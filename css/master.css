@@ -2,6 +2,22 @@ body {
     margin: 0px;
     padding: 0px;
     border: 0px;
+    display: grid;
+}
+
+div.content {
+    background-color: #ffffff;
+    display: grid;
+}
+
+div.aboutme,
+div.skills,
+div.research {
+    padding: 4%;
+}
+
+div.research {
+    padding-bottom: 20%;
 }
 
 #header {
@@ -11,7 +27,8 @@ body {
     background-size: cover;
     background-color: #f5f5f5;
     border-bottom: 1px solid #e5e5e5;
-    height: 300px;
+    height: 80vh;
+    width: 100%;
     align-self: center;
     align-items: center;
     /* height: 100vw;
@@ -21,7 +38,223 @@ body {
 .header {
     font-family: 'Roboto', sans-serif;
     color: rgb(0, 0, 0);
-    font-size: 20px;
+    font-size: 40px;
     text-align: center;
-    padding: 10% 0px 20px 0px;
+    padding: 20% 0px 0px 0px;
+}
+
+
+/* typing */
+
+.container {
+    height: 120px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.container p {
+    font-size: 2rem;
+    padding: 0.1rem;
+    font-weight: bold;
+    letter-spacing: 0.1rem;
+    text-align: center;
+    overflow: hidden;
+}
+
+.container p span.typed-text {
+    font-weight: normal;
+    color: #dd7732;
+}
+
+.container p span.cursor {
+    display: inline-block;
+    background-color: #ccc;
+    margin-left: 0.1rem;
+    width: 3px;
+    animation: blink 1s infinite;
+}
+
+.container p span.cursor.typing {
+    animation: none;
+}
+
+@keyframes blink {
+    0% {
+        background-color: #ccc;
+    }
+    49% {
+        background-color: #ccc;
+    }
+    50% {
+        background-color: transparent;
+    }
+    99% {
+        background-color: transparent;
+    }
+    100% {
+        background-color: #ccc;
+    }
+}
+
+
+/* Social Media Icons */
+
+ul.icon {
+    display: flex;
+    position: absolute;
+    padding: 4%;
+    padding-top: 10%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+ul.icon li {
+    list-style: none;
+}
+
+ul.icon li a {
+    width: 80px;
+    height: 80px;
+    background-color: #fff;
+    text-align: center;
+    line-height: 80px;
+    font-size: 25px;
+    margin: 0 10px;
+    display: block;
+    border-radius: 50%;
+    position: relative;
+    overflow: hidden;
+    border: 3px solid #fff;
+}
+
+a .icon {
+    position: relative;
+    color: #262626;
+    transition: .5s;
+}
+
+a:hover .icon {
+    color: #fff;
+    transform: rotateY(360deg);
+}
+
+a:before {
+    content: "";
+    position: relative;
+    top: 80%;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #f00;
+    transition: .5s;
+}
+
+li a:hover:before {
+    top: 0;
+}
+
+li:nth-child(1) a:before {
+    background: #000000;
+}
+
+li:nth-child(2) a:before {
+    background: #55acee;
+}
+
+li:nth-child(3) a:before {
+    background: #0077b5;
+}
+
+li:nth-child(4) a:before {
+    background: #dd4b39;
+}
+
+
+/* Waves */
+
+@keyframes move_wave {
+    0% {
+        transform: translateX(0) translateZ(0) scaleY(1)
+    }
+    50% {
+        transform: translateX(-25%) translateZ(0) scaleY(0.55)
+    }
+    100% {
+        transform: translateX(-50%) translateZ(0) scaleY(1)
+    }
+}
+
+.waveWrapper {
+    overflow: hidden;
+    position: absolute;
+    padding-top: 40px;
+    padding-bottom: 40px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: 0;
+    margin: auto;
+}
+
+.waveWrapperInner {
+    position: absolute;
+    width: 100%;
+    overflow: hidden;
+    height: 100%;
+    bottom: -1px;
+    /* background-image: linear-gradient(to top, #86377b 20%, #27273c 80%); */
+}
+
+.bgTop {
+    z-index: 15;
+    opacity: 0.5;
+}
+
+.bgMiddle {
+    z-index: 10;
+    opacity: 0.75;
+}
+
+.bgBottom {
+    z-index: 5;
+}
+
+.wave {
+    position: absolute;
+    left: 0;
+    width: 200%;
+    height: 100%;
+    background-repeat: repeat no-repeat;
+    background-position: 0 bottom;
+    transform-origin: center bottom;
+}
+
+.waveTop {
+    background-size: 50% 100px;
+}
+
+.waveAnimation .waveTop {
+    animation: move-wave 3s;
+    -webkit-animation: move-wave 3s;
+    -webkit-animation-delay: 1s;
+    animation-delay: 1s;
+}
+
+.waveMiddle {
+    background-size: 50% 120px;
+}
+
+.waveAnimation .waveMiddle {
+    animation: move_wave 10s linear infinite;
+}
+
+.waveBottom {
+    background-size: 50% 100px;
+}
+
+.waveAnimation .waveBottom {
+    animation: move_wave 15s linear infinite;
 }
