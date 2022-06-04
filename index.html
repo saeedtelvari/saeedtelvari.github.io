@@ -26,7 +26,40 @@
         <span></span>
     </div>
 
+
+
+    <!-- Content -->
     <div style="display:none;" id="myDiv" class="content">
+        <!-- Navigation Bar -->
+        <header>
+            <div class="navbar">
+                <ul class="nav">
+                    <li class="item">
+                        <a href="#">Home</a>
+                    </li>
+
+                    <li class="item">
+                        <a href="#">About</a>
+                    </li>
+
+                    <li class="item">
+                        <a href="#">CV</a>
+                    </li>
+
+                    <li class="item">
+                        <a href="#">Research Interests</a>
+                    </li>
+                </ul>
+
+                <div class="logo" url="https://saeedtelvari.github.io">
+                    <img src="#">
+                </div>
+            </div>
+        </header>
+
+        <section class="home">
+        </section>
+
         <div id="header" class="header">
             <h1>Hi, I'm Saeed</h1>
             <h3 class="container">
@@ -41,21 +74,8 @@
         <div class="aboutme" id="aboutme">
             <h2>About Me</h2>
             <p>Hi! I'm Sa'eed, a M.Sc. Student at Amirkabir University of Technology (Tehran Polytecnique). I'm interested in Machine learning & Deep Learning applications in Geo-Energy. I'm also interested in web development.</p>
-            <div class="icons">
-                <ul class="icon">
-                    <li>
-                        <a href="https://github.com/saeedtelvari">
-                            <i class="fab fa-github icon"></i> </a>
-                    </li>
-                    <li>
-                        <a href="#"><i class="fab fa-twitter icon"></i></a>
-                    </li>
-                    <li>
-                        <a href="https://linkedin.com/saeed-telvari"><i class="fab fa-linkedin-in icon"></i></a></li>
-                    <li>
-                        <a href="#"><i class="fab fa-google-plus-g icon"></i></a></li>
-                </ul>
-            </div>
+
+
         </div>
         <div class="skills">
             <h2>Skills</h2>
@@ -79,23 +99,26 @@
             </ul>
         </div>
 
-        <div class="waveWrapper waveAnimation">
-            <div class="waveWrapperInner bgTop">
-                <div class="wave waveTop" style="background-image: url('http://front-end-noobs.com/jecko/img/wave-top.png')"></div>
-            </div>
-            <div class="waveWrapperInner bgMiddle">
-                <div class="wave waveMiddle" style="background-image: url('http://front-end-noobs.com/jecko/img/wave-mid.png')"></div>
-            </div>
-            <div class="waveWrapperInner bgBottom">
-                <div class="wave waveBottom" style="background-image: url('http://front-end-noobs.com/jecko/img/wave-bot.png')"></div>
-            </div>
-        </div>
+
     </div>
 
 
 
 
     <script type="text/javascript" src="js/home.js"></script>
+    <!-- Jquery needed -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+    <script src="js/navbar.js"></script>
+    <script>
+        $(window).scroll(function() {
+            if ($(document).scrollTop() > 50) {
+                $('.nav').addClass('affix');
+                console.log("OK");
+            } else {
+                $('.nav').removeClass('affix');
+            }
+        });
+    </script>
 </body>
 
 </html>
