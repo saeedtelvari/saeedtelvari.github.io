@@ -192,6 +192,7 @@ header {
 .navbar .nav {
     margin: 0;
     padding: 0;
+    padding-left: 1.5%;
     display: inline-block;
     float: right;
     margin-right: 5%;
@@ -295,7 +296,8 @@ header {
     display: inline-flex;
     list-style: none;
     position: relative;
-    top: 4%;
+    padding-top: 5%;
+    padding-left: 0;
     bottom: 0%;
 }
 
@@ -365,7 +367,7 @@ header {
 .wrapper .github:hover,
 .wrapper .github:hover .tooltip,
 .wrapper .github:hover .tooltip::before {
-    background: #333333;
+    background: #1cf3bd;
     color: #ffffff;
 }
 
