@@ -50,7 +50,7 @@ div #right {
 
 #right img {
     float: right;
-    width: 80vh;
+    width: 100%;
     height: auto;
 }
 
@@ -69,6 +69,36 @@ div.research {
 
 div.research {
     padding-bottom: 20%;
+}
+
+
+/* Cards (Research Interests)*/
+
+.outside-card {
+    padding: 10px;
+}
+
+.card {
+    height: 35rem;
+    align-items: center;
+    padding-top: 1.5rem;
+}
+
+.card:hover {
+    -webkit-box-shadow: -2px -1px 15px 7px rgba(240, 240, 19, 0.777);
+}
+
+.card-img-div {
+    display: flex;
+    position: relative;
+    height: 20rem;
+    object-fit: cover;
+}
+
+.card-img {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .header {
