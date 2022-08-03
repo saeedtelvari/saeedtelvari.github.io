@@ -79,26 +79,32 @@ div.research {
 }
 
 .card {
-    height: 35rem;
+    height: 40rem;
     align-items: center;
     padding-top: 1.5rem;
 }
 
 .card:hover {
-    -webkit-box-shadow: -2px -1px 15px 7px rgba(240, 240, 19, 0.777);
+    -webkit-box-shadow: -2px -1px 15px 7px rgba(19, 240, 148, 0.777);
 }
 
 .card-img-div {
-    display: flex;
     position: relative;
-    height: 20rem;
-    object-fit: cover;
+    /* position: relative; */
+    /* height: 30%; */
 }
 
 .card-img {
     display: block;
     margin-left: auto;
     margin-right: auto;
+    margin-top: auto;
+    margin-bottom: auto;
+    padding-bottom: 0.5rem;
+}
+
+.card-body {
+    position: relative;
 }
 
 .header {
