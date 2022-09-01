@@ -26,13 +26,24 @@ h2.about_title {
     color: #19d276;
     margin: 0px;
     padding: 0px;
-    padding-bottom: 1em;
+    padding-bottom: 0.2em;
+    border: 0px;
+    display: grid;
+}
+
+h3.about_subtitle {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #d21947;
+    margin: 0px;
+    padding: 0px;
+    padding-bottom: 1.6em;
     border: 0px;
     display: grid;
 }
 
 p.about_content {
-    font-size: 1.5em;
+    font-size: 1.7em;
     font-weight: normal;
     color: #000000;
     margin: 0px;
