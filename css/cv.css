@@ -1,0 +1,40 @@
+.page {
+    margin-top: 10%;
+    margin-left: 10%;
+    margin-right: 10%;
+    position: absolute;
+    padding: 2rem 2rem 4rem 2rem;
+    border: 5px solid;
+    border-color: rgba(8, 212, 154, 0.664);
+    border-radius: 2rem;
+    width: 80%;
+}
+
+.display-3 {
+    text-align: center;
+}
+
+.RI {
+    padding-left: 3rem;
+    padding-top: 0.8rem;
+    padding-bottom: 1rem;
+}
+
+ul.RI {
+    list-style-type: circle;
+    list-style-position: inside;
+}
+
+.download-cv {
+    padding: 1rem;
+}
+
+li.aut-logo {
+    list-style: None;
+    background-image: url('../img/aut.png');
+    background-repeat: no-repeat;
+    background-position: left center;
+    padding: 20px 0px 20px 40px;
+    background-size: 2rem;
+    /* list-style-type: circle; */
+}
