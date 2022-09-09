@@ -1,0 +1,42 @@
+.game {
+    position: relative;
+    align-items: center;
+    align-content: center;
+    align-self: center;
+    padding: 12% 30% 20px 30%;
+}
+
+.table {
+    text-align: center;
+    border: 1px solid;
+    /* width: 35rem; */
+}
+
+td {
+    height: 10rem;
+    width: 10rem;
+    font-size: 6rem;
+}
+
+table td,
+table th {
+    border: 1px solid black;
+}
+
+table tr:first-child th {
+    border-top: 0;
+}
+
+table tr:last-child td {
+    border-bottom: 0;
+}
+
+table tr td:first-child,
+table tr th:first-child {
+    border-left: 0;
+}
+
+table tr td:last-child,
+table tr th:last-child {
+    border-right: 0;
+}
