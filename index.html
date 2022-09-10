@@ -17,7 +17,7 @@
 </head>
 <!-- Comment -->
 
-<body>
+<body class="loading main">
     <!-- onload="myFunction()" -->
     <!-- <div id="loader" class="Box">
         <span></span>
@@ -30,7 +30,6 @@
         <span></span>
         <span></span>
     </div> -->
-
 
 
     <!-- Content -->
@@ -122,37 +121,40 @@
         <div class="research container-fluid" id="RI">
             <h2 class="ri-header">Research Interests</h2>
             <div class="row align-items-center">
-                <div class="outside-card col-md">
+                <div data-aos="fade-up" class="outside-card col-md">
                     <div class="card card-hover-ml">
                         <div class="card-img-div">
                             <img src="img/brain-small.png" alt="" style="width:80%;" class="card-img">
                         </div>
                         <div class="card-body">
                             <h4 class="card-title">ML&DL Applications in Geo-Energy</h4>
+                            <div class="divider"></div>
                             <p class="card-text">Prediction of multi-phase flow characteristics, Segmentation of Pore-scale Fractured Rocks, Surrogate Reservoir Modeling (Smart Proxy Modeling), ...</p>
                         </div>
                     </div>
                 </div>
-                <div class="outside-card col-md">
+                <div data-aos="fade-up" class="outside-card col-md">
                     <div class="card card-hover-pnm">
                         <div class="card-img-div">
                             <img src="img/pnm2.png" alt="" style="width:80%" class="card-img">
                         </div>
                         <div class="card-body">
                             <h4 class="card-title">Pore-scale Modeling</h4>
-                            <p class="card-text">CO2 Injection, Advanced Geothermal Systems, Solute Transport, ...</p>
+                            <div class="divider"></div>
+                            <p class="card-text">Multi-phase Flow in Pore Network Models, CO2 Injection, Advanced Geothermal Systems, Solute Transport, ...</p>
                         </div>
 
                     </div>
                 </div>
-                <div class="outside-card col-md">
+                <div data-aos="fade-up" class="outside-card col-md">
                     <div class="card card-hover-co2">
                         <div class="card-img-div">
                             <img src="img/co2.jpg" alt="" style="width:80%" class="card-img">
                         </div>
                         <div class="card-body">
-                            <h4 class="card-title">CO2 Capture, Storage & Utilization</h4>
-                            <p class="card-text"></p>
+                            <h4 class="card-title">Image Processing</h4>
+                            <div class="divider"></div>
+                            <p class="card-text">Segmentation, Image Generation (GAN, AutoEncoder, ...), Filtering and De-noising, ...</p>
                         </div>
                     </div>
                 </div>
@@ -210,6 +212,8 @@
     <script>
         AOS.init();
     </script>
+    <script src="https://code.jquery.com/jquery-3.6.1.js" integrity="sha256-3zlB5s2uwoUzrXK3BT7AX3FyvojsraNFxCc2vC/7pNI=" crossorigin="anonymous"></script>
+
 </body>
 
 </html>

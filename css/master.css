@@ -34,6 +34,7 @@ h2.about_title {
 h3.about_subtitle {
     font-size: 1.5em;
     font-weight: bold;
+    text-align: left;
     color: #d21947;
     margin: 0px;
     padding: 0px;
@@ -45,6 +46,7 @@ h3.about_subtitle {
 p.about_content {
     font-size: 1.7em;
     font-weight: normal;
+    font-family: serif;
     color: #000000;
     margin: 0px;
     padding: 0px;
@@ -93,29 +95,33 @@ div.research {
 /* Cards (Research Interests)*/
 
 .outside-card {
-    padding: 10px;
+    padding: 30px;
+    text-align: center;
+    align-items: center;
 }
 
-.card {
-    height: 40rem;
+
+/* .card {
+    height: 41rem;
     align-items: center;
     padding-top: 1.5rem;
-}
+} */
 
 .card-hover-ml:hover {
-    -webkit-box-shadow: -2px -1px 10px 7px #ff002f40;
+    -webkit-box-shadow: -2px -1px 10px 7px rgba(0, 0, 0, 0.15);
 }
 
 .card-hover-pnm:hover {
-    -webkit-box-shadow: -2px -1px 10px 7px #0b353a69;
+    -webkit-box-shadow: -2px -1px 10px 7px rgba(0, 0, 0, 0.15);
 }
 
 .card-hover-co2:hover {
-    -webkit-box-shadow: -2px -1px 10px 7px #216c0a60;
+    -webkit-box-shadow: -2px -1px 10px 7px rgba(0, 0, 0, 0.15);
 }
 
 .card-img-div {
     position: relative;
+    padding: 1%;
     /* position: relative; */
     /* height: 30%; */
 }
@@ -126,16 +132,45 @@ div.research {
     margin-right: auto;
     margin-top: auto;
     margin-bottom: auto;
-    padding-bottom: 0.5rem;
+    /* padding-bottom: 0.5rem; */
 }
 
 .card-body {
-    position: relative;
+    position: absolute;
+    background-color: #f5f5f500;
+}
+
+.card-body:hover {
+    background-color: #ffffff;
+    width: 90%;
+    height: 80%;
+    border-radius: 6px;
+    border: 1px solid;
+    border-color: #021a68a0;
+    box-shadow: 2px 2px 2px 2px rgba(21, 75, 222, 0.2);
+}
+
+.card {
+    border-radius: 2%;
+}
+
+.card-title {
+    font-size: 2.1rem;
+    font-weight: bold;
+}
+
+.card-text {
+    padding-top: 0.5rem;
+    font-size: 1.2rem;
+}
+
+.divider {
+    border-top: 1.5px solid;
 }
 
 .header {
     /* background-image: url(); */
-    background-image: linear-gradient(rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.25)), url('../img/headerbg4.jpg');
+    background-image: linear-gradient(rgba(36, 36, 36, 0.476), rgba(255, 255, 255, 0.25)), url('../img/headerbg4.jpg');
     background-position: center;
     background-repeat: no-repeat;
     background-size: cover;
@@ -153,13 +188,105 @@ div.research {
 .header {
     font-family: 'poppins', sans-serif;
     color: rgb(0, 0, 0);
-    font-size: 2.5rem;
+    font-size: 3rem;
     text-align: center;
-    padding: 10% 0px 0px 0px;
+    padding: 5% 0px 0px 0px;
 }
 
 #title {
     opacity: 1;
+}
+
+@property --rotate {
+    syntax: "<angle>";
+    initial-value: 132deg;
+    inherits: false;
+}
+
+
+/* :root {
+    --card-height: 100%;
+    --card-width: calc(var(--card-height) / 1);
+} */
+
+.card {
+    /* height: 41rem; */
+    align-items: center;
+    padding-top: 1rem;
+    background: #ffffff;
+    width: var(--card-width);
+    height: var(--card-height);
+    padding: 8px;
+    position: relative;
+    border-radius: 6px;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    display: flex;
+    font-size: 1.5em;
+    color: rgb(88 199 250 / 0%);
+    cursor: pointer;
+    font-family: cursive;
+}
+
+.card:hover {
+    color: rgb(0, 29, 42);
+    transition: color 1s;
+}
+
+.card:hover:before,
+.card:hover:after {
+    animation: none;
+    opacity: 0;
+}
+
+
+/* .card::before {
+    content: "";
+    width: 104%;
+    height: 102%;
+    border-radius: 8px;
+    background-image: linear-gradient( var(--rotate), #aa4b6b, #6b6b83, 43%, #3b8d99);
+    position: absolute;
+    z-index: -1;
+    top: -1%;
+    left: -2%;
+    animation: spin 2.5s linear infinite;
+} */
+
+.card::after {
+    position: absolute;
+    content: "";
+    top: calc(var(--card-height) / 6);
+    left: calc(var(--card-height) / 6);
+    right: calc(var(--card-height) / 6);
+    z-index: -1;
+    height: 100%;
+    width: 100%;
+    margin: 0 auto;
+    transform: scale(0.8);
+    filter: blur(calc(var(--card-height) / 6));
+    background-image: linear-gradient( var(--rotate), #aa4b6b, #6b6b83, #3b8d99);
+    opacity: 1;
+    transition: opacity .5s;
+    animation: spin 3.5s linear infinite;
+}
+
+@keyframes spin {
+    0% {
+        --rotate: 0deg;
+    }
+    100% {
+        --rotate: 360deg;
+    }
+}
+
+a {
+    color: #212534;
+    text-decoration: none;
+    font-family: sans-serif;
+    font-weight: bold;
+    margin-top: 2rem;
 }
 
 
