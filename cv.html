@@ -12,23 +12,8 @@
 
 </head>
 
-<body class="loading">
-    <div id="preloader-bg">
-        <svg height="400" width="400" id="preloader">
-            <g filter="url(#goo)">
-            <circle class="outer" cx="200" cy="200" r="150" />
-            <circle class="drop" cx="200" cy="200" r="20">
-            </g>
-        
-            <defs>
-            <filter id="goo">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur" />
-                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" />
-        
-            </filter>
-            </defs>
-        </svg>
-    </div>
+<body>
+
     <div id="main" class="header-container fs">
         <!-- <div class="collapse navbar-collapse"> -->
         <div class="navbar">
@@ -158,16 +143,51 @@
             <div>
                 <h2 class="display-6 ">Skills</h2>
                 <div>
-                    <h4>Programming</h4>
+
                     <div class="row">
-                        <div class="col-md-3">
+                        <div class="col-md-4 disk-bp skills">
+                            <h4>Programming</h4>
+                            <ul>
+                                <li>Python</li>
+                                <ul>
+                                    <li>Django</li>
+                                    <li>Tensorflow/Keras</li>
+                                    <li>Scikit-learn</li>
+                                    <li>Scikit-Image</li>
+                                    <li>OpenCV</li>
+                                    <li>OpenPNM</li>
+                                </ul>
+                                <li>HTML/CSS/JavaScript</li>
+                                <ul>
+                                    <li>HTML5</li>
+                                    <li>CSS3</li>
+                                    <li>JavaScript</li>
+                                    <li>JQuery</li>
+                                </ul>
+                                <li>C/C++</li>
+                                <li>Matlab</li>
+                                <li>Latex</li>
+                            </ul>
 
                         </div>
-                        <div class="col-md-3">
-
+                        <div class="col-md-4 disk-bp">
+                            <h4>Software</h4>
+                            <ul>
+                                <li>Eclipse</li>
+                                <li>Saphir</li>
+                                <li>Prosper</li>
+                                <li>MBAL</li>
+                                <li>Comsol</li>
+                            </ul>
                         </div>
-                        <div class="col-md-3">
-
+                        <div class="col-md-4 disk-bp">
+                            <h4>IDE/Tools</h4>
+                            <ul>
+                                <li>VSCode</li>
+                                <li>Jupyter</li>
+                                <li>Ubuntu WSL</li>
+                                <li>Docker</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -175,10 +195,80 @@
             <div class="divider"></div>
             <div>
                 <h2 class="display-6 ">Courses</h2>
+                <div class="row">
+                    <div class="col-md-6 disk-bp">
+                        <ul>
+                            <li>The Basics of Transport Phenomena</li>
+                            <li>Python 3 Master Course</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6 disk-bp">
+                        <ul>
+                            <li>Machine Learning</li>
+                            <li>Deep Learning and Neural Networks</li>
+                        </ul>
+                    </div>
+                </div>
+
+
             </div>
             <div class="divider"></div>
-            <div>
+            <div id="language">
                 <h2 class="display-6 ">Language</h2>
+                <div class="row">
+                    <div class="col-sm-1">
+                        <ul>
+                            <li>Persian</li>
+                            <li>English</li>
+                        </ul>
+                    </div>
+                    <div class="col-sm-3 no-bp">
+                        <ul>
+                            <li>Native</li>
+                            <li>Professional Working Proficiency</li>
+                            <li>
+                                <div class="accordion-container">
+                                    <div class="set">
+                                        <a>
+                                            Vestibulum
+                                            <i class="fa fa-plus"></i>
+                                        </a>
+                                        <div class="content">
+                                            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna.</p>
+                                        </div>
+                                    </div>
+                                    <div class="set">
+                                        <a>
+                                    Phasellus 
+                                    <i class="fa fa-plus"></i>
+                                  </a>
+                                        <div class="content">
+                                            <p> Aliquam cursus vitae nulla non rhoncus. Nunc condimentum erat nec dictum tempus. Suspendisse aliquam erat hendrerit vehicula vestibulum.</p>
+                                        </div>
+                                    </div>
+                                    <div class="set">
+                                        <a>
+                                    Praesent 
+                                    <i class="fa fa-plus"></i>
+                                  </a>
+                                        <div class="content">
+                                            <p>Pellentesque aliquam ligula libero, vitae imperdiet diam porta vitae. sed do eiusmod tempor incididunt ut labore et dolore magna.</p>
+                                        </div>
+                                    </div>
+                                    <div class="set">
+                                        <a>
+                                    Curabitur 
+                                    <i class="fa fa-plus"></i> 
+                                  </a>
+                                        <div class="content">
+                                            <p> Donec tincidunt consectetur orci at dignissim. Proin auctor aliquam justo, vitae luctus odio pretium scelerisque. </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
             </div>
 
         </div>
@@ -189,17 +279,9 @@
     <script>
         var time = 5000;
         $('#main').hide();
-        $('#preloader').show()
-        setTimeout(function() {
-
-            // setTimeout(document.body.classList.remove('loading'), 3000)
-            $('#preloader-bg').fadeOut(3000)
-            $('#preloader').fadeOut(3000)
-            $('#main').show(2000);
-
-        }, 5000)
-        $(document).ready();
+        $('#main').show(2000);
     </script>
+    <script src="js/accordion.js"></script>
 </body>
 
 
