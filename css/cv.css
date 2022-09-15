@@ -180,7 +180,7 @@ ul.date {
 
 ul.honors {
     list-style-type: circle;
-    font-size: 1.4rem;
+    font-size: 1.3rem;
 }
 
 div.projects>ul {
@@ -197,6 +197,13 @@ div.projects>ul>ul {
 
 .disk-bp>ul {
     list-style-type: circle;
+    font-size: 1.2rem;
+    padding-left: 0.4rem;
+}
+.disk-bp>ul>li:hover {
+    background-color: #3399cc;
+    color: #fff;
+    padding-left: 0.4rem;
 }
 
 .disk-bp>ul>ul>li {
@@ -204,16 +211,16 @@ div.projects>ul>ul {
     background-image: url('../img/line.png');
     background-repeat: no-repeat;
     background-position: left center;
-    padding: 0px 0px 0px 1.5rem;
+    padding: 0px 0px 0px 1rem;
     background-size: 1rem;
 }
 
 .disk-bp>ul>ul {
-    padding-left: 0.8rem;
+    padding-left: 0.6rem;
 }
 
 .skills>ul>li {
-    padding-top: 0.4rem;
+    padding-top: 0.3rem;
 }
 
 
@@ -230,8 +237,8 @@ div.projects>ul>ul {
     text-align: center;
     color: #fff;
     padding-bottom: 5px;
-    margin-bottom: 20px;
-    padding-bottom: 15px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
     border-bottom: 1px solid rgba(221, 221, 221, 0);
 }
 
@@ -244,10 +251,11 @@ div.projects>ul>ul {
 
 .set>a {
     display: block;
-    padding: 10px 15px;
+    /* padding: 10px 15px; */
+    padding-left: 0.4rem;
     text-decoration: none;
-    color: #555;
-    font-weight: 600;
+    color: rgb(0, 0, 0);
+    /* font-weight: 600; */
     border-bottom: 1px solid rgba(221, 221, 221, 0);
     -webkit-transition: all 0.2s linear;
     -moz-transition: all 0.2s linear;
@@ -263,6 +271,10 @@ div.projects>ul>ul {
     background-color: #3399cc;
     color: #fff;
 }
+.set>a:hover {
+    background-color: #3399cc;
+    color: #fff;
+}
 
 .content {
     background-color: #fff;
@@ -271,7 +283,7 @@ div.projects>ul>ul {
 }
 
 .content p {
-    padding: 10px 15px;
+    padding: 8px 12px;
     margin: 0;
-    color: #333;
+    color: rgb(0, 0, 0);
 }

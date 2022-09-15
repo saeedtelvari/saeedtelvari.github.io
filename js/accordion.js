@@ -1,5 +1,6 @@
 $(document).ready(function() {
-    $(".set > a").on("mouseover", function() {
+    $(".set > a").css('cursor', 'pointer');
+    $(".set > a").on("click", function() {
         if ($(this).hasClass("active")) {
             $(this).removeClass("active");
             $(this)
