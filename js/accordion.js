@@ -23,6 +23,8 @@ $(document).ready(function() {
             $(this)
                 .siblings(".content")
                 .slideDown(200);
+            
         }
     });
+    $("#python").trigger('click');
 });

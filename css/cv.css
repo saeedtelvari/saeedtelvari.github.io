@@ -200,11 +200,7 @@ div.projects>ul>ul {
     font-size: 1.2rem;
     padding-left: 0.4rem;
 }
-.disk-bp>ul>li:hover {
-    background-color: #3399cc;
-    color: #fff;
-    padding-left: 0.4rem;
-}
+
 
 .disk-bp>ul>ul>li {
     list-style-type: none;
@@ -273,6 +269,9 @@ div.projects>ul>ul {
 }
 .set>a:hover {
     background-color: #3399cc;
+    color: #fff;
+}
+.set>a>li:hover {
     color: #fff;
 }
 
