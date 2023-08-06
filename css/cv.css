@@ -3,6 +3,12 @@
     background-color: azure;
 } */
 
+a, a:hover, a:focus, a:active {
+    text-decoration: none;
+    color: rgb(33, 132, 94);
+	font-weight: bold;
+}
+
 body {
     background-color: #08AEEA;
     background-image: linear-gradient(0deg, #ea088484 0%, #2AF598 100%);
@@ -185,6 +191,10 @@ ul.honors {
 }
 
 div.projects>ul {
+    list-style-type: circle;
+}
+
+div.publications>ul {
     list-style-type: circle;
 }
 

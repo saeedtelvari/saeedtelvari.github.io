@@ -12,27 +12,26 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Sofia">
     <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.6.3/css/all.css" integrity="sha384-UHRtZLI+pbxtHCWp1t77Bi1L4ZtiqrqD80Kn4Z8NTSRyMA2Fd33n5dQ8lWUE00s/" crossorigin="anonymous">
     <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+    <!-- <link rel="stylesheet" type="text/css" href="css/cv.css"> -->
     <!-- CSS only -->
-
+    <link rel="icon" href="img/logo-no-name.png">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
+    <link rel="stylesheet" href="extra.css">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Arizonia&family=Montserrat:wght@400;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.4.1/css/all.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.13.1/css/all.min.css">
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js" integrity="sha384-OgVRvuATP1z7JjHLkuOU7Xw704+h835Lr+6QL9UvYjZE3Ipu6Tp75j7Bh/kR0JKI" crossorigin="anonymous"></script>
+  
 </head>
 <!-- Comment -->
 
-<body class="loading main">
-    <!-- onload="myFunction()" -->
-    <!-- <div id="loader" class="Box">
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-    </div> -->
+<body>
 
-
-    <!-- Content -->
+<!-- Content -->
     <!-- style="display:none;" -->
     <div id="myDiv" class="content">
         <!-- Navigation Bar -->
@@ -71,187 +70,43 @@
 
 
         <!-- Header -->
-        <div class="header">
-            <div id="title">
-                <h1 id="title">Hi, I'm Saeed</h1>
-                <h3 class="container" id="title">
-                    <p>I'm a <span class="typed-text"></span><span class="cursor">&nbsp;</span></p>
+        <div class="page glass-morphism-page content">
+            <div id="title" class="display-3 title">
+                <h1 id="title">Hi, I'm Sa'eed</h1>
+                <h3 class="" id="title">
+                    <p>A <span class="typed-text"></span><span class="cursor">&nbsp;</span></p>
                 </h3>
+
+                <div class=social_media_icon>
+                    <a class="btn" href="https://www.linkedin.com/in/stelvari/" target=_blank>
+                      <i class="fab fa-linkedin" aria-hidden="true"></i>
+                    </a>
+                    <a class="btn" href="https://github.com/saeedtelvari" target=_blank>
+                      <i class="fab fa-github"></i>
+                    </a>
+                    <a class="btn" href="mailto:telvari.saeed@gmail.com" target=_blank>
+                      <i class="fab fa-google"></i>
+                    </a>
+                </div>
             </div>
 
         </div>
 
 
 
-        <!-- About -->
-
-        <div class="aboutme" id="aboutme">
-            <div data-aos="fade-up" id="left">
-                <h2 class="about_title">About Me</h2>
-                <h3 class="about_subtitle">A Researcher, Python Programmer & Machine Learning Practitioner</h3>
-                <p class="about_content">Hi! I'm Sa'eed, a master's student of Reservoir Engineering at Amirkabir University of Technology (Tehran Polytecnique). Currently, I'm working on image segmentation of fractured rocks using classical image processing and deep learning
-                    methods. Image segmentation is used to seperate the fracture from the the matrix, therefore it is a decisive factor in flow simulation through fractures</p>
-                <!-- Social Media Icons -->
-                <ul class="wrapper" data-aos="fade-up">
-
-                    <li class="icon email">
-                        <a href="mailto:saeedtelvari2018@gmail.com" target="_blank" style="color:#000000;">
-                            <span class="tooltip">Gmail</span>
-                            <span><i class="fa fa-envelope" aria-hidden="true"></i></span></a>
-                    </li>
-                    <li class="icon github">
-                        <a href="https://github.com/saeedtelvari" target="_blank" style="color:#000000;">
-                            <span class="tooltip">Github</span>
-                            <span><i class="fab fa-github"></i></span>
-                        </a>
-                    </li>
-                    <li class="icon linkedin">
-                        <a href="https://www.linkedin.com/in/stelvari/" target="_blank" style="color:#000000;">
-                            <span class="tooltip">LinkedIn</span>
-                            <span><i class="fab fa-linkedin-in" aria-hidden="true"></i></span></a>
-                    </li>
-
-                </ul>
-            </div>
-            <div id="right">
-                <img src="img/about.jpg" alt="About Me">
-            </div>
-        </div>
-        <!-- Research Interests -->
-        <div class="research container-fluid" id="RI">
-            <h2 class="ri-header">Research Interests</h2>
-            <div class="row align-items-center">
-                <div data-aos="fade-up" class="outside-card col-md">
-                    <div class="card card-hover-ml">
-                        <div class="card-img-div">
-                            <img src="img/brain-small.png" alt="" style="width:80%;" class="card-img">
-                        </div>
-                        <div class="card-body">
-                            <h4 class="card-title">ML&DL Applications in Geo-Energy</h4>
-                            <div class="divider"></div>
-                            <p class="card-text">Prediction of multi-phase flow characteristics, Segmentation of Pore-scale Fractured Rocks, Surrogate Reservoir Modeling (Smart Proxy Modeling), ...</p>
-                        </div>
-                    </div>
-                </div>
-                <div data-aos="fade-up" class="outside-card col-md">
-                    <div class="card card-hover-pnm">
-                        <div class="card-img-div">
-                            <img src="img/pnm2.png" alt="" style="width:80%" class="card-img">
-                        </div>
-                        <div class="card-body">
-                            <h4 class="card-title">Pore-scale Modeling</h4>
-                            <div class="divider"></div>
-                            <p class="card-text">Multi-phase Flow in Pore Network Models, CO2 Injection, Advanced Geothermal Systems, Solute Transport, ...</p>
-                        </div>
-
-                    </div>
-                </div>
-                <div data-aos="fade-up" class="outside-card col-md">
-                    <div class="card card-hover-co2">
-                        <div class="card-img-div">
-                            <img src="img/co2.jpg" alt="" style="width:80%" class="card-img">
-                        </div>
-                        <div class="card-body">
-                            <h4 class="card-title">Image Processing</h4>
-                            <div class="divider"></div>
-                            <p class="card-text">Segmentation, Image Generation (GAN, AutoEncoder, ...), Filtering and De-noising, ...</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-
-        <!-- Skills -->
-        <!-- <div class="skills container-fluid">
-            <div class="col-md-4">
-                <h2>Skills</h2>
-            </div>
-            <div class="col-md">
-                <li>Python</li>
-                <li>HTML/CSS/JavaScript</li>
-            </div>
-            <ul>
-
-                <li>Django</li>
-                <li>C/C++</li>
-                <li>MySQL</li>
-                <li>Docker</li>
-                <li>Git</li>
-            </ul>
-        </div> -->
 
 
 
-    </div>
-    <!-- Site footer -->
-    <div>
-
-        <footer class="site-footer" data-aos="fade-up" data-aos-duration="3000">
-            <div class="container site-footer-wrapper">
-                <div class="row">
-                    <div class="col-sm-12 col-md-6">
-                        <h6 class="footer-h6">About</h6>
-                        <p class="text-justify" id="font" style="text-align:justify;">Thanks for visiting my website! If you contact me for any reason please email me via
-                            <a href="mailto:telvari.saeed@gmail.com">telvari.saeed@gmail.com</a>
-                        </p>
-                    </div>
-
-                    <div class="col-xs-6 col-md-3">
-                        <h6 class="footer-h6">Social Media</h6>
-                        <!-- Social Media Icons -->
-                        <ul class="wrapper social-icons-wrapper" data-aos="zoom-in">
-
-                            <li class="icon email">
-                                <a href="mailto:saeedtelvari2018@gmail.com" target="_blank" style="color:#000000;">
-                                    <span class="tooltip">Gmail</span>
-                                    <span><i class="fa fa-envelope" aria-hidden="true"></i></span></a>
-                            </li>
-                            <li class="icon github">
-                                <a href="https://github.com/saeedtelvari" target="_blank" style="color:#000000;">
-                                    <span class="tooltip">Github</span>
-                                    <span><i class="fab fa-github"></i></span>
-                                </a>
-                            </li>
-                            <li class="icon linkedin">
-                                <a href="https://www.linkedin.com/in/stelvari/" target="_blank" style="color:#000000;">
-                                    <span class="tooltip">LinkedIn</span>
-                                    <span><i class="fab fa-linkedin-in" aria-hidden="true"></i></span></a>
-                            </li>
-
-                        </ul>
-                    </div>
-
-                    <div class="col-xs-6 col-md-3">
-                        <h6 class="footer-h6">Quick Links</h6>
-                        <ul class="footer-links">
-                            <li><a href="#">Home</a></li>
-                            <li><a href="#aboutme">About</a></li>
-                            <li><a href="/cv.html">CV</a></li>
-                            <li><a href="#RI">Research Interests</a></li>
-                        </ul>
-                    </div>
-                </div>
-                <hr>
-            </div>
-            <!-- <div class="divider"></div> -->
-            <div class="container site-footer-wrapper">
-                <div class="row">
-                    <div class="col-sm-12 col-md-6">
-                        <p class="copyright-text" id="font">Copyright &copy; 2022 All Rights Reserved by
-                            <a href="#">Saeed Telvari</a>.
-                        </p>
-                    </div>
-                    <div class="col-xs-6 col-md-3"></div>
-                    <div class="col-xs-6 col-md-3">
-
-                    </div>
-                </div>
-            </div>
-        </footer>
-    </div>
 
 
+    <!-- <script type="text/javascript" src="js/NN.js"></script> -->
+    <script src="https://code.jquery.com/jquery-3.6.1.js" integrity="sha256-3zlB5s2uwoUzrXK3BT7AX3FyvojsraNFxCc2vC/7pNI=" crossorigin="anonymous"></script>
+    <script>
+        var time = 5000;
+        $('#main').hide();
+        $('#main').show(2000);
+    </script>
+    <script src="js/accordion.js"></script>
 
     <script type="text/javascript" src="js/home.js"></script>
     <!-- Jquery needed -->
@@ -274,5 +129,3 @@
     <script src="https://code.jquery.com/jquery-3.6.1.js" integrity="sha256-3zlB5s2uwoUzrXK3BT7AX3FyvojsraNFxCc2vC/7pNI=" crossorigin="anonymous"></script>
 
 </body>
-
-</html>
