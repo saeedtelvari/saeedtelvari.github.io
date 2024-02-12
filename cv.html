@@ -14,7 +14,7 @@
 
 <body>
 
-    <div id="main" class="header-container fs">
+    <div id="main" class="header-container fs waitAnimate">
         <!-- <div class="collapse navbar-collapse"> -->
         <div class="navbar">
             <ul class="nav">
@@ -43,9 +43,11 @@
                 </h1>
                 <p>Department of Petroleum Engineering</p>
                 <p>Amirkabir University of Technology, Tehran, Iran</p>
-                <a href="tel:936-755-4631" class="link-dark">(+98) 936-755-4631</a>
+                <!-- <a href="tel:936-755-4631" class="link-dark">(+98) 992-167-1643</a> -->
                 <div class="download-cv">
-                    <button type="button " class="btn btn-primary ">Download PDF</button>
+                    <a href="https://drive.google.com/file/d/1eoh5nXUE444ZV8B1XoESA2g4_EMIByLr/view?usp=sharing">
+                        <button type="button " class="btn btn-primary ">Download PDF</button>
+                    </a>
                 </div>
             </div>
             <div class="divider"></div>
@@ -54,12 +56,14 @@
                 <div class="container RI ">
                     <div class="row mx-auto ">
                         <ul class="col-sm RI " style="font-size: 1.2rem ">
-                            <li>AI Applications in Subsurface Engineering</li>
+                            <li>AI Applications in Subsurface</li>
                             <li>Porous Media</li>
+                            <li>Image Processing</li>
                         </ul>
                         <ul class="col-sm RI " style="font-size: 1.2rem ">
-                            <li>CFD</li>
-                            <li>Geothermal</li>
+                            <li>Numerical Simulation</li>
+                            <li>CCUS</li>
+                            <li>Computer Vision</li>
                         </ul>
                     </div>
                 </div>
@@ -71,7 +75,7 @@
                     <ul class="col-sm" style="font-size: 1.2rem"style="font-size: 1.2rem">
                         <li class="aut-logo">Amirkabir University of Technology, Tehran, Iran</li>
                         <li class="degree">M.Sc. of PE - Reservoir Engineering</li>
-                        <li class="grade">GPA : <strong>16.95</strong></li>
+                        <li class="grade">GPA : <strong>3.61/4</strong></li>
                     </ul>
                     <ul class="col-sm date">2022-present</ul>
                 </div>
@@ -94,7 +98,13 @@
                         <br><a href="https://doi.org/10.1016/j.advwatres.2023.104442">(Link)</a>
                         </li>
                     </ul>
-                    </div>
+                    <ul style="font-size: 1.2rem">
+                        <li> "Fractured Rock Image Segmentation using Autoencoder-Based Deep Learning. (In progress)"
+                        <br><strong>Saeed Telvari</strong>, Mohammad Sharifi
+                        <!-- <br><a href="https://doi.org/10.1016/j.advwatres.2023.104442">(Link)</a> -->
+                        </li>
+                    </ul>
+                </div>
             </div>
             <div class="divider"></div>
             <div>
@@ -126,20 +136,35 @@
             <div>
                 <h2 class="display-6 ">Academic Projects</h2>
                 <div class="projects">
+                    
+                    <ul>
+                        <li>Automatic interpretation of well tests</li>
+                        <ul>
+                            <li>Implemented LSTM to predict reservoir properties from pressure derivative and dp</li>
+                            <li>Developed a script to match analytical model to data</li>
+                        </ul>
+                    </ul>
+                    
+                    <ul>
+                        <li>Developing an extended local upscaling module in MRST</li>
+                        <ul>
+                            <li>Remodeled a local upscaling module with periodic boundary conditions into an extended local one</li>
+                            <li>Implemented and compared with local and fine scale pressure field</li>
+                        </ul>
+                    </ul>
+                    
+                    <ul>
+                        <li>Conjugate heat transfer between rock and fracture fluid using OpenFOAM v9</li>
+                        <ul>
+                            <li>Extracted and partitioned a micro-scale 3D image of a fractured granite rock</li>
+                            <li>Simulated injection of CO2 with a lower temperature into a fractured granite with high temperature</li>
+                        </ul>
+                    </ul>
                     <ul>
                         <li>Training machine learning models to identify formation lithology</li>
                         <ul>
                             <li>Used 10 conventional well log data as input and mud logging data as output</li>
                             <li>Developed FNN (pytorch), Decision Tree (tensorflow), and clustering algorithms such as SVM and k-means</li>
-                        </ul>
-                    </ul>
-                    <ul>
-                        <li>Developing a Python Package for Fracture Pore-scale Image Processing and Analysis</li>
-
-                        <ul>
-                            <li>Developed a python package named FracPy</li>
-                            <li>Contains some of the most useful Image Processing functions</li>
-                            <li>Still in testing phase!</li>
                         </ul>
                     </ul>
                 </div>
@@ -148,7 +173,6 @@
             <div>
                 <h2 class="display-6 ">Skills</h2>
                 <div>
-
                     <div class="row">
                         <div class="col-md-4 disk-bp skills">
                             <h4>Programming</h4>
@@ -162,18 +186,19 @@
                                         <div class="content">
                                             <p><ul>
                                                 <li>Tensorflow/Keras</li>
+                                                <li>Pytorch</li>
                                                 <li>Scikit-learn</li>
                                                 <li>Scikit-Image</li>
                                                 <li>OpenCV</li>
                                                 <li>OpenPNM</li>
-                                                <li>Django</li>
+                                                
                                             </ul>
                                             </p>
                                         </div>
                                     </div>
                                     <div class="set">
                                         <a>
-                                    <li>Web Developement</li> 
+                                    <!-- <li>Web Developement</li> 
                                     <i class="fa fa-plus"></i>
                                         </a>
                                         <div class="content">
@@ -187,15 +212,15 @@
                                             </ul>
                                             </p>
                                         </div>
-                                    </div>
+                                    </div> -->
                                     <div class="set">
                                         <a>
-                                    <li>C/C++</li>
+                                    <li>Rust</li>
                                     <i class="fa fa-plus"></i>
                                         </a>
-                                        <div class="content">
+                                        <!-- <div class="content">
                                             <p><ul><li>CUDA Programming</li></ul></p>
-                                        </div>
+                                        </div> -->
                                     </div>
                                     <div class="set">
                                         <a>
@@ -224,7 +249,8 @@
                                         <p>
                                         <ul>
                                             <li>OpenFOAM</li>
-                                            <li>COMSOL</li>
+                                            <!-- <li>COMSOL</li> -->
+                                            <li>PerGeos</li>
                                             <li>SALOME</li>
                                             <li>MeshLab</li>
                                         </ul>
@@ -233,37 +259,27 @@
                                 </div>
                                 <div class="set">
                                     <a>
-                                <li>Petroleum Engineering</li> 
+                                <li>
+                                    Industry
+                                </li> 
                                 <i class="fa fa-plus"></i>
                                     </a>
                                     <div class="content">
                                         <p>
                                         <ul>
                                             <li>Eclipse</li>
-                                            <li>Petrel</li>
+                                            <li>Petrel RE</li>
                                             <li>Saphir</li>
                                             <li>PVTSim</li>
-                                            <li>IPM Suite</li>
+                                            
                                         </ul>
                                         </p>
                                     </div>
                                 </div>
-                                <div class="set">
+                                <!-- <div class="set">
                                     <a><li>Eclipse</li><i class="fa fa-plus"></i></a>
-                                </div>
-                                <div class="set">
-                                    <a><li>Petrel</li><i class="fa fa-plus"></i></a>
-                                </div>
+                                </div> -->
                                 
-                                <div class="set">
-                                    <a><li>Saphir</li><i class="fa fa-plus"></i></a>
-                                </div>
-                                <div class="set">
-                                    <a><li>Prosper</li><i class="fa fa-plus"></i></a>
-                                </div>
-                                <div class="set">
-                                    <a><li>MBAL</li><i class="fa fa-plus"></i></a>
-                                </div>
                                 
                             </ul>
                         </div>
@@ -271,16 +287,19 @@
                             <h4>IDE/Tools</h4>
                             <ul>
                                 <div class="set">
-                                    <a><li>VSCode</li><i class="fa fa-plus"></i></a>
+                                    <a><li>Linux</li><i class="fa fa-plus"></i></a>
+                                </div>
+                                <div class="set">
+                                    <a><li>Docker</li><i class="fa fa-plus"></i></a>
                                 </div>
                                 <div class="set">
                                     <a><li>Jupyter</li><i class="fa fa-plus"></i></a>
                                 </div>
                                 <div class="set">
-                                    <a><li>Ubuntu WSL</li><i class="fa fa-plus"></i></a>
+                                    <a><li>VSCode</li><i class="fa fa-plus"></i></a>
                                 </div>
                                 <div class="set">
-                                    <a><li>Docker</li><i class="fa fa-plus"></i></a>
+                                    <a><li>Git</li><i class="fa fa-plus"></i></a>
                                 </div>
                             </ul>
                         </div>
@@ -293,14 +312,16 @@
                 <div class="row">
                     <div class="col-md-6 disk-bp">
                         <ul>
-                            <li>The Basics of Transport Phenomena</li>
                             <li>Python 3 Master Course</li>
+                            <li>Deep Learning: GANs and Variational Autoencoders</li>
+                            <li>The Basics of Transport Phenomena</li>
                         </ul>
                     </div>
                     <div class="col-md-6 disk-bp">
                         <ul>
                             <li>Machine Learning</li>
                             <li>Deep Learning and Neural Networks</li>
+                            <li>TensorFlow for Deep Learning with Python</li>
                         </ul>
                     </div>
                 </div>

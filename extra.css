@@ -44,7 +44,7 @@ span.wave {
     right:0;
 }
 .boyimage{
-  height: 400px;
+  height: 200px;
 }
 
 @media only screen and (max-width : 1183px){
@@ -88,8 +88,8 @@ span.wave {
 
   .btn {
     display: inline-block;
-    width: 4.37rem;
-    height: 4.37rem;
+    width: 3.37rem;
+    height: 3.37rem;
     background: rgba(255, 255, 255, 0.4);;
     padding: 0px 0px;
     margin: 10px;
@@ -101,7 +101,7 @@ span.wave {
   }
 
   .btn i {
-    line-height: 70px;
+    line-height: 55px;
     font-size: 1.625rem;
     transition: 0.2s linear;
   }
