@@ -1,0 +1,134 @@
+{
+  "personal": {
+    "name": "Sa'eed Telvari",
+    "title": "Petroleum Engineering Graduate Student",
+    "department": "Department of Petroleum Engineering",
+    "university": "Amirkabir University of Technology, Tehran, Iran",
+    "email": "telvari.saeed@gmail.com",
+    "linkedin": "https://www.linkedin.com/in/stelvari/",
+    "github": "https://github.com/saeedtelvari",
+    "cv_download": "https://drive.google.com/file/d/1eoh5nXUE444ZV8B1XoESA2g4_EMIByLr/view?usp=drive_link"
+  },
+  "research_interests": [
+    "AI Applications in Subsurface",
+    "Porous Media",
+    "Image Processing",
+    "Numerical Simulation",
+    "CCUS",
+    "Computer Vision"
+  ],
+  "education": [
+    {
+      "degree": "M.Sc. of PE - Reservoir Engineering",
+      "institution": "Amirkabir University of Technology, Tehran, Iran",
+      "gpa": "3.61/4",
+      "period": "2022-present"
+    },
+    {
+      "degree": "B.Sc. of Petroleum Engineering",
+      "institution": "Amirkabir University of Technology, Tehran, Iran",
+      "gpa": "17.43/20 (3.57/4)",
+      "period": "2018-2022"
+    }
+  ],
+  "publications": [
+    {
+      "title": "Prediction of two-phase flow properties for digital sandstones using 3D convolutional neural networks",
+      "authors": "Saeed Telvari, Mohammad Sayyafzadeh, Javad Siavashi, Mohammad Sharifi",
+      "link": "https://doi.org/10.1016/j.advwatres.2023.104442",
+      "status": "published"
+    },
+    {
+      "title": "Fractured Rock Image Segmentation using Autoencoder-Based Deep Learning",
+      "authors": "Saeed Telvari, Mohammad Sharifi",
+      "status": "in_progress"
+    }
+  ],
+  "experience": [
+    {
+      "position": "Internship",
+      "company": "Iranian Offshore Oil Company",
+      "period": "Aug-Sep 2021"
+    }
+  ],
+  "honors": [
+    "Ranked within the top 2% in Iranian University Entrance Exam for masters degrees",
+    "Granted direct admission for graduate study from Talented Student Office of Amirkabir University of Technology",
+    "Received national undergraduate scholarship (full tuition waiver)",
+    "Ranked within the top 4% among more than 140,000 students in Iranian University Entrance Exam for bachelor degrees",
+    "Recognized as a talented student in the entrance exam of NODET for middle and high school"
+  ],
+  "projects": [
+    {
+      "title": "Automatic interpretation of well tests",
+      "details": [
+        "Implemented LSTM to predict reservoir properties from pressure derivative and dp",
+        "Developed a script to match analytical model to data"
+      ]
+    },
+    {
+      "title": "Developing an extended local upscaling module in MRST",
+      "details": [
+        "Remodeled a local upscaling module with periodic boundary conditions into an extended local one",
+        "Implemented and compared with local and fine scale pressure field"
+      ]
+    },
+    {
+      "title": "Conjugate heat transfer between rock and fracture fluid using OpenFOAM v9",
+      "details": [
+        "Extracted and partitioned a micro-scale 3D image of a fractured granite rock",
+        "Simulated injection of CO2 with a lower temperature into a fractured granite with high temperature"
+      ]
+    },
+    {
+      "title": "Training machine learning models to identify formation lithology",
+      "details": [
+        "Used 10 conventional well log data as input and mud logging data as output",
+        "Developed FNN (pytorch), Decision Tree (tensorflow), and clustering algorithms such as SVM and k-means"
+      ]
+    }
+  ],
+  "skills": {
+    "programming": {
+      "Python": [
+        "Tensorflow/Keras",
+        "Pytorch", 
+        "Scikit-learn",
+        "Scikit-Image",
+        "OpenCV",
+        "OpenPNM"
+      ],
+      "Other": ["Rust", "MATLAB", "LaTeX"]
+    },
+    "software": {
+      "CFD": ["OpenFOAM", "PerGeos", "SALOME", "MeshLab"],
+      "Industry": ["Eclipse", "Petrel RE", "Saphir", "PVTSim"]
+    },
+    "tools": ["Linux", "Docker", "Jupyter", "VSCode", "Git"]
+  },
+  "courses": [
+    "Python 3 Master Course",
+    "Deep Learning: GANs and Variational Autoencoders", 
+    "The Basics of Transport Phenomena",
+    "Machine Learning",
+    "Deep Learning and Neural Networks",
+    "TensorFlow for Deep Learning with Python"
+  ],
+  "languages": [
+    {
+      "language": "Persian",
+      "proficiency": "Native"
+    },
+    {
+      "language": "English", 
+      "proficiency": "Professional Working Proficiency",
+      "test": "TOEFL: 108",
+      "breakdown": {
+        "Reading": 30,
+        "Listening": 28,
+        "Speaking": 22,
+        "Writing": 28
+      }
+    }
+  ]
+}
