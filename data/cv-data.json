@@ -1,76 +1,95 @@
 {
   "personal": {
     "name": "Sa'eed Telvari",
-    "title": "Petroleum Engineering Graduate Student",
-    "department": "Department of Petroleum Engineering",
-    "university": "Amirkabir University of Technology, Tehran, Iran",
+    "title": "PhD Applicant",
+    "phone": "+98992-167-1643",
     "email": "telvari.saeed@gmail.com",
-    "linkedin": "https://www.linkedin.com/in/stelvari/",
-    "github": "https://github.com/saeedtelvari",
-    "cv_download": "https://drive.google.com/file/d/1eoh5nXUE444ZV8B1XoESA2g4_EMIByLr/view?usp=drive_link"
+    "location": "Tehran, Iran",
+    "linkedin": "STelvari",
+    "github": "Github",
+    "website": "Website"
   },
+  "highlights": [
+    "Reservoir Engineer: A solid foundation in reservoir simulation with proficiency in Eclipse and MRST",
+    "ML Researcher: 2+ years of experience in developing and deploying deep learning models.",
+    "Programmer: A proficient Python programmer with 3+ years experience."
+  ],
   "research_interests": [
-    "AI Applications in Subsurface",
-    "Porous Media",
-    "Image Processing",
-    "Numerical Simulation",
+    "AI Applications in Geo-energy",
     "CCUS",
-    "Computer Vision"
+    "Reservoir Simulation",
+    "Pore-scale Modeling"
   ],
   "education": [
     {
-      "degree": "M.Sc. of PE - Reservoir Engineering",
-      "institution": "Amirkabir University of Technology, Tehran, Iran",
-      "gpa": "3.61/4",
-      "period": "2022-present"
+      "degree": "Ph.D. of Petroleum Engineering",
+      "institution": "Heriot-watt University",
+      "period": "2024 - 2028",
+      "thesis": "Developing Vertical Equilibrium Models for Simulating CO2 Storage in Depleted Gas Reservoirs",
+      "supervisor": "Florian Doster"
+    },
+    {
+      "degree": "M.Sc. of Petroleum Engineering - Reservoir Engineering",
+      "institution": "Amirkabir University",
+      "gpa": "3.65/4 (17.23/20)",
+      "period": "2022 - 2024",
+      "thesis": "Investigation of Machine Learning Methods in Upscaling Fine-scale Discrete Fracture Models",
+      "supervisor": "Mohammad Sharifi"
     },
     {
       "degree": "B.Sc. of Petroleum Engineering",
-      "institution": "Amirkabir University of Technology, Tehran, Iran",
-      "gpa": "17.43/20 (3.57/4)",
-      "period": "2018-2022"
+      "institution": "Amirkabir University",
+      "gpa": "17.43/20",
+      "period": "2018-2022",
+      "thesis": "Prediction of two-phase flow properties for digital sandstones using 3D convolutional neural networks",
+      "supervisor": "Mohammad Sharifi"
     }
   ],
   "publications": [
     {
-      "title": "Prediction of two-phase flow properties for digital sandstones using 3D convolutional neural networks",
-      "authors": "Saeed Telvari, Mohammad Sayyafzadeh, Javad Siavashi, Mohammad Sharifi",
-      "link": "https://doi.org/10.1016/j.advwatres.2023.104442",
-      "status": "published"
+      "title": "Accelerated Permeability Upscaling: A CNN Approach",
+      "authors": "Sayyafzadeh, M., Telvari, S., Guerillot, D., & Sharifi, M. (2024)",
+      "status": "submitted"
     },
     {
-      "title": "Fractured Rock Image Segmentation using Autoencoder-Based Deep Learning",
-      "authors": "Saeed Telvari, Mohammad Sharifi",
-      "status": "in_progress"
+      "title": "Prediction of two-phase flow properties for digital sandstones using 3D convolutional neural networks",
+      "authors": "Telvari, S., Sayyafzadeh, M., Siavashi, J., & Sharifi, M. (2023)",
+      "journal": "Advances in Water Resources, 176, 104442",
+      "status": "published"
     }
   ],
-  "experience": [
+  "ta_experience": [
     {
-      "position": "Internship",
-      "company": "Iranian Offshore Oil Company",
-      "period": "Aug-Sep 2021"
+      "course": "Advanced Naturally Fractured Reservoirs",
+      "institution": "Amirkabir University",
+      "period": "2023 Autumn",
+      "duties": ["Delivering lectures on reservoir simulation by Eclipse", "Designing & grading home works"]
+    },
+    {
+      "course": "Advanced EOR",
+      "institution": "Amirkabir University",
+      "period": "2024 Spring",
+      "duties": ["Delivering lectures on reservoir simulation by Eclipse & Petrel", "Designing & grading course projects"]
     }
   ],
   "honors": [
-    "Ranked within the top 2% in Iranian University Entrance Exam for masters degrees",
     "Granted direct admission for graduate study from Talented Student Office of Amirkabir University of Technology",
-    "Received national undergraduate scholarship (full tuition waiver)",
-    "Ranked within the top 4% among more than 140,000 students in Iranian University Entrance Exam for bachelor degrees",
-    "Recognized as a talented student in the entrance exam of NODET for middle and high school"
+    "Ranked within the top 2% in Iranian University Entrance Exam for master's degrees",
+    "Received national undergraduate scholarship (full tuition waiver)"
   ],
   "projects": [
-    {
-      "title": "Automatic interpretation of well tests",
-      "details": [
-        "Implemented LSTM to predict reservoir properties from pressure derivative and dp",
-        "Developed a script to match analytical model to data"
-      ]
-    },
     {
       "title": "Developing an extended local upscaling module in MRST",
       "details": [
         "Remodeled a local upscaling module with periodic boundary conditions into an extended local one",
         "Implemented and compared with local and fine scale pressure field"
+      ]
+    },
+    {
+      "title": "Automatic interpretation of well tests",
+      "details": [
+        "Implemented LSTM to predict reservoir properties from pressure derivative and dp",
+        "Developed a script to match analytical model to data"
       ]
     },
     {
@@ -81,54 +100,68 @@
       ]
     },
     {
-      "title": "Training machine learning models to identify formation lithology",
+      "title": "Identify formation lithology from well logs using ML",
       "details": [
-        "Used 10 conventional well log data as input and mud logging data as output",
-        "Developed FNN (pytorch), Decision Tree (tensorflow), and clustering algorithms such as SVM and k-means"
+        "Implemented FNN by pytorch and Decision Tree by tensorflow",
+        "Implemented clustering algorithms such as SVM and k-means"
       ]
     }
   ],
   "skills": {
-    "programming": {
-      "Python": [
-        "Tensorflow/Keras",
-        "Pytorch", 
-        "Scikit-learn",
-        "Scikit-Image",
-        "OpenCV",
-        "OpenPNM"
-      ],
-      "Other": ["Rust", "MATLAB", "LaTeX"]
-    },
-    "software": {
-      "CFD": ["OpenFOAM", "PerGeos", "SALOME", "MeshLab"],
-      "Industry": ["Eclipse", "Petrel RE", "Saphir", "PVTSim"]
-    },
+    "programming": ["Python", "C/C++", "MATLAB", "LATEX"],
+    "frameworks": ["MRST", "TensorFlow", "PyTorch", "OpenCV", "OpenPNM"],
+    "software": ["OpenFOAM", "PerGeos", "Eclipse", "Petrel"],
     "tools": ["Linux", "Docker", "Jupyter", "VSCode", "Git"]
   },
-  "courses": [
-    "Python 3 Master Course",
-    "Deep Learning: GANs and Variational Autoencoders", 
-    "The Basics of Transport Phenomena",
-    "Machine Learning",
-    "Deep Learning and Neural Networks",
-    "TensorFlow for Deep Learning with Python"
+  "certificates": [
+    {"name": "Python 3 Master Course", "provider": "Udemy"},
+    {"name": "Machine Learning", "provider": "Coursera"},
+    {"name": "Deep Learning & Neural Networks", "provider": "Coursera"},
+    {"name": "The Basics of Transport Phenomena", "provider": "Edx"},
+    {"name": "TensorFlow for Deep Learning with Python", "provider": "Udemy"}
   ],
   "languages": [
     {
-      "language": "Persian",
-      "proficiency": "Native"
+      "language": "English",
+      "proficiency": "Fluent",
+      "test": "TOEFL: 108/120 (R:30, L:28, S:22, W:28)"
     },
     {
-      "language": "English", 
-      "proficiency": "Professional Working Proficiency",
-      "test": "TOEFL: 108",
-      "breakdown": {
-        "Reading": 30,
-        "Listening": 28,
-        "Speaking": 22,
-        "Writing": 28
-      }
+      "language": "Persian",
+      "proficiency": "Native"
+    }
+  ],
+  "extra_curricular": [
+    {
+      "role": "Web Development Coordinator",
+      "organization": "SPE Student Chapter",
+      "institution": "Amirkabir University",
+      "period": "2019 & 2022",
+      "description": "Led the design and development of the chapter's official website"
+    },
+    {
+      "role": "Event Technology Coordinator",
+      "organization": "SPE Student Chapter", 
+      "institution": "Amirkabir University",
+      "period": "2019 & 2022",
+      "description": "Collaborated with event organizers to identify and fulfill IT and AV requirements for seminars and workshops"
+    }
+  ],
+  "references": [
+    {
+      "name": "Mohammad Sharifi",
+      "role": "Supervisor",
+      "email": "m_sharifi@aut.ac.ir"
+    },
+    {
+      "name": "Mohammad Sayyafzadeh",
+      "role": "Advisor",
+      "email": "mohammad.sayyafzadeh@adelaide.edu.au"
+    },
+    {
+      "name": "Javad Siavashi",
+      "role": "Research Associate",
+      "email": "javad.siavashi@aut.ac.ir"
     }
   ]
 }
