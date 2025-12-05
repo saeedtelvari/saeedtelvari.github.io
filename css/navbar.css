@@ -23,6 +23,11 @@ header {
     width: 100%;
     transition: 0.5s ease;
     align-items: normal;
+    background: linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0.15) 0%,
+        transparent 100%
+    );
 }
 
 .navbartop .navtop {
@@ -38,21 +43,75 @@ header {
     list-style: none;
     display: inline-block;
     font-size: 18px;
-    padding: 5px;
-    font-weight: 300;
+    padding: 8px 16px;
+    font-weight: 400;
     line-height: 80px;
-    margin-right: 20px;
-    transition: 0.5s ease;
+    margin-right: 10px;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    border-radius: 12px;
+    position: relative;
+}
+
+.navbartop .navtop .item::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    bottom: 50%;
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.2) 0%,
+        rgba(255, 255, 255, 0.05) 100%
+    );
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    opacity: 0;
+    transition: all 0.4s ease;
+    z-index: -1;
+}
+
+.navbartop .navtop .item:hover::before {
+    top: 25%;
+    bottom: 25%;
+    opacity: 1;
+    box-shadow: 
+        0 4px 15px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.navbartop .navtop .item:hover {
+    transform: translateY(-2px);
 }
 
 .navbartop .navtop .item .contact {
     display: inline-block;
-    background-color: #ffffff;
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.25) 0%,
+        rgba(255, 255, 255, 0.1) 100%
+    );
     height: 40px;
     line-height: 30px;
-    padding: 5px;
-    border-radius: 2px;
-    transition: 0.5s ease;
+    padding: 5px 15px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 
+        0 4px 15px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.navbartop .navtop .item .contact:hover {
+    transform: translateY(-3px);
+    box-shadow: 
+        0 8px 25px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+        0 0 20px rgba(255, 255, 255, 0.1);
 }
 
 .navbartop .navtop .item a {
@@ -67,17 +126,19 @@ header {
     margin-top: 1%;
     margin-left: 5%;
     width: 80px;
-    height: 100px;
-    /* background-color: firebrick; */
-    background: url(../img/logo.png);
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
+    height: 80px;
     transition: 0.5s ease;
 }
 
 .navbartop .logo img {
-    display: none;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    transition: 0.3s ease;
+}
+
+.navbartop .logo:hover img {
+    transform: scale(1.05);
 }
 
 .scrolled {
@@ -85,8 +146,18 @@ header {
 }
 
 .scrolled.navbartop {
-    height: 80px;
-    background-color: rgba(0, 0, 0, 0.063);
+    height: 70px;
+    background: linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0.3) 0%,
+        rgba(0, 0, 0, 0.1) 100%
+    );
+    backdrop-filter: blur(25px) saturate(180%);
+    -webkit-backdrop-filter: blur(25px) saturate(180%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 
+        0 4px 30px rgba(0, 0, 0, 0.15),
+        inset 0 -1px 0 rgba(255, 255, 255, 0.1);
     transition: 0.5s ease;
 }
 
@@ -97,11 +168,18 @@ header {
 
 .scrolled.navbartop .navtop .item .contact {
     display: inline-block;
-    background-color: #ffffff00;
-    height: 50px;
-    line-height: 30px;
-    padding: 5px;
-    border-radius: 2px;
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.2) 0%,
+        rgba(255, 255, 255, 0.05) 100%
+    );
+    height: 45px;
+    line-height: 35px;
+    padding: 5px 15px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     transition: 0.5s ease;
 }
 
@@ -118,4 +196,191 @@ header {
     background-position: center;
     background-repeat: no-repeat;
     transition: 0.5s ease;
+}
+
+/* =====================================================
+   MOBILE HAMBURGER MENU
+   ===================================================== */
+
+/* Hamburger Button */
+.hamburger {
+    display: none;
+    flex-direction: column;
+    justify-content: space-around;
+    width: 30px;
+    height: 24px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    position: absolute;
+    right: 5%;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 100;
+}
+
+.hamburger span {
+    width: 100%;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 3px;
+    transition: all 0.3s ease;
+}
+
+.hamburger.active span:nth-child(1) {
+    transform: rotate(45deg) translate(6px, 6px);
+}
+
+.hamburger.active span:nth-child(2) {
+    opacity: 0;
+}
+
+.hamburger.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(6px, -6px);
+}
+
+/* Mobile Navigation Overlay */
+.mobile-nav-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    z-index: 90;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.mobile-nav-overlay.active {
+    opacity: 1;
+}
+
+/* =====================================================
+   RESPONSIVE BREAKPOINTS
+   ===================================================== */
+
+/* Tablet Landscape and below */
+@media (max-width: 1024px) {
+    .navbartop .navtop .item {
+        padding: 6px 12px;
+        font-size: 16px;
+        margin-right: 5px;
+    }
+    
+    .navbartop .logo {
+        width: 70px;
+        height: 70px;
+    }
+}
+
+/* Tablet Portrait and below */
+@media (max-width: 768px) {
+    .hamburger {
+        display: flex;
+    }
+    
+    .navbartop {
+        height: 70px;
+    }
+    
+    .navbartop .navtop {
+        position: fixed;
+        top: 0;
+        right: -100%;
+        width: 280px;
+        height: 100vh;
+        flex-direction: column;
+        background: linear-gradient(
+            180deg,
+            rgba(26, 26, 46, 0.98) 0%,
+            rgba(22, 33, 62, 0.98) 50%,
+            rgba(15, 52, 96, 0.98) 100%
+        );
+        backdrop-filter: blur(30px);
+        -webkit-backdrop-filter: blur(30px);
+        padding: 100px 30px 30px;
+        margin: 0;
+        float: none;
+        display: flex;
+        transition: right 0.4s ease;
+        z-index: 95;
+        border-left: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: -10px 0 40px rgba(0, 0, 0, 0.3);
+    }
+    
+    .navbartop .navtop.active {
+        right: 0;
+    }
+    
+    .navbartop .navtop .item {
+        display: block;
+        line-height: 1.5;
+        padding: 15px 20px;
+        margin: 5px 0;
+        font-size: 18px;
+        text-align: left;
+        border-radius: 12px;
+    }
+    
+    .navbartop .navtop .item::before {
+        border-radius: 12px;
+    }
+    
+    .navbartop .navtop .item:hover::before {
+        top: 0;
+        bottom: 0;
+    }
+    
+    .navbartop .logo {
+        width: 55px;
+        height: 55px;
+        margin-top: 8px;
+    }
+    
+    .mobile-nav-overlay {
+        display: block;
+        pointer-events: none;
+    }
+    
+    .mobile-nav-overlay.active {
+        pointer-events: auto;
+    }
+    
+    .scrolled.navbartop {
+        height: 60px;
+    }
+    
+    .scrolled.navbartop .logo {
+        width: 45px;
+        height: 45px;
+        margin-top: 8px;
+    }
+    
+    .scrolled.navbartop .navtop .item {
+        line-height: 1.5;
+    }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+    .navbartop .navtop {
+        width: 100%;
+        right: -100%;
+        padding: 90px 20px 20px;
+    }
+    
+    .navbartop .logo {
+        width: 50px;
+        height: 50px;
+        margin-left: 4%;
+    }
+    
+    .hamburger {
+        right: 4%;
+    }
 }
