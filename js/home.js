@@ -81,7 +81,7 @@ function autoSlide() {
 }
 
 function startAutoSlide() {
-    autoSlideInterval = setInterval(autoSlide, 10000); // 10 seconds
+    autoSlideInterval = setInterval(autoSlide, 20000); // 10 seconds
 }
 
 function stopAutoSlide() {
@@ -94,6 +94,18 @@ function resetAutoSlide() {
 }
 
 document.addEventListener('click', activate, false);
+
+// Arrow key navigation
+document.addEventListener('keydown', function(e) {
+    const items = document.querySelectorAll('.card');
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        slider.append(items[0]);
+        resetAutoSlide();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        slider.prepend(items[items.length - 1]);
+        resetAutoSlide();
+    }
+});
 
 // Start auto-slide on load
 startAutoSlide();
