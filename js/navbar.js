@@ -1,11 +1,35 @@
-$(document).ready(function() {
-    $(window).on('scroll', function() {
-        if (Math.round($(window).scrollTop()) > 100) {
-            $('.navbar').addClass('scrolled');
+// Navbar scroll effect (vanilla JS - no jQuery needed)
+document.addEventListener('DOMContentLoaded', function() {
+    const navbar = document.querySelector('.navbartop');
+    const backToTopBtn = document.getElementById('back-to-top');
+    
+    window.addEventListener('scroll', function() {
+        // Navbar scroll effect
+        if (window.scrollY > 100) {
+            navbar.classList.add('scrolled');
         } else {
-            $('.navbar').removeClass('scrolled');
+            navbar.classList.remove('scrolled');
+        }
+        
+        // Back to top button visibility
+        if (backToTopBtn) {
+            if (window.scrollY > 500) {
+                backToTopBtn.classList.add('visible');
+            } else {
+                backToTopBtn.classList.remove('visible');
+            }
         }
     });
+    
+    // Back to top button click handler
+    if (backToTopBtn) {
+        backToTopBtn.addEventListener('click', function() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+    }
 });
 
 // Mobile Navigation Toggle
