@@ -1,603 +1,100 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description"
-    content="Sa'eed Telvari - Ph.D. Candidate in Petroleum Engineering specializing in reservoir simulation, CO2 storage modeling, and CCUS technologies.">
-  <title>Sa'eed Telvari</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css" rel="stylesheet"
-    integrity="sha384-gH2yIJqKdNHPEq0n4Mqa/HGKIhSkIHeL5AyhkYV8i59U5AR6csBvApHHNl/vI1Bx" crossorigin="anonymous">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Sofia">
+  <title>Telvari Portfolio — UI kit</title>
+  <link rel="stylesheet" href="./colors_and_type.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <link rel="icon" href="img/icons/logo-minimalist.png">
-
-  <link rel="stylesheet" type="text/css" href="css/master.css">
-  <link rel="stylesheet" type="text/css" href="css/navbar.css">
-  <link rel="stylesheet" type="text/css" href="css/animations.css">
-  <link rel="stylesheet" type="text/css" href="css/glass-effects.css">
-  <link rel="stylesheet" type="text/css" href="css/sections.css">
-  <link href="https://fonts.googleapis.com/css2?family=Arizonia&family=Montserrat:wght@400;800&display=swap"
-    rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@700&display=swap" rel="stylesheet">
-</head>
-
-<body>
-  <!-- Header / Navigation -->
-  <header>
-    <div class="navbartop">
-      <a href="index.html" class="logo" aria-label="Sa'eed Telvari - Home">
-        <img src="img/icons/logo-minimalist.png" alt="Sa'eed Telvari Logo">
-      </a>
-      
-      <ul class="navtop">
-        <li class="item">
-          <a href="#home">Home</a>
-        </li>
-        <li class="item">
-          <a href="#about">About</a>
-        </li>
-        <li class="item">
-          <a href="#research">Research</a>
-        </li>
-        <li class="item">
-          <a href="#publications">Publications</a>
-        </li>
-        <li class="item">
-          <a href="#projects">Projects</a>
-        </li>
-        <li class="item">
-          <a href="cv.html">CV</a>
-        </li>
-      </ul>
-
-      <!-- Mobile Hamburger Button -->
-      <button class="hamburger" aria-label="Toggle navigation menu">
-        <span></span>
-        <span></span>
-        <span></span>
-      </button>
-    </div>
-    <!-- Mobile Navigation Overlay -->
-    <div class="mobile-nav-overlay"></div>
-  </header>
-
-  <!-- Main Content -->
-  <main>
-    <!-- Hero Section / Slider -->
-    <section id="home" class="hero-section">
-      <ul class='slider'>
-        <li class='card' style="background-image: url('img/projects/sld3.png')">
-          <div class='content'>
-            <h2 class='title'>Contact Me</h2>
-            <div class="social_media_icon">
-              <a class="btn glass-social" href="https://www.linkedin.com/in/stelvari/" target="_blank"
-                aria-label="LinkedIn">
-                <i class="fab fa-linkedin" aria-hidden="true"></i>
-              </a>
-              <a class="btn glass-social" href="https://github.com/saeedtelvari" target="_blank" aria-label="GitHub">
-                <i class="fab fa-github"></i>
-              </a>
-              <a class="btn glass-social" href="https://scholar.google.com/citations?user=_nGa8EQAAAAJ&hl=en" target="_blank" aria-label="Google Scholar">
-                <i class="fas fa-graduation-cap"></i>
-              </a>
-              <a class="btn glass-social" href="mailto:telvari.saeed@gmail.com" target="_blank" aria-label="Email">
-                <i class="fas fa-envelope"></i>
-              </a>
-            </div>
-            <div class="button-group">
-              <button onclick="window.open('data/CV.pdf', '_blank')">Download CV</button>
-              <button onclick="window.location='cv.html'">View Online CV</button>
-            </div>
-          </div>
-        </li>
-        <li class='card' style="background-image: url('img/projects/sld0.png')">
-          <div class='content'>
-            <h2 class='title'>Ph.D. Candidate</h2>
-            <p class='description'>Welcome to my academic journey! I'm a PhD candidate at Heriot-Watt University
-              specializing in reservoir simulation and CO<sub>2</sub> storage modeling.
-              With expertise in Eclipse and MRST, I focus on developing advanced simulation techniques
-              for CCUS applications and depleted gas reservoir characterization.</p>
-            <button onclick="window.location='#about'">Learn More</button>
-          </div>
-        </li>
-        <li class='card' style="background-image: url('img/projects/sld6.png')">
-          <div class='content'>
-            <h2 class='title'>CO<sub>2</sub> Storage Research</h2>
-            <p class='description'>My PhD research focuses on developing Vertical Equilibrium Models
-              for simulating CO<sub>2</sub> storage in depleted gas reservoirs, achieving <strong>100-400× computational
-                speedup</strong>
-              compared to traditional 3D simulations while maintaining accuracy for field-scale applications.</p>
-            <button onclick="window.location='#research'">View Research</button>
-          </div>
-        </li>
-        <li class='card' style="background-image: url('img/projects/sld1.png')">
-          <div class='content'>
-            <h2 class='title'>Reservoir Simulation</h2>
-            <p class='description'>
-              Expert in Eclipse and MRST (Matlab Reservoir Simulation Toolbox) with extensive
-              experience in fractured reservoir modeling. Developed <strong>extended local upscaling modules</strong>
-              that improved simulation accuracy by 15-20% for heterogeneous formations.
-            </p>
-            <button onclick="window.location='#projects'">View Projects</button>
-          </div>
-        </li>
-        <li class='card' style="background-image: url('img/projects/sld4.png')">
-          <div class='content'>
-            <h2 class='title'>Energy Transition</h2>
-            <p class='description'>
-              Driving the shift toward sustainable energy through advanced subsurface engineering.
-              My work bridges CCUS technologies, geothermal systems, and reservoir characterization
-              to enable a low-carbon future and support global net-zero goals.
-            </p>
-            <button onclick="window.location='#research'">Explore Research</button>
-          </div>
-        </li>
-      </ul>
-      <nav class='nav'>
-        <ion-icon class='btn prev' name="arrow-back-outline" aria-label="Previous Slide"></ion-icon>
-        <ion-icon class='btn next' name="arrow-forward-outline" aria-label="Next Slide"></ion-icon>
-      </nav>
-    </section>
-
-    <!-- About Section -->
-    <section id="about" class="content-section" style="background-image: url('img/backgrounds/bg18.png');">
-      <div class="section-container glass-morphism-section">
-        <h2 class="section-title">About Me</h2>
-        <div class="about-content">
-          <div class="about-text">
-            <p class="lead">
-              I'm <strong>Sa'eed Telvari</strong>, a PhD candidate in Petroleum Engineering at Heriot-Watt University,
-              working under the supervision of Dr. Florian Doster. My research bridges the gap between
-              computational efficiency and physical accuracy in subsurface flow simulation.
-            </p>
-            <p>
-              My journey began at Amirkabir University of Technology (Tehran Polytechnic), where I completed
-              both my B.Sc. and M.Sc. in Petroleum Engineering with a focus on reservoir simulation and
-              machine learning applications. I was granted direct admission for graduate study based on
-              my academic excellence, ranking within the top 2% in the national entrance exam.
-            </p>
-            <p>
-              Currently, I'm developing Vertical Equilibrium (VE) models for simulating CO<sub>2</sub> storage in
-              depleted gas reservoirs—a key simulation strategy for achieving net-zero emissions. My work
-              combines numerical methods, machine learning, and domain expertise to create computationally
-              efficient yet accurate simulation tools for Carbon Capture, Utilization, and Storage (CCUS).
-            </p>
-            <div class="about-highlights">
-              <div class="highlight-item glass-card">
-                <i class="fas fa-graduation-cap"></i>
-                <span>PhD @ Heriot-Watt</span>
-              </div>
-              <div class="highlight-item glass-card">
-                <i class="fas fa-flask"></i>
-                <span>CCUS Research</span>
-              </div>
-              <div class="highlight-item glass-card">
-                <i class="fas fa-code"></i>
-                <span>Python, MATLAB, Julia</span>
-              </div>
-              <div class="highlight-item glass-card">
-                <i class="fas fa-robot"></i>
-                <span>Agentic AI Enthusiast</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Research Interests Section -->
-    <section id="research" class="content-section" style="background-image: url('img/backgrounds/bg16.png'); background-size: 200%;">
-      <div class="section-container glass-morphism-section">
-        <h2 class="section-title">Research Interests</h2>
-        <div class="research-grid">
-          <div class="research-card glass-card">
-            <div class="research-icon">
-              <i class="fas fa-cloud"></i>
-            </div>
-            <h3>CO<sub>2</sub> Storage Modeling</h3>
-            <p>Developing efficient numerical models for CO<sub>2</sub> injection and storage in depleted reservoirs,
-              focusing on Vertical Equilibrium approaches for large-scale simulations.</p>
-          </div>
-          <div class="research-card glass-card">
-            <div class="research-icon">
-              <i class="fas fa-cubes"></i>
-            </div>
-            <h3>Reservoir Simulation</h3>
-            <p>Advanced simulation techniques using Eclipse and MRST for complex reservoir systems,
-              including fractured and heterogeneous formations.</p>
-          </div>
-          <div class="research-card glass-card">
-            <div class="research-icon">
-              <i class="fas fa-layer-group"></i>
-            </div>
-            <h3>Upscaling Methods</h3>
-            <p>Machine learning-enhanced upscaling of fine-scale discrete fracture models to
-              field-scale simulations while preserving flow characteristics.</p>
-          </div>
-          <div class="research-card glass-card">
-            <div class="research-icon">
-              <i class="fas fa-microscope"></i>
-            </div>
-            <h3>Digital Rock Analysis</h3>
-            <p>Pore-scale modeling and 3D CNN-based prediction of petrophysical properties
-              from micro-CT images of rock samples.</p>
-          </div>
-          <div class="research-card glass-card">
-            <div class="research-icon">
-              <i class="fas fa-fire"></i>
-            </div>
-            <h3>Depleted Oil/Gas Reservoirs</h3>
-            <p>Characterization and modeling of depleted hydrocarbon reservoirs for CO<sub>2</sub> storage,
-              including residual gas effects and multi-phase flow dynamics.</p>
-          </div>
-          <div class="research-card glass-card">
-            <div class="research-icon">
-              <i class="fas fa-brain"></i>
-            </div>
-            <h3>Machine Learning in PE</h3>
-            <p>Applying deep learning and neural networks to accelerate reservoir characterization
-              and property prediction workflows.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Publications Section -->
-    <section id="publications" class="content-section" style="background-image: url('img/backgrounds/bg12.png');">
-      <div class="section-container glass-morphism-section">
-        <h2 class="section-title">Publications</h2>
-        <div class="publications-list">
-          <article class="publication-item glass-card">
-            <div class="publication-type">
-              <span class="badge badge-published">Conference</span>
-            </div>
-            <h3 class="publication-title">Three-Phase VE Simulation of CO<sub>2</sub>–Methane–Brine Flow in Reservoirs</h3>
-            <p class="publication-authors">
-              <strong>Telvari, S.</strong>, Ramachandran, H., Wang, G., & Doster, F. (2025)
-            </p>
-            <p class="publication-venue">Sixth EAGE Global Energy Transition Conference & Exhibition (GET 2025), Volume 2025, p.1-5</p>
-            <p class="publication-abstract">
-              A Vertical Equilibrium (VE) model for simulating three-phase CO<sub>2</sub>–methane–brine flow in depleted gas reservoirs,
-              enabling efficient large-scale simulation of CO<sub>2</sub> storage with residual methane interactions.
-            </p>
-            <a href="https://doi.org/10.3997/2214-4609.202521145" target="_blank" class="publication-link glass-button">
-              <i class="fas fa-external-link-alt"></i> View Publication
-            </a>
-          </article>
-
-          <article class="publication-item glass-card">
-            <div class="publication-type">
-              <span class="badge">Accepted</span>
-            </div>
-            <h3 class="publication-title">Accelerated Permeability Upscaling: A CNN Approach</h3>
-            <p class="publication-authors">
-              Sayyafzadeh, M., <strong>Telvari, S.</strong>, Guerillot, D., & Sharifi, M. (2024)
-            </p>
-            <p class="publication-venue">Under Review</p>
-            <p class="publication-abstract">
-              A novel convolutional neural network approach for rapid permeability upscaling in heterogeneous
-              reservoirs, achieving 100-400× computational speedup compared to traditional flow-based methods.
-            </p>
-          </article>
-
-          <article class="publication-item glass-card">
-            <div class="publication-type">
-              <span class="badge badge-published">Published</span>
-            </div>
-            <h3 class="publication-title">Prediction of two-phase flow properties for digital sandstones using 3D
-              convolutional neural networks</h3>
-            <p class="publication-authors">
-              <strong>Telvari, S.</strong>, Sayyafzadeh, M., Siavashi, J., & Sharifi, M. (2023)
-            </p>
-            <p class="publication-venue">Advances in Water Resources, 176, 104442</p>
-            <p class="publication-abstract">
-              Developed a 3D CNN architecture for predicting relative permeability and capillary pressure curves
-              directly from micro-CT images, eliminating the need for expensive pore-network modeling.
-            </p>
-            <a href="https://doi.org/10.1016/j.advwatres.2023.104442" target="_blank" class="publication-link glass-button">
-              <i class="fas fa-external-link-alt"></i> View Publication
-            </a>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <!-- Projects Section -->
-    <section id="projects" class="content-section" style="background-image: url('img/backgrounds/bg16.png');">
-      <div class="section-container glass-morphism-section">
-        <h2 class="section-title">Academic Projects</h2>
-        <div class="projects-grid">
-          <div class="project-card glass-card">
-            <div class="project-header">
-              <i class="fas fa-chart-line"></i>
-              <h3>Extended Local Upscaling in MRST</h3>
-            </div>
-            <p>Developed an extended local upscaling module with periodic boundary conditions,
-              improving reservoir simulation accuracy by 15-20% for heterogeneous formations.</p>
-            <div class="project-tags">
-              <span class="tag">MATLAB</span>
-              <span class="tag">MRST</span>
-              <span class="tag">Upscaling</span>
-            </div>
-          </div>
-
-          <div class="project-card glass-card">
-            <div class="project-header">
-              <i class="fas fa-temperature-high"></i>
-              <h3>CO<sub>2</sub> Injection in Fractured Granite</h3>
-            </div>
-            <p>Simulated conjugate heat transfer between rock matrix and fracture fluid using OpenFOAM,
-              analyzing temperature effects on CO<sub>2</sub> storage mechanisms in geothermal systems.</p>
-            <div class="project-tags">
-              <span class="tag">OpenFOAM</span>
-              <span class="tag">CFD</span>
-              <span class="tag">Heat Transfer</span>
-            </div>
-          </div>
-
-          <div class="project-card glass-card">
-            <div class="project-header">
-              <i class="fas fa-wave-square"></i>
-              <h3>Automated Well Test Interpretation</h3>
-            </div>
-            <p>Built analytical solutions and automated matching algorithms for pressure transient analysis,
-              streamlining reservoir property estimation from field data.</p>
-            <div class="project-tags">
-              <span class="tag">Python</span>
-              <span class="tag">Well Testing</span>
-              <span class="tag">PTA</span>
-            </div>
-          </div>
-
-          <div class="project-card glass-card">
-            <div class="project-header">
-              <i class="fas fa-database"></i>
-              <h3>Digital Rock Physics Workflow</h3>
-            </div>
-            <p>Created an end-to-end pipeline for extracting petrophysical properties from micro-CT images
-              using advanced image processing and deep learning techniques.</p>
-            <div class="project-tags">
-              <span class="tag">Python</span>
-              <span class="tag">TensorFlow</span>
-              <span class="tag">Image Processing</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- News/Updates Section -->
-    <section id="news" class="content-section" style="background-image: url('img/backgrounds/bg15.png');">
-      <div class="section-container glass-morphism-section">
-        <h2 class="section-title">Recent Activity</h2>
-        <div class="news-timeline">
-          <div class="news-item glass-card">
-            <div class="news-date">
-              <span class="month">Oct</span>
-              <span class="year">2025</span>
-            </div>
-            <div class="news-content">
-              <h3>Paper Published at EAGE GET 2025</h3>
-              <p>Published "Three-Phase VE Simulation of CO<sub>2</sub>–Methane–Brine Flow in Reservoirs" at the Sixth EAGE Global Energy Transition Conference.</p>
-            </div>
-          </div>
-
-          <div class="news-item glass-card">
-            <div class="news-date">
-              <span class="month">Sep</span>
-              <span class="year">2024</span>
-            </div>
-            <div class="news-content">
-              <h3>Started PhD at Heriot-Watt University</h3>
-              <p>Began doctoral research on Vertical Equilibrium Models for CO<sub>2</sub> storage under Dr. Florian Doster.</p>
-            </div>
-          </div>
-
-          <div class="news-item glass-card">
-            <div class="news-date">
-              <span class="month">Jun</span>
-              <span class="year">2024</span>
-            </div>
-            <div class="news-content">
-              <h3>M.Sc. Thesis Defense</h3>
-              <p>Successfully defended thesis on "Machine Learning Methods in Upscaling Fine-scale Discrete Fracture
-                Models" with distinction. GPA: 3.65/4 (17.23/20).</p>
-            </div>
-          </div>
-
-          <div class="news-item glass-card">
-            <div class="news-date">
-              <span class="month">May</span>
-              <span class="year">2023</span>
-            </div>
-            <div class="news-content">
-              <h3>Paper Published in Advances in Water Resources</h3>
-              <p>First-author publication on 3D CNN prediction of two-phase flow properties accepted in a top-tier
-                journal.</p>
-            </div>
-          </div>
-
-          <!-- Expandable older activities -->
-          <div id="older-activities" class="older-activities hidden">
-            <div class="news-item glass-card">
-              <div class="news-date">
-                <span class="month">Fall</span>
-                <span class="year">2023</span>
-              </div>
-              <div class="news-content">
-                <h3>Teaching Assistant - Advanced Naturally Fractured Reservoirs</h3>
-                <p>Delivered lectures on Eclipse reservoir simulation and designed course assignments at Amirkabir
-                  University.</p>
-              </div>
-            </div>
-
-            <div class="news-item glass-card">
-              <div class="news-date">
-                <span class="month">Sep</span>
-                <span class="year">2022</span>
-              </div>
-              <div class="news-content">
-                <h3>Started M.Sc. at Amirkabir University</h3>
-                <p>Granted direct admission for graduate study from Talented Student Office. Ranked within top 2% in Iranian University Entrance Exam for master's degrees.</p>
-              </div>
-            </div>
-
-            <div class="news-item glass-card">
-              <div class="news-date">
-                <span class="month">Jun</span>
-                <span class="year">2022</span>
-              </div>
-              <div class="news-content">
-                <h3>B.Sc. Graduation - Amirkabir University</h3>
-                <p>Completed B.Sc. in Petroleum Engineering with GPA: 17.43/20. Thesis: "Prediction of two-phase flow properties for digital sandstones using 3D CNNs".</p>
-              </div>
-            </div>
-
-            <div class="news-item glass-card">
-              <div class="news-date">
-                <span class="month">Sep</span>
-                <span class="year">2018</span>
-              </div>
-              <div class="news-content">
-                <h3>Started B.Sc. at Amirkabir University of Technology</h3>
-                <p>Began undergraduate studies in Petroleum Engineering with national scholarship (full tuition waiver). Ranked within top 4% among 140,000+ students in national entrance exam.</p>
-              </div>
-            </div>
-          </div>
-
-          <button id="show-more-btn" class="show-more-btn glass-button" onclick="toggleOlderActivities()">
-            <span id="show-more-text">Show More</span>
-            <i id="show-more-icon" class="fas fa-chevron-down"></i>
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- Contact Section -->
-    <section id="contact" class="content-section" style="background-image: url('img/backgrounds/bg17.png');">
-      <div class="section-container glass-morphism-section">
-        <h2 class="section-title">Get In Touch</h2>
-        <div class="contact-content">
-          <p class="contact-intro">
-            I'm always interested in discussing research collaborations, academic opportunities,
-            or questions about reservoir simulation and CCUS technologies.
-          </p>
-          <div class="contact-methods">
-            <a href="mailto:telvari.saeed@gmail.com" class="contact-item glass-card">
-              <i class="fas fa-envelope"></i>
-              <span>telvari.saeed@gmail.com</span>
-            </a>
-            <a href="https://www.linkedin.com/in/stelvari/" target="_blank" class="contact-item glass-card">
-              <i class="fab fa-linkedin"></i>
-              <span>LinkedIn Profile</span>
-            </a>
-            <a href="https://github.com/saeedtelvari" target="_blank" class="contact-item glass-card">
-              <i class="fab fa-github"></i>
-              <span>GitHub</span>
-            </a>
-            <a href="https://scholar.google.com/citations?user=_nGa8EQAAAAJ&hl=en" target="_blank" class="contact-item glass-card">
-              <i class="fas fa-graduation-cap"></i>
-              <span>Google Scholar</span>
-            </a>
-          </div>
-          <div class="contact-location">
-            <i class="fas fa-map-marker-alt"></i>
-            <span>Institute of GeoEnergy Engineering, Heriot-Watt University, Edinburgh, UK</span>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Footer -->
-  <footer class="site-footer glass-nav">
-    <div class="footer-content">
-      <div class="footer-info">
-        <p>&copy; 2024-2025 Sa'eed Telvari. All rights reserved.</p>
-        <p class="footer-update">Last updated: December 2024</p>
-      </div>
-      <div class="footer-links">
-        <a href="#home">Home</a>
-        <a href="#about">About</a>
-        <a href="#publications">Publications</a>
-        <a href="cv.html">CV</a>
-      </div>
-    </div>
-  </footer>
-
-  <!-- Back to Top Button -->
-  <button id="back-to-top" class="back-to-top" aria-label="Back to top">
-    <i class="fas fa-chevron-up"></i>
-  </button>
-
-  <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
-  <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
-  <script src="js/home.js"></script>
-  <script src="js/navbar.js"></script>
-  <script src="js/animations.js"></script>
-  <script>
-    // Toggle older activities in Recent Activity section
-    function toggleOlderActivities() {
-      const olderActivities = document.getElementById('older-activities');
-      const showMoreBtn = document.getElementById('show-more-btn');
-      const showMoreText = document.getElementById('show-more-text');
-      const showMoreIcon = document.getElementById('show-more-icon');
-      
-      if (olderActivities.classList.contains('hidden')) {
-        olderActivities.classList.remove('hidden');
-        olderActivities.classList.add('expanded');
-        showMoreBtn.classList.add('expanded');
-        showMoreText.textContent = 'Show Less';
-      } else {
-        olderActivities.classList.remove('expanded');
-        olderActivities.classList.add('hidden');
-        showMoreBtn.classList.remove('expanded');
-        showMoreText.textContent = 'Show More';
-      }
+  <link rel="icon" href="./assets/logo-minimalist.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: linear-gradient(135deg, #211d34 0%, #1c2645 50%, #1d416e 100%);
+      font-family: 'Montserrat', system-ui, sans-serif;
+      overflow-x: hidden;
     }
+    /* Scrollbar style to match */
+    ::-webkit-scrollbar { width: 10px; }
+    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.20); }
+    ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(100,255,218,0.30), rgba(100,255,218,0.10)); border-radius: 6px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(100,255,218,0.40); }
 
-    // Scroll animation - Intersection Observer
-    document.addEventListener('DOMContentLoaded', function() {
-      // Add fade-in-up class to all animatable elements
-      const animatableElements = document.querySelectorAll(
-        '.glass-card, .section-title, .about-text p, .highlight-item, ' +
-        '.research-card, .publication-item, .project-card, .news-item, ' +
-        '.contact-item, .contact-intro, .contact-location'
-      );
-      
-      animatableElements.forEach(el => {
-        el.classList.add('fade-in-up');
-      });
+    /* Subsurface hero animations — defined globally so React re-renders can't reset them */
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.25; }
+      50%      { opacity: 0.95; }
+    }
+    @keyframes flow {
+      from { stroke-dashoffset: 0; }
+      to   { stroke-dashoffset: -160; }
+    }
+    @keyframes flow-reverse {
+      from { stroke-dashoffset: 0; }
+      to   { stroke-dashoffset: 160; }
+    }
+    @keyframes fingerDrip {
+      0%   { transform: translateY(0) scale(1);      opacity: 0; }
+      15%  {                                         opacity: 0.55; }
+      85%  { transform: translateY(120px) scale(1.3); opacity: 0.30; }
+      100% { transform: translateY(140px) scale(0.3); opacity: 0; }
+    }
+    @keyframes cellPulse {
+      0%, 100% { opacity: 0.15; transform: scale(0.85); }
+      50%      { opacity: 0.95; transform: scale(1.25); }
+    }
+    @keyframes bubbleRise {
+      0%   { transform: translate(0, 0)               scale(0.5); opacity: 0; }
+      15%  { transform: translate(calc(var(--drift, 0px) * 0.10), -30px)  scale(0.85); opacity: 0.85; }
+      55%  { transform: translate(calc(var(--drift, 0px) * 0.50), -160px) scale(1);    opacity: 0.75; }
+      85%  { transform: translate(calc(var(--drift, 0px) * 0.85), -260px) scale(1.05); opacity: 0.40; }
+      100% { transform: translate(var(--drift, 0px),              -330px) scale(1.1);  opacity: 0;    }
+    }
+    @keyframes streakRise {
+      0%   { transform: translateY(0);      opacity: 0; }
+      15%  {                                opacity: 0.75; }
+      85%  { transform: translateY(-180px); opacity: 0.45; }
+      100% { transform: translateY(-200px); opacity: 0; }
+    }
+    @keyframes faultRise {
+      0%   { transform: translateY(0); opacity: 0; }
+      15%  { opacity: 0.85; }
+      85%  { opacity: 0.85; }
+      100% { transform: translateY(var(--travel, -150px)); opacity: 0; }
+    }
+    @keyframes pulseFlare {
+      0%, 100% { opacity: 0.65; transform: translateX(-50%) scale(1);   }
+      50%      { opacity: 1;    transform: translateX(-50%) scale(1.4); }
+    }
+    @keyframes labelArrow {
+      0%, 100% { opacity: 0.65; }
+      50%      { opacity: 1; }
+    }
+    @keyframes feedBubble {
+      0%   { transform: translateY(0); opacity: 0; }
+      15%  { opacity: 0.85; }
+      85%  { opacity: 0.85; }
+      100% { transform: translateY(calc(42vh - 35px)); opacity: 0; }
+    }
+    @keyframes plumePulse {
+      0%, 100% { opacity: 0.22; transform: scale(1.0); }
+      50%      { opacity: 0.45; transform: scale(1.01); }
+    }
+  </style>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
 
-      // Create Intersection Observer
-      const observerOptions = {
-        root: null,
-        rootMargin: '0px 0px -50px 0px',
-        threshold: 0.1
-      };
-
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('visible');
-            // Optional: unobserve after animation
-            // observer.unobserve(entry.target);
-          }
-        });
-      }, observerOptions);
-
-      // Observe all animatable elements
-      animatableElements.forEach(el => observer.observe(el));
-
-      // Also observe section titles for scale effect
-      document.querySelectorAll('.section-title').forEach(title => {
-        title.classList.add('scale-in');
-        observer.observe(title);
-      });
-    });
-  </script>
+  <script type="text/babel" src="Primitives.jsx?v=3.8"></script>
+  <script type="text/babel" src="Header.jsx?v=3.8"></script>
+  <script type="text/babel" src="Footer.jsx?v=3.8"></script>
+  <script type="text/babel" src="SubsurfaceHero.jsx?v=3.17"></script>
+  <script type="text/babel" src="HomeSections.jsx?v=3.8"></script>
+  <script type="text/babel" src="CVPage.jsx?v=3.8"></script>
+  <script type="text/babel" src="App.jsx?v=3.8"></script>
 </body>
-
 </html>
