@@ -282,10 +282,28 @@ const SectionPanel = ({ children, bg, style = {} }) => (
     ...style,
   }}>
     {bg && (
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: 'linear-gradient(135deg, rgba(15,15,22,0.50) 0%, rgba(18,18,26,0.35) 50%, rgba(15,15,22,0.55) 100%)',
-      }}></div>
+      <>
+        {/* Main neutral contrast overlay */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(135deg, rgba(15,15,22,0.50) 0%, rgba(18,18,26,0.35) 50%, rgba(15,15,22,0.55) 100%)',
+          zIndex: 1,
+        }}></div>
+        {/* Top transition zone: gentle fade-in from the page's deep dark background */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 160,
+          background: 'linear-gradient(to bottom, #130d1c 0%, transparent 100%)',
+          pointerEvents: 'none',
+          zIndex: 2,
+        }} />
+        {/* Bottom transition zone: gentle fade-out into the page's deep dark background */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: 160,
+          background: 'linear-gradient(to top, #130d1c 0%, transparent 100%)',
+          pointerEvents: 'none',
+          zIndex: 2,
+        }} />
+      </>
     )}
     {/* decorative blobs */}
     <div 
@@ -303,7 +321,7 @@ const SectionPanel = ({ children, bg, style = {} }) => (
       }}
     />
     <div style={{
-      position: 'relative', zIndex: 1,
+      position: 'relative', zIndex: 5,
       maxWidth: 1100, margin: '0 auto',
       padding: '40px 36px',
       background: 'linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.08) 100%)',
