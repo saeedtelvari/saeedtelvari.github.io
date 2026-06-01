@@ -33,6 +33,7 @@ const App = () => {
           <div id="research" />
           <div id="publications" />
           <PublicationsList />
+          <div id="contact" />
           <ContactSection />
           <Footer />
         </main>

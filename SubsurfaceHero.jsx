@@ -1374,10 +1374,10 @@ const Identity = () => (
 
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 24, flexWrap: 'wrap' }}>
       <div style={{ display: 'flex', gap: 10 }}>
-        <BrandSocial icon="fa-brands fa-linkedin-in" tint="#0a66c2" />
-        <BrandSocial icon="fa-brands fa-github"      tint="#22272e" />
-        <BrandSocial icon="fa-solid fa-graduation-cap" tint="#4285f4" />
-        <BrandSocial icon="fa-solid fa-envelope"     tint="#ea4335" />
+        <BrandSocial icon="fa-brands fa-linkedin-in" tint="#0a66c2" url="https://www.linkedin.com/in/stelvari/" />
+        <BrandSocial icon="fa-brands fa-github"      tint="#22272e" url="https://github.com/saeedtelvari" />
+        <BrandSocial icon="fa-solid fa-graduation-cap" tint="#4285f4" url="https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330" />
+        <BrandSocial icon="fa-solid fa-envelope"     tint="#ea4335" url="mailto:st4014@hw.ac.uk" />
       </div>
       <div style={{ height: 22, width: 1, background: 'rgba(255,255,255,0.18)' }}/>
       <a href="#" style={{
@@ -1406,7 +1406,7 @@ const Identity = () => (
   </div>
 );
 
-const BrandSocial = ({ icon, tint }) => {
+const BrandSocial = ({ icon, tint, url }) => {
   const [hover, setHover] = useState(false);
   const toRGBA = (hex, a) => {
     const n = parseInt(hex.slice(1), 16);
@@ -1414,7 +1414,9 @@ const BrandSocial = ({ icon, tint }) => {
   };
   return (
     <a
-      href="#"
+      href={url}
+      target="_blank"
+      rel="noreferrer"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       aria-label="social link"

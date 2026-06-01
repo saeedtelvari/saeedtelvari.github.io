@@ -6,8 +6,10 @@ const { useState } = React;
    About + Recent Activity (merged)
    ===================================================== */
 const NEWS = [
-  { month: 'Oct', year: '2025', title: 'Paper Published at EAGE GET 2025', body: 'Published "Three-Phase VE Simulation of CO\u2082\u2013Methane\u2013Brine Flow in Reservoirs" at the Sixth EAGE Global Energy Transition Conference.' },
-  { month: 'Sep', year: '2024', title: 'Started PhD at Heriot-Watt University', body: 'Began doctoral research on Vertical Equilibrium Models for CO\u2082 storage under Dr. Florian Doster.' },
+  { month: 'May', year: '2026', title: 'Presented at InterPore 2026', body: 'Presented research on Vertical Equilibrium models for CO\u2082 storage at the InterPore 2026 Annual Meeting.' },
+  { month: 'Oct', year: '2025', title: 'Poster Presentation at EAGE GET 2025', body: 'Presented an extended abstract on "Three-Phase VE Simulation of CO\u2082\u2013Methane\u2013Brine Flow in Reservoirs" at the Sixth EAGE Global Energy Transition Conference.' },
+  { month: 'Sep', year: '2025', title: 'Presented at InterPore UK 2025', body: 'Delivered a presentation on Vertical Equilibrium flow models at the InterPore UK 2025 Chapter Meeting.' },
+  { month: 'Sep', year: '2024', title: 'Started PhD at Heriot-Watt University', body: 'Began doctoral research on Vertical Equilibrium Models for CO\u2082 storage.' },
   { month: 'Jun', year: '2024', title: 'M.Sc. Thesis Defense', body: 'Successfully defended thesis on "Machine Learning Methods in Upscaling Fine-scale Discrete Fracture Models" with distinction. GPA: 3.65/4.' },
   { month: 'May', year: '2023', title: 'Paper Published in Advances in Water Resources', body: 'First-author publication on 3D CNN prediction of two-phase flow properties accepted in a top-tier journal.' },
 ];
@@ -25,13 +27,13 @@ const AboutSection = () => (
         
         <Reveal delay="reveal-delay-1">
           <p className="lead" style={{ fontSize: 21, fontWeight: 500, lineHeight: 1.7, color: '#fff', marginTop: 0 }}>
-            I'm <strong style={{ color: '#64ffda', fontWeight: 600 }}>Sa'eed Telvari</strong>, a PhD candidate in Petroleum Engineering at Heriot-Watt University, working under the supervision of Dr.&nbsp;Florian Doster. My research bridges the gap between computational efficiency and physical accuracy in subsurface flow simulation.
+            I'm <strong style={{ color: '#64ffda', fontWeight: 600 }}>Sa'eed Telvari</strong>, a PhD candidate in Petroleum Engineering at Heriot-Watt University. My research bridges the gap between computational efficiency and physical accuracy in subsurface flow simulation.
           </p>
         </Reveal>
         
         <Reveal delay="reveal-delay-2">
           <p style={{ fontSize: 16, lineHeight: 1.8, color: 'rgba(255,255,255,0.85)' }}>
-            My journey began at Amirkabir University of Technology (Tehran Polytechnic), where I completed both my B.Sc. and M.Sc. in Petroleum Engineering with a focus on reservoir simulation and machine learning applications. I was granted direct admission for graduate study based on academic excellence, ranking within the top 2% in the national entrance exam.
+            I completed both my B.Sc. and M.Sc. in Petroleum Engineering with a focus on reservoir simulation and machine learning applications. Based on academic excellence, I was granted direct admission for graduate study, ranking within the top 2% in the national entrance exam.
           </p>
         </Reveal>
         
@@ -48,7 +50,7 @@ const AboutSection = () => (
             { icon: 'fas fa-graduation-cap', label: 'PhD @ Heriot-Watt' },
             { icon: 'fas fa-flask', label: 'CCUS Research' },
             { icon: 'fas fa-code', label: 'Python, MATLAB, Julia' },
-            { icon: 'fas fa-robot', label: 'Agentic AI Enthusiast' },
+            { icon: 'fas fa-robot', label: 'Agentic AI' },
           ].map((h, i) => (
             <Reveal key={i} delay={`reveal-delay-${i + 1}`}>
               <GlassCard padding={16} radius={16} style={{ display: 'flex', alignItems: 'center', gap: 12, height: '100%' }}>
@@ -134,20 +136,20 @@ const ResearchInterestsStrip = () => (
 
 const PUBLICATIONS = [
   {
-    badge: 'conference', badgeLabel: 'Conference',
-    title: 'Three-Phase VE Simulation of CO\u2082\u2013Methane\u2013Brine Flow in Reservoirs',
-    authors: <><strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, Ramachandran, H., Wang, G., &amp; Doster, F. (2025)</>,
-    venue: 'Sixth EAGE Global Energy Transition Conference & Exhibition (GET 2025)',
-    abstract: 'A Vertical Equilibrium (VE) model for simulating three-phase CO\u2082\u2013methane\u2013brine flow in depleted gas reservoirs, enabling efficient large-scale simulation of CO\u2082 storage with residual methane interactions.',
-    link: 'https://doi.org/10.3997/2214-4609.202521145',
-  },
-  {
     badge: 'preprint', badgeLabel: 'Preprint',
     title: 'A Vertical Equilibrium Model for CO\u2082 Migration in Depleted Gas Fields',
-    authors: <><strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, &amp; Doster, F. (2025)</>,
+    authors: <><strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, Ramachandran, H., Wang, G., &amp; Doster, F. (2025)</>,
     venue: 'EarthArXiv preprint',
     abstract: 'A reduced-order VE framework that captures the buoyant migration of injected CO\u2082 in depleted gas reservoirs against the cap rock, delivering full-field-scale forecasts orders of magnitude faster than 3D simulation.',
     link: 'https://doi.org/10.31223/X5P49D',
+  },
+  {
+    badge: 'conference', badgeLabel: 'Poster / Extended Abstract',
+    title: 'Three-Phase VE Simulation of CO\u2082\u2013Methane\u2013Brine Flow in Reservoirs',
+    authors: <><strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, Ramachandran, H., Wang, G., &amp; Doster, F. (2025)</>,
+    venue: 'Sixth EAGE Global Energy Transition Conference & Exhibition (GET 2025) — Poster Presentation',
+    abstract: 'An extended abstract presenting a Vertical Equilibrium (VE) model for simulating three-phase CO\u2082\u2013methane\u2013brine flow in depleted gas reservoirs, enabling efficient large-scale simulation of CO\u2082 storage with residual methane interactions.',
+    link: 'https://doi.org/10.3997/2214-4609.202521145',
   },
   {
     badge: 'published', badgeLabel: 'Published',
@@ -208,10 +210,10 @@ const PublicationsList = () => (
    ===================================================== */
 const ContactSection = () => {
   const contacts = [
-    { icon: "fas fa-envelope", label: "telvari.saeed@gmail.com" },
-    { icon: "fab fa-linkedin", label: "LinkedIn Profile" },
-    { icon: "fab fa-github", label: "GitHub" },
-    { icon: "fas fa-graduation-cap", label: "Google Scholar" },
+    { icon: "fas fa-envelope", label: "st4014@hw.ac.uk", url: "mailto:st4014@hw.ac.uk" },
+    { icon: "fab fa-linkedin", label: "LinkedIn Profile", url: "https://www.linkedin.com/in/stelvari/" },
+    { icon: "fab fa-github", label: "GitHub", url: "https://github.com/saeedtelvari" },
+    { icon: "fas fa-graduation-cap", label: "Google Scholar", url: "https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330" },
   ];
   
   return (
@@ -228,7 +230,7 @@ const ContactSection = () => {
         <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 18, marginBottom: 36 }}>
           {contacts.map((c, i) => (
             <Reveal key={i} delay={`reveal-delay-${i + 1}`}>
-              <ContactCard icon={c.icon} label={c.label} />
+              <ContactCard icon={c.icon} label={c.label} url={c.url} />
             </Reveal>
           ))}
         </div>
@@ -242,13 +244,16 @@ const ContactSection = () => {
     </SectionPanel>
   );
 };
-const ContactCard = ({ icon, label }) => {
+const ContactCard = ({ icon, label, url }) => {
   const [hovered, setHovered] = useState(false);
   return (
-    <div 
+    <a 
+      href={url}
+      target="_blank"
+      rel="noreferrer"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{ display: 'inline-block', height: '100%' }}
+      style={{ display: 'inline-block', height: '100%', textDecoration: 'none', cursor: 'pointer' }}
     >
       <GlassCard padding={18} radius={20} style={{ minWidth: 220, display: 'flex', alignItems: 'center', gap: 14, height: '100%' }}>
         <i className={icon} style={{ 
@@ -259,7 +264,7 @@ const ContactCard = ({ icon, label }) => {
         }}></i>
         <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.90)' }}>{label}</span>
       </GlassCard>
-    </div>
+    </a>
   );
 };
 

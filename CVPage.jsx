@@ -47,8 +47,8 @@ const CVPage = () => (
         <p style={{ fontSize: 19, color: 'rgba(255,255,255,0.70)', margin: '0 0 18px' }}>Ph.D. Candidate in Petroleum Engineering</p>
         <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 20, marginBottom: 24 }}>
           <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}><i className="fas fa-map-marker-alt" style={{ color: '#4ecdc4', marginRight: 8 }}></i>Edinburgh, UK</span>
-          <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}><i className="fas fa-envelope" style={{ color: '#4ecdc4', marginRight: 8 }}></i>telvari.saeed@gmail.com</span>
-          <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}><i className="fab fa-linkedin" style={{ color: '#4ecdc4', marginRight: 8 }}></i>/in/stelvari</span>
+          <a href="mailto:st4014@hw.ac.uk" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, textDecoration: 'none' }}><i className="fas fa-envelope" style={{ color: '#4ecdc4', marginRight: 8 }}></i>st4014@hw.ac.uk</a>
+          <a href="https://www.linkedin.com/in/stelvari/" target="_blank" rel="noreferrer" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, textDecoration: 'none' }}><i className="fab fa-linkedin" style={{ color: '#4ecdc4', marginRight: 8 }}></i>/in/stelvari</a>
         </div>
         <GlassButton variant="mint" icon="fas fa-download">Download PDF</GlassButton>
       </header>
@@ -71,7 +71,7 @@ const CVPage = () => (
       <CVSection icon="fas fa-graduation-cap" title="Education">
         <Timeline items={[
           { title: 'Ph.D. in Petroleum Engineering', date: '2024 – Present', inst: 'Heriot-Watt University, Edinburgh, UK',
-            details: ['Thesis: Developing Vertical Equilibrium Models for Simulating CO\u2082 Storage in Depleted Gas Reservoirs', 'Supervisor: Dr. Florian Doster'] },
+            details: ['Thesis: Developing Vertical Equilibrium Models for Simulating CO\u2082 Storage in Depleted Gas Reservoirs'] },
           { title: 'M.Sc. in Petroleum Engineering — Reservoir', date: '2022 – 2024', inst: 'Amirkabir University of Technology, Tehran',
             details: ['GPA: 3.65/4 (17.23/20)', 'Thesis: Machine Learning Methods in Upscaling Fine-scale Discrete Fracture Models'] },
           { title: 'B.Sc. in Petroleum Engineering', date: '2018 – 2022', inst: 'Amirkabir University of Technology, Tehran',
