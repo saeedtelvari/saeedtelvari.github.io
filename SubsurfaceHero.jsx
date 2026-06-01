@@ -62,16 +62,30 @@ const precomputeSimulation = () => {
         fluxes[i] = -K * hFace * grad;
       }
       
+      // Ghost cell boundary conditions for Constant Pressure far-field (h_boundary = 0)
+      // Left boundary (i = -1): h[-1] = 0, caprock = capRockY(-10) / 15.0
+      const ztGhostL = capRockY(-10) / 15.0;
+      const gradGhostL = (capRockY(0) / 15.0 + h[0]) - ztGhostL;
+      const hFaceGhostL = gradGhostL > 0 ? h[0] : 0.0;
+      const fluxGhostL = -K * hFaceGhostL * gradGhostL;
+
+      // Right boundary (i = N): h[N] = 0, caprock = capRockY(N * 10) / 15.0
+      const ztGhostR = capRockY(N * 10) / 15.0;
+      const gradGhostR = ztGhostR - (capRockY((N - 1) * 10) / 15.0 + h[N - 1]);
+      const hFaceGhostR = gradGhostR > 0 ? 0.0 : h[N - 1];
+      const fluxGhostR = -K * hFaceGhostR * gradGhostR;
+
       const nextH = [...h];
       for (let i = 0; i < N; i++) {
-        const fL = i === 0 ? 0 : fluxes[i - 1];
-        const fR = i === N - 1 ? 0 : fluxes[i];
+        const fL = i === 0 ? fluxGhostL : fluxes[i - 1];
+        const fR = i === N - 1 ? fluxGhostR : fluxes[i];
         // Conservative mass transport
         nextH[i] = Math.max(0, h[i] + dt * (fL - fR));
       }
       
       // Edge Fault Leakages (x=100 and x=970) preventing unnatural boundary pooling
-      const leakRate = 0.8;
+      // Lowered leakage rate to 0.15 to allow a significant portion of CO2 plume to bypass the faults
+      const leakRate = 0.15;
       let leakLeft = 0;
       if (nextH[10] > 0) {
         leakLeft = Math.min(nextH[10], leakRate * dt);
@@ -108,10 +122,21 @@ const precomputeSimulation = () => {
         fluxes2[i] = -K * hFace * grad;
       }
       
+      // Ghost cell boundary conditions for h2 (Secondary Reservoir Constant Pressure far-field)
+      const ztGhostL2 = (capRockY(-10) * 0.4) / 15.0;
+      const gradGhostL2 = ((capRockY(0) * 0.4) / 15.0 + h2[0]) - ztGhostL2;
+      const hFaceGhostL2 = gradGhostL2 > 0 ? h2[0] : 0.0;
+      const fluxGhostL2 = -K * hFaceGhostL2 * gradGhostL2;
+
+      const ztGhostR2 = (capRockY(N * 10) * 0.4) / 15.0;
+      const gradGhostR2 = ztGhostR2 - ((capRockY((N - 1) * 10) * 0.4) / 15.0 + h2[N - 1]);
+      const hFaceGhostR2 = gradGhostR2 > 0 ? 0.0 : h2[N - 1];
+      const fluxGhostR2 = -K * hFaceGhostR2 * gradGhostR2;
+
       const nextH2 = [...h2];
       for (let i = 0; i < N; i++) {
-        const fL = i === 0 ? 0 : fluxes2[i - 1];
-        const fR = i === N - 1 ? 0 : fluxes2[i];
+        const fL = i === 0 ? fluxGhostL2 : fluxes2[i - 1];
+        const fR = i === N - 1 ? fluxGhostR2 : fluxes2[i];
         nextH2[i] = Math.max(0, h2[i] + dt * (fL - fR));
       }
       
