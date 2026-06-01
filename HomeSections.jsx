@@ -10,7 +10,7 @@ const NEWS = [
   { month: 'Oct', year: '2025', title: 'Poster Presentation at EAGE GET 2025', body: 'Presented an extended abstract on "Three-Phase VE Simulation of CO\u2082\u2013Methane\u2013Brine Flow in Reservoirs" at the Sixth EAGE Global Energy Transition Conference.' },
   { month: 'Sep', year: '2025', title: 'Presented at InterPore UK 2025', body: 'Delivered a presentation on Vertical Equilibrium flow models at the InterPore UK 2025 Chapter Meeting.' },
   { month: 'Sep', year: '2024', title: 'Started PhD at Heriot-Watt University', body: 'Began doctoral research on Vertical Equilibrium Models for CO\u2082 storage.' },
-  { month: 'Jun', year: '2024', title: 'M.Sc. Thesis Defense', body: 'Successfully defended thesis on "Machine Learning Methods in Upscaling Fine-scale Discrete Fracture Models" with distinction. GPA: 3.65/4.' },
+  { month: 'Aug', year: '2024', title: 'M.Sc. Thesis Defense', body: 'Successfully defended thesis on "Machine Learning Methods in Upscaling Fine-scale Discrete Fracture Models" with distinction. GPA: 3.65/4.' },
   { month: 'May', year: '2023', title: 'Paper Published in Advances in Water Resources', body: 'First-author publication on 3D CNN prediction of two-phase flow properties accepted in a top-tier journal.' },
 ];
 

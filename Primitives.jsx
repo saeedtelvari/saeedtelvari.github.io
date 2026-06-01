@@ -284,7 +284,7 @@ const SectionPanel = ({ children, bg, style = {} }) => (
     {bg && (
       <div style={{
         position: 'absolute', inset: 0,
-        background: 'linear-gradient(135deg, rgba(26,26,46,0.85) 0%, rgba(22,33,62,0.80) 50%, rgba(15,52,96,0.85) 100%)',
+        background: 'linear-gradient(135deg, rgba(15,15,22,0.50) 0%, rgba(18,18,26,0.35) 50%, rgba(15,15,22,0.55) 100%)',
       }}></div>
     )}
     {/* decorative blobs */}
