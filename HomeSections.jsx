@@ -138,7 +138,7 @@ const PUBLICATIONS = [
   {
     badge: 'preprint', badgeLabel: 'Preprint',
     title: 'A Vertical Equilibrium Model for CO\u2082 Migration in Depleted Gas Fields',
-    authors: <><strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, Ramachandran, H., Wang, G., &amp; Doster, F. (2025)</>,
+    authors: <React.Fragment><strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, Ramachandran, H., Wang, G., &amp; Doster, F. (2025)</React.Fragment>,
     venue: 'EarthArXiv preprint',
     abstract: 'A reduced-order VE framework that captures the buoyant migration of injected CO\u2082 in depleted gas reservoirs against the cap rock, delivering full-field-scale forecasts orders of magnitude faster than 3D simulation.',
     link: 'https://doi.org/10.31223/X5P49D',
@@ -146,7 +146,7 @@ const PUBLICATIONS = [
   {
     badge: 'conference', badgeLabel: 'Poster / Extended Abstract',
     title: 'Three-Phase VE Simulation of CO\u2082\u2013Methane\u2013Brine Flow in Reservoirs',
-    authors: <><strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, Ramachandran, H., Wang, G., &amp; Doster, F. (2025)</>,
+    authors: <React.Fragment>Golsanami, N., <strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, &amp; Yan, W. (2022)</React.Fragment>,
     venue: 'Sixth EAGE Global Energy Transition Conference & Exhibition (GET 2025) — Poster Presentation',
     abstract: 'An extended abstract presenting a Vertical Equilibrium (VE) model for simulating three-phase CO\u2082\u2013methane\u2013brine flow in depleted gas reservoirs, enabling efficient large-scale simulation of CO\u2082 storage with residual methane interactions.',
     link: 'https://doi.org/10.3997/2214-4609.202521145',
@@ -154,7 +154,7 @@ const PUBLICATIONS = [
   {
     badge: 'published', badgeLabel: 'Published',
     title: 'Accelerated Permeability Upscaling: A CNN Approach',
-    authors: <>Sayyafzadeh, M., <strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, Guerillot, D., &amp; Sharifi, M. (2024)</>,
+    authors: <React.Fragment>Sayyafzadeh, M., <strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, Guerillot, D., &amp; Sharifi, M. (2024)</React.Fragment>,
     venue: 'SPE Journal, 31(04), 2242',
     abstract: 'A novel convolutional neural network approach for rapid permeability upscaling in heterogeneous reservoirs, achieving 100-400\u00d7 computational speedup compared to traditional flow-based methods.',
     link: 'https://onepetro.org/SJ/article-abstract/31/04/2242/795099/Accelerated-Permeability-Upscaling-A-Convolutional',
@@ -162,7 +162,7 @@ const PUBLICATIONS = [
   {
     badge: 'published', badgeLabel: 'Published',
     title: 'Prediction of two-phase flow properties for digital sandstones using 3D convolutional neural networks',
-    authors: <><strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, Sayyafzadeh, M., Siavashi, J., &amp; Sharifi, M. (2023)</>,
+    authors: <React.Fragment><strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, Sayyafzadeh, M., Siavashi, J., &amp; Sharifi, M. (2023)</React.Fragment>,
     venue: 'Advances in Water Resources, 176, 104442',
     abstract: 'Developed a 3D CNN architecture for predicting relative permeability and capillary pressure curves directly from micro-CT images, eliminating the need for expensive pore-network modeling.',
     link: 'https://doi.org/10.1016/j.advwatres.2023.104442',

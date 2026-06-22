@@ -6,6 +6,7 @@ const App = () => {
   const [screen, setScreen] = useState('home');
   const onNavigate = (id) => {
     if (id === 'cv') { setScreen('cv'); window.scrollTo(0, 0); return; }
+    if (id === 'simulator') { setScreen('simulator'); window.scrollTo(0, 0); return; }
     setScreen('home');
     // smooth-scroll to anchor on home
     setTimeout(() => {
@@ -22,7 +23,7 @@ const App = () => {
       color: '#fff',
       fontFamily: "'Montserrat', sans-serif",
     }}
-    data-screen-label={screen === 'cv' ? '02 CV' : '01 Home'}>
+    data-screen-label={screen === 'cv' ? '02 CV' : screen === 'simulator' ? '03 VE Simulator' : '01 Home'}>
       <Header active={screen} onNavigate={onNavigate} />
 
       {screen === 'home' ? (
@@ -35,6 +36,11 @@ const App = () => {
           <PublicationsList />
           <div id="contact" />
           <ContactSection />
+          <Footer />
+        </main>
+      ) : screen === 'simulator' ? (
+        <main>
+          <SimulatorPage />
           <Footer />
         </main>
       ) : (

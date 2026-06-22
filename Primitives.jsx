@@ -282,7 +282,7 @@ const SectionPanel = ({ children, bg, style = {} }) => (
     ...style,
   }}>
     {bg && (
-      <>
+      <React.Fragment>
         {/* Main neutral contrast overlay */}
         <div style={{
           position: 'absolute', inset: 0,
@@ -303,7 +303,7 @@ const SectionPanel = ({ children, bg, style = {} }) => (
           pointerEvents: 'none',
           zIndex: 2,
         }} />
-      </>
+      </React.Fragment>
     )}
     {/* decorative blobs */}
     <div 

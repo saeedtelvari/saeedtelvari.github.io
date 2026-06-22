@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Telvari Portfolio — UI kit</title>
+  <title>Saeed Telvari</title>
   <link rel="stylesheet" href="./colors_and_type.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <link rel="icon" href="./assets/logo-minimalist.png">
@@ -63,6 +63,12 @@
       85%  { opacity: 0.85; }
       100% { transform: translateY(var(--travel, -150px)); opacity: 0; }
     }
+    @keyframes faultRiseTilted {
+      0%   { transform: translate(0, 0); opacity: 0; }
+      15%  { opacity: 0.85; }
+      85%  { opacity: 0.85; }
+      100% { transform: translate(var(--travel-x, 0px), var(--travel-y, -150px)); opacity: 0; }
+    }
     @keyframes pulseFlare {
       0%, 100% { opacity: 0.65; transform: translateX(-50%) scale(1);   }
       50%      { opacity: 1;    transform: translateX(-50%) scale(1.4); }
@@ -92,9 +98,11 @@
   <script type="text/babel" src="Primitives.jsx?v=3.8"></script>
   <script type="text/babel" src="Header.jsx?v=3.8"></script>
   <script type="text/babel" src="Footer.jsx?v=3.8"></script>
-  <script type="text/babel" src="SubsurfaceHero.jsx?v=3.17"></script>
+  <script type="text/babel" src="SubsurfaceHero.jsx?v=3.19"></script>
   <script type="text/babel" src="HomeSections.jsx?v=3.8"></script>
   <script type="text/babel" src="CVPage.jsx?v=3.8"></script>
+  <script type="text/babel" src="GuidePage.jsx?v=1.0"></script>
+  <script type="text/babel" src="SimulatorPage.jsx?v=1.1"></script>
   <script type="text/babel" src="App.jsx?v=3.8"></script>
 </body>
 </html>

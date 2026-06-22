@@ -1,0 +1,2331 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "hyperedges": [
+      {
+        "id": "glassmorphism_ui_primitives",
+        "label": "Glassmorphism UI Primitives",
+        "nodes": [
+          "primitives_glasscard",
+          "primitives_glassbutton",
+          "primitives_sectionpanel"
+        ],
+        "relation": "participate_in",
+        "confidence": "INFERRED",
+        "confidence_score": 0.85,
+        "source_file": "Primitives.jsx"
+      },
+      {
+        "id": "co2_simulation_scene",
+        "label": "Interactive CO2 Numerical Simulation Scene",
+        "nodes": [
+          "subsurfacehero_precomputesimulation",
+          "subsurfacehero_plume",
+          "subsurfacehero_well",
+          "subsurfacehero_wellhead",
+          "subsurfacehero_reservoirgrid"
+        ],
+        "relation": "implement",
+        "confidence": "INFERRED",
+        "confidence_score": 0.95,
+        "source_file": "SubsurfaceHero.jsx"
+      },
+      {
+        "id": "main_layout_components",
+        "label": "Main Page Components Layout",
+        "nodes": [
+          "app_app",
+          "header_header",
+          "subsurfacehero_subsurfacehero",
+          "cvpage_cvpage",
+          "homesections_aboutsection",
+          "homesections_publicationslist",
+          "homesections_contactsection",
+          "footer_footer"
+        ],
+        "relation": "form",
+        "confidence": "INFERRED",
+        "confidence_score": 0.95,
+        "source_file": "App.jsx"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "label": "settings.local.json",
+      "file_type": "code",
+      "source_file": ".claude/settings.local.json",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_settings_local",
+      "community": 5,
+      "norm_label": "settings.local.json"
+    },
+    {
+      "label": "permissions",
+      "file_type": "code",
+      "source_file": ".claude/settings.local.json",
+      "source_location": "L2",
+      "_origin": "ast",
+      "id": "claude_settings_local_permissions",
+      "community": 5,
+      "norm_label": "permissions"
+    },
+    {
+      "label": "allow",
+      "file_type": "code",
+      "source_file": ".claude/settings.local.json",
+      "source_location": "L3",
+      "_origin": "ast",
+      "id": "claude_settings_local_permissions_allow",
+      "community": 5,
+      "norm_label": "allow"
+    },
+    {
+      "label": "deny",
+      "file_type": "code",
+      "source_file": ".claude/settings.local.json",
+      "source_location": "L7",
+      "_origin": "ast",
+      "id": "claude_settings_local_permissions_deny",
+      "community": 5,
+      "norm_label": "deny"
+    },
+    {
+      "label": "settings.json",
+      "file_type": "code",
+      "source_file": ".vscode/settings.json",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "vscode_settings",
+      "community": 8,
+      "norm_label": "settings.json"
+    },
+    {
+      "label": "liveServer.settings.port",
+      "file_type": "code",
+      "source_file": ".vscode/settings.json",
+      "source_location": "L2",
+      "_origin": "ast",
+      "id": "vscode_settings_liveserver_settings_port",
+      "community": 8,
+      "norm_label": "liveserver.settings.port"
+    },
+    {
+      "label": "App.jsx",
+      "file_type": "code",
+      "source_file": "App.jsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "app",
+      "community": 4,
+      "norm_label": "app.jsx"
+    },
+    {
+      "label": "App()",
+      "file_type": "code",
+      "source_file": "App.jsx",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "app_app",
+      "community": 4,
+      "norm_label": "app()"
+    },
+    {
+      "label": "root",
+      "file_type": "code",
+      "source_file": "App.jsx",
+      "source_location": "L50",
+      "_origin": "ast",
+      "id": "app_root",
+      "community": 4,
+      "norm_label": "root"
+    },
+    {
+      "label": "CVPage.jsx",
+      "file_type": "code",
+      "source_file": "CVPage.jsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "cvpage",
+      "community": 2,
+      "norm_label": "cvpage.jsx"
+    },
+    {
+      "label": "CVPage()",
+      "file_type": "code",
+      "source_file": "CVPage.jsx",
+      "source_location": "L3",
+      "_origin": "ast",
+      "id": "cvpage_cvpage",
+      "community": 2,
+      "norm_label": "cvpage()"
+    },
+    {
+      "label": "CVSection()",
+      "file_type": "code",
+      "source_file": "CVPage.jsx",
+      "source_location": "L125",
+      "_origin": "ast",
+      "id": "cvpage_cvsection",
+      "community": 2,
+      "norm_label": "cvsection()"
+    },
+    {
+      "label": "Timeline()",
+      "file_type": "code",
+      "source_file": "CVPage.jsx",
+      "source_location": "L139",
+      "_origin": "ast",
+      "id": "cvpage_timeline",
+      "community": 2,
+      "norm_label": "timeline()"
+    },
+    {
+      "label": "SkillCategory()",
+      "file_type": "code",
+      "source_file": "CVPage.jsx",
+      "source_location": "L167",
+      "_origin": "ast",
+      "id": "cvpage_skillcategory",
+      "community": 2,
+      "norm_label": "skillcategory()"
+    },
+    {
+      "label": "Footer.jsx",
+      "file_type": "code",
+      "source_file": "Footer.jsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "footer",
+      "community": 4,
+      "norm_label": "footer.jsx"
+    },
+    {
+      "label": "Footer()",
+      "file_type": "code",
+      "source_file": "Footer.jsx",
+      "source_location": "L2",
+      "_origin": "ast",
+      "id": "footer_footer",
+      "community": 4,
+      "norm_label": "footer()"
+    },
+    {
+      "label": "Header.jsx",
+      "file_type": "code",
+      "source_file": "Header.jsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "header",
+      "community": 4,
+      "norm_label": "header.jsx"
+    },
+    {
+      "label": "Header()",
+      "file_type": "code",
+      "source_file": "Header.jsx",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "header_header",
+      "community": 4,
+      "norm_label": "header()"
+    },
+    {
+      "label": "NavItem()",
+      "file_type": "code",
+      "source_file": "Header.jsx",
+      "source_location": "L69",
+      "_origin": "ast",
+      "id": "header_navitem",
+      "community": 4,
+      "norm_label": "navitem()"
+    },
+    {
+      "label": "HomeSections.jsx",
+      "file_type": "code",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "homesections",
+      "community": 1,
+      "norm_label": "homesections.jsx"
+    },
+    {
+      "label": "NEWS",
+      "file_type": "code",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "homesections_news",
+      "community": 1,
+      "norm_label": "news"
+    },
+    {
+      "label": "AboutSection()",
+      "file_type": "code",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L17",
+      "_origin": "ast",
+      "id": "homesections_aboutsection",
+      "community": 1,
+      "norm_label": "aboutsection()"
+    },
+    {
+      "label": "RESEARCH",
+      "file_type": "code",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L103",
+      "_origin": "ast",
+      "id": "homesections_research",
+      "community": 1,
+      "norm_label": "research"
+    },
+    {
+      "label": "ResearchInterestsStrip()",
+      "file_type": "code",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L112",
+      "_origin": "ast",
+      "id": "homesections_researchinterestsstrip",
+      "community": 1,
+      "norm_label": "researchinterestsstrip()"
+    },
+    {
+      "label": "PUBLICATIONS",
+      "file_type": "code",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L137",
+      "_origin": "ast",
+      "id": "homesections_publications",
+      "community": 1,
+      "norm_label": "publications"
+    },
+    {
+      "label": "PublicationsList()",
+      "file_type": "code",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L172",
+      "_origin": "ast",
+      "id": "homesections_publicationslist",
+      "community": 1,
+      "norm_label": "publicationslist()"
+    },
+    {
+      "label": "ContactSection()",
+      "file_type": "code",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L211",
+      "_origin": "ast",
+      "id": "homesections_contactsection",
+      "community": 1,
+      "norm_label": "contactsection()"
+    },
+    {
+      "label": "ContactCard()",
+      "file_type": "code",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L247",
+      "_origin": "ast",
+      "id": "homesections_contactcard",
+      "community": 1,
+      "norm_label": "contactcard()"
+    },
+    {
+      "label": "Primitives.jsx",
+      "file_type": "code",
+      "source_file": "Primitives.jsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "primitives",
+      "community": 2,
+      "norm_label": "primitives.jsx"
+    },
+    {
+      "label": "Reveal()",
+      "file_type": "code",
+      "source_file": "Primitives.jsx",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "primitives_reveal",
+      "community": 1,
+      "norm_label": "reveal()"
+    },
+    {
+      "label": "GlassCard()",
+      "file_type": "code",
+      "source_file": "Primitives.jsx",
+      "source_location": "L45",
+      "_origin": "ast",
+      "id": "primitives_glasscard",
+      "community": 1,
+      "norm_label": "glasscard()"
+    },
+    {
+      "label": "GlassButton()",
+      "file_type": "code",
+      "source_file": "Primitives.jsx",
+      "source_location": "L83",
+      "_origin": "ast",
+      "id": "primitives_glassbutton",
+      "community": 2,
+      "norm_label": "glassbutton()"
+    },
+    {
+      "label": "BADGE_TINTS",
+      "file_type": "code",
+      "source_file": "Primitives.jsx",
+      "source_location": "L139",
+      "_origin": "ast",
+      "id": "primitives_badge_tints",
+      "community": 2,
+      "norm_label": "badge_tints"
+    },
+    {
+      "label": "Badge()",
+      "file_type": "code",
+      "source_file": "Primitives.jsx",
+      "source_location": "L147",
+      "_origin": "ast",
+      "id": "primitives_badge",
+      "community": 2,
+      "norm_label": "badge()"
+    },
+    {
+      "label": "Tag()",
+      "file_type": "code",
+      "source_file": "Primitives.jsx",
+      "source_location": "L168",
+      "_origin": "ast",
+      "id": "primitives_tag",
+      "community": 2,
+      "norm_label": "tag()"
+    },
+    {
+      "label": "ResearchIcon()",
+      "file_type": "code",
+      "source_file": "Primitives.jsx",
+      "source_location": "L221",
+      "_origin": "ast",
+      "id": "primitives_researchicon",
+      "community": 2,
+      "norm_label": "researchicon()"
+    },
+    {
+      "label": "SectionTitle()",
+      "file_type": "code",
+      "source_file": "Primitives.jsx",
+      "source_location": "L237",
+      "_origin": "ast",
+      "id": "primitives_sectiontitle",
+      "community": 1,
+      "norm_label": "sectiontitle()"
+    },
+    {
+      "label": "Divider()",
+      "file_type": "code",
+      "source_file": "Primitives.jsx",
+      "source_location": "L263",
+      "_origin": "ast",
+      "id": "primitives_divider",
+      "community": 2,
+      "norm_label": "divider()"
+    },
+    {
+      "label": "SectionPanel()",
+      "file_type": "code",
+      "source_file": "Primitives.jsx",
+      "source_location": "L273",
+      "_origin": "ast",
+      "id": "primitives_sectionpanel",
+      "community": 2,
+      "norm_label": "sectionpanel()"
+    },
+    {
+      "label": "SubsurfaceHero.jsx",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "subsurfacehero",
+      "community": 0,
+      "norm_label": "subsurfacehero.jsx"
+    },
+    {
+      "label": "capRockY()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L14",
+      "_origin": "ast",
+      "id": "subsurfacehero_caprocky",
+      "community": 3,
+      "norm_label": "caprocky()"
+    },
+    {
+      "label": "precomputeSimulation()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L23",
+      "_origin": "ast",
+      "id": "subsurfacehero_precomputesimulation",
+      "community": 6,
+      "norm_label": "precomputesimulation()"
+    },
+    {
+      "label": "getBandPath()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L157",
+      "_origin": "ast",
+      "id": "subsurfacehero_getbandpath",
+      "community": 3,
+      "norm_label": "getbandpath()"
+    },
+    {
+      "label": "getMeniscusPath()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L194",
+      "_origin": "ast",
+      "id": "subsurfacehero_getmeniscuspath",
+      "community": 3,
+      "norm_label": "getmeniscuspath()"
+    },
+    {
+      "label": "getResidualPath()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L217",
+      "_origin": "ast",
+      "id": "subsurfacehero_getresidualpath",
+      "community": 3,
+      "norm_label": "getresidualpath()"
+    },
+    {
+      "label": "getColumnPath()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L249",
+      "_origin": "ast",
+      "id": "subsurfacehero_getcolumnpath",
+      "community": 3,
+      "norm_label": "getcolumnpath()"
+    },
+    {
+      "label": "SubsurfaceHero()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L258",
+      "_origin": "ast",
+      "id": "subsurfacehero_subsurfacehero",
+      "community": 0,
+      "norm_label": "subsurfacehero()"
+    },
+    {
+      "label": "SimulationController()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L328",
+      "_origin": "ast",
+      "id": "subsurfacehero_simulationcontroller",
+      "community": 0,
+      "norm_label": "simulationcontroller()"
+    },
+    {
+      "label": "Sky()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L461",
+      "_origin": "ast",
+      "id": "subsurfacehero_sky",
+      "community": 0,
+      "norm_label": "sky()"
+    },
+    {
+      "label": "Horizon()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L515",
+      "_origin": "ast",
+      "id": "subsurfacehero_horizon",
+      "community": 0,
+      "norm_label": "horizon()"
+    },
+    {
+      "label": "getCapRockPath()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L535",
+      "_origin": "ast",
+      "id": "subsurfacehero_getcaprockpath",
+      "community": 3,
+      "norm_label": "getcaprockpath()"
+    },
+    {
+      "label": "getCapRockFillPath()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L543",
+      "_origin": "ast",
+      "id": "subsurfacehero_getcaprockfillpath",
+      "community": 3,
+      "norm_label": "getcaprockfillpath()"
+    },
+    {
+      "label": "CAP_ROCK_UNDERSIDE",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L552",
+      "_origin": "ast",
+      "id": "subsurfacehero_cap_rock_underside",
+      "community": 0,
+      "norm_label": "cap_rock_underside"
+    },
+    {
+      "label": "CAP_ROCK_FILL",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L553",
+      "_origin": "ast",
+      "id": "subsurfacehero_cap_rock_fill",
+      "community": 0,
+      "norm_label": "cap_rock_fill"
+    },
+    {
+      "label": "getAquiferPath()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L555",
+      "_origin": "ast",
+      "id": "subsurfacehero_getaquiferpath",
+      "community": 3,
+      "norm_label": "getaquiferpath()"
+    },
+    {
+      "label": "ReservoirGrid()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L566",
+      "_origin": "ast",
+      "id": "subsurfacehero_reservoirgrid",
+      "community": 3,
+      "norm_label": "reservoirgrid()"
+    },
+    {
+      "label": "CapRockGrid()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L633",
+      "_origin": "ast",
+      "id": "subsurfacehero_caprockgrid",
+      "community": 3,
+      "norm_label": "caprockgrid()"
+    },
+    {
+      "label": "DepthAxis()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L652",
+      "_origin": "ast",
+      "id": "subsurfacehero_depthaxis",
+      "community": 0,
+      "norm_label": "depthaxis()"
+    },
+    {
+      "label": "GasFeedAnimation()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L678",
+      "_origin": "ast",
+      "id": "subsurfacehero_gasfeedanimation",
+      "community": 0,
+      "norm_label": "gasfeedanimation()"
+    },
+    {
+      "label": "Subsurface()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L711",
+      "_origin": "ast",
+      "id": "subsurfacehero_subsurface",
+      "community": 3,
+      "norm_label": "subsurface()"
+    },
+    {
+      "label": "Wellhead()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L813",
+      "_origin": "ast",
+      "id": "subsurfacehero_wellhead",
+      "community": 0,
+      "norm_label": "wellhead()"
+    },
+    {
+      "label": "Well()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L846",
+      "_origin": "ast",
+      "id": "subsurfacehero_well",
+      "community": 0,
+      "norm_label": "well()"
+    },
+    {
+      "label": "Streamlines()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L897",
+      "_origin": "ast",
+      "id": "subsurfacehero_streamlines",
+      "community": 7,
+      "norm_label": "streamlines()"
+    },
+    {
+      "label": "SimCells()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L956",
+      "_origin": "ast",
+      "id": "subsurfacehero_simcells",
+      "community": 7,
+      "norm_label": "simcells()"
+    },
+    {
+      "label": "Plume()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L1067",
+      "_origin": "ast",
+      "id": "subsurfacehero_plume",
+      "community": 3,
+      "norm_label": "plume()"
+    },
+    {
+      "label": "Annotation()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L1313",
+      "_origin": "ast",
+      "id": "subsurfacehero_annotation",
+      "community": 0,
+      "norm_label": "annotation()"
+    },
+    {
+      "label": "Identity()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L1336",
+      "_origin": "ast",
+      "id": "subsurfacehero_identity",
+      "community": 0,
+      "norm_label": "identity()"
+    },
+    {
+      "label": "BrandSocial()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L1409",
+      "_origin": "ast",
+      "id": "subsurfacehero_brandsocial",
+      "community": 0,
+      "norm_label": "brandsocial()"
+    },
+    {
+      "label": "ScrollCue()",
+      "file_type": "code",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L1442",
+      "_origin": "ast",
+      "id": "subsurfacehero_scrollcue",
+      "community": 0,
+      "norm_label": "scrollcue()"
+    },
+    {
+      "label": "Claude Local Settings Config",
+      "file_type": "code",
+      "source_file": ".claude/settings.local.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "_claude_settings_local",
+      "community": 9,
+      "norm_label": "claude local settings config"
+    },
+    {
+      "label": "VS Code Settings Config",
+      "file_type": "code",
+      "source_file": ".vscode/settings.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "_vscode_settings",
+      "community": 10,
+      "norm_label": "vs code settings config"
+    },
+    {
+      "label": "React DOM Root Render",
+      "file_type": "code",
+      "source_file": "App.jsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "app_root_render",
+      "community": 4,
+      "norm_label": "react dom root render"
+    },
+    {
+      "label": "Portfolio UI Kit README",
+      "file_type": "document",
+      "source_file": "README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "readme_readme",
+      "community": 11,
+      "norm_label": "portfolio ui kit readme"
+    },
+    {
+      "label": "UI Kit Entry Index HTML",
+      "file_type": "document",
+      "source_file": "index.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "index_index",
+      "community": 4,
+      "norm_label": "ui kit entry index html"
+    },
+    {
+      "label": "Global Scope Script Loading Pattern",
+      "file_type": "rationale",
+      "source_file": "index.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "architecture_global_window_binding",
+      "community": 4,
+      "norm_label": "global scope script loading pattern"
+    },
+    {
+      "label": "Glassmorphism UI System Design",
+      "file_type": "rationale",
+      "source_file": "Primitives.jsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "architecture_glassmorphism",
+      "community": 1,
+      "norm_label": "glassmorphism ui system design"
+    },
+    {
+      "label": "Vertical Equilibrium (VE) Simulation Assumptions",
+      "file_type": "concept",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "concept_vertical_equilibrium",
+      "community": 6,
+      "norm_label": "vertical equilibrium (ve) simulation assumptions"
+    },
+    {
+      "label": "Carbon Capture, Utilization, and Storage (CCUS)",
+      "file_type": "concept",
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "id": "concept_co2_sequestration",
+      "community": 0,
+      "norm_label": "carbon capture, utilization, and storage (ccus)"
+    }
+  ],
+  "links": [
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/settings.local.json",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "claude_settings_local",
+      "target": "claude_settings_local_permissions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/settings.local.json",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "claude_settings_local_permissions",
+      "target": "claude_settings_local_permissions_allow",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/settings.local.json",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "claude_settings_local_permissions",
+      "target": "claude_settings_local_permissions_deny",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".vscode/settings.json",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "vscode_settings",
+      "target": "vscode_settings_liveserver_settings_port",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "App.jsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "app",
+      "target": "app_app",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "App.jsx",
+      "source_location": "L50",
+      "weight": 1.0,
+      "source": "app",
+      "target": "app_root",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "App.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "app_app",
+      "target": "cvpage_cvpage"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "App.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "app_app",
+      "target": "footer_footer"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "App.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "app_app",
+      "target": "header_header"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "App.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "app_app",
+      "target": "homesections_aboutsection"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "App.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "app_app",
+      "target": "homesections_contactsection"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "App.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "app_app",
+      "target": "homesections_publicationslist"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "App.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "app_app",
+      "target": "subsurfacehero_subsurfacehero"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "App.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "app_root_render",
+      "target": "app_app"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "index.html",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "architecture_global_window_binding",
+      "target": "app_app"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CVPage.jsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "cvpage",
+      "target": "cvpage_cvpage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CVPage.jsx",
+      "source_location": "L125",
+      "weight": 1.0,
+      "source": "cvpage",
+      "target": "cvpage_cvsection",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CVPage.jsx",
+      "source_location": "L167",
+      "weight": 1.0,
+      "source": "cvpage",
+      "target": "cvpage_skillcategory",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CVPage.jsx",
+      "source_location": "L139",
+      "weight": 1.0,
+      "source": "cvpage",
+      "target": "cvpage_timeline",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CVPage.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "cvpage_cvpage",
+      "target": "cvpage_cvsection"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CVPage.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "cvpage_cvpage",
+      "target": "cvpage_skillcategory"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CVPage.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "cvpage_cvpage",
+      "target": "cvpage_timeline"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CVPage.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "cvpage_cvpage",
+      "target": "primitives_divider"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CVPage.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "cvpage_cvpage",
+      "target": "primitives_glassbutton"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CVPage.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "cvpage_cvpage",
+      "target": "primitives_tag"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "CVPage.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "cvpage_timeline",
+      "target": "homesections_news"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "CVPage.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "cvpage_skillcategory",
+      "target": "primitives_tag"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Footer.jsx",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "footer",
+      "target": "footer_footer",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Header.jsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "header",
+      "target": "header_header",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Header.jsx",
+      "source_location": "L69",
+      "weight": 1.0,
+      "source": "header",
+      "target": "header_navitem",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "Header.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "header_header",
+      "target": "header_navitem"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L17",
+      "weight": 1.0,
+      "source": "homesections",
+      "target": "homesections_aboutsection",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L247",
+      "weight": 1.0,
+      "source": "homesections",
+      "target": "homesections_contactcard",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L211",
+      "weight": 1.0,
+      "source": "homesections",
+      "target": "homesections_contactsection",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "homesections",
+      "target": "homesections_news",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L137",
+      "weight": 1.0,
+      "source": "homesections",
+      "target": "homesections_publications",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L172",
+      "weight": 1.0,
+      "source": "homesections",
+      "target": "homesections_publicationslist",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L103",
+      "weight": 1.0,
+      "source": "homesections",
+      "target": "homesections_research",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "HomeSections.jsx",
+      "source_location": "L112",
+      "weight": 1.0,
+      "source": "homesections",
+      "target": "homesections_researchinterestsstrip",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_aboutsection",
+      "target": "homesections_news"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_aboutsection",
+      "target": "primitives_glasscard"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_aboutsection",
+      "target": "primitives_reveal"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_aboutsection",
+      "target": "primitives_sectiontitle"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_researchinterestsstrip",
+      "target": "homesections_research"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_publicationslist",
+      "target": "homesections_researchinterestsstrip"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_researchinterestsstrip",
+      "target": "primitives_glasscard"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_researchinterestsstrip",
+      "target": "primitives_reveal"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_publicationslist",
+      "target": "homesections_publications"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_publicationslist",
+      "target": "primitives_badge"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_publicationslist",
+      "target": "primitives_glasscard"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_publicationslist",
+      "target": "primitives_reveal"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_publicationslist",
+      "target": "primitives_sectiontitle"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_contactsection",
+      "target": "homesections_contactcard"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_contactsection",
+      "target": "primitives_reveal"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_contactsection",
+      "target": "primitives_sectiontitle"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "homesections_contactcard",
+      "target": "primitives_glasscard"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Primitives.jsx",
+      "source_location": "L147",
+      "weight": 1.0,
+      "source": "primitives",
+      "target": "primitives_badge",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Primitives.jsx",
+      "source_location": "L139",
+      "weight": 1.0,
+      "source": "primitives",
+      "target": "primitives_badge_tints",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Primitives.jsx",
+      "source_location": "L263",
+      "weight": 1.0,
+      "source": "primitives",
+      "target": "primitives_divider",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Primitives.jsx",
+      "source_location": "L83",
+      "weight": 1.0,
+      "source": "primitives",
+      "target": "primitives_glassbutton",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Primitives.jsx",
+      "source_location": "L45",
+      "weight": 1.0,
+      "source": "primitives",
+      "target": "primitives_glasscard",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Primitives.jsx",
+      "source_location": "L221",
+      "weight": 1.0,
+      "source": "primitives",
+      "target": "primitives_researchicon",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Primitives.jsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "primitives",
+      "target": "primitives_reveal",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Primitives.jsx",
+      "source_location": "L273",
+      "weight": 1.0,
+      "source": "primitives",
+      "target": "primitives_sectionpanel",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Primitives.jsx",
+      "source_location": "L237",
+      "weight": 1.0,
+      "source": "primitives",
+      "target": "primitives_sectiontitle",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Primitives.jsx",
+      "source_location": "L168",
+      "weight": 1.0,
+      "source": "primitives",
+      "target": "primitives_tag",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "Primitives.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "architecture_glassmorphism",
+      "target": "primitives_glasscard"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "Primitives.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "primitives_glasscard",
+      "target": "primitives_sectionpanel"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "Primitives.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "primitives_badge",
+      "target": "primitives_badge_tints"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L1313",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_annotation",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L1409",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_brandsocial",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L553",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_cap_rock_fill",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L552",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_cap_rock_underside",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L633",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_caprockgrid",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_caprocky",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L652",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_depthaxis",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L678",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_gasfeedanimation",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L555",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_getaquiferpath",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L157",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_getbandpath",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L543",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_getcaprockfillpath",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L535",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_getcaprockpath",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L249",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_getcolumnpath",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L194",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_getmeniscuspath",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L217",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_getresidualpath",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L515",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_horizon",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L1336",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_identity",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L1067",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_plume",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_precomputesimulation",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L566",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_reservoirgrid",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L1442",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_scrollcue",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L956",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_simcells",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L328",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_simulationcontroller",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L461",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_sky",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L897",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_streamlines",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L711",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_subsurface",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L258",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_subsurfacehero",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L846",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_well",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L813",
+      "weight": 1.0,
+      "source": "subsurfacehero",
+      "target": "subsurfacehero_wellhead",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_caprockgrid",
+      "target": "subsurfacehero_caprocky"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_getaquiferpath",
+      "target": "subsurfacehero_caprocky"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_getbandpath",
+      "target": "subsurfacehero_caprocky"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_getcaprockfillpath",
+      "target": "subsurfacehero_caprocky"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_getcaprockpath",
+      "target": "subsurfacehero_caprocky"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_getcolumnpath",
+      "target": "subsurfacehero_caprocky"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_getmeniscuspath",
+      "target": "subsurfacehero_caprocky"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_getresidualpath",
+      "target": "subsurfacehero_caprocky"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_plume",
+      "target": "subsurfacehero_caprocky"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_precomputesimulation",
+      "target": "subsurfacehero_caprocky"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_reservoirgrid",
+      "target": "subsurfacehero_caprocky"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_streamlines",
+      "target": "subsurfacehero_caprocky"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L741",
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurface",
+      "target": "subsurfacehero_caprocky",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_well",
+      "target": "subsurfacehero_caprocky"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "concept_vertical_equilibrium",
+      "target": "subsurfacehero_precomputesimulation"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurfacehero",
+      "target": "subsurfacehero_precomputesimulation"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_plume",
+      "target": "subsurfacehero_getbandpath"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_plume",
+      "target": "subsurfacehero_getmeniscuspath"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "subsurfacehero_plume",
+      "target": "subsurfacehero_getresidualpath"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "HomeSections.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "concept_co2_sequestration",
+      "target": "subsurfacehero_subsurfacehero"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurfacehero",
+      "target": "subsurfacehero_annotation"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurfacehero",
+      "target": "subsurfacehero_depthaxis"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurfacehero",
+      "target": "subsurfacehero_gasfeedanimation"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurfacehero",
+      "target": "subsurfacehero_horizon"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurfacehero",
+      "target": "subsurfacehero_identity"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurfacehero",
+      "target": "subsurfacehero_plume"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurfacehero",
+      "target": "subsurfacehero_scrollcue"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurfacehero",
+      "target": "subsurfacehero_simulationcontroller"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurfacehero",
+      "target": "subsurfacehero_sky"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurfacehero",
+      "target": "subsurfacehero_subsurface"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurfacehero",
+      "target": "subsurfacehero_well"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurfacehero",
+      "target": "subsurfacehero_wellhead"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_plume",
+      "target": "subsurfacehero_getcaprockpath"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurface",
+      "target": "subsurfacehero_getcaprockpath"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurface",
+      "target": "subsurfacehero_getcaprockfillpath"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": "L712",
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurface",
+      "target": "subsurfacehero_getaquiferpath",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurface",
+      "target": "subsurfacehero_reservoirgrid"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_subsurface",
+      "target": "subsurfacehero_caprockgrid"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_simcells",
+      "target": "subsurfacehero_streamlines"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "SubsurfaceHero.jsx",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "subsurfacehero_identity",
+      "target": "subsurfacehero_brandsocial"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "index.html",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "index_index",
+      "target": "app_root_render"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "index.html",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "index_index",
+      "target": "architecture_global_window_binding"
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "glassmorphism_ui_primitives",
+      "label": "Glassmorphism UI Primitives",
+      "nodes": [
+        "primitives_glasscard",
+        "primitives_glassbutton",
+        "primitives_sectionpanel"
+      ],
+      "relation": "participate_in",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "Primitives.jsx"
+    },
+    {
+      "id": "co2_simulation_scene",
+      "label": "Interactive CO2 Numerical Simulation Scene",
+      "nodes": [
+        "subsurfacehero_precomputesimulation",
+        "subsurfacehero_plume",
+        "subsurfacehero_well",
+        "subsurfacehero_wellhead",
+        "subsurfacehero_reservoirgrid"
+      ],
+      "relation": "implement",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "SubsurfaceHero.jsx"
+    },
+    {
+      "id": "main_layout_components",
+      "label": "Main Page Components Layout",
+      "nodes": [
+        "app_app",
+        "header_header",
+        "subsurfacehero_subsurfacehero",
+        "cvpage_cvpage",
+        "homesections_aboutsection",
+        "homesections_publicationslist",
+        "homesections_contactsection",
+        "footer_footer"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "App.jsx"
+    }
+  ],
+  "built_at_commit": "6e69ca8d5fbc5e8c303de38344069c927b675efb"
+}

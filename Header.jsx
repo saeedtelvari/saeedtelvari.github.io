@@ -14,6 +14,7 @@ const Header = ({ active, onNavigate }) => {
     { id: 'home',         label: 'Home' },
     { id: 'about',        label: 'About' },
     { id: 'publications', label: 'Research' },
+    { id: 'simulator',    label: 'VE Simulator' },
     { id: 'cv',           label: 'CV' },
   ];
 

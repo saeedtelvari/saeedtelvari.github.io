@@ -8,19 +8,63 @@ const { useEffect, useMemo, useRef, useState } = React;
    Physical Cap Rock & VE Numerical PDE Solver
    ===================================================== */
 
-// Interpolates a smooth spline of the cap rock underside profile:
-// (0, 140) -> (195, 92) -> (510, 170) -> (710, 34) -> (1000, 142)
-// Defines a complex, realistic wavy cap rock profile with multiple anticlines and a regional dip
-const capRockY = (x) => {
+// Generate randomized faults globally so that capRockY and other global helpers can access it
+const generateRandomizedFaults = () => {
+  const count = 2; // Always exactly 2 faults
+  const faultsList = [];
+  for (let i = 0; i < count; i++) {
+    let minPct, maxPct;
+    if (i === 0) {
+      minPct = 20;
+      maxPct = 45;
+    } else {
+      minPct = 55;
+      maxPct = 80;
+    }
+    const xPercent = Math.floor(Math.random() * (maxPct - minPct + 1)) + minPct;
+    const thresholdHeight = parseFloat((Math.random() * 0.7 + 0.1).toFixed(2)); // 0.1m to 0.8m
+    const leakRate = parseFloat((Math.random() * 0.20 + 0.05).toFixed(2)); // 0.05 to 0.25
+    
+    faultsList.push({
+      xPercent,
+      thresholdHeight,
+      leakRate,
+    });
+  }
+  faultsList.sort((a, b) => a.xPercent - b.xPercent);
+  return faultsList;
+};
+
+const randomizedFaults = generateRandomizedFaults();
+
+// Interpolates a smooth spline of the cap rock underside profile with fault slips:
+const capRockY = (x, faults = randomizedFaults, cellIdx = null) => {
   const dip = 60 + x * 0.12; 
   const wave1 = - 20 * Math.sin(x * Math.PI / 150); // Large wavelength
   const wave2 = - 15 * Math.sin(x * Math.PI / 80);  // Medium wavelength
   const wave3 = - 8 * Math.sin(x * Math.PI / 45);   // Small wavelength
-  return dip + wave1 + wave2 + wave3;
+  
+  let offset = 0;
+  // Determine reference x based on cell index (if provided) or continuous coordinate
+  const xReference = cellIdx !== null ? (cellIdx * 10 + 5) : x;
+  
+  // Apply a dynamic geological offset (slip) at each fault location
+  if (faults) {
+    for (let idx = 0; idx < faults.length; idx++) {
+      const f = faults[idx];
+      const xFault = f.xPercent * 10;
+      if (xReference > xFault) {
+        const direction = idx % 2 === 0 ? 1 : -1;
+        offset += direction * 15; // 15px step offset (slip displacement)
+      }
+    }
+  }
+  
+  return dip + wave1 + wave2 + wave3 + offset;
 };
 
 // Numerical PDE Simulator: solves explicit Finite Volume VE equations for CO2 gravity tongue
-const precomputeSimulation = () => {
+const precomputeSimulation = (faults = []) => {
   const N = 101; // 101 cells (width 10px each for x = 0 to 1000)
   const history = [];
   
@@ -29,6 +73,8 @@ const precomputeSimulation = () => {
   
   let h2 = new Array(N).fill(0); // secondary reservoir plume
   let h2Max = new Array(N).fill(0);
+  
+  const R = 0.25; // Sgr trapping fraction
   
   for (let frame = 0; frame <= 600; frame++) {
     history.push({ h: [...h], hMax: [...hMax], h2: [...h2], h2Max: [...h2Max] });
@@ -42,11 +88,20 @@ const precomputeSimulation = () => {
     const Q = frame <= 100 ? 0.65 : 0.0;
     
     for (let step = 0; step < substeps; step++) {
+      // 1. Partition total height into mobile and trapped components (VE physics)
+      const hMob = new Array(N).fill(0);
+      for (let i = 0; i < N; i++) {
+        const H = h[i];
+        const hm = hMax[i];
+        const mobileVal = R < 1.0 ? Math.max(0, (H - R * hm) / (1.0 - R)) : 0;
+        hMob[i] = Math.min(H, mobileVal);
+      }
+      
       const fluxes = new Array(N - 1).fill(0);
       for (let i = 0; i < N - 1; i++) {
         // Scale pixel depths to physical meters (divided by 15.0) to align with plume thickness h
-        const ztL = capRockY(i * 10) / 15.0;
-        const ztR = capRockY((i + 1) * 10) / 15.0;
+        const ztL = capRockY(i * 10, faults, i) / 15.0;
+        const ztR = capRockY((i + 1) * 10, faults, i) / 15.0;
         
         // Total fluid potential depth (deeper y is positive)
         const zL = ztL + h[i];
@@ -56,23 +111,21 @@ const precomputeSimulation = () => {
         const grad = zR - zL;
         
         // Upwind mobility thickness
-        const hFace = grad > 0 ? h[i + 1] : h[i];
+        const hFace = grad > 0 ? hMob[i + 1] : hMob[i];
         
         // VE flux: mobility * potential gradient
         fluxes[i] = -K * hFace * grad;
       }
       
       // Ghost cell boundary conditions for Constant Pressure far-field (h_boundary = 0)
-      // Left boundary (i = -1): h[-1] = 0, caprock = capRockY(-10) / 15.0
-      const ztGhostL = capRockY(-10) / 15.0;
-      const gradGhostL = (capRockY(0) / 15.0 + h[0]) - ztGhostL;
-      const hFaceGhostL = gradGhostL > 0 ? h[0] : 0.0;
+      const ztGhostL = capRockY(-10, faults, -1) / 15.0;
+      const gradGhostL = (capRockY(0, faults, 0) / 15.0 + h[0]) - ztGhostL;
+      const hFaceGhostL = gradGhostL > 0 ? hMob[0] : 0.0;
       const fluxGhostL = -K * hFaceGhostL * gradGhostL;
 
-      // Right boundary (i = N): h[N] = 0, caprock = capRockY(N * 10) / 15.0
-      const ztGhostR = capRockY(N * 10) / 15.0;
-      const gradGhostR = ztGhostR - (capRockY((N - 1) * 10) / 15.0 + h[N - 1]);
-      const hFaceGhostR = gradGhostR > 0 ? 0.0 : h[N - 1];
+      const ztGhostR = capRockY(N * 10, faults, N) / 15.0;
+      const gradGhostR = ztGhostR - (capRockY((N - 1) * 10, faults, N - 1) / 15.0 + h[N - 1]);
+      const hFaceGhostR = gradGhostR > 0 ? 0.0 : hMob[N - 1];
       const fluxGhostR = -K * hFaceGhostR * gradGhostR;
 
       const nextH = [...h];
@@ -83,18 +136,20 @@ const precomputeSimulation = () => {
         nextH[i] = Math.max(0, h[i] + dt * (fL - fR));
       }
       
-      // Edge Fault Leakages (x=100 and x=970) preventing unnatural boundary pooling
-      // Lowered leakage rate to 0.15 to allow a significant portion of CO2 plume to bypass the faults
-      const leakRate = 0.15;
-      let leakLeft = 0;
-      if (nextH[10] > 0) {
-        leakLeft = Math.min(nextH[10], leakRate * dt);
-        nextH[10] -= leakLeft;
-      }
-      let leakRight = 0;
-      if (nextH[97] > 0) {
-        leakRight = Math.min(nextH[97], leakRate * dt);
-        nextH[97] -= leakRight;
+      // Fault capillary seal breaching and leakage
+      const leaks = new Array(faults.length).fill(0);
+      for (let idx = 0; idx < faults.length; idx++) {
+        const f = faults[idx];
+        const cellIdx = Math.round(f.xPercent);
+        const boundedIdx = Math.max(0, Math.min(N - 1, cellIdx));
+        
+        // Leakage occurs only if CO2 column height exceeds entry threshold
+        if (nextH[boundedIdx] > f.thresholdHeight) {
+          const overpressure = nextH[boundedIdx] - f.thresholdHeight;
+          const leak = Math.min(overpressure, f.leakRate * dt);
+          nextH[boundedIdx] -= leak;
+          leaks[idx] = leak;
+        }
       }
       
       // Inject at cell index 70 (right flank of primary anticlines) only if Q > 0
@@ -107,30 +162,38 @@ const precomputeSimulation = () => {
       }
       
       // --- SECONDARY RESERVOIR (h2) ---
+      const h2Mob = new Array(N).fill(0);
+      for (let i = 0; i < N; i++) {
+        const H = h2[i];
+        const hm = h2Max[i];
+        const mobileVal = R < 1.0 ? Math.max(0, (H - R * hm) / (1.0 - R)) : 0;
+        h2Mob[i] = Math.min(H, mobileVal);
+      }
+      
       const fluxes2 = new Array(N - 1).fill(0);
       for (let i = 0; i < N - 1; i++) {
         // Shallower topography
-        const ztL = (capRockY(i * 10) * 0.4) / 15.0;
-        const ztR = (capRockY((i + 1) * 10) * 0.4) / 15.0;
+        const ztL = (capRockY(i * 10, faults, i) * 0.4) / 15.0;
+        const ztR = (capRockY((i + 1) * 10, faults, i) * 0.4) / 15.0;
         
         const zL = ztL + h2[i];
         const zR = ztR + h2[i + 1];
         
         const grad = zR - zL;
-        const hFace = grad > 0 ? h2[i + 1] : h2[i];
+        const hFace = grad > 0 ? h2Mob[i + 1] : h2Mob[i];
         
         fluxes2[i] = -K * hFace * grad;
       }
       
-      // Ghost cell boundary conditions for h2 (Secondary Reservoir Constant Pressure far-field)
-      const ztGhostL2 = (capRockY(-10) * 0.4) / 15.0;
-      const gradGhostL2 = ((capRockY(0) * 0.4) / 15.0 + h2[0]) - ztGhostL2;
-      const hFaceGhostL2 = gradGhostL2 > 0 ? h2[0] : 0.0;
+      // Ghost cell boundary conditions for h2
+      const ztGhostL2 = (capRockY(-10, faults, -1) * 0.4) / 15.0;
+      const gradGhostL2 = ((capRockY(0, faults, 0) * 0.4) / 15.0 + h2[0]) - ztGhostL2;
+      const hFaceGhostL2 = gradGhostL2 > 0 ? h2Mob[0] : 0.0;
       const fluxGhostL2 = -K * hFaceGhostL2 * gradGhostL2;
 
-      const ztGhostR2 = (capRockY(N * 10) * 0.4) / 15.0;
-      const gradGhostR2 = ztGhostR2 - ((capRockY((N - 1) * 10) * 0.4) / 15.0 + h2[N - 1]);
-      const hFaceGhostR2 = gradGhostR2 > 0 ? 0.0 : h2[N - 1];
+      const ztGhostR2 = (capRockY(N * 10, faults, N) * 0.4) / 15.0;
+      const gradGhostR2 = ztGhostR2 - ((capRockY((N - 1) * 10, faults, N - 1) * 0.4) / 15.0 + h2[N - 1]);
+      const hFaceGhostR2 = gradGhostR2 > 0 ? 0.0 : h2Mob[N - 1];
       const fluxGhostR2 = -K * hFaceGhostR2 * gradGhostR2;
 
       const nextH2 = [...h2];
@@ -141,8 +204,12 @@ const precomputeSimulation = () => {
       }
       
       // Inject leaked mass from primary into secondary fault locations
-      nextH2[10] += leakLeft;
-      nextH2[97] += leakRight;
+      for (let idx = 0; idx < faults.length; idx++) {
+        const f = faults[idx];
+        const cellIdx = Math.round(f.xPercent);
+        const boundedIdx = Math.max(0, Math.min(N - 1, cellIdx));
+        nextH2[boundedIdx] += leaks[idx];
+      }
       
       h2 = nextH2;
       for (let i = 0; i < N; i++) {
@@ -153,47 +220,11 @@ const precomputeSimulation = () => {
   return history;
 };
 
-// Dynamically traces the top cap rock and bottom gravity tongue to generate custom SVG paths
+/// Dynamically traces the top cap rock and bottom gravity tongue to generate custom SVG paths
 const getBandPath = (h, fraction, depthMultiplier = 1.0) => {
+  if (!h) return "";
   const N = h.length;
-  const scale = 20.0; // Scale factor to amplify solver units to SVG pixels
-  
-  // Find active boundaries where the band thickness is visible
-  let firstActive = -1;
-  let lastActive = -1;
-  for (let i = 0; i < N; i++) {
-    if (h[i] * scale * fraction > 0.8) {
-      if (firstActive === -1) firstActive = i;
-      lastActive = i;
-    }
-  }
-  
-  if (firstActive === -1) return "";
-  
-  // Trace cap rock underside from left to right
-  let path = `M ${firstActive * 10} ${capRockY(firstActive * 10) * depthMultiplier}`;
-  for (let i = firstActive + 1; i <= lastActive; i++) {
-    path += ` L ${i * 10} ${capRockY(i * 10) * depthMultiplier}`;
-  }
-  
-  // Trace plume bottom interface from right to left
-  for (let i = lastActive; i >= firstActive; i--) {
-    let yVal = capRockY(i * 10) * depthMultiplier + h[i] * scale * fraction;
-    // Visually constrain the secondary reservoir from overlapping the layer below it
-    if (depthMultiplier === 0.4) {
-      yVal = Math.min(yVal, capRockY(i * 10) * 0.85);
-    }
-    path += ` L ${i * 10} ${yVal}`;
-  }
-  
-  path += " Z";
-  return path;
-};
-
-// Generates a clean meniscus path along the active cap-rock boundary
-const getMeniscusPath = (h, depthMultiplier = 1.0) => {
-  const N = h.length;
-  const scale = 20.0;
+  const scale = 15.0; // Standardized vertical scale
   
   let firstActive = -1;
   let lastActive = -1;
@@ -206,9 +237,56 @@ const getMeniscusPath = (h, depthMultiplier = 1.0) => {
   
   if (firstActive === -1) return "";
   
-  let path = `M ${firstActive * 10} ${capRockY(firstActive * 10) * depthMultiplier}`;
-  for (let i = firstActive + 1; i <= lastActive; i++) {
-    path += ` L ${i * 10} ${capRockY(i * 10) * depthMultiplier}`;
+  // Trace cap rock underside from left to right (piecewise)
+  let path = `M ${firstActive * 10} ${capRockY(firstActive * 10, randomizedFaults, firstActive) * depthMultiplier}`;
+  for (let i = firstActive; i <= lastActive; i++) {
+    const x1 = i * 10;
+    const x2 = (i + 1) * 10;
+    if (i > firstActive) {
+      path += ` L ${x1} ${capRockY(x1, randomizedFaults, i) * depthMultiplier}`;
+    }
+    path += ` L ${x2} ${capRockY(x2, randomizedFaults, i) * depthMultiplier}`;
+  }
+  
+  // Trace plume bottom interface from right to left (piecewise)
+  for (let i = lastActive; i >= firstActive; i--) {
+    const x1 = i * 10;
+    const x2 = (i + 1) * 10;
+    const y2 = capRockY(x2, randomizedFaults, i) * depthMultiplier + h[i] * fraction * scale;
+    const y1 = capRockY(x1, randomizedFaults, i) * depthMultiplier + h[i] * fraction * scale;
+    
+    path += ` L ${x2} ${y2}`;
+    path += ` L ${x1} ${y1}`;
+  }
+  
+  path += " Z";
+  return path;
+};
+
+// Generates a clean meniscus path along the active cap-rock boundary
+const getMeniscusPath = (h, depthMultiplier = 1.0) => {
+  const N = h.length;
+  const scale = 15.0; 
+  
+  let firstActive = -1;
+  let lastActive = -1;
+  for (let i = 0; i < N; i++) {
+    if (h[i] * scale > 0.8) {
+      if (firstActive === -1) firstActive = i;
+      lastActive = i;
+    }
+  }
+  
+  if (firstActive === -1) return "";
+  
+  let path = `M ${firstActive * 10} ${capRockY(firstActive * 10, randomizedFaults, firstActive) * depthMultiplier}`;
+  for (let i = firstActive; i <= lastActive; i++) {
+    const x1 = i * 10;
+    const x2 = (i + 1) * 10;
+    if (i > firstActive) {
+      path += ` L ${x1} ${capRockY(x1, randomizedFaults, i) * depthMultiplier}`;
+    }
+    path += ` L ${x2} ${capRockY(x2, randomizedFaults, i) * depthMultiplier}`;
   }
   return path;
 };
@@ -217,7 +295,7 @@ const getMeniscusPath = (h, depthMultiplier = 1.0) => {
 const getResidualPath = (h, hMax, depthMultiplier = 1.0) => {
   if (!h || !hMax) return "";
   const N = h.length;
-  const scale = 20.0;
+  const scale = 15.0; // Standardized
   
   let firstActive = -1;
   let lastActive = -1;
@@ -230,17 +308,41 @@ const getResidualPath = (h, hMax, depthMultiplier = 1.0) => {
   
   if (firstActive === -1) return "";
   
-  let path = `M ${firstActive * 10} ${capRockY(firstActive * 10) * depthMultiplier + h[firstActive] * scale}`;
-  for (let i = firstActive + 1; i <= lastActive; i++) {
-    let yVal = capRockY(i * 10) * depthMultiplier + h[i] * scale;
-    if (depthMultiplier === 0.4) yVal = Math.min(yVal, capRockY(i * 10) * 0.85);
-    path += ` L ${i * 10} ${yVal}`;
+  // Top boundary of residual (starts at top of residual plume which is bottom of mobile)
+  const startYTop = capRockY(firstActive * 10, randomizedFaults, firstActive) * depthMultiplier + h[firstActive] * scale;
+  let path = `M ${firstActive * 10} ${startYTop}`;
+  
+  for (let i = firstActive; i <= lastActive; i++) {
+    const x1 = i * 10;
+    const x2 = (i + 1) * 10;
+    let y1 = capRockY(x1, randomizedFaults, i) * depthMultiplier + h[i] * scale;
+    let y2 = capRockY(x2, randomizedFaults, i) * depthMultiplier + h[i] * scale;
+    if (depthMultiplier === 0.4) {
+      y1 = Math.min(y1, capRockY(x1, randomizedFaults, i) * 0.85);
+      y2 = Math.min(y2, capRockY(x2, randomizedFaults, i) * 0.85);
+    }
+    
+    if (i > firstActive) {
+      path += ` L ${x1} ${y1}`;
+    }
+    path += ` L ${x2} ${y2}`;
   }
+  
+  // Bottom boundary of residual (down to hMax)
   for (let i = lastActive; i >= firstActive; i--) {
-    let yVal = capRockY(i * 10) * depthMultiplier + hMax[i] * scale;
-    if (depthMultiplier === 0.4) yVal = Math.min(yVal, capRockY(i * 10) * 0.85);
-    path += ` L ${i * 10} ${yVal}`;
+    const x1 = i * 10;
+    const x2 = (i + 1) * 10;
+    let y1 = capRockY(x1, randomizedFaults, i) * depthMultiplier + hMax[i] * scale;
+    let y2 = capRockY(x2, randomizedFaults, i) * depthMultiplier + hMax[i] * scale;
+    if (depthMultiplier === 0.4) {
+      y1 = Math.min(y1, capRockY(x1, randomizedFaults, i) * 0.85);
+      y2 = Math.min(y2, capRockY(x2, randomizedFaults, i) * 0.85);
+    }
+    
+    path += ` L ${x2} ${y2}`;
+    path += ` L ${x1} ${y1}`;
   }
+  
   path += " Z";
   return path;
 };
@@ -260,8 +362,11 @@ const SubsurfaceHero = () => {
   const [isPlaying, setIsPlaying] = useState(true); // Auto-play on first load to wow visitors
   const [speed, setSpeed] = useState(1);
 
-  // Precompute the entire physical simulation history (solved in <1ms!)
-  const history = useMemo(() => precomputeSimulation(), []);
+  // Generate randomized faults dynamically on mount so that they change on every reload/navigation
+  const faults = useMemo(() => generateRandomizedFaults(), []);
+
+  // Precompute the entire physical simulation history (solved in <1ms!) using dynamic faults
+  const history = useMemo(() => precomputeSimulation(faults), [faults]);
   const currentFrame = history[Math.round(time)] || history[0];
   const currentH = currentFrame.h;
   const currentHMax = currentFrame.hMax;
@@ -293,7 +398,7 @@ const SubsurfaceHero = () => {
     }}>
       {/* Sky and subsurface as discrete background bands */}
       <Sky />
-      <Subsurface h={currentH} />
+      <Subsurface h={currentH} hMax={currentHMax} faults={faults} />
       <Horizon />
 
       {/* Above-ground content */}
@@ -303,8 +408,8 @@ const SubsurfaceHero = () => {
 
       {/* Below-ground content */}
       <DepthAxis />
-      <Well />
-      <Plume h={currentH} hMax={currentHMax} h2={currentH2} h2Max={currentH2Max} time={time} isPlaying={isPlaying} />
+      <Well faults={faults} />
+      <Plume h={currentH} hMax={currentHMax} h2={currentH2} h2Max={currentH2Max} time={time} isPlaying={isPlaying} faults={faults} />
       <Annotation />
 
       {/* Floating glassmorphism simulation dashboard */}
@@ -476,7 +581,7 @@ const Sky = () => {
   })), []);
 
   return (
-    <>
+    <React.Fragment>
       <div style={{
         position: 'absolute', left: 0, right: 0, top: 0, height: '42vh',
         background: 'linear-gradient(180deg, #16101f 0%, #1e1936 50%, #211d34 100%)',
@@ -505,7 +610,7 @@ const Sky = () => {
                   }}/>
         ))}
       </svg>
-    </>
+    </React.Fragment>
   );
 };
 
@@ -532,18 +637,18 @@ const Horizon = () => (
    Subsurface — SVG cross-section with anticline cap rock,
    reservoir and aquifer. 42vh → 100vh.
    ===================================================== */
-const getCapRockPath = () => {
-  let path = `M 0 ${capRockY(0)}`;
+const getCapRockPath = (faults = randomizedFaults) => {
+  let path = `M 0 ${capRockY(0, faults)}`;
   for (let x = 10; x <= 1000; x += 10) {
-    path += ` L ${x} ${capRockY(x)}`;
+    path += ` L ${x} ${capRockY(x, faults)}`;
   }
   return path;
 };
 
-const getCapRockFillPath = () => {
-  let path = `M 0 0 L 1000 0 L 1000 ${capRockY(1000)}`;
+const getCapRockFillPath = (faults = randomizedFaults) => {
+  let path = `M 0 0 L 1000 0 L 1000 ${capRockY(1000, faults)}`;
   for (let x = 1000; x >= 0; x -= 10) {
-    path += ` L ${x} ${capRockY(x)}`;
+    path += ` L ${x} ${capRockY(x, faults)}`;
   }
   path += " Z";
   return path;
@@ -552,10 +657,10 @@ const getCapRockFillPath = () => {
 const CAP_ROCK_UNDERSIDE = getCapRockPath();
 const CAP_ROCK_FILL = getCapRockFillPath();
 
-const getAquiferPath = () => {
-  let path = `M 0 580 L 1000 580 L 1000 ${capRockY(1000) + 190}`;
+const getAquiferPath = (faults = randomizedFaults) => {
+  let path = `M 0 580 L 1000 580 L 1000 ${capRockY(1000, faults) + 190}`;
   for (let x = 1000; x >= 0; x -= 10) {
-    path += ` L ${x} ${capRockY(x) + 190}`;
+    path += ` L ${x} ${capRockY(x, faults) + 190}`;
   }
   path += " Z";
   return path;
@@ -563,15 +668,17 @@ const getAquiferPath = () => {
 
 // Conforming finite volume columns for the reservoir grid block visualization (VE model grid blocks)
 // Dynamically fills the lower portion of each cell with solid brine under the CO2 plume interface
-const ReservoirGrid = ({ h }) => {
+const ReservoirGrid = ({ h, hMax, faults }) => {
   const cols = [];
-  const scale = 16.0; // matching scale factor of the plume
+  const scale = 15.0; // matching scale factor of the plume
+  const N = 100;
   
-  for (let i = 0; i < 100; i++) {
+  // Conforming finite volume columns for the reservoir grid block visualization
+  for (let i = 0; i < N; i++) {
     const x1 = i * 10;
     const x2 = (i + 1) * 10;
-    const yt1 = capRockY(x1);
-    const yt2 = capRockY(x2);
+    const yt1 = capRockY(x1, faults, i);
+    const yt2 = capRockY(x2, faults, i);
     const yb1 = yt1 + 190;
     const yb2 = yt2 + 190;
     
@@ -582,13 +689,10 @@ const ReservoirGrid = ({ h }) => {
     const b = Math.floor(18 + permHash * 8);
     const blockFill = `rgb(${r}, ${g}, ${b})`;
     
-    // Plume thickness at cell left and right boundaries
-    const h1 = h ? (h[i] || 0) * scale : 0;
-    const h2 = h ? (h[i + 1] || 0) * scale : 0;
-    
     // Conforming solid Brine layer: starts from bottom of CO2 plume down to reservoir bottom
-    const yBrineTop1 = yt1 + h1;
-    const yBrineTop2 = yt2 + h2;
+    const maxFluidDepth = hMax ? Math.max((h ? h[i] : 0), hMax[i]) : (h ? h[i] : 0);
+    const yBrineTop1 = yt1 + maxFluidDepth * scale;
+    const yBrineTop2 = yt2 + maxFluidDepth * scale;
     
     cols.push(
       <g key={i}>
@@ -630,12 +734,12 @@ const ReservoirGrid = ({ h }) => {
 };
 
 // Conforming vertical grid lines for the cap rock stratum
-const CapRockGrid = () => {
+const CapRockGrid = ({ faults }) => {
   const lines = [];
   for (let i = 1; i < 100; i++) {
     const x = i * 10;
     const yTop = 0;
-    const yBot = capRockY(x);
+    const yBot = capRockY(x, faults);
     lines.push(
       <line 
         key={i} 
@@ -708,10 +812,12 @@ const GasFeedAnimation = ({ isPlaying }) => {
   );
 };
 
-const Subsurface = ({ h }) => {
-  const AQUIFER_PATH = getAquiferPath();
+const Subsurface = ({ h, hMax, faults }) => {
+  const AQUIFER_PATH = useMemo(() => getAquiferPath(faults), [faults]);
+  const CAP_ROCK_FILL = useMemo(() => getCapRockFillPath(faults), [faults]);
+  const CAP_ROCK_UNDERSIDE = useMemo(() => getCapRockPath(faults), [faults]);
   return (
-    <>
+    <React.Fragment>
       <svg
         style={{
           position: 'absolute', left: 0, right: 0, top: '42vh',
@@ -738,42 +844,42 @@ const Subsurface = ({ h }) => {
         
         {/* Realistic Cap rock strata layers */}
         <path 
-          d={`M 0 0 L 1000 0 L 1000 ${capRockY(1000)*0.85} ` + Array.from({ length: 100 }, (_, i) => `L ${(99-i)*10} ${capRockY((99-i)*10)*0.85}`).join(" ") + ` Z`} 
+          d={`M 0 0 L 1000 0 L 1000 ${capRockY(1000, faults)*0.85} ` + Array.from({ length: 100 }, (_, i) => `L ${(99-i)*10} ${capRockY((99-i)*10, faults)*0.85}`).join(" ") + ` Z`} 
           fill="rgba(0,0,0,0.15)"
         />
         <path 
-          d={`M 0 0 L 1000 0 L 1000 ${capRockY(1000)*0.4} ` + Array.from({ length: 100 }, (_, i) => `L ${(99-i)*10} ${capRockY((99-i)*10)*0.4}`).join(" ") + ` Z`} 
+          d={`M 0 0 L 1000 0 L 1000 ${capRockY(1000, faults)*0.4} ` + Array.from({ length: 100 }, (_, i) => `L ${(99-i)*10} ${capRockY((99-i)*10, faults)*0.4}`).join(" ") + ` Z`} 
           fill="rgba(0,0,0,0.25)"
         />
         <path 
-          d={`M 0 0 L 1000 0 L 1000 ${capRockY(1000)*0.15} ` + Array.from({ length: 100 }, (_, i) => `L ${(99-i)*10} ${capRockY((99-i)*10)*0.15}`).join(" ") + ` Z`} 
+          d={`M 0 0 L 1000 0 L 1000 ${capRockY(1000, faults)*0.15} ` + Array.from({ length: 100 }, (_, i) => `L ${(99-i)*10} ${capRockY((99-i)*10, faults)*0.15}`).join(" ") + ` Z`} 
           fill="rgba(0,0,0,0.35)"
         />
-        <CapRockGrid />
+        <CapRockGrid faults={faults} />
 
         {/* Sync Background Reservoir: Conforming FVM Grid blocks */}
-        <ReservoirGrid h={h} />
+        <ReservoirGrid h={h} hMax={hMax} faults={faults} />
 
         {/* Synced Aquifer conforming layer */}
         <path d={AQUIFER_PATH} fill="url(#grad-aquifer-v2)"/>
         
         {/* Realistic Aquifer strata layers */}
         <path 
-          d={`M 0 580 L 1000 580 L 1000 ${capRockY(1000) + 190 + 80} ` + Array.from({ length: 100 }, (_, i) => `L ${(99-i)*10} ${capRockY((99-i)*10) + 190 + 80}`).join(" ") + ` Z`} 
+          d={`M 0 580 L 1000 580 L 1000 ${capRockY(1000, faults) + 190 + 80} ` + Array.from({ length: 100 }, (_, i) => `L ${(99-i)*10} ${capRockY((99-i)*10, faults) + 190 + 80}`).join(" ") + ` Z`} 
           fill="rgba(0,0,0,0.2)"
         />
         <path 
-          d={`M 0 580 L 1000 580 L 1000 ${capRockY(1000) + 190 + 170} ` + Array.from({ length: 100 }, (_, i) => `L ${(99-i)*10} ${capRockY((99-i)*10) + 190 + 170}`).join(" ") + ` Z`} 
+          d={`M 0 580 L 1000 580 L 1000 ${capRockY(1000, faults) + 190 + 170} ` + Array.from({ length: 100 }, (_, i) => `L ${(99-i)*10} ${capRockY((99-i)*10, faults) + 190 + 170}`).join(" ") + ` Z`} 
           fill="rgba(0,0,0,0.35)"
         />
         <path 
-          d={`M 0 580 L 1000 580 L 1000 ${capRockY(1000) + 190 + 260} ` + Array.from({ length: 100 }, (_, i) => `L ${(99-i)*10} ${capRockY((99-i)*10) + 190 + 260}`).join(" ") + ` Z`} 
+          d={`M 0 580 L 1000 580 L 1000 ${capRockY(1000, faults) + 190 + 260} ` + Array.from({ length: 100 }, (_, i) => `L ${(99-i)*10} ${capRockY((99-i)*10, faults) + 190 + 260}`).join(" ") + ` Z`} 
           fill="rgba(0,0,0,0.5)"
         />
 
         {/* Aquifer boundary stroke */}
         <path 
-          d={`M 0 ${capRockY(0) + 190} ` + Array.from({ length: 100 }, (_, i) => `L ${(i+1)*10} ${capRockY((i+1)*10) + 190}`).join(" ")} 
+          d={`M 0 ${capRockY(0, faults) + 190} ` + Array.from({ length: 100 }, (_, i) => `L ${(i+1)*10} ${capRockY((i+1)*10, faults) + 190}`).join(" ")} 
           stroke="rgba(0,0,0,0.35)" 
           strokeWidth="1.2" 
           fill="none"
@@ -805,7 +911,7 @@ const Subsurface = ({ h }) => {
           textShadow: '0 1px 4px rgba(0,0,0,0.8)',
         }}>{s.label}</span>
       ))}
-    </>
+    </React.Fragment>
   );
 };
 
@@ -843,8 +949,8 @@ const Wellhead = () => (
 
 // Well — vertical tubing from horizon down through reservoir
 // Dynamic height constraints ensure it never extends below the reservoir bottom perforations
-const Well = () => {
-  const yBotVal = capRockY(700) + 160; 
+const Well = ({ faults }) => {
+  const yBotVal = capRockY(700, faults) + 160; 
   const heightVh = `${yBotVal * 0.1}vh`;
   return (
     <div style={{
@@ -894,21 +1000,21 @@ const Well = () => {
 
 // Streamlines — gentle curves flowing through the reservoir
 // Refactored to dynamically trace caprock-parallel contours
-const Streamlines = ({ isPlaying }) => {
+const Streamlines = ({ isPlaying, faults }) => {
   // 3 left-migrating streamlines
   const leftPaths = [35, 75, 115].map(d => {
-    let path = `M 700 ${capRockY(700) + d}`;
+    let path = `M 700 ${capRockY(700, faults) + d}`;
     for (let x = 690; x >= 0; x -= 10) {
-      path += ` L ${x} ${capRockY(x) + d}`;
+      path += ` L ${x} ${capRockY(x, faults) + d}`;
     }
     return path;
   });
   
   // 3 right-migrating streamlines
   const rightPaths = [35, 75, 115].map(d => {
-    let path = `M 700 ${capRockY(700) + d}`;
+    let path = `M 700 ${capRockY(700, faults) + d}`;
     for (let x = 710; x <= 1000; x += 10) {
-      path += ` L ${x} ${capRockY(x) + d}`;
+      path += ` L ${x} ${capRockY(x, faults) + d}`;
     }
     return path;
   });
@@ -977,7 +1083,7 @@ const SimCells = ({ isPlaying }) => {
     return arr;
   }, []);
   return (
-    <>
+    <React.Fragment>
       {cells.map((c, i) => (
         <span key={i} style={{
           position: 'absolute', left: c.left, top: c.top,
@@ -990,7 +1096,7 @@ const SimCells = ({ isPlaying }) => {
           zIndex: 2, pointerEvents: 'none',
         }}/>
       ))}
-    </>
+    </React.Fragment>
   );
 };
 
@@ -1064,9 +1170,10 @@ const PLUME_B4 =
 // Band 5: peak core (sw ≈ 0.85+, near-saturated CO2)
 const PLUME_B5 = "M 695 38 C 705 38, 716 46, 718 56 C 720 96, 716 200, 710 393 L 690 393 C 684 200, 680 96, 682 56 C 684 46, 690 38, 695 38 Z";
 
-const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
+const Plume = ({ h, hMax, h2, h2Max, time, isPlaying, faults = [] }) => {
+  const CAP_ROCK_PATH = useMemo(() => getCapRockPath(faults), [faults]);
   return (
-    <>
+    <React.Fragment>
       <svg
         style={{
           position: 'absolute', left: 0, right: 0, top: '42vh',
@@ -1083,7 +1190,7 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
             <path d={`${CAP_ROCK_PATH} L 1000 580 L 0 580 Z`}/>
           </clipPath>
           <clipPath id="below-shallow-caprock">
-            <path d={`M 0 ${capRockY(0) * 0.4} ${Array.from({length: 100}, (_, i) => `L ${(i+1)*10} ${capRockY((i+1)*10) * 0.4}`).join(' ')} L 1000 580 L 0 580 Z`}/>
+            <path d={`M 0 ${capRockY(0, faults) * 0.4} ${Array.from({length: 100}, (_, i) => `L ${(i+1)*10} ${capRockY((i+1)*10, faults) * 0.4}`).join(' ')} L 1000 580 L 0 580 Z`}/>
           </clipPath>
           <filter id="band-soften" x="-5%" y="-5%" width="110%" height="110%">
             <feGaussianBlur stdDeviation="0.7"/>
@@ -1104,9 +1211,9 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
 
         <g clipPath="url(#below-caprock)">
           {/* 1. Pulsing Outer Neon Glow Aura */}
-          {getBandPath(h, 1.0) && (
+          {getBandPath(h, 1.0, 1.0, faults) && (
             <path 
-              d={getBandPath(h, 1.0)} 
+              d={getBandPath(h, 1.0, 1.0, faults)} 
               fill="url(#co2-glow-grad)" 
               filter="url(#plume-glow)"
               style={{
@@ -1118,9 +1225,9 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
           )}
 
           {/* 2. Softened Secondary Aura */}
-          {getBandPath(h, 1.0) && (
+          {getBandPath(h, 1.0, 1.0, faults) && (
             <path 
-              d={getBandPath(h, 1.0)} 
+              d={getBandPath(h, 1.0, 1.0, faults)} 
               fill="url(#co2-core-grad)" 
               opacity="0.30"
               filter="url(#band-soften)"
@@ -1128,9 +1235,9 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
           )}
 
           {/* 3. Solid High-Definition Core Plume */}
-          {getBandPath(h, 1.0) && (
+          {getBandPath(h, 1.0, 1.0, faults) && (
             <path 
-              d={getBandPath(h, 1.0)} 
+              d={getBandPath(h, 1.0, 1.0, faults)} 
               fill="url(#co2-core-grad)" 
               stroke="#0dfca2"
               strokeWidth="0.8"
@@ -1139,16 +1246,16 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
           )}
 
           {/* 4. Residual Trapped CO2 Area */}
-          {getResidualPath(h, hMax) && (
+          {getResidualPath(h, hMax, 1.0, faults) && (
             <path 
-              d={getResidualPath(h, hMax)} 
+              d={getResidualPath(h, hMax, 1.0, faults)} 
               fill="#0dfca2" 
               opacity="0.18"
             />
           )}
-          {getResidualPath(h, hMax) && (
+          {getResidualPath(h, hMax, 1.0, faults) && (
             <path 
-              d={getResidualPath(h, hMax)} 
+              d={getResidualPath(h, hMax, 1.0, faults)} 
               fill="none" 
               stroke="rgba(13,252,162,0.4)"
               strokeWidth="0.8"
@@ -1157,9 +1264,9 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
           )}
 
           {/* Bright meniscus along the CO2/cap-rock contact (dynamic trace of active caprock boundary) */}
-          {getMeniscusPath(h) && (
+          {getMeniscusPath(h, 1.0, faults) && (
             <path
-              d={getMeniscusPath(h)}
+              d={getMeniscusPath(h, 1.0, faults)}
               stroke="rgba(255,255,255,0.45)" strokeWidth="0.6" fill="none"
             />
           )}
@@ -1169,9 +1276,9 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
         {/* ================= SECONDARY RESERVOIR RENDERING ================= */}
         <g clipPath="url(#below-shallow-caprock)">
           {/* Secondary Reservoir Pulsing Outer Neon Glow Aura */}
-          {h2 && getBandPath(h2, 1.0, 0.4) && (
+          {h2 && getBandPath(h2, 1.0, 0.4, faults) && (
             <path 
-              d={getBandPath(h2, 1.0, 0.4)} 
+              d={getBandPath(h2, 1.0, 0.4, faults)} 
               fill="url(#co2-glow-grad)" 
               filter="url(#plume-glow)"
               style={{
@@ -1183,9 +1290,9 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
           )}
 
           {/* Secondary Reservoir Softened Secondary Aura */}
-          {h2 && getBandPath(h2, 1.0, 0.4) && (
+          {h2 && getBandPath(h2, 1.0, 0.4, faults) && (
             <path 
-              d={getBandPath(h2, 1.0, 0.4)} 
+              d={getBandPath(h2, 1.0, 0.4, faults)} 
               fill="url(#co2-core-grad)" 
               opacity="0.30"
               filter="url(#band-soften)"
@@ -1193,9 +1300,9 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
           )}
 
           {/* Secondary Reservoir Solid High-Definition Core Plume */}
-          {h2 && getBandPath(h2, 1.0, 0.4) && (
+          {h2 && getBandPath(h2, 1.0, 0.4, faults) && (
             <path 
-              d={getBandPath(h2, 1.0, 0.4)} 
+              d={getBandPath(h2, 1.0, 0.4, faults)} 
               fill="url(#co2-core-grad)" 
               stroke="#0dfca2"
               strokeWidth="0.8"
@@ -1204,16 +1311,16 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
           )}
 
           {/* Secondary Reservoir Residual Trapped CO2 Area */}
-          {h2Max && getResidualPath(h2, h2Max, 0.4) && (
+          {h2Max && getResidualPath(h2, h2Max, 0.4, faults) && (
             <path 
-              d={getResidualPath(h2, h2Max, 0.4)} 
+              d={getResidualPath(h2, h2Max, 0.4, faults)} 
               fill="#0dfca2" 
               opacity="0.18"
             />
           )}
-          {h2Max && getResidualPath(h2, h2Max, 0.4) && (
+          {h2Max && getResidualPath(h2, h2Max, 0.4, faults) && (
             <path 
-              d={getResidualPath(h2, h2Max, 0.4)} 
+              d={getResidualPath(h2, h2Max, 0.4, faults)} 
               fill="none" 
               stroke="rgba(13,252,162,0.4)"
               strokeWidth="0.8"
@@ -1222,9 +1329,9 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
           )}
 
           {/* Secondary Reservoir meniscus */}
-          {h2 && getMeniscusPath(h2, 0.4) && (
+          {h2 && getMeniscusPath(h2, 0.4, faults) && (
             <path
-              d={getMeniscusPath(h2, 0.4)}
+              d={getMeniscusPath(h2, 0.4, faults)}
               stroke="rgba(255,255,255,0.45)" strokeWidth="0.6" fill="none"
             />
           )}
@@ -1259,29 +1366,70 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
           })}
         </g>
         
-        {/* Fault Lines (Left: x=100, Right: x=970) */}
-        <path d={`M 100 ${capRockY(100)} L 98 ${capRockY(100)*0.85} L 102 ${capRockY(100)*0.7} L 99 ${capRockY(100)*0.55} L 100 ${capRockY(100)*0.4}`} 
-              stroke="rgba(100,255,218,0.25)" strokeWidth="1.2" strokeDasharray="3 3" fill="none" />
-        <path d={`M 970 ${capRockY(970)} L 972 ${capRockY(970)*0.85} L 968 ${capRockY(970)*0.7} L 971 ${capRockY(970)*0.55} L 970 ${capRockY(970)*0.4}`} 
-              stroke="rgba(100,255,218,0.25)" strokeWidth="1.2" strokeDasharray="3 3" fill="none" />
+        {/* Dynamic Fault Lines based on randomized faults list */}
+        {faults.map((f, idx) => {
+          const xPixel = f.xPercent * 10;
+          const yCap = capRockY(xPixel, faults);
+          const yStart = yCap * 0.35;
+          const yEnd = yCap + 220;
+          const T = idx === 0 ? 0.18 : -0.18;
+          const xStart = xPixel + T * (yStart - yCap);
+          const xEnd = xPixel + T * (yEnd - yCap);
+          return (
+            <g key={`fault-group-${idx}`}>
+              {/* Glowing background path for visibility */}
+              <line 
+                x1={xStart} 
+                y1={yStart} 
+                x2={xEnd} 
+                y2={yEnd} 
+                stroke="#64ffda" 
+                strokeWidth="2.5" 
+                opacity="0.12" 
+                style={{ filter: 'blur(2px)' }}
+              />
+              {/* Sharp dashed line */}
+              <line 
+                x1={xStart} 
+                y1={yStart} 
+                x2={xEnd} 
+                y2={yEnd} 
+                stroke="rgba(100,255,218,0.55)" 
+                strokeWidth="1.2" 
+                strokeDasharray="4 4" 
+              />
+            </g>
+          );
+        })}
 
-        {/* Fault Leakage Bubbles (Active when CO2 reaches the fault) */}
-        {h && h[10] > 0.05 && [0, 0.6, 1.2, 1.8, 2.4].map((delay, i) => (
-          <circle key={`fl${i}`} cx={100 + (i%2)*3 - 1.5} cy={capRockY(100)} r="2" fill="#0dfca2" style={{
-            opacity: 0,
-            '--travel': `-${capRockY(100) * 0.6}px`,
-            animation: `faultRise 3s linear ${delay}s infinite`,
-            animationPlayState: isPlaying ? 'running' : 'paused',
-          }}/>
-        ))}
-        {h && h[97] > 0.05 && [0, 0.6, 1.2, 1.8, 2.4].map((delay, i) => (
-          <circle key={`fr${i}`} cx={970 + (i%2)*3 - 1.5} cy={capRockY(970)} r="2" fill="#0dfca2" style={{
-            opacity: 0,
-            '--travel': `-${capRockY(970) * 0.6}px`,
-            animation: `faultRise 3s linear ${delay}s infinite`,
-            animationPlayState: isPlaying ? 'running' : 'paused',
-          }}/>
-        ))}
+        {/* Dynamic Fault Leakage Bubbles (Active when CO2 column reaches fault and breaches threshold) */}
+        {faults.map((f, idx) => {
+          const cellIdx = Math.round(f.xPercent);
+          const hasBreached = h && h[cellIdx] > f.thresholdHeight;
+          if (!hasBreached) return null;
+          
+          const xPixel = f.xPercent * 10;
+          const yCap = capRockY(xPixel, faults);
+          const yStart = yCap * 0.35;
+          const T = idx === 0 ? 0.18 : -0.18;
+          
+          return [0, 0.6, 1.2, 1.8, 2.4].map((delay, i) => (
+            <circle 
+              key={`fb-${idx}-${i}`} 
+              cx={xPixel + (i % 2) * 3 - 1.5} 
+              cy={yCap} 
+              r="2" 
+              fill="#0dfca2" 
+              style={{
+                opacity: 0,
+                '--travel-x': `${T * (yStart - yCap)}px`,
+                '--travel-y': `${yStart - yCap}px`,
+                animation: `faultRiseTilted 3s linear ${delay}s infinite`,
+                animationPlayState: isPlaying ? 'running' : 'paused',
+              }}
+            />
+          ));
+        })}
       </svg>
 
 
@@ -1303,7 +1451,7 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying }) => {
       }}>
         Brine
       </div>
-    </>
+    </React.Fragment>
   );
 };
 
