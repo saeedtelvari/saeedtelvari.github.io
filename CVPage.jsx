@@ -16,10 +16,9 @@ const CVPage = () => (
       zIndex: 0,
     }}></div>
 
-    <div style={{
+    <div className="cv-card-container" style={{
       position: 'relative', zIndex: 1,
       maxWidth: 980, margin: '0 auto',
-      padding: 44,
       background: 'linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.08) 100%)',
       backdropFilter: 'blur(25px) saturate(180%)',
       WebkitBackdropFilter: 'blur(25px) saturate(180%)',
@@ -37,7 +36,7 @@ const CVPage = () => (
           margin: '0 0 12px',
           fontFamily: "'Montserrat', sans-serif",
           fontWeight: 700,
-          fontSize: 56,
+          fontSize: 'clamp(36px, 5vw, 56px)',
           lineHeight: 1.1,
           background: 'linear-gradient(135deg, #fff 0%, #a8edea 100%)',
           WebkitBackgroundClip: 'text',
@@ -50,7 +49,7 @@ const CVPage = () => (
           <a href="mailto:st4014@hw.ac.uk" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, textDecoration: 'none' }}><i className="fas fa-envelope" style={{ color: '#4ecdc4', marginRight: 8 }}></i>st4014@hw.ac.uk</a>
           <a href="https://www.linkedin.com/in/stelvari/" target="_blank" rel="noreferrer" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, textDecoration: 'none' }}><i className="fab fa-linkedin" style={{ color: '#4ecdc4', marginRight: 8 }}></i>/in/stelvari</a>
         </div>
-        <GlassButton variant="mint" icon="fas fa-download">Download PDF</GlassButton>
+        <GlassButton variant="mint" icon="fas fa-download" onClick={() => window.print()}>Download PDF</GlassButton>
       </header>
 
       <Divider />
@@ -83,7 +82,7 @@ const CVPage = () => (
 
       {/* Skills */}
       <CVSection icon="fas fa-tools" title="Skills">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+        <div className="cv-skills-grid">
           <SkillCategory icon="fas fa-code" title="Programming" tags={['Python', 'MATLAB', 'Julia', 'Rust', 'LaTeX']} detail="Libraries: TensorFlow, PyTorch, Scikit-learn, OpenCV, OpenPNM" />
           <SkillCategory icon="fas fa-industry" title="Industry Software" tags={['Eclipse', 'MRST', 'Petrel RE', 'Saphir', 'PVTSim']} />
           <SkillCategory icon="fas fa-cube" title="CFD & Simulation" tags={['OpenFOAM', 'PerGeos', 'SALOME', 'MeshLab']} />

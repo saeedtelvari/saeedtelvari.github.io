@@ -16,9 +16,7 @@ const NEWS = [
 
 const AboutSection = () => (
   <SectionPanel bg="./assets/about_bg.png">
-    <div style={{
-      display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 48, alignItems: 'flex-start',
-    }}>
+    <div className="about-grid">
       {/* Left: About */}
       <div style={{ color: 'rgba(255,255,255,0.90)' }}>
         <Reveal>
@@ -43,9 +41,7 @@ const AboutSection = () => (
           </p>
         </Reveal>
         
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, marginTop: 28,
-        }}>
+        <div className="highlights-grid">
           {[
             { icon: 'fas fa-graduation-cap', label: 'PhD @ Heriot-Watt' },
             { icon: 'fas fa-flask', label: 'CCUS Research' },
@@ -117,7 +113,7 @@ const ResearchInterestsStrip = () => (
         color: 'rgba(100,255,218,0.85)', margin: '0 0 18px',
       }}>Research Interests</h3>
     </Reveal>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+    <div className="research-strip-grid">
       {RESEARCH.map((r, i) => (
         <Reveal key={i} delay={`reveal-delay-${(i % 3) + 1}`}>
           <GlassCard padding={16} radius={14} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, height: '100%' }}>

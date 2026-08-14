@@ -5,9 +5,9 @@ const { useEffect, useMemo, useRef, useState } = React;
 const SimulatorPage = () => {
   // --- STATE PARAMETERS ---
   // Physical parameters
-  const [K, setK] = useState(0.85); // Absolute permeability scaling (0.1 to 2.0)
+  const [K, setK] = useState(1.70); // Absolute permeability scaling (0.1 to 3.5)
   const [porosity, setPorosity] = useState(0.25); // Porosity (0.1 to 0.4)
-  const [cellCount, setCellCount] = useState(100); // N cells resolution (50 to 150)
+  const [cellCount, setCellCount] = useState(200); // N cells resolution (50 to 300)
   const [residualTrapFraction, setResidualTrapFraction] = useState(0.25); // Trapping fraction Sgr (0.0 to 0.40)
   
   // Define dx in the outer scope of the component so it is available to all rendering sub-blocks
@@ -20,16 +20,21 @@ const SimulatorPage = () => {
   const [faultOffset, setFaultOffset] = useState(1.2); // Fault displacement (0 to 3)
 
   // Injection parameters
-  const [Q, setQ] = useState(0.55); // Constant injection rate (0.0 to 1.5)
+  const [Q, setQ] = useState(2.30); // Constant injection rate (0.0 to 3.5)
   const [injLocation, setInjLocation] = useState(70); // Injection cell index % (10% to 90%)
-  const [injDuration, setInjDuration] = useState(150); // Frame count of active injection (50 to 400)
+  const [injDuration, setInjDuration] = useState(240); // Frame count of active injection (50 to 400)
   
   // Fault parameters
   const [faultCount, setFaultCount] = useState(2); // Number of faults (0 to 3)
   const [faults, setFaults] = useState(() => [
-    { xPercent: 20 + Math.random() * 20, isSealed: false, thresholdHeight: 0.2 + Math.random() * 0.3, leakRate: 0.08 + Math.random() * 0.1, transmissibility: 1.0 },
-    { xPercent: 60 + Math.random() * 20, isSealed: false, thresholdHeight: 0.2 + Math.random() * 0.3, leakRate: 0.08 + Math.random() * 0.1, transmissibility: 1.0 }
+    { xPercent: 28, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 1.0, dipSlope: -0.22 },
+    { xPercent: 48, isSealed: false, thresholdHeight: 0.30, leakRate: 0.12, transmissibility: 1.0, dipSlope: 0.25 }
   ]);
+
+  // Capillary fringe state
+  const [hasCapillaryFringe, setHasCapillaryFringe] = useState(true);
+  const [fringeScale, setFringeScale] = useState(0.65); // subtle, crisp capillary transition zone thickness (meters)
+  const [entryPressure, setEntryPressure] = useState(15); // entry capillary pressure (kPa)
 
   // Simulation run state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -54,8 +59,8 @@ const SimulatorPage = () => {
   const [uqTargetMetric, setUqTargetMetric] = useState('leaked'); // 'leaked' (CO2 leaked mass) or 'trapped' (trapping efficiency %)
   
   // Solver variables (Plume thickness vector, max thickness historical)
-  const [h, setH] = useState(() => new Array(100).fill(0));
-  const [hMax, setHMax] = useState(() => new Array(100).fill(0));
+  const [h, setH] = useState(() => new Array(200).fill(0));
+  const [hMax, setHMax] = useState(() => new Array(200).fill(0));
   
   // Cumulative masses tracking state
   const [massHistory, setMassHistory] = useState([]); // Array of { time, injected, trapped, mobile, leaked }
@@ -157,8 +162,8 @@ const SimulatorPage = () => {
       setFaultCount(3);
       setFaults([
         { xPercent: 25, isSealed: false, thresholdHeight: 0.3, leakRate: 0.18, transmissibility: 0.8 },
-        { xPercent: 55, isSealed: true, thresholdHeight: 0.8, leakRate: 0.12, transmissibility: 0.0 },
-        { xPercent: 80, isSealed: false, thresholdHeight: 0.5, leakRate: 0.20, transmissibility: 0.5 }
+        { xPercent: 48, isSealed: true, thresholdHeight: 0.8, leakRate: 0.12, transmissibility: 0.0 },
+        { xPercent: 88, isSealed: false, thresholdHeight: 0.5, leakRate: 0.20, transmissibility: 0.5 }
       ]);
       setResidualTrapFraction(0.15);
     } else if (presetName === 'monocline') {
@@ -172,9 +177,9 @@ const SimulatorPage = () => {
       setInjDuration(200);
       setFaultCount(1);
       setFaults([
-        { xPercent: 50, isSealed: false, thresholdHeight: 0.2, leakRate: 0.08, transmissibility: 0.9 },
-        { xPercent: 55, isSealed: false, thresholdHeight: 0.6, leakRate: 0.12, transmissibility: 0.7 },
-        { xPercent: 80, isSealed: false, thresholdHeight: 0.4, leakRate: 0.12, transmissibility: 0.8 }
+        { xPercent: 35, isSealed: false, thresholdHeight: 0.2, leakRate: 0.08, transmissibility: 0.9 },
+        { xPercent: 50, isSealed: false, thresholdHeight: 0.6, leakRate: 0.12, transmissibility: 0.7 },
+        { xPercent: 88, isSealed: false, thresholdHeight: 0.4, leakRate: 0.12, transmissibility: 0.8 }
       ]);
       setResidualTrapFraction(0.25);
     } else if (presetName === 'default') {
@@ -195,25 +200,57 @@ const SimulatorPage = () => {
     }
   };
 
-  // Helper: Caprock Underside Topography Function
-  const capRockY = (x, cellIdx = null) => {
+  // Base unperturbed caprock profile
+  const capRockBaseProfile = (x) => {
     const dip = 150 + x * (dipPercent / 100.0) * 8.0; // regional dip
     const wave = - amplitude * Math.sin((x * Math.PI / 1000.0) * frequency * 2);
+    return dip + wave;
+  };
+
+  // Base unperturbed stratum profile for any yOffset
+  const stratumBaseProfile = (x, yOffset = 0) => {
+    return capRockBaseProfile(x) + yOffset;
+  };
+
+  // Computes the exact subpixel intersection (x*, y*) of a sloped fault plane with any geological stratum at depth
+  const getSimStratumFaultIntersection = (f, idx, yOffset = 0) => {
+    const x0 = (f.xPercent / 100.0) * 1000.0;
+    const defaultSlope = idx % 2 === 0 ? -0.22 : 0.25;
+    const slope = f.dipSlope !== undefined ? f.dipSlope : defaultSlope;
+    let x = x0;
+    for (let iter = 0; iter < 3; iter++) {
+      const y = stratumBaseProfile(x, yOffset);
+      x = x0 + slope * y;
+    }
+    const y = stratumBaseProfile(x, yOffset);
+    return { x, y, x0, slope };
+  };
+
+  // Computes intersection for caprock specifically (yOffset = 0)
+  const getSimFaultIntersection = (f, idx) => {
+    return getSimStratumFaultIntersection(f, idx, 0);
+  };
+
+  // Computes elevation for any geological stratum displaced along the sloped fault
+  const stratumY = (x, cellIdx = null, yOffset = 0) => {
+    const base = stratumBaseProfile(x, yOffset);
     let offset = 0;
-    
-    // Determine the offset based on the reference x (either cell center or continuous x)
     const xRef = cellIdx !== null ? (cellIdx * dx + dx / 2.0) : x;
     
-    // Accumulate fault offsets based on how many faults are active
     for (let idx = 0; idx < faultCount; idx++) {
       const f = faults[idx];
-      const xFault = (f.xPercent / 100.0) * 1000.0;
-      if (xRef > xFault) {
+      const inter = getSimStratumFaultIntersection(f, idx, yOffset);
+      if (xRef > inter.x) {
         const direction = idx % 2 === 0 ? 1 : -1;
-        offset += direction * faultOffset * 12; // alternate step offsets
+        offset += direction * faultOffset * 12;
       }
     }
-    return dip + wave + offset;
+    return base + offset;
+  };
+
+  // Helper: Caprock Underside Topography Function
+  const capRockY = (x, cellIdx = null) => {
+    return stratumY(x, cellIdx, 0);
   };
 
   // --- SOLVER ITERATOR (FORWARD & REVERSE) ---
@@ -224,7 +261,7 @@ const SimulatorPage = () => {
       if (isPlaying) {
         setSimTime(t => {
           const nextTime = t + 1;
-          if (nextTime > 500) {
+          if (nextTime > 1000) {
             setIsPlaying(false);
             return t;
           }
@@ -244,7 +281,7 @@ const SimulatorPage = () => {
           setCurrentMasses(result.masses);
           
           // Append to mass history for plotting
-          if (nextTime % 2 === 0 || nextTime === 1 || nextTime === 500) {
+          if (nextTime % 5 === 0 || nextTime === 1 || nextTime === 1000) {
             setMassHistory(history => {
               const cleaned = history.filter(item => item.time < nextTime);
               return [...cleaned, { time: nextTime, ...result.masses }];
@@ -465,7 +502,7 @@ const SimulatorPage = () => {
     setIsReversing(false);
     
     const nextTime = simTime + 1;
-    if (nextTime > 500) return;
+    if (nextTime > 1000) return;
     
     if (simTime < historyRef.current.length - 1) {
       commitBranch();
@@ -484,7 +521,7 @@ const SimulatorPage = () => {
     setCurrentMasses(result.masses);
     setSimTime(nextTime);
     
-    if (nextTime % 2 === 0 || nextTime === 1 || nextTime === 500) {
+    if (nextTime % 5 === 0 || nextTime === 1 || nextTime === 1000) {
       setMassHistory(history => {
         const cleaned = history.filter(item => item.time < nextTime);
         return [...cleaned, { time: nextTime, ...result.masses }];
@@ -607,8 +644,8 @@ const SimulatorPage = () => {
         let curHMax = new Array(cellCount).fill(0);
         let curMasses = { injected: 0, trapped: 0, mobile: 0, leaked: 0 };
 
-        // Run explicit solver to Year 500
-        for (let year = 1; year <= 500; year++) {
+        // Run explicit solver to Year 1000
+        for (let year = 1; year <= 1000; year++) {
           const res = runSolverStep(curH, curHMax, curMasses, year, runParams);
           curH = res.h;
           curHMax = res.hMax;
@@ -797,7 +834,7 @@ const SimulatorPage = () => {
       leaked: realization.finalLeaked
     };
     setCurrentMasses(finalMasses);
-    setSimTime(500);
+    setSimTime(1000);
     setIsPlaying(false);
     setIsReversing(false);
 
@@ -817,7 +854,7 @@ const SimulatorPage = () => {
         params: JSON.parse(JSON.stringify(solverParamsRef.current))
       },
       {
-        time: 500,
+        time: 1000,
         h: [...realization.h],
         hMax: [...realization.hMax],
         masses: { ...finalMasses },
@@ -827,7 +864,7 @@ const SimulatorPage = () => {
 
     setMassHistory([
       { time: 0, injected: 0, trapped: 0, mobile: 0, leaked: 0 },
-      { time: 500, ...finalMasses }
+      { time: 1000, ...finalMasses }
     ]);
     
     setActiveSubTab('profile');
@@ -1132,94 +1169,162 @@ const SimulatorPage = () => {
     };
   };
 
-  // --- PATH GENERATORS FOR SVG VISUALIZER ---
-  // Trapped CO2 sits directly under the caprock (from capRockY down to capRockY + hTrapped)
-  const getTrappedPath = () => {
-    const N = h.length;
-    const scale = 15.0; // Unified scale matching solver coordinate system
+  // --- NODE-BASED RIBBON BUILDER (Zero Sawteeth Guaranteed) ---
+  const buildSmoothRibbon = (topElevationFn, botElevationFn, kStart, kEnd) => {
+    if (kStart > kEnd) return "";
     
-    let firstActive = -1;
-    let lastActive = -1;
-    for (let i = 0; i < N; i++) {
-      if (hTrapped[i] * scale > 0.6) {
-        if (firstActive === -1) firstActive = i;
-        lastActive = i;
-      }
-    }
-    
-    if (firstActive === -1) return "";
-    
-    // Top boundary: left-to-right along caprock (with vertical steps at faults)
-    let path = `M ${firstActive * dx} ${capRockY(firstActive * dx, firstActive)}`;
-    for (let i = firstActive; i <= lastActive; i++) {
-      const x1 = i * dx;
-      const x2 = (i + 1) * dx;
-      if (i > firstActive) {
-        path += ` L ${x1} ${capRockY(x1, i)}`;
-      }
-      path += ` L ${x2} ${capRockY(x2, i)}`;
-    }
-    
-    // Bottom boundary: right-to-left (piecewise constant heights relative to caprock)
-    for (let i = lastActive; i >= firstActive; i--) {
-      const x2 = (i + 1) * dx;
-      const x1 = i * dx;
-      const y2 = capRockY(x2, i) + hTrapped[i] * scale;
-      const y1 = capRockY(x1, i) + hTrapped[i] * scale;
+    let path = "";
+    for (let k = kStart; k <= kEnd; k++) {
+      const x = k * dx;
+      const isFault = k > 0 && k < cellCount && Math.abs(capRockY(x, k - 1) - capRockY(x, k)) > 0.1;
       
-      path += ` L ${x2} ${y2}`;
-      path += ` L ${x1} ${y1}`;
+      if (k === kStart) {
+        const y0 = topElevationFn(k, isFault ? 'right' : 'avg');
+        path = `M ${x} ${y0}`;
+      } else if (isFault) {
+        const yL = topElevationFn(k, 'left');
+        const yR = topElevationFn(k, 'right');
+        path += ` L ${x} ${yL} L ${x} ${yR}`;
+      } else {
+        const y = topElevationFn(k, 'avg');
+        path += ` L ${x} ${y}`;
+      }
+    }
+    
+    for (let k = kEnd; k >= kStart; k--) {
+      const x = k * dx;
+      const isFault = k > 0 && k < cellCount && Math.abs(capRockY(x, k - 1) - capRockY(x, k)) > 0.1;
+      
+      if (isFault) {
+        const yR = botElevationFn(k, 'right');
+        const yL = botElevationFn(k, 'left');
+        path += ` L ${x} ${yR} L ${x} ${yL}`;
+      } else {
+        const y = botElevationFn(k, 'avg');
+        path += ` L ${x} ${y}`;
+      }
     }
     
     path += " Z";
     return path;
   };
 
-  // Mobile CO2 flows beneath the trapped layer (from capRockY + hTrapped down to capRockY + hTrapped + hMobile)
+  const getSimNodeValue = (arr, k, side = 'avg') => {
+    if (!arr) return 0;
+    const N = arr.length;
+    if (k <= 0) return arr[0];
+    if (k >= N) return arr[N - 1];
+    if (side === 'left') return arr[k - 1];
+    if (side === 'right') return arr[k];
+    return 0.5 * (arr[k - 1] + arr[k]);
+  };
+
+  // Helper to find the active continuous domain with sub-grid zero-tapered tip nodes
+  const getSimActiveBounds = (nodeValueFn, N, eps = 0.001) => {
+    let kFirst = -1, kLast = -1;
+    for (let k = 0; k <= N; k++) {
+      const val = nodeValueFn(k);
+      if (val > eps) {
+        if (kFirst === -1) kFirst = k;
+        kLast = k;
+      }
+    }
+    if (kFirst === -1) return null;
+    const kStart = Math.max(0, kFirst - 1);
+    const kEnd = Math.min(N, kLast + 1);
+    return { kStart, kEnd };
+  };
+
+  // Trapped CO2 sits directly under the caprock
+  const getTrappedPath = () => {
+    const N = cellCount;
+    const scale = 15.0;
+    
+    const bounds = getSimActiveBounds(k => getSimNodeValue(hTrapped, k, 'avg'), N, 0.001);
+    if (!bounds) return "";
+    
+    return buildSmoothRibbon(
+      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k),
+      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k) + getSimNodeValue(hTrapped, k, side) * scale,
+      bounds.kStart, bounds.kEnd
+    );
+  };
+
+  // Mobile CO2 flows beneath the trapped layer
   const getMobilePath = () => {
-    const N = h.length;
-    const scale = 15.0; // Unified scale matching solver coordinate system
+    const N = cellCount;
+    const scale = 15.0;
     
-    let firstActive = -1;
-    let lastActive = -1;
-    for (let i = 0; i < N; i++) {
-      if (hMobile[i] * scale > 0.6) {
-        if (firstActive === -1) firstActive = i;
-        lastActive = i;
-      }
-    }
+    const bounds = getSimActiveBounds(k => getSimNodeValue(hMobile, k, 'avg'), N, 0.001);
+    if (!bounds) return "";
     
-    if (firstActive === -1) return "";
+    return buildSmoothRibbon(
+      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k) + getSimNodeValue(hTrapped, k, side) * scale,
+      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k) + (getSimNodeValue(hTrapped, k, side) + getSimNodeValue(hMobile, k, side)) * scale,
+      bounds.kStart, bounds.kEnd
+    );
+  };
+
+  // Swept Residual Trapping Footprint (hTrapped)
+  const getSweptResidualSimPath = () => {
+    const N = cellCount;
+    const scale = 15.0;
+    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.22 : 0;
     
-    // Top boundary: left-to-right (piecewise constant trapped heights)
-    const startYTop = capRockY(firstActive * dx, firstActive) + hTrapped[firstActive] * scale;
-    let path = `M ${firstActive * dx} ${startYTop}`;
+    const bounds = getSimActiveBounds(k => getSimNodeValue(hTrapped, k, 'avg'), N, 0.001);
+    if (!bounds) return "";
     
-    for (let i = firstActive; i <= lastActive; i++) {
-      const x1 = i * dx;
-      const x2 = (i + 1) * dx;
-      const y1 = capRockY(x1, i) + hTrapped[i] * scale;
-      const y2 = capRockY(x2, i) + hTrapped[i] * scale;
-      
-      if (i > firstActive) {
-        path += ` L ${x1} ${y1}`;
-      }
-      path += ` L ${x2} ${y2}`;
-    }
+    return buildSmoothRibbon(
+      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k),
+      (k, side) => {
+        const hTrp = getSimNodeValue(hTrapped, k, side);
+        const f = fringePx * Math.min(1.0, hTrp * 1.5);
+        return capRockY(k * dx, side === 'left' ? k - 1 : k) + hTrp * scale + f;
+      },
+      bounds.kStart, bounds.kEnd
+    );
+  };
+
+  // Active Flowing Mobile Plume (hMobile)
+  const getActiveMobileSimPath = () => {
+    const N = cellCount;
+    const scale = 15.0;
+    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.28 : 0;
     
-    // Bottom boundary: right-to-left (piecewise constant total heights)
-    for (let i = lastActive; i >= firstActive; i--) {
-      const x2 = (i + 1) * dx;
-      const x1 = i * dx;
-      const y2 = capRockY(x2, i) + (hTrapped[i] + hMobile[i]) * scale;
-      const y1 = capRockY(x1, i) + (hTrapped[i] + hMobile[i]) * scale;
-      
-      path += ` L ${x2} ${y2}`;
-      path += ` L ${x1} ${y1}`;
-    }
+    const bounds = getSimActiveBounds(k => getSimNodeValue(hMobile, k, 'avg'), N, 0.001);
+    if (!bounds) return "";
     
-    path += " Z";
-    return path;
+    return buildSmoothRibbon(
+      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k),
+      (k, side) => {
+        const hMob = getSimNodeValue(hMobile, k, side);
+        const f = fringePx * Math.min(1.0, hMob * 1.8);
+        return capRockY(k * dx, side === 'left' ? k - 1 : k) + hMob * scale + f;
+      },
+      bounds.kStart, bounds.kEnd
+    );
+  };
+
+  // Capillary Fringe extends beneath the mobile CO2 layer into the brine
+  const getFringePath = (multiplier = 1.0) => {
+    if (!hasCapillaryFringe) return "";
+    const N = cellCount;
+    const scale = 15.0;
+    const fringePx = fringeScale * 15.0 * multiplier * 0.5;
+    
+    const bounds = getSimActiveBounds(k => getSimNodeValue(hMobile, k, 'avg'), N, 0.001);
+    if (!bounds) return "";
+    
+    return buildSmoothRibbon(
+      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k) + (getSimNodeValue(hTrapped, k, side) + getSimNodeValue(hMobile, k, side)) * scale,
+      (k, side) => {
+        const hTot = (getSimNodeValue(hTrapped, k, side) + getSimNodeValue(hMobile, k, side)) * scale;
+        const hMob = getSimNodeValue(hMobile, k, side);
+        const f = fringePx * Math.min(1.0, hMob * 2.0);
+        return capRockY(k * dx, side === 'left' ? k - 1 : k) + hTot + f;
+      },
+      bounds.kStart, bounds.kEnd
+    );
   };
 
   // Reservoir Conformable Grid block columns
@@ -1232,8 +1337,8 @@ const SimulatorPage = () => {
       const x2 = (i + 1) * dx;
       const yt1 = capRockY(x1, i);
       const yt2 = capRockY(x2, i);
-      const yb1 = yt1 + 175;
-      const yb2 = yt2 + 175;
+      const yb1 = stratumY(x1, i, 175);
+      const yb2 = stratumY(x2, i, 175);
       
       // Permeability noise mapping for sandstone heterogeneity
       const permFactor = 0.5 + 0.5 * Math.sin(i * 12.7 + 1.1);
@@ -1260,7 +1365,7 @@ const SimulatorPage = () => {
     const maxVal = Math.max(10, currentMasses.injected * 1.05);
     
     // Scale helper
-    const getX = (t) => padding.left + (t / 500.0) * (width - padding.left - padding.right);
+    const getX = (t) => padding.left + (t / 1000.0) * (width - padding.left - padding.right);
     const getY = (val) => height - padding.bottom - (val / maxVal) * (height - padding.top - padding.bottom);
     
     let pathInj = "", pathTrap = "", pathMob = "", pathLeak = "";
@@ -1297,7 +1402,7 @@ const SimulatorPage = () => {
         })}
         
         {/* X axis year labels */}
-        {[0, 100, 200, 300, 400, 500].map((t, i) => {
+        {[0, 200, 400, 600, 800, 1000].map((t, i) => {
           const x = getX(t);
           return (
             <text key={i} x={x} y={height - 8} fill="rgba(255,255,255,0.45)" fontSize="8.5" textAnchor="middle" fontFamily="monospace">
@@ -1484,7 +1589,7 @@ const SimulatorPage = () => {
                   </button>
                   
                   {/* Step Forward */}
-                  <button onClick={stepForward} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', opacity: simTime < 500 ? 0.8 : 0.3 }} disabled={simTime >= 500} title="Step Forward 1 Year">
+                  <button onClick={stepForward} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', opacity: simTime < 1000 ? 0.8 : 0.3 }} disabled={simTime >= 1000} title="Step Forward 1 Year">
                     <i className="fas fa-step-forward" style={{ fontSize: 10 }} />
                   </button>
                 </div>
@@ -1547,7 +1652,7 @@ const SimulatorPage = () => {
                     width: 2, background: 'rgba(255,255,255,0.06)' 
                   }} />
 
-                  {[0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500].map((m, idx) => {
+                  {[0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000].map((m, idx) => {
                     const maxSimulated = historyRef.current.length - 1;
                     const isAvailable = m <= maxSimulated;
                     const isCurrent = m === simTime;
@@ -1800,7 +1905,7 @@ const SimulatorPage = () => {
               </div>
               <div style={{ paddingRight: 8 }}>
                 {activeSubTab === 'profile' ? (
-                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Year {simTime} / 500</span>
+                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Year {simTime} / 1000</span>
                 ) : activeSubTab === 'uq' ? (
                   <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Monte Carlo Analysis</span>
                 ) : (
@@ -1814,6 +1919,32 @@ const SimulatorPage = () => {
               if (activeSubTab === 'profile') {
                 return (
                   <div style={{ flex: 1, position: 'relative', display: 'flex', background: '#1c1626' }}>
+                    {/* Floating HUD Legend */}
+                    <div style={{
+                      position: 'absolute', top: 12, right: 12,
+                      display: 'flex', gap: 12, alignItems: 'center',
+                      background: 'rgba(0,0,0,0.50)', backdropFilter: 'blur(10px)',
+                      WebkitBackdropFilter: 'blur(10px)',
+                      border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20,
+                      padding: '5px 12px', fontSize: 10, color: 'rgba(255,255,255,0.85)',
+                      zIndex: 5, pointerEvents: 'none'
+                    }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#0b7a61', border: '1px solid #0dfca2' }} /> Trapped CO₂
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#0dfca2' }} /> Mobile CO₂
+                      </span>
+                      {hasCapillaryFringe && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: 2, background: 'linear-gradient(180deg, rgba(13,252,162,0.6), transparent)', border: '1px dashed #20c997' }} /> Capillary Fringe
+                        </span>
+                      )}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#0a2a4d' }} /> Brine
+                      </span>
+                    </div>
+
               <svg viewBox="0 0 1000 450" preserveAspectRatio="none" style={{ width: '100%', height: '100%', pointerEvents: 'auto' }}>
                 <defs>
                   <clipPath id="caprock-clipper">
@@ -1822,12 +1953,32 @@ const SimulatorPage = () => {
                   
                   <linearGradient id="plume-grad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#0dfca2" stopOpacity="0.95"/>
+                    <stop offset="40%" stopColor="#05e67c" stopOpacity="0.85"/>
                     <stop offset="100%" stopColor="#05ab5e" stopOpacity="0.75"/>
                   </linearGradient>
                   
                   <linearGradient id="trapped-grad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#0b7a61" stopOpacity="0.85"/>
                     <stop offset="100%" stopColor="#034d3c" stopOpacity="0.75"/>
+                  </linearGradient>
+
+                  {/* Active Mobile Supercritical Flow Gradient (S_max: Brilliant Radiant Emerald -> Mint) */}
+                  <linearGradient id="active-mobile-sim-grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#0dfca2" stopOpacity="0.98"/>
+                    <stop offset="25%" stopColor="#0dfca2" stopOpacity="0.95"/>
+                    <stop offset="50%" stopColor="#05e67c" stopOpacity="0.90"/>
+                    <stop offset="72%" stopColor="#20c997" stopOpacity="0.65"/>
+                    <stop offset="88%" stopColor="#38b2ac" stopOpacity="0.28"/>
+                    <stop offset="100%" stopColor="#0a2a4d" stopOpacity="0.0"/>
+                  </linearGradient>
+
+                  {/* Residual Trapped Gas Swept Footprint Gradient (S_gr: Distinct Luminous Seafoam / Subsurface Teal) */}
+                  <linearGradient id="residual-trapped-sim-grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#20c997" stopOpacity="0.60"/>
+                    <stop offset="30%" stopColor="#20c997" stopOpacity="0.50"/>
+                    <stop offset="60%" stopColor="#38b2ac" stopOpacity="0.36"/>
+                    <stop offset="85%" stopColor="#1a7f8e" stopOpacity="0.20"/>
+                    <stop offset="100%" stopColor="#0a2a4d" stopOpacity="0.0"/>
                   </linearGradient>
                   
                   <linearGradient id="brine-grad" x1="0" y1="0" x2="0" y2="1">
@@ -1839,22 +1990,34 @@ const SimulatorPage = () => {
                 {/* Conforming caprock layer (solid brown) */}
                 <path d={`M 0 0 L 1000 0 L 1000 ${capRockY(1000)} ` + Array.from({ length: 100 }, (_, idx) => `L ${(99-idx)*10} ${capRockY((99-idx)*10)}`).join(" ") + ` Z`} fill="#282030" stroke="rgba(255,255,255,0.02)"/>
                 
-                {/* Reservoir Sandstone conforming blocks */}
+                {/* Reservoir Sandstone conforming blocks with continuous smooth fluid interpolation */}
                 {(() => {
                   const N = h.length;
                   const scale = 15.0;
+                  const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 1.6 : 0;
+                  
+                  // Compute total fluid depth including capillary fringe transition
+                  const effH = new Array(N);
+                  for (let i = 0; i < N; i++) {
+                    const f_i = fringePx * Math.min(1.0, hMobile[i] * 2.0);
+                    effH[i] = h[i] * scale + f_i;
+                  }
+                  
                   return reservoirBlocks.map((b, idx) => {
                     const cellInjIdx = Math.floor((injLocation / 100.0) * cellCount);
-                    const yBrineTop1 = b.yt1 + h[idx] * scale;
-                    const yBrineTop2 = b.yt2 + h[idx] * scale;
+                    const hFluidLeft = idx === 0 ? effH[0] : 0.5 * (effH[idx - 1] + effH[idx]);
+                    const hFluidRight = idx === N - 1 ? effH[N - 1] : 0.5 * (effH[idx] + effH[idx + 1]);
+                    
+                    const yBrineTop1 = Math.min(b.yb1, b.yt1 + hFluidLeft);
+                    const yBrineTop2 = Math.min(b.yb2, b.yt2 + hFluidRight);
                     
                     return (
                       <g key={idx}>
                         {/* Sandstone Gridblock */}
                         <polygon points={b.points} fill={b.fill} stroke="rgba(0,0,0,0.12)" strokeWidth="0.5"/>
                         
-                        {/* Brine water layer conforming (saturated water) */}
-                        {yBrineTop1 < b.yb1 && (
+                        {/* Smooth continuous Brine water layer (sw=1) */}
+                        {(yBrineTop1 < b.yb1 || yBrineTop2 < b.yb2) && (
                           <polygon points={`${b.x1},${yBrineTop1} ${b.x2},${yBrineTop2} ${b.x2},${b.yb2} ${b.x1},${b.yb1}`} fill="url(#brine-grad)"/>
                         )}
 
@@ -1867,20 +2030,21 @@ const SimulatorPage = () => {
                   });
                 })()}
 
-                {/* CO2 Plume Core Band (VE double layer visual representation) */}
+                {/* CO2 Plume Multiphase Fluid Body */}
                 <g clipPath="url(#caprock-clipper)">
-                  {/* 1. Trapped Plume Layer directly beneath Caprock */}
-                  {getTrappedPath() && (
-                    <path d={getTrappedPath()} fill="url(#trapped-grad)" stroke="#0b7a61" strokeWidth="0.8"/>
+                  {/* 1. Swept Residual Trapped Gas Footprint (S_gr) */}
+                  {getSweptResidualSimPath() && (
+                    <path d={getSweptResidualSimPath()} fill="url(#residual-trapped-sim-grad)" opacity="0.92" />
                   )}
-                  {/* 2. Mobile flowing Plume Layer running below the trapped layer */}
-                  {getMobilePath() && (
-                    <path d={getMobilePath()} fill="url(#plume-grad)" stroke="#0dfca2" strokeWidth="0.8"/>
+
+                  {/* 2. Active Flowing Mobile Plume (S_max) */}
+                  {getActiveMobileSimPath() && (
+                    <path d={getActiveMobileSimPath()} fill="url(#active-mobile-sim-grad)" opacity="0.98" />
                   )}
                 </g>
 
                 {/* Aquifer boundary bottom seal */}
-                <path d={`M 0 ${capRockY(0)+175} ` + Array.from({ length: 101 }, (_, idx) => `L ${idx*10} ${capRockY(idx*10)+175}`).join(" ")} stroke="rgba(0,0,0,0.3)" strokeWidth="1" fill="none"/>
+                <path d={`M 0 ${stratumY(0, 0, 175)} ` + Array.from({ length: 101 }, (_, idx) => `L ${idx*10} ${stratumY(idx*10, idx, 175)}`).join(" ")} stroke="rgba(0,0,0,0.3)" strokeWidth="1" fill="none"/>
 
                 {/* Injection Well Riser and flare */}
                 {(() => {
@@ -1904,17 +2068,15 @@ const SimulatorPage = () => {
                   );
                 })()}
 
-                {/* Fault Lines (Dynamic representation) */}
+                {/* Fault Lines (Dynamic sloped representation intersecting caprock exactly at fault throw) */}
                 {Array.from({ length: faultCount }).map((_, idx) => {
                   const f = faults[idx];
-                  const xPos = (f.xPercent / 100.0) * 1000.0;
-                  const yFault = capRockY(xPos);
+                  const inter = getSimFaultIntersection(f, idx);
                   const color = f.isSealed ? '#64ffda' : '#ff6b6b';
-                  const T = idx % 2 === 0 ? 0.18 : -0.18;
-                  const yStart = yFault - 60;
-                  const yEnd = yFault + 180;
-                  const xStart = xPos + T * (yStart - yFault);
-                  const xEnd = xPos + T * (yEnd - yFault);
+                  const yStart = 0;
+                  const yEnd = 450;
+                  const xStart = inter.x0 + inter.slope * yStart;
+                  const xEnd = inter.x0 + inter.slope * yEnd;
                   return (
                     <g key={idx}>
                       <line x1={xStart} y1={yStart} x2={xEnd} y2={yEnd} stroke={color} strokeWidth="1.2" strokeDasharray="3 3" opacity="0.6"/>
@@ -1922,30 +2084,53 @@ const SimulatorPage = () => {
                   );
                 })}
 
-                {/* Leaking CO2 bubbles ascending through the active open faults */}
+                {/* Leaking CO2 conduit stream ascending along the sloped fault plane */}
                 {isPlaying && Array.from({ length: faultCount }).map((_, idx) => {
                   const f = faults[idx];
                   if (f.isSealed) return null;
-                  const xPos = (f.xPercent / 100.0) * 1000.0;
-                  const direction = idx % 2 === 0 ? 1 : -1;
-                  const sourceXPos = direction === 1 ? xPos - 10 : xPos + 10;
-                  const cellIdx = Math.round(cellCount * (sourceXPos / 1000.0));
+                  const inter = getSimFaultIntersection(f, idx);
+                  const cellIdx = Math.round(cellCount * (inter.x / 1000.0));
                   const boundedIdx = Math.max(0, Math.min(cellCount - 1, cellIdx));
-                  const yFault = capRockY(xPos);
-                  const T = idx % 2 === 0 ? 0.18 : -0.18;
                   
-                  // Bubbles activate ONLY when total plume height exceeds spill threshold height
+                  // Flow activates ONLY when total plume height exceeds spill threshold height
                   if (h[boundedIdx] > f.thresholdHeight + 0.05) {
-                    const travelY = -yFault * 0.8;
-                    const travelX = T * travelY;
-                    return [0, 0.7, 1.4, 2.1].map((delay, i) => (
-                      <circle key={`fl-${idx}-${i}`} cx={xPos + (i % 2) * 2 - 1} cy={yFault - 10} r="1.5" fill="#0dfca2" style={{
-                        opacity: 0,
-                        '--travel-x': `${travelX}px`,
-                        '--travel-y': `${travelY}px`,
-                        animation: 'faultRiseTilted 2.5s linear ' + delay + 's infinite'
-                      }}/>
-                    ));
+                    const travelY = -65; // Traverses through the overlying seal
+                    const travelX = inter.slope * travelY;
+                    const xTop = inter.x + travelX;
+                    const yTop = inter.y + travelY;
+
+                    return (
+                      <g key={`fl-group-${idx}`}>
+                        {/* Active conduit flow filament */}
+                        <line 
+                          x1={inter.x} 
+                          y1={inter.y} 
+                          x2={xTop} 
+                          y2={yTop} 
+                          stroke="#ff6b6b" 
+                          strokeWidth="1.5" 
+                          strokeDasharray="4 3" 
+                          opacity="0.8" 
+                          style={{ animation: 'conduitFlow 1s linear infinite' }}
+                        />
+                        {/* Micro-fluid Pulses */}
+                        {[0, 0.6, 1.2, 1.8].map((delay, i) => (
+                          <circle 
+                            key={`fl-${idx}-${i}`} 
+                            cx={inter.x} 
+                            cy={inter.y} 
+                            r="1.6" 
+                            fill="#ff6b6b" 
+                            style={{
+                              opacity: 0,
+                              '--travel-x': `${travelX}px`,
+                              '--travel-y': `${travelY}px`,
+                              animation: 'faultRiseTilted 2.0s cubic-bezier(0.25, 0.46, 0.45, 0.94) ' + delay + 's infinite'
+                            }}
+                          />
+                        ))}
+                      </g>
+                    );
                   }
                   return null;
                 })}
@@ -2329,18 +2514,40 @@ const SimulatorPage = () => {
                 <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 10 }}>
                   <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Sandstone Properties</span>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                    <Slider label="Permeability (K)" val={`${Math.round(K*1000)} mD`} min="0.1" max="2.0" step="0.1" value={K} onChange={v => setK(parseFloat(v))} />
+                    <Slider label="Permeability (K)" val={`${Math.round(K*1000)} mD`} min="0.1" max="3.5" step="0.1" value={K} onChange={v => setK(parseFloat(v))} />
                     <Slider label="Porosity (phi)" val={`${Math.round(porosity*100)}%`} min="0.1" max="0.4" step="0.05" value={porosity} onChange={v => setPorosity(parseFloat(v))} />
                     <Slider label="Grid Cells (N)" val={cellCount} min="50" max="300" step="10" value={cellCount} onChange={v => setCellCount(parseInt(v))} />
                     <Slider label="Residual Trap (Sgr)" val={`${Math.round(residualTrapFraction*100)}%`} min="0.0" max="0.4" step="0.05" value={residualTrapFraction} onChange={v => setResidualTrapFraction(parseFloat(v))} />
                   </div>
                 </div>
 
+                {/* Capillary Fringe & Pressure Parameters */}
+                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Capillary Fringe (P_c Transition)</span>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, cursor: 'pointer', color: hasCapillaryFringe ? '#64ffda' : 'rgba(255,255,255,0.5)' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={hasCapillaryFringe} 
+                        onChange={e => setHasCapillaryFringe(e.target.checked)} 
+                        style={{ accentColor: '#64ffda' }} 
+                      />
+                      Enable Fringe
+                    </label>
+                  </div>
+                  {hasCapillaryFringe && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
+                      <Slider label="Fringe Height (h_c)" val={`${fringeScale.toFixed(2)} m`} min="0.10" max="3.00" step="0.10" value={fringeScale} onChange={v => setFringeScale(parseFloat(v))} />
+                      <Slider label="Entry Capillary P_e" val={`${entryPressure} kPa`} min="5" max="40" step="1" value={entryPressure} onChange={v => setEntryPressure(parseInt(v))} />
+                    </div>
+                  )}
+                </div>
+
                 {/* Injection Settings */}
                 <div>
                   <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Injection Settings</span>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                    <Slider label="Flow Rate (Q)" val={Q} min="0.0" max="1.5" step="0.1" value={Q} onChange={v => setQ(parseFloat(v))} />
+                    <Slider label="Flow Rate (Q)" val={Q} min="0.0" max="3.5" step="0.1" value={Q} onChange={v => setQ(parseFloat(v))} />
                     <Slider label="Well Location" val={`${injLocation}%`} min="10" max="90" step="5" value={injLocation} onChange={v => setInjLocation(parseInt(v))} />
                     <Slider label="Inj. Stop Year" val={`${injDuration}y`} min="50" max="400" step="10" value={injDuration} onChange={v => setInjDuration(parseInt(v))} />
                   </div>

@@ -291,15 +291,15 @@ const SectionPanel = ({ children, bg, style = {} }) => (
         }}></div>
         {/* Top transition zone: gentle fade-in from the page's deep dark background */}
         <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: 160,
-          background: 'linear-gradient(to bottom, #130d1c 0%, transparent 100%)',
+          position: 'absolute', top: 0, left: 0, right: 0, height: 140,
+          background: 'linear-gradient(to bottom, rgba(33,29,52,0.95) 0%, transparent 100%)',
           pointerEvents: 'none',
           zIndex: 2,
         }} />
         {/* Bottom transition zone: gentle fade-out into the page's deep dark background */}
         <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, height: 160,
-          background: 'linear-gradient(to top, #130d1c 0%, transparent 100%)',
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: 140,
+          background: 'linear-gradient(to top, rgba(29,65,110,0.95) 0%, transparent 100%)',
           pointerEvents: 'none',
           zIndex: 2,
         }} />
@@ -320,10 +320,9 @@ const SectionPanel = ({ children, bg, style = {} }) => (
         background: 'radial-gradient(circle at 80% 80%, rgba(255,119,198,0.09) 0%, transparent 40%)',
       }}
     />
-    <div style={{
+    <div className="section-panel-content" style={{
       position: 'relative', zIndex: 5,
       maxWidth: 1100, margin: '0 auto',
-      padding: '40px 36px',
       background: 'linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.08) 100%)',
       backdropFilter: 'blur(20px) saturate(180%)',
       WebkitBackdropFilter: 'blur(20px) saturate(180%)',

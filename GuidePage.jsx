@@ -251,6 +251,34 @@ const GuidePage = ({ isEmbedded = false }) => {
           </p>
         </div>
 
+        {/* Card 6: Capillary Fringe VE Model */}
+        <div className="math-card full-width-card">
+          <h3 className="math-header">
+            <i className="fas fa-water" /> Capillary Fringe & Capillary-VE Formulation
+          </h3>
+          <p className="math-text">
+            While basic VE assumes an infinitely sharp fluid interface, capillary pressure <span className="variable">P</span><span className="subscript">c</span>(<span className="variable">S</span><span className="subscript">w</span>) creates a **capillary transition zone (capillary fringe)** beneath the mobile plume where CO₂ and brine coexist at varying saturations:
+          </p>
+          <div className="equation-block">
+            <span className="variable">P</span><span className="subscript">c</span>(<span className="variable">z</span>) = <span className="variable">P</span><span className="subscript">CO₂</span>(<span className="variable">z</span>) - <span className="variable">P</span><span className="subscript">brine</span>(<span className="variable">z</span>) = <span className="variable">P</span><span className="subscript">entry</span> + &Delta;&rho; <span className="variable">g</span> (<span className="variable">z</span> - <span className="variable">z</span><span className="subscript">interface</span>)
+          </div>
+          <p className="math-text">
+            Using the **Brooks-Corey retention model**, the vertical saturation distribution <span className="variable">S</span><span className="subscript">w</span>(<span className="variable">z</span>) within the capillary fringe is given by:
+          </p>
+          <div className="equation-block">
+            <span className="variable">S</span><span className="subscript">w</span>*(<span className="variable">z</span>) = <span className="parenthesis">(</span><span className="fraction"><span className="numerator"><span className="variable">P</span><span className="subscript">entry</span></span><span className="denominator"><span className="variable">P</span><span className="subscript">c</span>(<span className="variable">z</span>)</span></span><span className="parenthesis">)</span><span className="superscript">&lambda;</span>, &emsp; <span className="variable">h</span><span className="subscript">c</span> = <span className="fraction"><span className="numerator"><span className="variable">P</span><span className="subscript">entry</span></span><span className="denominator">&Delta;&rho; <span className="variable">g</span></span></span>
+          </div>
+          <p className="math-text">
+            Where &lambda; is the pore-size distribution index and <span className="variable">h</span><span className="subscript">c</span> is the characteristic **capillary transition height**. The vertically-integrated pseudo-relative permeability <span className="variable">k̃</span><span className="subscript">r,CO₂</span>(<span className="variable">h</span>) integrates the continuous saturation curve over the full vertical column:
+          </p>
+          <div className="equation-block">
+            <span className="variable">k̃</span><span className="subscript">r,CO₂</span>(<span className="variable">h</span>) = <span className="fraction"><span className="numerator">1</span><span className="denominator"><span className="variable">h</span></span></span> &int;<span className="superscript"><span className="variable">h</span></span><span className="subscript">0</span> <span className="variable">k</span><span className="subscript">r,CO₂</span>(<span className="variable">S</span><span className="subscript">CO₂</span>(<span className="variable">z</span>)) <span className="variable">dz</span>
+          </div>
+          <p className="math-text">
+            Accounting for the capillary fringe rounds off sharp shock fronts, correctly captures capillary retention during imbibition, and reflects the true diffuse halo observed in high-resolution field monitoring.
+          </p>
+        </div>
+
       </div>
     </div>
   );

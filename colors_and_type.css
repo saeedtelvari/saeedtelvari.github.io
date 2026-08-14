@@ -338,3 +338,114 @@ code, kbd, .mono {
   filter: drop-shadow(0 0 8px rgba(100, 255, 218, 0.45));
 }
 
+/* =====================================================
+   RESPONSIVE LAYOUT UTILITIES
+   ===================================================== */
+
+.about-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 48px;
+  align-items: flex-start;
+}
+@media (max-width: 860px) {
+  .about-grid {
+    grid-template-columns: 1fr !important;
+    gap: 36px !important;
+  }
+}
+
+.highlights-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-top: 28px;
+}
+@media (max-width: 520px) {
+  .highlights-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.research-strip-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+@media (max-width: 900px) {
+  .research-strip-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 580px) {
+  .research-strip-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.cv-skills-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+@media (max-width: 768px) {
+  .cv-skills-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.cv-card-container {
+  padding: 44px;
+}
+@media (max-width: 600px) {
+  .cv-card-container {
+    padding: 24px 16px !important;
+    border-radius: 20px !important;
+  }
+}
+
+.section-panel-content {
+  padding: 40px 36px;
+}
+@media (max-width: 600px) {
+  .section-panel-content {
+    padding: 28px 16px !important;
+    border-radius: 20px !important;
+  }
+}
+
+.hero-identity-container {
+  position: absolute;
+  left: 6%;
+  top: 110px;
+  max-width: 620px;
+  z-index: 7;
+}
+@media (max-width: 860px) {
+  .hero-identity-container {
+    position: relative !important;
+    left: auto !important;
+    top: 0 !important;
+    max-width: 100% !important;
+    padding: 100px 20px 20px !important;
+  }
+}
+
+.hero-annotation-box {
+  position: absolute;
+  left: 6%;
+  bottom: 195px;
+  width: 320px;
+  z-index: 10;
+}
+@media (max-width: 860px) {
+  .hero-annotation-box {
+    position: relative !important;
+    left: auto !important;
+    bottom: auto !important;
+    width: auto !important;
+    margin: 16px 20px 0 !important;
+  }
+}
+
+
