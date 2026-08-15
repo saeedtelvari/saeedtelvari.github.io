@@ -1092,11 +1092,12 @@ const SimulatorPage = () => {
       }
 
       // Ghost cells boundaries (zero far-field flux)
+      const H_res = 175.0 / 15.0; // 11.667 m physical maximum thickness of reservoir sandstone bed
       const hTmp = [...nextH];
       for (let i = 0; i < N; i++) {
         const fL = i === 0 ? 0 : fluxes[i - 1];
         const fR = i === N - 1 ? 0 : fluxes[i];
-        hTmp[i] = Math.max(0, nextH[i] + dt * (fL - fR));
+        hTmp[i] = Math.max(0, Math.min(H_res, nextH[i] + dt * (fL - fR)));
       }
 
       // Injection: Smooth wellbore Gaussian kernel over adjacent cells to prevent point singularity
@@ -1106,7 +1107,7 @@ const SimulatorPage = () => {
         const kernel = [0.10, 0.20, 0.40, 0.20, 0.10];
         for (let offset = -2; offset <= 2; offset++) {
           const cIdx = Math.max(0, Math.min(N - 1, cellInjIdx + offset));
-          hTmp[cIdx] += (dVolInj * kernel[offset + 2]) / (porosity * (dx / 5.0));
+          hTmp[cIdx] = Math.min(H_res, hTmp[cIdx] + (dVolInj * kernel[offset + 2]) / (porosity * (dx / 5.0)));
         }
         injected += dVolInj;
       }
@@ -1129,9 +1130,9 @@ const SimulatorPage = () => {
         }
       }
 
-      nextH = hTmp;
+      nextH = hTmp.map(val => Math.max(0, Math.min(H_res, val)));
       for (let i = 0; i < N; i++) {
-        if (nextH[i] > nextHMax[i]) nextHMax[i] = nextH[i];
+        if (nextH[i] > nextHMax[i]) nextHMax[i] = Math.min(H_res, nextH[i]);
       }
     }
 
@@ -1239,7 +1240,11 @@ const SimulatorPage = () => {
     
     return buildSmoothRibbon(
       (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k),
-      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k) + getSimNodeValue(hTrapped, k, side) * scale,
+      (k, side) => {
+        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
+        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
+        return Math.min(yBotMax, yTop + getSimNodeValue(hTrapped, k, side) * scale);
+      },
       bounds.kStart, bounds.kEnd
     );
   };
@@ -1253,8 +1258,16 @@ const SimulatorPage = () => {
     if (!bounds) return "";
     
     return buildSmoothRibbon(
-      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k) + getSimNodeValue(hTrapped, k, side) * scale,
-      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k) + (getSimNodeValue(hTrapped, k, side) + getSimNodeValue(hMobile, k, side)) * scale,
+      (k, side) => {
+        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
+        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
+        return Math.min(yBotMax, yTop + getSimNodeValue(hTrapped, k, side) * scale);
+      },
+      (k, side) => {
+        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
+        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
+        return Math.min(yBotMax, yTop + (getSimNodeValue(hTrapped, k, side) + getSimNodeValue(hMobile, k, side)) * scale);
+      },
       bounds.kStart, bounds.kEnd
     );
   };
@@ -1271,9 +1284,11 @@ const SimulatorPage = () => {
     return buildSmoothRibbon(
       (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k),
       (k, side) => {
+        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
+        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
         const hTrp = getSimNodeValue(hTrapped, k, side);
         const f = fringePx * Math.min(1.0, hTrp * 1.5);
-        return capRockY(k * dx, side === 'left' ? k - 1 : k) + hTrp * scale + f;
+        return Math.min(yBotMax, yTop + hTrp * scale + f);
       },
       bounds.kStart, bounds.kEnd
     );
@@ -1291,12 +1306,48 @@ const SimulatorPage = () => {
     return buildSmoothRibbon(
       (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k),
       (k, side) => {
+        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
+        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
         const hMob = getSimNodeValue(hMobile, k, side);
         const f = fringePx * Math.min(1.0, hMob * 1.8);
-        return capRockY(k * dx, side === 'left' ? k - 1 : k) + hMob * scale + f;
+        return Math.min(yBotMax, yTop + hMob * scale + f);
       },
       bounds.kStart, bounds.kEnd
     );
+  };
+
+  // Maximum Historic Gas Saturation Boundary (hMax Swept Footprint Dashed Line)
+  const getMaxHgLinePath = () => {
+    const N = cellCount;
+    const scale = 15.0;
+    const bounds = getSimActiveBounds(k => getSimNodeValue(hMax, k, 'avg'), N, 0.001);
+    if (!bounds) return "";
+    
+    let path = "";
+    for (let k = bounds.kStart; k <= bounds.kEnd; k++) {
+      const x = k * dx;
+      const isFault = k > 0 && k < cellCount && Math.abs(capRockY(x, k - 1) - capRockY(x, k)) > 0.1;
+      if (k === bounds.kStart) {
+        const yTop = capRockY(x, isFault ? k : k);
+        const yBotMax = stratumY(x, isFault ? k : k, 175);
+        const y0 = Math.min(yBotMax, yTop + getSimNodeValue(hMax, k, isFault ? 'right' : 'avg') * scale);
+        path = `M ${x} ${y0}`;
+      } else if (isFault) {
+        const yTopL = capRockY(x, k - 1);
+        const yBotMaxL = stratumY(x, k - 1, 175);
+        const yTopR = capRockY(x, k);
+        const yBotMaxR = stratumY(x, k, 175);
+        const yL = Math.min(yBotMaxL, yTopL + getSimNodeValue(hMax, k, 'left') * scale);
+        const yR = Math.min(yBotMaxR, yTopR + getSimNodeValue(hMax, k, 'right') * scale);
+        path += ` L ${x} ${yL} L ${x} ${yR}`;
+      } else {
+        const yTop = capRockY(x, k);
+        const yBotMax = stratumY(x, k, 175);
+        const y = Math.min(yBotMax, yTop + getSimNodeValue(hMax, k, 'avg') * scale);
+        path += ` L ${x} ${y}`;
+      }
+    }
+    return path;
   };
 
   // Reservoir Conformable Grid block columns
@@ -1928,25 +1979,36 @@ const SimulatorPage = () => {
                       zIndex: 5, pointerEvents: 'none'
                     }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#0b7a61', border: '1px solid #0dfca2' }} /> Trapped CO₂
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#0dfca2' }} /> Mobile CO₂ (S_g → 0.90)
                       </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#0dfca2' }} /> Mobile CO₂
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#20c997', border: '1px solid #1a8e8f' }} /> Trapped Gas (S_gr ≈ 0.25)
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 14, height: 0, borderTop: '2px dashed #64ffda' }} /> Max Envelope (h_max)
                       </span>
                       {hasCapillaryFringe && (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: 2, background: 'linear-gradient(180deg, rgba(13,252,162,0.6), transparent)', border: '1px dashed #20c997' }} /> Capillary Fringe
+                          <span style={{ width: 8, height: 8, borderRadius: 2, background: 'linear-gradient(180deg, #20c997, #1a8e8f, #0a2a4d)', border: '1px solid #20c997' }} /> Capillary Fringe
                         </span>
                       )}
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#0a2a4d' }} /> Brine
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#0a2a4d' }} /> Brine (S_w = 1.0)
                       </span>
                     </div>
 
               <svg viewBox="0 0 1000 450" preserveAspectRatio="none" style={{ width: '100%', height: '100%', pointerEvents: 'auto' }}>
                 <defs>
                   <clipPath id="caprock-clipper">
-                    <path d={`M 0 ${reservoirBlocks[0] ? reservoirBlocks[0].yt1 : capRockY(0)} ` + reservoirBlocks.map(b => `L ${b.x1} ${b.yt1} L ${b.x2} ${b.yt2}`).join(" ") + ` L 1000 450 L 0 450 Z`}/>
+                    <path d={`M 0 ${reservoirBlocks[0] ? reservoirBlocks[0].yt1 : capRockY(0)} ` + 
+                      reservoirBlocks.map(b => `L ${b.x2} ${b.yt2}`).join(" ") + 
+                      ` L 1000 ${stratumY(1000, cellCount - 1, 175)} ` +
+                      Array.from({ length: cellCount + 1 }, (_, idx) => {
+                        const k = cellCount - idx;
+                        const x = k * dx;
+                        return `L ${x} ${stratumY(x, Math.max(0, k - 1), 175)}`;
+                      }).join(" ") + ` Z`}
+                    />
                   </clipPath>
                   
                   <linearGradient id="plume-grad" x1="0" y1="0" x2="0" y2="1">
@@ -1960,35 +2022,34 @@ const SimulatorPage = () => {
                     <stop offset="100%" stopColor="#034d3c" stopOpacity="0.75"/>
                   </linearGradient>
 
-                  {/* Active Mobile Supercritical Flow Gradient (S_max: Brilliant Radiant Emerald -> Mint) */}
+                  {/* Active Mobile Supercritical Flow Gradient (S_max: Green -> Aqua/Teal) */}
                   <linearGradient id="active-mobile-sim-grad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#0dfca2" stopOpacity="0.98"/>
-                    <stop offset="25%" stopColor="#0dfca2" stopOpacity="0.95"/>
-                    <stop offset="50%" stopColor="#05e67c" stopOpacity="0.90"/>
-                    <stop offset="72%" stopColor="#20c997" stopOpacity="0.65"/>
-                    <stop offset="88%" stopColor="#38b2ac" stopOpacity="0.28"/>
-                    <stop offset="100%" stopColor="#0a2a4d" stopOpacity="0.0"/>
+                    <stop offset="45%" stopColor="#0dfca2" stopOpacity="0.95"/>
+                    <stop offset="70%" stopColor="#05e67c" stopOpacity="0.92"/>
+                    <stop offset="88%" stopColor="#20c997" stopOpacity="0.90"/>
+                    <stop offset="100%" stopColor="#1a8e8f" stopOpacity="0.85"/>
                   </linearGradient>
 
-                  {/* Residual Trapped Gas Swept Footprint Gradient (S_gr: Distinct Luminous Seafoam / Subsurface Teal) */}
+                  {/* Residual Trapped Gas Swept Footprint Gradient (S_gr Seafoam/Teal -> Brine Blue) */}
                   <linearGradient id="residual-trapped-sim-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#20c997" stopOpacity="0.60"/>
-                    <stop offset="30%" stopColor="#20c997" stopOpacity="0.50"/>
-                    <stop offset="60%" stopColor="#38b2ac" stopOpacity="0.36"/>
-                    <stop offset="85%" stopColor="#1a7f8e" stopOpacity="0.20"/>
-                    <stop offset="100%" stopColor="#0a2a4d" stopOpacity="0.0"/>
+                    <stop offset="0%" stopColor="#20c997" stopOpacity="0.85"/>
+                    <stop offset="40%" stopColor="#20c997" stopOpacity="0.75"/>
+                    <stop offset="75%" stopColor="#1a8e8f" stopOpacity="0.65"/>
+                    <stop offset="92%" stopColor="#125672" stopOpacity="0.45"/>
+                    <stop offset="100%" stopColor="#0a2a4d" stopOpacity="0.25"/>
                   </linearGradient>
                   
-                  {/* Capillary Fringe Transition Gradient (feathering softly into deep blue brine) */}
+                  {/* Capillary Fringe Transition Gradient (Green -> Aqua -> Native Aquifer Brine Blue) */}
                   <linearGradient id="fringe-sim-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#20c997" stopOpacity="0.60"/>
-                    <stop offset="35%" stopColor="#20c997" stopOpacity="0.35"/>
-                    <stop offset="70%" stopColor="#0a2a4d" stopOpacity="0.15"/>
-                    <stop offset="100%" stopColor="#0a2a4d" stopOpacity="0.0"/>
+                    <stop offset="0%" stopColor="#20c997" stopOpacity="0.80"/>
+                    <stop offset="50%" stopColor="#1a8e8f" stopOpacity="0.60"/>
+                    <stop offset="85%" stopColor="#125672" stopOpacity="0.35"/>
+                    <stop offset="100%" stopColor="#0a2a4d" stopOpacity="0.10"/>
                   </linearGradient>
 
                   <linearGradient id="brine-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#0a2a4d" stopOpacity="0.8"/>
+                    <stop offset="0%" stopColor="#0a2a4d" stopOpacity="0.85"/>
                     <stop offset="100%" stopColor="#051426" stopOpacity="0.95"/>
                   </linearGradient>
                 </defs>
@@ -2039,6 +2100,18 @@ const SimulatorPage = () => {
                   {/* 2. Active Flowing Mobile Plume (S_max) */}
                   {getActiveMobileSimPath() && (
                     <path d={getActiveMobileSimPath()} fill="url(#active-mobile-sim-grad)" opacity="0.98" />
+                  )}
+
+                  {/* 3. Maximum Historic Gas Saturation Boundary (hMax Swept Footprint Dashed Line) */}
+                  {getMaxHgLinePath() && (
+                    <path 
+                      d={getMaxHgLinePath()} 
+                      fill="none" 
+                      stroke="#64ffda" 
+                      strokeWidth="1.4" 
+                      strokeDasharray="5 3.5" 
+                      opacity="0.85" 
+                    />
                   )}
                 </g>
 

@@ -45,6 +45,28 @@ const App = () => {
     window.__onNavigate = onNavigate;
   }, []);
 
+  // Dismiss 0ms pre-React loading screen once components mount and initial simulation renders
+  useEffect(() => {
+    const loader = document.getElementById('app-loader');
+    if (loader) {
+      const startTime = window.__pageLoadStart || Date.now();
+      const elapsed = Date.now() - startTime;
+      const minDuration = 1550; // 1.55s clean sequence playback
+      const remaining = Math.max(100, minDuration - elapsed);
+
+      const timer = setTimeout(() => {
+        loader.classList.add('loader-finished');
+        setTimeout(() => {
+          if (loader && loader.parentNode) {
+            loader.parentNode.removeChild(loader);
+          }
+        }, 700);
+      }, remaining);
+
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   // Track active section on home screen using scroll listener
   useEffect(() => {
     if (screen !== 'home') {
