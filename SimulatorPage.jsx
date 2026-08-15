@@ -144,57 +144,54 @@ const SimulatorPage = () => {
       setAmplitude(45);
       setFrequency(1.5);
       setFaultOffset(0);
-      setK(0.8);
+      setK(1.60);
       setPorosity(0.25);
-      setQ(0.7);
-      setInjDuration(180);
+      setQ(2.20);
+      setInjDuration(240);
       setFaultCount(0);
       setResidualTrapFraction(0.30);
     } else if (presetName === 'faulted') {
       setDipPercent(1.8);
       setAmplitude(15);
       setFrequency(2);
-      setFaultOffset(2.2);
-      setK(1.2);
-      setPorosity(0.20);
-      setQ(0.5);
-      setInjDuration(120);
-      setFaultCount(3);
+      setFaultOffset(1.8);
+      setK(1.80);
+      setPorosity(0.22);
+      setQ(2.00);
+      setInjDuration(200);
+      setFaultCount(2);
       setFaults([
-        { xPercent: 25, isSealed: false, thresholdHeight: 0.3, leakRate: 0.18, transmissibility: 0.8 },
-        { xPercent: 48, isSealed: true, thresholdHeight: 0.8, leakRate: 0.12, transmissibility: 0.0 },
-        { xPercent: 88, isSealed: false, thresholdHeight: 0.5, leakRate: 0.20, transmissibility: 0.5 }
+        { xPercent: 26, isSealed: false, thresholdHeight: 0.30, leakRate: 0.16, transmissibility: 0.8, dipSlope: -0.22 },
+        { xPercent: 50, isSealed: false, thresholdHeight: 0.45, leakRate: 0.12, transmissibility: 0.5, dipSlope: 0.25 }
       ]);
-      setResidualTrapFraction(0.15);
+      setResidualTrapFraction(0.20);
     } else if (presetName === 'monocline') {
-      setDipPercent(-2.8);
-      setAmplitude(5);
+      setDipPercent(-2.5);
+      setAmplitude(6);
       setFrequency(0.5);
       setFaultOffset(0);
-      setK(0.65);
-      setPorosity(0.30);
-      setQ(0.4);
-      setInjDuration(200);
+      setK(1.50);
+      setPorosity(0.28);
+      setQ(1.80);
+      setInjDuration(220);
       setFaultCount(1);
       setFaults([
-        { xPercent: 35, isSealed: false, thresholdHeight: 0.2, leakRate: 0.08, transmissibility: 0.9 },
-        { xPercent: 50, isSealed: false, thresholdHeight: 0.6, leakRate: 0.12, transmissibility: 0.7 },
-        { xPercent: 88, isSealed: false, thresholdHeight: 0.4, leakRate: 0.12, transmissibility: 0.8 }
+        { xPercent: 32, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 0.9, dipSlope: -0.20 }
       ]);
       setResidualTrapFraction(0.25);
     } else if (presetName === 'default') {
-      setDipPercent(1.2);
-      setAmplitude(20);
+      setDipPercent(1.5);
+      setAmplitude(25);
       setFrequency(2);
       setFaultOffset(1.2);
-      setK(0.85);
+      setK(1.70);
       setPorosity(0.25);
-      setQ(0.55);
-      setInjDuration(150);
+      setQ(2.30);
+      setInjDuration(240);
       setFaultCount(2);
       setFaults([
-        { xPercent: 20 + Math.random() * 20, isSealed: false, thresholdHeight: 0.2 + Math.random() * 0.3, leakRate: 0.08 + Math.random() * 0.1, transmissibility: 1.0 },
-        { xPercent: 60 + Math.random() * 20, isSealed: false, thresholdHeight: 0.2 + Math.random() * 0.3, leakRate: 0.08 + Math.random() * 0.1, transmissibility: 1.0 }
+        { xPercent: 28, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 1.0, dipSlope: -0.22 },
+        { xPercent: 48, isSealed: false, thresholdHeight: 0.30, leakRate: 0.12, transmissibility: 1.0, dipSlope: 0.25 }
       ]);
       setResidualTrapFraction(0.25);
     }
@@ -1030,23 +1027,19 @@ const SimulatorPage = () => {
     } = params;
 
     const N = cellCount;
+    const dx = parentDX || (1000.0 / N);
     let nextH = [...currentH];
     let nextHMax = [...currentHMax];
     let { injected, trapped, mobile, leaked } = masses;
 
-    // Solver substeps to preserve CFL stability (dt * K * h / dx^2 < 0.5)
-    // As grid spacing dx decreases by a factor of 3, dt must decrease by a factor of 9 (dx^2 scaling)
-    const dxRatio = parentDX / 10.0;
-    const baseDt = 0.02 * (porosity / 0.25) * (dxRatio * dxRatio) / (K / 0.85);
-    
-    // Cap dt and calculate required substeps dynamically to cover exactly 1 year of simulation time
-    const dt = Math.min(0.02, baseDt);
-    const substeps = Math.ceil(1.0 / dt);
+    // 25 substeps per year to guarantee total TVD numerical advection stability
+    const substeps = 25;
+    const dt = 1.0 / substeps;
 
     // Physical coordinate depth array (scaled by 1/15)
     const zt = new Array(N).fill(0);
     for (let i = 0; i < N; i++) {
-      zt[i] = capRockY(i * parentDX + parentDX / 2.0) / 15.0;
+      zt[i] = capRockY(i * dx + dx / 2.0, i) / 15.0;
     }
 
     // Run explicit finite volume integration substeps
@@ -1061,69 +1054,77 @@ const SimulatorPage = () => {
         hMob[i] = Math.min(H, mobileVal);
       }
 
-      // 2. Compute fluxes using only the mobile thickness
+      // 2. Compute fluxes using only the mobile thickness with physical upwind TVD limiter
       const fluxes = new Array(N - 1).fill(0);
       for (let i = 0; i < N - 1; i++) {
         const zL = zt[i] + nextH[i];
         const zR = zt[i + 1] + nextH[i + 1];
-        const grad = zR - zL;
-        const hFace = grad > 0 ? hMob[i + 1] : hMob[i]; // mobility is driven by mobile CO2
+        const grad = (zR - zL) / (dx / 5.0);
+        const hFace = grad > 0 ? hMob[i + 1] : hMob[i];
         
         // Find if a fault is located at this grid boundary and apply its transmissibility multiplier
         let transMult = 1.0;
         for (let idx = 0; idx < faultCount; idx++) {
           const f = faults[idx];
           if (f) {
-            const cellFaultIdx = Math.round(N * (f.xPercent / 100.0));
+            const inter = getSimFaultIntersection(f, idx);
+            const cellFaultIdx = Math.round(inter.x / dx);
             if (cellFaultIdx - 1 === i) {
-              transMult = f.transmissibility !== undefined ? f.transmissibility : 1.0;
+              if (f.isSealed) {
+                transMult = 0.0; // Infinite sealed barrier
+              } else {
+                transMult = f.transmissibility !== undefined ? f.transmissibility : 1.0;
+              }
               break;
             }
           }
         }
         
-        fluxes[i] = - K * hFace * grad * transMult;
+        let rawFlux = - (K / porosity) * hFace * grad * 0.08 * transMult;
+        
+        // TVD physical limiter: flux can never exceed 30% of mobile mass in cell per substep
+        if (rawFlux > 0) {
+          rawFlux = Math.min(rawFlux, (0.30 * hMob[i]) / dt);
+        } else {
+          rawFlux = Math.max(rawFlux, - (0.30 * hMob[i + 1]) / dt);
+        }
+        fluxes[i] = rawFlux;
       }
 
-      // Ghost cells boundaries
-      const ztL_ghost = capRockY(-parentDX / 2.0) / 15.0;
-      const srcL = zt[0] + nextH[0];
-      const gradL = srcL - ztL_ghost;
-      const hFaceL = gradL > 0 ? hMob[0] : 0.0;
-      const fluxL = - K * hFaceL * gradL;
-
-      const ztR_ghost = capRockY(N * parentDX + parentDX / 2.0) / 15.0;
-      const gradR = ztR_ghost - (zt[N - 1] + nextH[N - 1]);
-      const hFaceR = gradR > 0 ? 0.0 : hMob[N - 1];
-      const fluxR = - K * hFaceR * gradR;
-
+      // Ghost cells boundaries (zero far-field flux)
       const hTmp = [...nextH];
       for (let i = 0; i < N; i++) {
-        const fL = i === 0 ? fluxL : fluxes[i - 1];
-        const fR = i === N - 1 ? fluxR : fluxes[i];
-        hTmp[i] = Math.max(0, nextH[i] + (dt / porosity) * (fL - fR));
+        const fL = i === 0 ? 0 : fluxes[i - 1];
+        const fR = i === N - 1 ? 0 : fluxes[i];
+        hTmp[i] = Math.max(0, nextH[i] + dt * (fL - fR));
       }
 
-      // Injection: Active only during injection duration
+      // Injection: Smooth wellbore Gaussian kernel over adjacent cells to prevent point singularity
       const cellInjIdx = Math.floor((injLocation / 100.0) * N);
       if (Q > 0 && currentFrame <= injDuration) {
-        hTmp[cellInjIdx] += (Q * dt) / porosity;
-        injected += Q * dt * 0.15; // Scaled to look realistic in mass balance
+        const dVolInj = Q * dt;
+        const kernel = [0.10, 0.20, 0.40, 0.20, 0.10];
+        for (let offset = -2; offset <= 2; offset++) {
+          const cIdx = Math.max(0, Math.min(N - 1, cellInjIdx + offset));
+          hTmp[cIdx] += (dVolInj * kernel[offset + 2]) / (porosity * (dx / 5.0));
+        }
+        injected += dVolInj;
       }
 
       // Fault Leaks: threshold-pressure/spill-height capillary barrier
       for (let idx = 0; idx < faultCount; idx++) {
         const f = faults[idx];
         if (!f.isSealed) {
-          const cellFaultIdx = Math.round(N * (f.xPercent / 100.0));
+          const inter = getSimFaultIntersection(f, idx);
+          const cellFaultIdx = Math.round(inter.x / dx);
           const boundedIdx = Math.max(0, Math.min(N - 1, cellFaultIdx));
           
           // Leakage occurs only if CO2 column height H exceeds the threshold
           if (hTmp[boundedIdx] > f.thresholdHeight) {
             const overpressure = hTmp[boundedIdx] - f.thresholdHeight;
-            const leak = Math.min(overpressure, f.leakRate * dt);
-            hTmp[boundedIdx] -= leak;
-            leaked += leak * porosity * 2.5;
+            const leakHeight = Math.min(overpressure, f.leakRate * dt * 0.8);
+            hTmp[boundedIdx] -= leakHeight;
+            leaked += leakHeight * porosity * (dx / 5.0);
           }
         }
       }
@@ -1134,11 +1135,10 @@ const SimulatorPage = () => {
       }
     }
 
-    // Mass distribution calculation
+    // Mass distribution calculation (Exact integral of fluid volume)
     let mobileSum = 0;
     let trappedSum = 0;
     
-    // Trapped is simply the residual locked height (total height - mobile height)
     for (let i = 0; i < N; i++) {
       const H = nextH[i];
       const hm = nextHMax[i];
@@ -1147,24 +1147,18 @@ const SimulatorPage = () => {
       const hMob = Math.min(H, mobileVal);
       const hTrap = Math.max(0, H - hMob);
       
-      mobileSum += hMob * parentDX * porosity;
-      trappedSum += hTrap * parentDX * porosity;
+      mobileSum += hMob * (dx / 5.0) * porosity;
+      trappedSum += hTrap * (dx / 5.0) * porosity;
     }
 
-    // Balance masses
-    const scaleFactor = 0.12;
-    const computedMobile = mobileSum * scaleFactor;
-    const computedTrapped = trappedSum * scaleFactor;
-    
-    // leaked is already accumulated
     return {
       h: nextH,
       hMax: nextHMax,
       masses: {
-        injected: injected,
-        trapped: computedTrapped,
-        mobile: Math.max(0, injected - computedTrapped - leaked), // Enforce mass balance conservation
-        leaked: leaked
+        injected: parseFloat(injected.toFixed(2)),
+        trapped: parseFloat(trappedSum.toFixed(2)),
+        mobile: parseFloat(mobileSum.toFixed(2)),
+        leaked: parseFloat(leaked.toFixed(2))
       }
     };
   };
@@ -1269,7 +1263,7 @@ const SimulatorPage = () => {
   const getSweptResidualSimPath = () => {
     const N = cellCount;
     const scale = 15.0;
-    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.22 : 0;
+    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.25 : 0;
     
     const bounds = getSimActiveBounds(k => getSimNodeValue(hTrapped, k, 'avg'), N, 0.001);
     if (!bounds) return "";
@@ -1289,7 +1283,7 @@ const SimulatorPage = () => {
   const getActiveMobileSimPath = () => {
     const N = cellCount;
     const scale = 15.0;
-    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.28 : 0;
+    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.35 : 0;
     
     const bounds = getSimActiveBounds(k => getSimNodeValue(hMobile, k, 'avg'), N, 0.001);
     if (!bounds) return "";
@@ -1300,28 +1294,6 @@ const SimulatorPage = () => {
         const hMob = getSimNodeValue(hMobile, k, side);
         const f = fringePx * Math.min(1.0, hMob * 1.8);
         return capRockY(k * dx, side === 'left' ? k - 1 : k) + hMob * scale + f;
-      },
-      bounds.kStart, bounds.kEnd
-    );
-  };
-
-  // Capillary Fringe extends beneath the mobile CO2 layer into the brine
-  const getFringePath = (multiplier = 1.0) => {
-    if (!hasCapillaryFringe) return "";
-    const N = cellCount;
-    const scale = 15.0;
-    const fringePx = fringeScale * 15.0 * multiplier * 0.5;
-    
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hMobile, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    
-    return buildSmoothRibbon(
-      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k) + (getSimNodeValue(hTrapped, k, side) + getSimNodeValue(hMobile, k, side)) * scale,
-      (k, side) => {
-        const hTot = (getSimNodeValue(hTrapped, k, side) + getSimNodeValue(hMobile, k, side)) * scale;
-        const hMob = getSimNodeValue(hMobile, k, side);
-        const f = fringePx * Math.min(1.0, hMob * 2.0);
-        return capRockY(k * dx, side === 'left' ? k - 1 : k) + hTot + f;
       },
       bounds.kStart, bounds.kEnd
     );
@@ -1362,7 +1334,7 @@ const SimulatorPage = () => {
     const height = 210;
     const padding = { left: 45, right: 15, top: 15, bottom: 25 };
     
-    const maxVal = Math.max(10, currentMasses.injected * 1.05);
+    const maxVal = Math.max(10, Math.max(currentMasses.injected, currentMasses.mobile + currentMasses.trapped + currentMasses.leaked) * 1.08);
     
     // Scale helper
     const getX = (t) => padding.left + (t / 1000.0) * (width - padding.left - padding.right);
@@ -1386,54 +1358,80 @@ const SimulatorPage = () => {
     }
     
     return (
-      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
-        {/* Y Grid axis */}
-        {[0.25, 0.5, 0.75, 1.0].map((ratio, i) => {
-          const val = maxVal * ratio;
-          const y = getY(val);
-          return (
-            <g key={i}>
-              <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="3 3"/>
-              <text x={padding.left - 8} y={y + 3} fill="rgba(255,255,255,0.45)" fontSize="8.5" textAnchor="end" fontFamily="monospace">
-                {Math.round(val)}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* Interactive Top Legend Pill Bar with Live Numerical Readouts */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', fontSize: 10.5, padding: '2px 4px' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 10, height: 2, background: '#ffffff', opacity: 0.6, borderTop: '1px dashed #fff' }} />
+            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Injected:</span>
+            <strong style={{ color: '#fff', fontFamily: 'monospace' }}>{Math.round(currentMasses.injected)} kt</strong>
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 10, height: 2.5, background: '#64ffda' }} />
+            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Mobile:</span>
+            <strong style={{ color: '#64ffda', fontFamily: 'monospace' }}>{Math.round(currentMasses.mobile)} kt</strong>
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 10, height: 2.5, background: '#3ca68e' }} />
+            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Trapped:</span>
+            <strong style={{ color: '#3ca68e', fontFamily: 'monospace' }}>{Math.round(currentMasses.trapped)} kt</strong>
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 10, height: 2.5, background: '#ff6b6b' }} />
+            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Leaked:</span>
+            <strong style={{ color: '#ff6b6b', fontFamily: 'monospace' }}>{Math.round(currentMasses.leaked)} kt</strong>
+          </span>
+        </div>
+
+        <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+          {/* Y Grid axis */}
+          {[0.25, 0.5, 0.75, 1.0].map((ratio, i) => {
+            const val = maxVal * ratio;
+            const y = getY(val);
+            return (
+              <g key={i}>
+                <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="3 3"/>
+                <text x={padding.left - 8} y={y + 3} fill="rgba(255,255,255,0.45)" fontSize="8.5" textAnchor="end" fontFamily="monospace">
+                  {Math.round(val)}
+                </text>
+              </g>
+            );
+          })}
+          
+          {/* X axis year labels */}
+          {[0, 200, 400, 600, 800, 1000].map((t, i) => {
+            const x = getX(t);
+            return (
+              <text key={i} x={x} y={height - 8} fill="rgba(255,255,255,0.45)" fontSize="8.5" textAnchor="middle" fontFamily="monospace">
+                {t}y
               </text>
-            </g>
-          );
-        })}
-        
-        {/* X axis year labels */}
-        {[0, 200, 400, 600, 800, 1000].map((t, i) => {
-          const x = getX(t);
-          return (
-            <text key={i} x={x} y={height - 8} fill="rgba(255,255,255,0.45)" fontSize="8.5" textAnchor="middle" fontFamily="monospace">
-              {t}y
-            </text>
-          );
-        })}
-        
-        {/* Plot Lines */}
-        {pathInj && <path d={pathInj} fill="none" stroke="#ffffff" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.6"/>}
-        {pathMob && <path d={pathMob} fill="none" stroke="#64ffda" strokeWidth="2" style={{ filter: 'drop-shadow(0 0 2px rgba(100,255,218,0.4))' }}/>}
-        {pathTrap && <path d={pathTrap} fill="none" stroke="#3ca68e" strokeWidth="1.8"/>}
-        {pathLeak && <path d={pathLeak} fill="none" stroke="#ff6b6b" strokeWidth="1.8"/>}
-        
-        {/* Vertical line indicator for current simTime */}
-        <line 
-          x1={getX(simTime)} 
-          y1={padding.top} 
-          x2={getX(simTime)} 
-          y2={height - padding.bottom} 
-          stroke="#64ffda" 
-          strokeWidth="1.2" 
-          strokeDasharray="2 2"
-          opacity="0.8"
-        />
-        <circle cx={getX(simTime)} cy={padding.top} r="3" fill="#64ffda" />
-        
-        {/* Axes borders */}
-        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
-        <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
-      </svg>
+            );
+          })}
+          
+          {/* Plot Lines */}
+          {pathInj && <path d={pathInj} fill="none" stroke="#ffffff" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.6"/>}
+          {pathMob && <path d={pathMob} fill="none" stroke="#64ffda" strokeWidth="2" style={{ filter: 'drop-shadow(0 0 2px rgba(100,255,218,0.4))' }}/>}
+          {pathTrap && <path d={pathTrap} fill="none" stroke="#3ca68e" strokeWidth="1.8"/>}
+          {pathLeak && <path d={pathLeak} fill="none" stroke="#ff6b6b" strokeWidth="2"/>}
+          
+          {/* Vertical line indicator for current simTime */}
+          <line 
+            x1={getX(simTime)} 
+            y1={padding.top} 
+            x2={getX(simTime)} 
+            y2={height - padding.bottom} 
+            stroke="#64ffda" 
+            strokeWidth="1.2" 
+            strokeDasharray="2 2"
+            opacity="0.8"
+          />
+          <circle cx={getX(simTime)} cy={padding.top} r="3" fill="#64ffda" />
+          
+          {/* Axes borders */}
+          <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
+          <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
+        </svg>
+      </div>
     );
   };
 
@@ -1981,6 +1979,14 @@ const SimulatorPage = () => {
                     <stop offset="100%" stopColor="#0a2a4d" stopOpacity="0.0"/>
                   </linearGradient>
                   
+                  {/* Capillary Fringe Transition Gradient (feathering softly into deep blue brine) */}
+                  <linearGradient id="fringe-sim-grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#20c997" stopOpacity="0.60"/>
+                    <stop offset="35%" stopColor="#20c997" stopOpacity="0.35"/>
+                    <stop offset="70%" stopColor="#0a2a4d" stopOpacity="0.15"/>
+                    <stop offset="100%" stopColor="#0a2a4d" stopOpacity="0.0"/>
+                  </linearGradient>
+
                   <linearGradient id="brine-grad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#0a2a4d" stopOpacity="0.8"/>
                     <stop offset="100%" stopColor="#051426" stopOpacity="0.95"/>
@@ -1988,46 +1994,39 @@ const SimulatorPage = () => {
                 </defs>
 
                 {/* Conforming caprock layer (solid brown) */}
-                <path d={`M 0 0 L 1000 0 L 1000 ${capRockY(1000)} ` + Array.from({ length: 100 }, (_, idx) => `L ${(99-idx)*10} ${capRockY((99-idx)*10)}`).join(" ") + ` Z`} fill="#282030" stroke="rgba(255,255,255,0.02)"/>
+                <path d={`M 0 0 L 1000 0 L 1000 ${capRockY(1000, cellCount - 1)} ` + Array.from({ length: cellCount + 1 }, (_, idx) => {
+                  const k = cellCount - idx;
+                  const x = k * dx;
+                  return `L ${x} ${capRockY(x, Math.max(0, k - 1))}`;
+                }).join(" ") + ` Z`} fill="#282030" stroke="rgba(255,255,255,0.02)"/>
                 
-                {/* Reservoir Sandstone conforming blocks with continuous smooth fluid interpolation */}
-                {(() => {
-                  const N = h.length;
-                  const scale = 15.0;
-                  const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 1.6 : 0;
-                  
-                  // Compute total fluid depth including capillary fringe transition
-                  const effH = new Array(N);
-                  for (let i = 0; i < N; i++) {
-                    const f_i = fringePx * Math.min(1.0, hMobile[i] * 2.0);
-                    effH[i] = h[i] * scale + f_i;
-                  }
-                  
-                  return reservoirBlocks.map((b, idx) => {
-                    const cellInjIdx = Math.floor((injLocation / 100.0) * cellCount);
-                    const hFluidLeft = idx === 0 ? effH[0] : 0.5 * (effH[idx - 1] + effH[idx]);
-                    const hFluidRight = idx === N - 1 ? effH[N - 1] : 0.5 * (effH[idx] + effH[idx + 1]);
-                    
-                    const yBrineTop1 = Math.min(b.yb1, b.yt1 + hFluidLeft);
-                    const yBrineTop2 = Math.min(b.yb2, b.yt2 + hFluidRight);
-                    
-                    return (
-                      <g key={idx}>
-                        {/* Sandstone Gridblock */}
-                        <polygon points={b.points} fill={b.fill} stroke="rgba(0,0,0,0.12)" strokeWidth="0.5"/>
-                        
-                        {/* Smooth continuous Brine water layer (sw=1) */}
-                        {(yBrineTop1 < b.yb1 || yBrineTop2 < b.yb2) && (
-                          <polygon points={`${b.x1},${yBrineTop1} ${b.x2},${yBrineTop2} ${b.x2},${b.yb2} ${b.x1},${b.yb1}`} fill="url(#brine-grad)"/>
-                        )}
+                {/* Reservoir Sandstone conforming blocks with subtle geological permeability texture */}
+                {reservoirBlocks.map((b, idx) => (
+                  <polygon key={idx} points={b.points} fill={b.fill} stroke="rgba(0,0,0,0.06)" strokeWidth="0.5"/>
+                ))}
 
-                        {/* Well injection casing visual inside reservoir column */}
-                        {idx === cellInjIdx && (
-                          <rect x={b.x1 + dx/2.0 - 2} y={b.yt1} width="4" height={b.yb1 - b.yt1} fill="rgba(255,255,255,0.2)"/>
-                        )}
-                      </g>
-                    );
-                  });
+                {/* Smooth continuous Native Brine Water layer across entire aquifer body */}
+                <path 
+                  d={`M 0 ${reservoirBlocks[0] ? reservoirBlocks[0].yt1 : capRockY(0)} ` + 
+                     reservoirBlocks.map(b => `L ${b.x2} ${b.yt2}`).join(" ") + 
+                     ` L 1000 ${stratumY(1000, cellCount - 1, 175)} ` +
+                     Array.from({ length: cellCount + 1 }, (_, idx) => {
+                       const k = cellCount - idx;
+                       const x = k * dx;
+                       return `L ${x} ${stratumY(x, Math.max(0, k - 1), 175)}`;
+                     }).join(" ") + ` Z`} 
+                  fill="url(#brine-grad)"
+                  opacity="0.88"
+                />
+
+                {/* Well injection casing visual inside reservoir column */}
+                {(() => {
+                  const cellInjIdx = Math.floor((injLocation / 100.0) * cellCount);
+                  const b = reservoirBlocks[cellInjIdx];
+                  if (!b) return null;
+                  return (
+                    <rect x={b.x1 + dx/2.0 - 2} y={b.yt1} width="4" height={b.yb1 - b.yt1} fill="rgba(255,255,255,0.2)"/>
+                  );
                 })()}
 
                 {/* CO2 Plume Multiphase Fluid Body */}
@@ -2044,7 +2043,10 @@ const SimulatorPage = () => {
                 </g>
 
                 {/* Aquifer boundary bottom seal */}
-                <path d={`M 0 ${stratumY(0, 0, 175)} ` + Array.from({ length: 101 }, (_, idx) => `L ${idx*10} ${stratumY(idx*10, idx, 175)}`).join(" ")} stroke="rgba(0,0,0,0.3)" strokeWidth="1" fill="none"/>
+                <path d={`M 0 ${stratumY(0, 0, 175)} ` + Array.from({ length: cellCount + 1 }, (_, idx) => {
+                  const x = idx * dx;
+                  return `L ${x} ${stratumY(x, Math.min(cellCount - 1, idx), 175)}`;
+                }).join(" ")} stroke="rgba(0,0,0,0.3)" strokeWidth="1" fill="none"/>
 
                 {/* Injection Well Riser and flare */}
                 {(() => {
@@ -2093,7 +2095,7 @@ const SimulatorPage = () => {
                   const boundedIdx = Math.max(0, Math.min(cellCount - 1, cellIdx));
                   
                   // Flow activates ONLY when total plume height exceeds spill threshold height
-                  if (h[boundedIdx] > f.thresholdHeight + 0.05) {
+                  if (h[boundedIdx] > f.thresholdHeight) {
                     const travelY = -65; // Traverses through the overlying seal
                     const travelX = inter.slope * travelY;
                     const xTop = inter.x + travelX;
