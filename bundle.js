@@ -415,7 +415,7 @@ Object.assign(window, {
 // ==========================================
 // File: Header.jsx
 // ==========================================
-// Header.jsx — fixed top navbar, transparent over hero, shrinks on scroll, responsive mobile drawer.
+// Header.jsx — fixed top navbar, transparent over hero, shrinks on scroll, with mobile drawer.
 
 // [destructured React]
 
@@ -425,13 +425,60 @@ const Header = ({
 }) => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [currentSection, setCurrentSection] = useState(active);
+
+  // Shrink-on-scroll
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 80);
+    const onScroll = () => {
+      setScrolled(window.scrollY > 80);
+
+      // Auto section spy when on home page
+      if (active === 'home' || active === 'about' || active === 'publications' || active === 'contact') {
+        const sections = [{
+          id: 'contact',
+          el: document.getElementById('contact')
+        }, {
+          id: 'publications',
+          el: document.getElementById('publications')
+        }, {
+          id: 'about',
+          el: document.getElementById('about')
+        }, {
+          id: 'home',
+          el: document.getElementById('home')
+        }];
+        for (const s of sections) {
+          if (s.el) {
+            const rect = s.el.getBoundingClientRect();
+            if (rect.top <= 200) {
+              setCurrentSection(s.id);
+              break;
+            }
+          }
+        }
+      } else {
+        setCurrentSection(active);
+      }
+    };
     window.addEventListener('scroll', onScroll, {
       passive: true
     });
     return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [active]);
+
+  // Sync current section if active prop changes
+  useEffect(() => {
+    setCurrentSection(active);
+  }, [active]);
+
+  // Close drawer on escape key
+  useEffect(() => {
+    const onKeyDown = e => {
+      if (e.key === 'Escape' && mobileOpen) setMobileOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mobileOpen]);
   const items = [{
     id: 'home',
     label: 'Home'
@@ -448,11 +495,12 @@ const Header = ({
     id: 'cv',
     label: 'CV'
   }];
-  const handleNav = id => {
+  const handleItemClick = id => {
     setMobileOpen(false);
-    onNavigate(id);
+    if (onNavigate) onNavigate(id);else if (window.__onNavigate) window.__onNavigate(id);
   };
   return /*#__PURE__*/React.createElement("header", {
+    role: "banner",
     style: {
       position: 'fixed',
       top: 0,
@@ -464,81 +512,107 @@ const Header = ({
   }, /*#__PURE__*/React.createElement("style", null, `
         .desktop-nav-list {
           display: flex;
-          gap: 4px;
+          gap: 6px;
           list-style: none;
           margin: 0;
           padding: 0;
           align-items: center;
         }
-        .mobile-nav-toggle {
+        .hamburger-btn {
           display: none;
-          background: rgba(255,255,255,0.10);
-          border: 1px solid rgba(255,255,255,0.20);
+          background: rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.15);
           color: #64ffda;
           width: 40px;
           height: 40px;
           border-radius: 10px;
-          font-size: 18px;
           cursor: pointer;
           align-items: center;
           justify-content: center;
-          backdrop-filter: blur(10px);
+          font-size: 16px;
           transition: all 0.3s ease;
+          backdrop-filter: blur(8px);
         }
-        .mobile-nav-drawer {
-          display: none;
+        .hamburger-btn:hover {
+          background: rgba(100,255,218,0.18);
+          border-color: #64ffda;
+        }
+        .mobile-drawer-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(10, 8, 18, 0.7);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          z-index: 1001;
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.35s ease;
+        }
+        .mobile-drawer-backdrop.open {
+          opacity: 1;
+          pointer-events: auto;
+        }
+        .mobile-drawer-panel {
+          position: fixed;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          width: min(320px, 80vw);
+          background: linear-gradient(165deg, rgba(33, 29, 52, 0.98) 0%, rgba(20, 28, 52, 0.98) 100%);
+          border-left: 1px solid rgba(100, 255, 218, 0.25);
+          box-shadow: -10px 0 35px rgba(0, 0, 0, 0.5);
+          z-index: 1002;
+          transform: translateX(100%);
+          transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          padding: 28px 24px;
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+          pointer-events: auto;
+        }
+        .mobile-drawer-panel.open {
+          transform: translateX(0);
         }
         @media (max-width: 768px) {
           .desktop-nav-list {
             display: none !important;
           }
-          .mobile-nav-toggle {
+          .hamburger-btn {
             display: flex !important;
           }
-          .mobile-nav-drawer {
-            display: flex !important;
-            flex-direction: column;
-            gap: 8px;
-            padding: 16px 20px;
-            background: linear-gradient(180deg, rgba(28,38,69,0.96) 0%, rgba(19,13,28,0.98) 100%);
-            backdrop-filter: blur(25px) saturate(180%);
-            -webkit-backdrop-filter: blur(25px) saturate(180%);
-            border-bottom: 1px solid rgba(255,255,255,0.15);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            animation: drawerSlide 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+          .header-container {
+            padding: 0 20px !important;
           }
-        }
-        @keyframes drawerSlide {
-          from { opacity: 0; transform: translateY(-10px); }
-          to   { opacity: 1; transform: translateY(0); }
         }
       `), /*#__PURE__*/React.createElement("div", {
+    className: "header-container",
     style: {
       height: scrolled ? 64 : 88,
-      padding: '0 28px',
+      padding: '0 36px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
       transition: 'all 0.4s ease',
-      background: scrolled ? 'linear-gradient(180deg, rgba(20,18,34,0.85) 0%, rgba(18,22,42,0.75) 100%)' : 'linear-gradient(180deg, rgba(0,0,0,0.40) 0%, rgba(0,0,0,0.10) 50%, transparent 100%)',
-      backdropFilter: scrolled ? 'blur(25px) saturate(180%)' : 'blur(8px)',
-      WebkitBackdropFilter: scrolled ? 'blur(25px) saturate(180%)' : 'blur(8px)',
-      borderBottom: scrolled ? '1px solid rgba(255,255,255,0.15)' : '1px solid transparent',
-      boxShadow: scrolled ? '0 4px 30px rgba(0,0,0,0.25), inset 0 -1px 0 rgba(255,255,255,0.10)' : 'none',
+      background: scrolled ? 'linear-gradient(180deg, rgba(19, 13, 28, 0.92) 0%, rgba(19, 13, 28, 0.75) 100%)' : 'linear-gradient(180deg, rgba(19, 13, 28, 0.60) 0%, rgba(19, 13, 28, 0.20) 60%, transparent 100%)',
+      backdropFilter: scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)',
+      WebkitBackdropFilter: scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)',
+      borderBottom: scrolled ? '1px solid rgba(255,255,255,0.12)' : '1px solid transparent',
+      boxShadow: scrolled ? '0 4px 30px rgba(0,0,0,0.30), inset 0 -1px 0 rgba(255,255,255,0.08)' : 'none',
       pointerEvents: 'auto'
     }
   }, /*#__PURE__*/React.createElement("a", {
     href: "#",
     onClick: e => {
       e.preventDefault();
-      handleNav('home');
+      handleItemClick('home');
     },
+    "aria-label": "Sa'eed Telvari Homepage",
     style: {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      width: scrolled ? 42 : 56,
-      height: scrolled ? 42 : 56,
+      width: scrolled ? 44 : 58,
+      height: scrolled ? 44 : 58,
       transition: 'all 0.4s ease'
     }
   }, /*#__PURE__*/React.createElement("img", {
@@ -549,47 +623,166 @@ const Header = ({
       height: '100%',
       objectFit: 'contain'
     }
-  })), /*#__PURE__*/React.createElement("ul", {
+  })), /*#__PURE__*/React.createElement("nav", {
+    role: "navigation",
+    "aria-label": "Main menu"
+  }, /*#__PURE__*/React.createElement("ul", {
     className: "desktop-nav-list"
   }, items.map(it => /*#__PURE__*/React.createElement(NavItem, {
     key: it.id,
     label: it.label,
-    active: active === it.id,
-    onClick: () => handleNav(it.id)
-  }))), /*#__PURE__*/React.createElement("button", {
-    className: "mobile-nav-toggle",
+    active: currentSection === it.id,
+    onClick: () => handleItemClick(it.id)
+  })))), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "hamburger-btn",
     onClick: () => setMobileOpen(!mobileOpen),
-    "aria-label": "Toggle Navigation Menu"
+    "aria-expanded": mobileOpen,
+    "aria-label": mobileOpen ? "Close navigation menu" : "Open navigation menu"
   }, /*#__PURE__*/React.createElement("i", {
-    className: mobileOpen ? "fas fa-times" : "fas fa-bars"
-  }))), mobileOpen && /*#__PURE__*/React.createElement("div", {
-    className: "mobile-nav-drawer",
+    className: `fas ${mobileOpen ? 'fa-times' : 'fa-bars'}`
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: `mobile-drawer-backdrop ${mobileOpen ? 'open' : ''}`,
+    onClick: () => setMobileOpen(false),
+    "aria-hidden": "true"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: `mobile-drawer-panel ${mobileOpen ? 'open' : ''}`,
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-label": "Mobile Navigation"
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
-      pointerEvents: 'auto'
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderBottom: '1px solid rgba(255,255,255,0.08)',
+      paddingBottom: 16
     }
-  }, items.map(it => /*#__PURE__*/React.createElement("div", {
-    key: it.id,
-    onClick: () => handleNav(it.id),
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
-      padding: '12px 16px',
-      borderRadius: 12,
-      fontSize: 15,
-      fontWeight: active === it.id ? 600 : 500,
-      color: active === it.id ? '#64ffda' : 'rgba(255,255,255,0.9)',
-      background: active === it.id ? 'rgba(100,255,218,0.15)' : 'transparent',
-      border: active === it.id ? '1px solid rgba(100,255,218,0.30)' : '1px solid transparent',
-      cursor: 'pointer',
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'space-between'
+      gap: 10
     }
-  }, /*#__PURE__*/React.createElement("span", null, it.label), active === it.id && /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-chevron-right",
+  }, /*#__PURE__*/React.createElement("img", {
+    src: "./assets/logo-minimalist.png",
+    alt: "Logo",
     style: {
-      fontSize: 12,
-      color: '#64ffda'
+      width: 32,
+      height: 32,
+      objectFit: 'contain'
     }
-  })))));
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 15,
+      fontWeight: 700,
+      color: '#fff',
+      letterSpacing: '-0.01em'
+    }
+  }, "Sa\u2019eed Telvari")), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setMobileOpen(false),
+    "aria-label": "Close menu",
+    style: {
+      background: 'none',
+      border: 'none',
+      color: 'rgba(255,255,255,0.6)',
+      fontSize: 18,
+      cursor: 'pointer',
+      padding: 4
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-times"
+  }))), /*#__PURE__*/React.createElement("ul", {
+    style: {
+      listStyle: 'none',
+      margin: 0,
+      padding: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8
+    }
+  }, items.map(it => {
+    const isActive = currentSection === it.id;
+    return /*#__PURE__*/React.createElement("li", {
+      key: it.id
+    }, /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: () => handleItemClick(it.id),
+      style: {
+        width: '100%',
+        textAlign: 'left',
+        padding: '12px 16px',
+        borderRadius: 12,
+        background: isActive ? 'rgba(100,255,218,0.15)' : 'transparent',
+        border: isActive ? '1px solid rgba(100,255,218,0.35)' : '1px solid transparent',
+        color: isActive ? '#64ffda' : 'rgba(255,255,255,0.85)',
+        fontSize: 15,
+        fontWeight: isActive ? 600 : 400,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        transition: 'all 0.2s ease'
+      }
+    }, /*#__PURE__*/React.createElement("span", null, it.label), isActive && /*#__PURE__*/React.createElement("i", {
+      className: "fas fa-chevron-right",
+      style: {
+        fontSize: 11,
+        color: '#64ffda'
+      }
+    })));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 'auto',
+      borderTop: '1px solid rgba(255,255,255,0.08)',
+      paddingTop: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'rgba(255,255,255,0.5)',
+      textTransform: 'uppercase',
+      letterSpacing: '0.1em',
+      marginBottom: 12
+    }
+  }, "Connect"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("a", {
+    href: "https://www.linkedin.com/in/stelvari/",
+    target: "_blank",
+    rel: "noreferrer",
+    "aria-label": "LinkedIn",
+    style: {
+      color: '#64ffda',
+      fontSize: 16
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fab fa-linkedin"
+  })), /*#__PURE__*/React.createElement("a", {
+    href: "https://github.com/saeedtelvari",
+    target: "_blank",
+    rel: "noreferrer",
+    "aria-label": "GitHub",
+    style: {
+      color: '#64ffda',
+      fontSize: 16
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fab fa-github"
+  })), /*#__PURE__*/React.createElement("a", {
+    href: "mailto:st4014@hw.ac.uk",
+    "aria-label": "Email",
+    style: {
+      color: '#64ffda',
+      fontSize: 16
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-envelope"
+  }))))));
 };
 const NavItem = ({
   label,
@@ -598,32 +791,34 @@ const NavItem = ({
 }) => {
   const [hover, setHover] = useState(false);
   const showPill = hover || active;
-  return /*#__PURE__*/React.createElement("li", {
+  return /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("button", {
+    type: "button",
     onMouseEnter: () => setHover(true),
     onMouseLeave: () => setHover(false),
     onClick: onClick,
+    "aria-current": active ? 'page' : undefined,
     style: {
       position: 'relative',
       padding: '8px 16px',
       fontFamily: "'Montserrat', sans-serif",
-      fontSize: 15,
+      fontSize: 14.5,
       fontWeight: active ? 600 : 400,
-      color: active ? '#64ffda' : 'var(--fg-2, rgba(255,255,255,0.85))',
+      color: active ? '#64ffda' : 'azure',
       cursor: 'pointer',
       borderRadius: 12,
-      transition: 'all 0.4s cubic-bezier(0.175,0.885,0.32,1.275)',
+      transition: 'all 0.35s cubic-bezier(0.175,0.885,0.32,1.275)',
       transform: hover ? 'translateY(-2px)' : 'translateY(0)',
-      background: showPill ? 'linear-gradient(135deg, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.05) 100%)' : 'transparent',
+      background: showPill ? 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.05) 100%)' : 'transparent',
       backdropFilter: showPill ? 'blur(10px)' : 'none',
       WebkitBackdropFilter: showPill ? 'blur(10px)' : 'none',
-      border: active ? '1px solid rgba(100,255,218,0.35)' : showPill ? '1px solid rgba(255,255,255,0.15)' : '1px solid transparent',
-      boxShadow: active ? '0 4px 15px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.20), 0 0 10px rgba(100,255,218,0.15)' : showPill ? '0 4px 15px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.30)' : 'none'
+      border: active ? '1px solid rgba(100,255,218,0.40)' : showPill ? '1px solid rgba(255,255,255,0.15)' : '1px solid transparent',
+      boxShadow: active ? '0 4px 15px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.20), 0 0 10px rgba(100,255,218,0.15)' : showPill ? '0 4px 15px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.30)' : 'none',
+      outline: 'none',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 6
     }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      transition: 'color 0.3s ease'
-    }
-  }, label), active && /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("span", null, label), active && /*#__PURE__*/React.createElement("span", {
     style: {
       position: 'absolute',
       bottom: 2,
@@ -635,7 +830,7 @@ const NavItem = ({
       backgroundColor: '#64ffda',
       boxShadow: '0 0 8px #64ffda'
     }
-  }));
+  })));
 };
 Object.assign(window, {
   Header
@@ -648,7 +843,6 @@ Object.assign(window, {
 const Footer = ({
   onNavigate
 }) => {
-  const [hoveredLink, setHoveredLink] = useState(null);
   const links = [{
     id: 'home',
     label: 'Home'
@@ -666,13 +860,15 @@ const Footer = ({
     label: 'CV'
   }];
   return /*#__PURE__*/React.createElement("footer", {
+    role: "contentinfo",
     style: {
       position: 'relative',
       zIndex: 10,
-      padding: '28px 36px',
-      background: 'linear-gradient(180deg, rgba(15,52,96,0.95) 0%, rgba(22,33,62,0.98) 100%)',
+      padding: '32px 36px',
+      background: 'linear-gradient(180deg, rgba(15,20,38,0.95) 0%, rgba(10,12,24,0.98) 100%)',
       borderTop: '1px solid rgba(255,255,255,0.10)',
-      color: 'rgba(255,255,255,0.70)'
+      color: 'rgba(255,255,255,0.70)',
+      fontFamily: "'Montserrat', sans-serif"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -682,12 +878,14 @@ const Footer = ({
       justifyContent: 'space-between',
       alignItems: 'center',
       flexWrap: 'wrap',
-      gap: 16
+      gap: 18
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
     style: {
       margin: 0,
-      fontSize: 13
+      fontSize: 13,
+      color: 'rgba(255,255,255,0.85)',
+      fontWeight: 500
     }
   }, "\xA9 2024\u20132026 Sa\u2019eed Telvari. All rights reserved."), /*#__PURE__*/React.createElement("p", {
     style: {
@@ -695,29 +893,46 @@ const Footer = ({
       fontSize: 12,
       color: 'rgba(255,255,255,0.50)'
     }
-  }, "Institute of GeoEnergy Engineering \xB7 Heriot-Watt University")), /*#__PURE__*/React.createElement("div", {
+  }, "Institute of GeoEnergy Engineering \xB7 Heriot-Watt University")), /*#__PURE__*/React.createElement("nav", {
+    role: "navigation",
+    "aria-label": "Footer navigation"
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
-      gap: 24,
+      gap: 20,
       fontSize: 13,
       flexWrap: 'wrap'
     }
-  }, links.map(l => /*#__PURE__*/React.createElement("a", {
+  }, links.map(l => /*#__PURE__*/React.createElement(FooterLink, {
     key: l.id,
-    href: `#${l.id}`,
+    label: l.label,
+    onClick: () => {
+      if (onNavigate) onNavigate(l.id);else if (window.__onNavigate) window.__onNavigate(l.id);
+    }
+  }))))));
+};
+const FooterLink = ({
+  label,
+  onClick
+}) => {
+  const [hover, setHover] = useState(false);
+  return /*#__PURE__*/React.createElement("a", {
+    href: "#",
     onClick: e => {
       e.preventDefault();
-      if (onNavigate) onNavigate(l.id);else if (window.__onNavigate) window.__onNavigate(l.id);
+      onClick();
     },
-    onMouseEnter: () => setHoveredLink(l.id),
-    onMouseLeave: () => setHoveredLink(null),
+    onMouseEnter: () => setHover(true),
+    onMouseLeave: () => setHover(false),
     style: {
-      color: hoveredLink === l.id ? '#64ffda' : 'rgba(255,255,255,0.75)',
+      color: hover ? '#64ffda' : 'rgba(255,255,255,0.70)',
       textDecoration: 'none',
       cursor: 'pointer',
-      transition: 'color 0.25s ease'
+      transition: 'all 0.25s ease',
+      fontWeight: hover ? 500 : 400,
+      transform: hover ? 'translateY(-1px)' : 'none'
     }
-  }, l.label)))));
+  }, label);
 };
 Object.assign(window, {
   Footer
@@ -1269,7 +1484,9 @@ const getColumnPath = (b, geo = currentGeology) => {
   const yEnd = capRockY(g.wellX, g.faults, null, 1.0, g) + 160; // wellbore bottom perforations exactly within reservoir thickness
   return `M ${xStart} ${yStart} L ${xEnd} ${yStart} L ${xEnd} ${yEnd} L ${xStart} ${yEnd} Z`;
 };
-const SubsurfaceHero = () => {
+const SubsurfaceHero = ({
+  onNavigate
+}) => {
   const [time, setTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true); // Auto-play on first load to wow visitors
   const [speed, setSpeed] = useState(1);
@@ -1313,7 +1530,9 @@ const SubsurfaceHero = () => {
     hMax: currentHMax,
     faults: faults,
     geology: geology
-  }), /*#__PURE__*/React.createElement(Horizon, null), /*#__PURE__*/React.createElement(Identity, null), /*#__PURE__*/React.createElement(Wellhead, {
+  }), /*#__PURE__*/React.createElement(Horizon, null), /*#__PURE__*/React.createElement(Identity, {
+    onNavigate: onNavigate
+  }), /*#__PURE__*/React.createElement(Wellhead, {
     geology: geology
   }), /*#__PURE__*/React.createElement(GasFeedAnimation, {
     isPlaying: isPlaying,
@@ -2706,7 +2925,9 @@ const Annotation = () => /*#__PURE__*/React.createElement("div", {
 /* =====================================================
    IDENTITY — sits firmly inside the sky region
    ===================================================== */
-const Identity = () => /*#__PURE__*/React.createElement("div", {
+const Identity = ({
+  onNavigate
+}) => /*#__PURE__*/React.createElement("div", {
   className: "hero-identity-container"
 }, /*#__PURE__*/React.createElement("div", {
   style: {
@@ -2798,7 +3019,7 @@ const Identity = () => /*#__PURE__*/React.createElement("div", {
   href: "#cv",
   onClick: e => {
     e.preventDefault();
-    if (window.__onNavigate) window.__onNavigate('cv');
+    if (onNavigate) onNavigate('cv');else if (window.__onNavigate) window.__onNavigate('cv');
   },
   style: {
     display: 'inline-flex',
@@ -2823,10 +3044,12 @@ const Identity = () => /*#__PURE__*/React.createElement("div", {
   href: "#contact",
   onClick: e => {
     e.preventDefault();
-    const el = document.getElementById('contact');
-    if (el) el.scrollIntoView({
-      behavior: 'smooth'
-    });
+    if (onNavigate) onNavigate('contact');else if (window.__onNavigate) window.__onNavigate('contact');else {
+      const el = document.getElementById('contact');
+      if (el) el.scrollIntoView({
+        behavior: 'smooth'
+      });
+    }
   },
   style: {
     display: 'inline-flex',
@@ -2958,8 +3181,43 @@ const NEWS = [{
 }];
 const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
   bg: "./assets/about_bg.png"
-}, /*#__PURE__*/React.createElement("div", {
-  className: "about-grid"
+}, /*#__PURE__*/React.createElement("style", null, `
+      .about-main-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+        gap: 48px;
+        align-items: flex-start;
+      }
+      .about-badges-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
+        margin-top: 28px;
+      }
+      .research-strip-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+      @media (max-width: 960px) {
+        .about-main-grid {
+          grid-template-columns: 1fr !important;
+          gap: 36px !important;
+        }
+        .research-strip-grid {
+          grid-template-columns: repeat(2, 1fr) !important;
+        }
+      }
+      @media (max-width: 600px) {
+        .about-badges-grid {
+          grid-template-columns: 1fr !important;
+        }
+        .research-strip-grid {
+          grid-template-columns: 1fr !important;
+        }
+      }
+    `), /*#__PURE__*/React.createElement("div", {
+  className: "about-main-grid"
 }, /*#__PURE__*/React.createElement("div", {
   style: {
     color: 'rgba(255,255,255,0.90)'
@@ -3002,7 +3260,7 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
     color: 'rgba(255,255,255,0.85)'
   }
 }, "Currently, I'm developing Vertical Equilibrium (VE) models for simulating CO", /*#__PURE__*/React.createElement("sub", null, "2"), " storage in depleted gas reservoirs \u2014 a key simulation strategy for achieving net-zero emissions.")), /*#__PURE__*/React.createElement("div", {
-  className: "highlights-grid"
+  className: "about-badges-grid"
 }, [{
   icon: 'fas fa-graduation-cap',
   label: 'PhD @ Heriot-Watt'
@@ -3327,19 +3585,23 @@ const ContactSection = () => {
   const contacts = [{
     icon: "fas fa-envelope",
     label: "st4014@hw.ac.uk",
-    url: "mailto:st4014@hw.ac.uk"
+    url: "mailto:st4014@hw.ac.uk",
+    aria: "Email Sa'eed Telvari"
   }, {
     icon: "fab fa-linkedin",
     label: "LinkedIn Profile",
-    url: "https://www.linkedin.com/in/stelvari/"
+    url: "https://www.linkedin.com/in/stelvari/",
+    aria: "Sa'eed Telvari on LinkedIn"
   }, {
     icon: "fab fa-github",
     label: "GitHub",
-    url: "https://github.com/saeedtelvari"
+    url: "https://github.com/saeedtelvari",
+    aria: "Sa'eed Telvari on GitHub"
   }, {
     icon: "fas fa-graduation-cap",
     label: "Google Scholar",
-    url: "https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330"
+    url: "https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330",
+    aria: "Sa'eed Telvari on Google Scholar"
   }];
   return /*#__PURE__*/React.createElement(SectionPanel, {
     bg: "./assets/contact_bg_v2.png",
@@ -3374,7 +3636,8 @@ const ContactSection = () => {
   }, /*#__PURE__*/React.createElement(ContactCard, {
     icon: c.icon,
     label: c.label,
-    url: c.url
+    url: c.url,
+    ariaLabel: c.aria
   })))), /*#__PURE__*/React.createElement(Reveal, {
     delay: "reveal-delay-3"
   }, /*#__PURE__*/React.createElement("div", {
@@ -3395,13 +3658,15 @@ const ContactSection = () => {
 const ContactCard = ({
   icon,
   label,
-  url
+  url,
+  ariaLabel
 }) => {
   const [hovered, setHovered] = useState(false);
   return /*#__PURE__*/React.createElement("a", {
     href: url,
     target: "_blank",
     rel: "noreferrer",
+    "aria-label": ariaLabel || label,
     onMouseEnter: () => setHovered(true),
     onMouseLeave: () => setHovered(false),
     style: {
@@ -3446,210 +3711,254 @@ Object.assign(window, {
 // ==========================================
 // CVPage.jsx — single long glass page mirroring cv.html
 
-const CVPage = () => /*#__PURE__*/React.createElement("div", {
-  style: {
-    minHeight: '100vh',
-    backgroundImage: "url('./assets/headerbg3.jpg')",
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-    backgroundAttachment: 'fixed',
-    padding: '120px 24px 64px'
-  }
-}, /*#__PURE__*/React.createElement("div", {
-  style: {
-    position: 'fixed',
-    inset: 0,
-    background: 'linear-gradient(135deg, rgba(10,10,20,0.85) 0%, rgba(15,25,45,0.80) 50%, rgba(10,20,40,0.85) 100%)',
-    zIndex: 0
-  }
-}), /*#__PURE__*/React.createElement("div", {
-  className: "cv-card-container",
-  style: {
-    position: 'relative',
-    zIndex: 1,
-    maxWidth: 980,
-    margin: '0 auto',
-    background: 'linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.08) 100%)',
-    backdropFilter: 'blur(25px) saturate(180%)',
-    WebkitBackdropFilter: 'blur(25px) saturate(180%)',
-    border: '1px solid rgba(255,255,255,0.15)',
-    borderTop: '1px solid rgba(255,255,255,0.25)',
-    borderLeft: '1px solid rgba(255,255,255,0.20)',
-    borderRadius: 30,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.30), inset 0 2px 4px rgba(255,255,255,0.10)',
-    color: '#fff'
-  }
-}, /*#__PURE__*/React.createElement("header", {
-  style: {
-    textAlign: 'center',
-    marginBottom: 24
-  }
-}, /*#__PURE__*/React.createElement("h1", {
-  style: {
-    margin: '0 0 12px',
-    fontFamily: "'Montserrat', sans-serif",
-    fontWeight: 700,
-    fontSize: 'clamp(36px, 5vw, 56px)',
-    lineHeight: 1.1,
-    background: 'linear-gradient(135deg, #fff 0%, #a8edea 100%)',
-    WebkitBackgroundClip: 'text',
-    backgroundClip: 'text',
-    WebkitTextFillColor: 'transparent'
-  }
-}, "Sa\u2019eed Telvari"), /*#__PURE__*/React.createElement("p", {
-  style: {
-    fontSize: 19,
-    color: 'rgba(255,255,255,0.70)',
-    margin: '0 0 18px'
-  }
-}, "Ph.D. Candidate in Petroleum Engineering"), /*#__PURE__*/React.createElement("div", {
-  style: {
-    display: 'flex',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-    gap: 20,
-    marginBottom: 24
-  }
-}, /*#__PURE__*/React.createElement("span", {
-  style: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 14
-  }
-}, /*#__PURE__*/React.createElement("i", {
-  className: "fas fa-map-marker-alt",
-  style: {
-    color: '#4ecdc4',
-    marginRight: 8
-  }
-}), "Edinburgh, UK"), /*#__PURE__*/React.createElement("a", {
-  href: "mailto:st4014@hw.ac.uk",
-  style: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 14,
-    textDecoration: 'none'
-  }
-}, /*#__PURE__*/React.createElement("i", {
-  className: "fas fa-envelope",
-  style: {
-    color: '#4ecdc4',
-    marginRight: 8
-  }
-}), "st4014@hw.ac.uk"), /*#__PURE__*/React.createElement("a", {
-  href: "https://www.linkedin.com/in/stelvari/",
-  target: "_blank",
-  rel: "noreferrer",
-  style: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 14,
-    textDecoration: 'none'
-  }
-}, /*#__PURE__*/React.createElement("i", {
-  className: "fab fa-linkedin",
-  style: {
-    color: '#4ecdc4',
-    marginRight: 8
-  }
-}), "/in/stelvari")), /*#__PURE__*/React.createElement(GlassButton, {
-  variant: "mint",
-  icon: "fas fa-download",
-  onClick: () => window.print()
-}, "Download PDF")), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
-  icon: "fas fa-flask",
-  title: "Research Interests"
-}, /*#__PURE__*/React.createElement("div", {
-  style: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 10
-  }
-}, ['Reservoir Simulation', 'CO\u2082 Storage', 'CCUS Technologies', 'Vertical Equilibrium Models', 'Machine Learning', 'Upscaling Methods', 'Fractured Reservoirs', 'Digital Rock Physics'].map(t => /*#__PURE__*/React.createElement(Tag, {
-  key: t,
-  variant: "research"
-}, t)))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
-  icon: "fas fa-graduation-cap",
-  title: "Education"
-}, /*#__PURE__*/React.createElement(Timeline, {
-  items: [{
-    title: 'Ph.D. in Petroleum Engineering',
-    date: '2024 – Present',
-    inst: 'Heriot-Watt University, Edinburgh, UK',
-    details: ['Thesis: Developing Vertical Equilibrium Models for Simulating CO\u2082 Storage in Depleted Gas Reservoirs']
+const CVPage = ({
+  onNavigate
+}) => {
+  const handlePrint = () => {
+    window.print();
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: '100vh',
+      backgroundImage: "url('./assets/headerbg3.jpg')",
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundAttachment: 'fixed',
+      padding: '120px 24px 64px'
+    }
+  }, /*#__PURE__*/React.createElement("style", null, `
+        .cv-skills-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 16px;
+        }
+        @media (max-width: 680px) {
+          .cv-skills-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .cv-card-container {
+            padding: 24px 18px !important;
+          }
+          .cv-name-title {
+            font-size: 38px !important;
+          }
+        }
+        @media print {
+          header, nav, footer, .cv-download-btn {
+            display: none !important;
+          }
+          body {
+            background: #fff !important;
+            color: #000 !important;
+          }
+          .cv-card-container {
+            background: #fff !important;
+            color: #000 !important;
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+          }
+        }
+      `), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      inset: 0,
+      background: 'linear-gradient(135deg, rgba(10,10,20,0.85) 0%, rgba(15,25,45,0.80) 50%, rgba(10,20,40,0.85) 100%)',
+      zIndex: 0
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "cv-card-container",
+    style: {
+      position: 'relative',
+      zIndex: 1,
+      maxWidth: 980,
+      margin: '0 auto',
+      padding: 44,
+      background: 'linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.08) 100%)',
+      backdropFilter: 'blur(25px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(25px) saturate(180%)',
+      border: '1px solid rgba(255,255,255,0.15)',
+      borderTop: '1px solid rgba(255,255,255,0.25)',
+      borderLeft: '1px solid rgba(255,255,255,0.20)',
+      borderRadius: 30,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.30), inset 0 2px 4px rgba(255,255,255,0.10)',
+      color: '#fff'
+    }
+  }, /*#__PURE__*/React.createElement("header", {
+    style: {
+      textAlign: 'center',
+      marginBottom: 24
+    }
+  }, /*#__PURE__*/React.createElement("h1", {
+    className: "cv-name-title",
+    style: {
+      margin: '0 0 12px',
+      fontFamily: "'Montserrat', sans-serif",
+      fontWeight: 700,
+      fontSize: 'clamp(36px, 5vw, 56px)',
+      lineHeight: 1.1,
+      background: 'linear-gradient(135deg, #fff 0%, #a8edea 100%)',
+      WebkitBackgroundClip: 'text',
+      backgroundClip: 'text',
+      WebkitTextFillColor: 'transparent'
+    }
+  }, "Sa\u2019eed Telvari"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 19,
+      color: 'rgba(255,255,255,0.70)',
+      margin: '0 0 18px'
+    }
+  }, "Ph.D. Candidate in Petroleum Engineering"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'center',
+      flexWrap: 'wrap',
+      gap: 20,
+      marginBottom: 24
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'rgba(255,255,255,0.85)',
+      fontSize: 14
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-map-marker-alt",
+    style: {
+      color: '#4ecdc4',
+      marginRight: 8
+    }
+  }), "Edinburgh, UK"), /*#__PURE__*/React.createElement("a", {
+    href: "mailto:st4014@hw.ac.uk",
+    style: {
+      color: 'rgba(255,255,255,0.85)',
+      fontSize: 14,
+      textDecoration: 'none'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-envelope",
+    style: {
+      color: '#4ecdc4',
+      marginRight: 8
+    }
+  }), "st4014@hw.ac.uk"), /*#__PURE__*/React.createElement("a", {
+    href: "https://www.linkedin.com/in/stelvari/",
+    target: "_blank",
+    rel: "noreferrer",
+    style: {
+      color: 'rgba(255,255,255,0.85)',
+      fontSize: 14,
+      textDecoration: 'none'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fab fa-linkedin",
+    style: {
+      color: '#4ecdc4',
+      marginRight: 8
+    }
+  }), "/in/stelvari")), /*#__PURE__*/React.createElement("div", {
+    className: "cv-download-btn"
+  }, /*#__PURE__*/React.createElement(GlassButton, {
+    variant: "mint",
+    icon: "fas fa-download",
+    onClick: handlePrint
+  }, "Download PDF / Print"))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
+    icon: "fas fa-flask",
+    title: "Research Interests"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 10
+    }
+  }, ['Reservoir Simulation', 'CO\u2082 Storage', 'CCUS Technologies', 'Vertical Equilibrium Models', 'Machine Learning', 'Upscaling Methods', 'Fractured Reservoirs', 'Digital Rock Physics'].map(t => /*#__PURE__*/React.createElement(Tag, {
+    key: t,
+    variant: "research"
+  }, t)))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
+    icon: "fas fa-graduation-cap",
+    title: "Education"
+  }, /*#__PURE__*/React.createElement(Timeline, {
+    items: [{
+      title: 'Ph.D. in Petroleum Engineering',
+      date: '2024 – Present',
+      inst: 'Heriot-Watt University, Edinburgh, UK',
+      details: ['Thesis: Developing Vertical Equilibrium Models for Simulating CO\u2082 Storage in Depleted Gas Reservoirs']
+    }, {
+      title: 'M.Sc. in Petroleum Engineering — Reservoir',
+      date: '2022 – 2024',
+      inst: 'Amirkabir University of Technology, Tehran',
+      details: ['GPA: 3.65/4 (17.23/20)', 'Thesis: Machine Learning Methods in Upscaling Fine-scale Discrete Fracture Models']
+    }, {
+      title: 'B.Sc. in Petroleum Engineering',
+      date: '2018 – 2022',
+      inst: 'Amirkabir University of Technology, Tehran',
+      details: ['GPA: 17.43/20', 'Thesis: Prediction of two-phase flow properties for digital sandstones using 3D CNNs']
+    }]
+  })), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
+    icon: "fas fa-tools",
+    title: "Skills"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "cv-skills-grid"
+  }, /*#__PURE__*/React.createElement(SkillCategory, {
+    icon: "fas fa-code",
+    title: "Programming",
+    tags: ['Python', 'MATLAB', 'Julia', 'Rust', 'LaTeX'],
+    detail: "Libraries: TensorFlow, PyTorch, Scikit-learn, OpenCV, OpenPNM"
+  }), /*#__PURE__*/React.createElement(SkillCategory, {
+    icon: "fas fa-industry",
+    title: "Industry Software",
+    tags: ['Eclipse', 'MRST', 'Petrel RE', 'Saphir', 'PVTSim']
+  }), /*#__PURE__*/React.createElement(SkillCategory, {
+    icon: "fas fa-cube",
+    title: "CFD & Simulation",
+    tags: ['OpenFOAM', 'PerGeos', 'SALOME', 'MeshLab']
+  }), /*#__PURE__*/React.createElement(SkillCategory, {
+    icon: "fas fa-laptop-code",
+    title: "Tools & Platforms",
+    tags: ['Linux', 'Docker', 'Git', 'Jupyter', 'VS Code']
+  }))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
+    icon: "fas fa-award",
+    title: "Honors & Awards"
+  }, /*#__PURE__*/React.createElement("ul", {
+    style: {
+      listStyle: 'none',
+      padding: 0,
+      margin: 0
+    }
+  }, [{
+    icon: 'fas fa-trophy',
+    body: 'Ranked within top 2% in Iranian University Entrance Exam for Master\'s degrees'
   }, {
-    title: 'M.Sc. in Petroleum Engineering — Reservoir',
-    date: '2022 – 2024',
-    inst: 'Amirkabir University of Technology, Tehran',
-    details: ['GPA: 3.65/4 (17.23/20)', 'Thesis: Machine Learning Methods in Upscaling Fine-scale Discrete Fracture Models']
+    icon: 'fas fa-star',
+    body: 'Direct admission for graduate study from Talented Student Office, Amirkabir University'
   }, {
-    title: 'B.Sc. in Petroleum Engineering',
-    date: '2018 – 2022',
-    inst: 'Amirkabir University of Technology, Tehran',
-    details: ['GPA: 17.43/20', 'Thesis: Prediction of two-phase flow properties for digital sandstones using 3D CNNs']
-  }]
-})), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
-  icon: "fas fa-tools",
-  title: "Skills"
-}, /*#__PURE__*/React.createElement("div", {
-  className: "cv-skills-grid"
-}, /*#__PURE__*/React.createElement(SkillCategory, {
-  icon: "fas fa-code",
-  title: "Programming",
-  tags: ['Python', 'MATLAB', 'Julia', 'Rust', 'LaTeX'],
-  detail: "Libraries: TensorFlow, PyTorch, Scikit-learn, OpenCV, OpenPNM"
-}), /*#__PURE__*/React.createElement(SkillCategory, {
-  icon: "fas fa-industry",
-  title: "Industry Software",
-  tags: ['Eclipse', 'MRST', 'Petrel RE', 'Saphir', 'PVTSim']
-}), /*#__PURE__*/React.createElement(SkillCategory, {
-  icon: "fas fa-cube",
-  title: "CFD & Simulation",
-  tags: ['OpenFOAM', 'PerGeos', 'SALOME', 'MeshLab']
-}), /*#__PURE__*/React.createElement(SkillCategory, {
-  icon: "fas fa-laptop-code",
-  title: "Tools & Platforms",
-  tags: ['Linux', 'Docker', 'Git', 'Jupyter', 'VS Code']
-}))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
-  icon: "fas fa-award",
-  title: "Honors & Awards"
-}, /*#__PURE__*/React.createElement("ul", {
-  style: {
-    listStyle: 'none',
-    padding: 0,
-    margin: 0
-  }
-}, [{
-  icon: 'fas fa-trophy',
-  body: 'Ranked within top 2% in Iranian University Entrance Exam for Master\'s degrees'
-}, {
-  icon: 'fas fa-star',
-  body: 'Direct admission for graduate study from Talented Student Office, Amirkabir University'
-}, {
-  icon: 'fas fa-medal',
-  body: 'National undergraduate scholarship (full tuition waiver)'
-}, {
-  icon: 'fas fa-trophy',
-  body: 'Ranked within top 4% among 140,000+ students in undergraduate entrance exam'
-}, {
-  icon: 'fas fa-certificate',
-  body: 'Recognized as talented student in NODET entrance exam'
-}].map((a, i) => /*#__PURE__*/React.createElement("li", {
-  key: i,
-  style: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 12,
-    padding: '12px 0',
-    color: 'rgba(255,255,255,0.90)',
-    fontSize: 15,
-    borderBottom: '1px solid rgba(255,255,255,0.05)'
-  }
-}, /*#__PURE__*/React.createElement("i", {
-  className: a.icon,
-  style: {
-    color: '#ffc107',
-    fontSize: 16,
-    marginTop: 3
-  }
-}), a.body))))));
+    icon: 'fas fa-medal',
+    body: 'National undergraduate scholarship (full tuition waiver)'
+  }, {
+    icon: 'fas fa-trophy',
+    body: 'Ranked within top 4% among 140,000+ students in undergraduate entrance exam'
+  }, {
+    icon: 'fas fa-certificate',
+    body: 'Recognized as talented student in NODET entrance exam'
+  }].map((a, i) => /*#__PURE__*/React.createElement("li", {
+    key: i,
+    style: {
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 12,
+      padding: '12px 0',
+      color: 'rgba(255,255,255,0.90)',
+      fontSize: 15,
+      borderBottom: '1px solid rgba(255,255,255,0.05)'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: a.icon,
+    style: {
+      color: '#ffc107',
+      fontSize: 16,
+      marginTop: 3
+    }
+  }), a.body))))));
+};
 
 /* -----------------------------------------------------
    Helpers
@@ -6933,7 +7242,28 @@ const SimulatorPage = () => {
     style: {
       marginRight: 6
     }
-  }), " Sensitivity & UQ")), /*#__PURE__*/React.createElement("div", {
+  }), " Sensitivity & UQ"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setActiveSubTab('guide'),
+    style: {
+      background: activeSubTab === 'guide' ? 'rgba(100, 255, 218, 0.08)' : 'none',
+      border: 'none',
+      borderBottom: activeSubTab === 'guide' ? '2px solid #64ffda' : '2px solid transparent',
+      color: activeSubTab === 'guide' ? '#64ffda' : 'rgba(255,255,255,0.6)',
+      padding: '12px 16px',
+      fontSize: '11px',
+      fontWeight: 600,
+      letterSpacing: '0.05em',
+      textTransform: 'uppercase',
+      cursor: 'pointer',
+      transition: 'all 0.2s ease',
+      outline: 'none'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-book",
+    style: {
+      marginRight: 6
+    }
+  }), " PDE Methodology Guide")), /*#__PURE__*/React.createElement("div", {
     style: {
       paddingRight: 8
     }
@@ -8405,9 +8735,7 @@ const SimulatorPage = () => {
     label: "Cumulative Leaked Fraction",
     pct: currentMasses.injected > 0 ? currentMasses.leaked / currentMasses.injected * 100 : 0,
     color: "#ff6b6b"
-  })))))), /*#__PURE__*/React.createElement(GuidePage, {
-    isEmbedded: true
-  }));
+  })))))));
 };
 
 // Slider Input helper component
@@ -8650,7 +8978,9 @@ const App = () => {
   }, /*#__PURE__*/React.createElement(Header, {
     active: currentNav,
     onNavigate: onNavigate
-  }), screen === 'home' ? /*#__PURE__*/React.createElement("main", null, /*#__PURE__*/React.createElement(SubsurfaceHero, null), /*#__PURE__*/React.createElement("div", {
+  }), screen === 'home' ? /*#__PURE__*/React.createElement("main", null, /*#__PURE__*/React.createElement(SubsurfaceHero, {
+    onNavigate: onNavigate
+  }), /*#__PURE__*/React.createElement("div", {
     id: "about"
   }), /*#__PURE__*/React.createElement(AboutSection, null), /*#__PURE__*/React.createElement("div", {
     id: "research"
@@ -8662,7 +8992,9 @@ const App = () => {
     onNavigate: onNavigate
   })) : screen === 'simulator' ? /*#__PURE__*/React.createElement("main", null, /*#__PURE__*/React.createElement(SimulatorPage, null), /*#__PURE__*/React.createElement(Footer, {
     onNavigate: onNavigate
-  })) : /*#__PURE__*/React.createElement("main", null, /*#__PURE__*/React.createElement(CVPage, null), /*#__PURE__*/React.createElement(Footer, {
+  })) : /*#__PURE__*/React.createElement("main", null, /*#__PURE__*/React.createElement(CVPage, {
+    onNavigate: onNavigate
+  }), /*#__PURE__*/React.createElement(Footer, {
     onNavigate: onNavigate
   })));
 };

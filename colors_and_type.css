@@ -448,4 +448,44 @@ code, kbd, .mono {
   }
 }
 
+/* =====================================================
+   ACCESSIBILITY & FOCUS RINGS
+   ===================================================== */
+:focus-visible {
+  outline: 2px solid var(--mint) !important;
+  outline-offset: 3px !important;
+}
 
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible) {
+  outline: none !important;
+}
+
+/* =====================================================
+   PREFERS REDUCED MOTION
+   For users with vestibular or motion sensitivities.
+   ===================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* =====================================================
+   GLOBAL PRINT STYLES
+   Clean printing of CV and portfolio pages.
+   ===================================================== */
+@media print {
+  header, footer, nav, .mobile-drawer-panel, .mobile-drawer-backdrop {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+}

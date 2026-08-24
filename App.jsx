@@ -106,7 +106,7 @@ const App = () => {
 
       {screen === 'home' ? (
         <main>
-          <SubsurfaceHero />
+          <SubsurfaceHero onNavigate={onNavigate} />
           <div id="about" />
           <AboutSection />
           <div id="research" />
@@ -123,7 +123,7 @@ const App = () => {
         </main>
       ) : (
         <main>
-          <CVPage />
+          <CVPage onNavigate={onNavigate} />
           <Footer onNavigate={onNavigate} />
         </main>
       )}

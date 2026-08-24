@@ -583,7 +583,7 @@ const getColumnPath = (b, geo = currentGeology) => {
   return `M ${xStart} ${yStart} L ${xEnd} ${yStart} L ${xEnd} ${yEnd} L ${xStart} ${yEnd} Z`;
 };
 
-const SubsurfaceHero = () => {
+const SubsurfaceHero = ({ onNavigate }) => {
   const [time, setTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true); // Auto-play on first load to wow visitors
   const [speed, setSpeed] = useState(1);
@@ -629,7 +629,7 @@ const SubsurfaceHero = () => {
       <Horizon />
 
       {/* Above-ground content */}
-      <Identity />
+      <Identity onNavigate={onNavigate} />
       <Wellhead geology={geology} />
       <GasFeedAnimation isPlaying={isPlaying} geology={geology} />
 
@@ -1830,7 +1830,7 @@ const Annotation = () => (
 /* =====================================================
    IDENTITY — sits firmly inside the sky region
    ===================================================== */
-const Identity = () => (
+const Identity = ({ onNavigate }) => (
   <div className="hero-identity-container">
     <div style={{
       fontSize: 11.5, letterSpacing: '0.20em', textTransform: 'uppercase',
@@ -1876,7 +1876,8 @@ const Identity = () => (
         href="#cv" 
         onClick={(e) => { 
           e.preventDefault(); 
-          if (window.__onNavigate) window.__onNavigate('cv'); 
+          if (onNavigate) onNavigate('cv');
+          else if (window.__onNavigate) window.__onNavigate('cv'); 
         }} 
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -1895,8 +1896,12 @@ const Identity = () => (
         href="#contact" 
         onClick={(e) => {
           e.preventDefault();
-          const el = document.getElementById('contact');
-          if (el) el.scrollIntoView({ behavior: 'smooth' });
+          if (onNavigate) onNavigate('contact');
+          else if (window.__onNavigate) window.__onNavigate('contact');
+          else {
+            const el = document.getElementById('contact');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }
         }}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,

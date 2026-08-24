@@ -16,7 +16,43 @@ const NEWS = [
 
 const AboutSection = () => (
   <SectionPanel bg="./assets/about_bg.png">
-    <div className="about-grid">
+    <style>{`
+      .about-main-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+        gap: 48px;
+        align-items: flex-start;
+      }
+      .about-badges-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
+        margin-top: 28px;
+      }
+      .research-strip-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+      @media (max-width: 960px) {
+        .about-main-grid {
+          grid-template-columns: 1fr !important;
+          gap: 36px !important;
+        }
+        .research-strip-grid {
+          grid-template-columns: repeat(2, 1fr) !important;
+        }
+      }
+      @media (max-width: 600px) {
+        .about-badges-grid {
+          grid-template-columns: 1fr !important;
+        }
+        .research-strip-grid {
+          grid-template-columns: 1fr !important;
+        }
+      }
+    `}</style>
+    <div className="about-main-grid">
       {/* Left: About */}
       <div style={{ color: 'rgba(255,255,255,0.90)' }}>
         <Reveal>
@@ -41,7 +77,7 @@ const AboutSection = () => (
           </p>
         </Reveal>
         
-        <div className="highlights-grid">
+        <div className="about-badges-grid">
           {[
             { icon: 'fas fa-graduation-cap', label: 'PhD @ Heriot-Watt' },
             { icon: 'fas fa-flask', label: 'CCUS Research' },
@@ -181,7 +217,7 @@ const PublicationsList = () => (
             <p style={{ color: 'rgba(255,255,255,0.85)', margin: '0 0 6px', fontSize: 15 }}>{p.authors}</p>
             <p style={{ color: 'rgba(255,255,255,0.60)', fontStyle: 'italic', margin: '0 0 14px', fontSize: 14 }}>{p.venue}</p>
             <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 14, lineHeight: 1.6, margin: '0 0 16px' }}
-               dangerouslySetInnerHTML={{ __html: p.abstract }} />
+                dangerouslySetInnerHTML={{ __html: p.abstract }} />
             {p.link && (
               <a href={p.link} target="_blank" rel="noreferrer" style={{
                 display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -206,10 +242,10 @@ const PublicationsList = () => (
    ===================================================== */
 const ContactSection = () => {
   const contacts = [
-    { icon: "fas fa-envelope", label: "st4014@hw.ac.uk", url: "mailto:st4014@hw.ac.uk" },
-    { icon: "fab fa-linkedin", label: "LinkedIn Profile", url: "https://www.linkedin.com/in/stelvari/" },
-    { icon: "fab fa-github", label: "GitHub", url: "https://github.com/saeedtelvari" },
-    { icon: "fas fa-graduation-cap", label: "Google Scholar", url: "https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330" },
+    { icon: "fas fa-envelope", label: "st4014@hw.ac.uk", url: "mailto:st4014@hw.ac.uk", aria: "Email Sa'eed Telvari" },
+    { icon: "fab fa-linkedin", label: "LinkedIn Profile", url: "https://www.linkedin.com/in/stelvari/", aria: "Sa'eed Telvari on LinkedIn" },
+    { icon: "fab fa-github", label: "GitHub", url: "https://github.com/saeedtelvari", aria: "Sa'eed Telvari on GitHub" },
+    { icon: "fas fa-graduation-cap", label: "Google Scholar", url: "https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330", aria: "Sa'eed Telvari on Google Scholar" },
   ];
   
   return (
@@ -226,7 +262,7 @@ const ContactSection = () => {
         <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 18, marginBottom: 36 }}>
           {contacts.map((c, i) => (
             <Reveal key={i} delay={`reveal-delay-${i + 1}`}>
-              <ContactCard icon={c.icon} label={c.label} url={c.url} />
+              <ContactCard icon={c.icon} label={c.label} url={c.url} ariaLabel={c.aria} />
             </Reveal>
           ))}
         </div>
@@ -240,13 +276,15 @@ const ContactSection = () => {
     </SectionPanel>
   );
 };
-const ContactCard = ({ icon, label, url }) => {
+
+const ContactCard = ({ icon, label, url, ariaLabel }) => {
   const [hovered, setHovered] = useState(false);
   return (
     <a 
       href={url}
       target="_blank"
       rel="noreferrer"
+      aria-label={ariaLabel || label}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{ display: 'inline-block', height: '100%', textDecoration: 'none', cursor: 'pointer' }}

@@ -1951,6 +1951,25 @@ const SimulatorPage = () => {
                 >
                   <i className="fas fa-chart-bar" style={{ marginRight: 6 }} /> Sensitivity & UQ
                 </button>
+                <button 
+                  onClick={() => setActiveSubTab('guide')}
+                  style={{
+                    background: activeSubTab === 'guide' ? 'rgba(100, 255, 218, 0.08)' : 'none',
+                    border: 'none',
+                    borderBottom: activeSubTab === 'guide' ? '2px solid #64ffda' : '2px solid transparent',
+                    color: activeSubTab === 'guide' ? '#64ffda' : 'rgba(255,255,255,0.6)',
+                    padding: '12px 16px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    letterSpacing: '0.05em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    outline: 'none'
+                  }}
+                >
+                  <i className="fas fa-book" style={{ marginRight: 6 }} /> PDE Methodology Guide
+                </button>
               </div>
               <div style={{ paddingRight: 8 }}>
                 {activeSubTab === 'profile' ? (
@@ -2811,8 +2830,6 @@ const SimulatorPage = () => {
           </div>
         </div>
       </div>
-
-      <GuidePage isEmbedded={true} />
     </div>
   );
 };
