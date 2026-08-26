@@ -449,6 +449,90 @@ code, kbd, .mono {
 }
 
 /* =====================================================
+   GEOLOGICAL STRATIGRAPHY & SUBSURFACE DESCENT TOKENS
+   ===================================================== */
+:root {
+  /* Depth Layer 1: Sedimentary Basin (2 - 5 km) */
+  --strata-sediment-base: #131726;
+  --strata-sediment-accent: #d97706;
+  --strata-sediment-cyan: #38bdf8;
+  
+  /* Depth Layer 2: Crystalline Basement (5 - 15 km) */
+  --strata-crystal-base: #141226;
+  --strata-crystal-accent: #a855f7;
+  --strata-crystal-cyan: #64ffda;
+
+  /* Depth Layer 3: Moho & Upper Mantle (15 - 35+ km) */
+  --strata-mantle-base: #130d1c;
+  --strata-mantle-magma: #f97316;
+  --strata-mantle-ruby: #ef4444;
+
+  /* Depth Layer 4: Earth's Molten Core (>2,900 km) */
+  --strata-core-base: #0d0814;
+  --strata-core-gold: #fbbf24;
+  --strata-core-incandescent: #f43f5e;
+}
+
+/* Magma and thermal convection pulse animations */
+@keyframes magmaPulse {
+  0%, 100% {
+    opacity: 0.40;
+    filter: drop-shadow(0 0 6px rgba(249, 115, 22, 0.45));
+  }
+  50% {
+    opacity: 0.90;
+    filter: drop-shadow(0 0 18px rgba(239, 68, 68, 0.85));
+  }
+}
+
+@keyframes magneticFlux {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -160; }
+}
+
+@keyframes crystalShimmer {
+  0%, 100% { opacity: 0.30; transform: scale(1); }
+  50%      { opacity: 0.85; transform: scale(1.02); }
+}
+
+@keyframes coreGlowPulse {
+  0%, 100% {
+    opacity: 0.65;
+    transform: scaleY(1.0);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scaleY(1.12);
+  }
+}
+
+@keyframes strataDrift {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+
+/* Stratigraphic Depth HUD Floating Sidebar */
+.stratigraphic-hud-container {
+  position: fixed;
+  right: 22px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: auto;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+@media (max-width: 1080px) {
+  .stratigraphic-hud-container {
+    display: none !important;
+  }
+}
+
+/* =====================================================
    ACCESSIBILITY & FOCUS RINGS
    ===================================================== */
 :focus-visible {

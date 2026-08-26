@@ -15,7 +15,7 @@ const NEWS = [
 ];
 
 const AboutSection = () => (
-  <SectionPanel bg="./assets/about_bg.png">
+  <SectionPanel strataTheme="sedimentary">
     <style>{`
       .about-main-grid {
         display: grid;
@@ -56,6 +56,15 @@ const AboutSection = () => (
       {/* Left: About */}
       <div style={{ color: 'rgba(255,255,255,0.90)' }}>
         <Reveal>
+          <div style={{ textAlign: 'center', marginBottom: 6 }}>
+            <StratigraphicBadge
+              theme="sedimentary"
+              depth="2.0 – 5.0 km"
+              formation="Deep Sedimentary Basin · Marine Carbonate &amp; Evaporites"
+              temp="95°C"
+              press="35 MPa"
+            />
+          </div>
           <SectionTitle style={{ marginBottom: 28, fontSize: 34 }}>About Me</SectionTitle>
         </Reveal>
         
@@ -202,8 +211,17 @@ const PUBLICATIONS = [
 ];
 
 const PublicationsList = () => (
-  <SectionPanel bg="./assets/research_bg_v2.png" style={{ marginTop: 24 }}>
+  <SectionPanel strataTheme="crystalline">
     <Reveal>
+      <div style={{ textAlign: 'center', marginBottom: 6 }}>
+        <StratigraphicBadge
+          theme="crystalline"
+          depth="5.0 – 15.0 km"
+          formation="Crystalline Basement · Metamorphic Gneiss Foliation &amp; Shear Fractures"
+          temp="240°C"
+          press="120 MPa"
+        />
+      </div>
       <SectionTitle>Research &amp; Publications</SectionTitle>
     </Reveal>
     <ResearchInterestsStrip />
@@ -249,8 +267,17 @@ const ContactSection = () => {
   ];
   
   return (
-    <SectionPanel bg="./assets/contact_bg_v2.png" style={{ marginTop: 24 }}>
+    <SectionPanel strataTheme="mantle">
       <Reveal>
+        <div style={{ textAlign: 'center', marginBottom: 6 }}>
+          <StratigraphicBadge
+            theme="mantle"
+            depth="15 – 35+ km"
+            formation="Lower Crust &amp; Moho Boundary · Ductile Mantle &amp; Thermal Conduits"
+            temp="680°C"
+            press="450 MPa"
+          />
+        </div>
         <SectionTitle>Get In Touch</SectionTitle>
       </Reveal>
       <div style={{ textAlign: 'center' }}>
@@ -268,7 +295,7 @@ const ContactSection = () => {
         </div>
         <Reveal delay="reveal-delay-3">
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, color: 'rgba(255,255,255,0.60)', fontSize: 14 }}>
-            <i className="fas fa-map-marker-alt" style={{ color: '#64ffda' }}></i>
+            <i className="fas fa-map-marker-alt" style={{ color: '#f97316' }}></i>
             Institute of GeoEnergy Engineering, Heriot-Watt University, Edinburgh, UK
           </div>
         </Reveal>
@@ -302,4 +329,154 @@ const ContactCard = ({ icon, label, url, ariaLabel }) => {
   );
 };
 
-Object.assign(window, { AboutSection, PublicationsList, ContactSection });
+/* =====================================================
+   StratigraphicDepthHUD — Floating Geological Column Navigator
+   ===================================================== */
+const StratigraphicDepthHUD = ({ onNavigate }) => {
+  const [activeDepthIndex, setActiveDepthIndex] = useState(0);
+  const [hoveredTick, setHoveredTick] = useState(null);
+
+  const horizons = [
+    { id: 'home', depth: '1.5 km', label: 'CO₂ Storage Reservoir', color: '#64ffda', temp: '45°C' },
+    { id: 'about', depth: '3.5 km', label: 'Sedimentary Basin', color: '#38bdf8', temp: '95°C' },
+    { id: 'publications', depth: '10 km', label: 'Crystalline Basement', color: '#a855f7', temp: '240°C' },
+    { id: 'contact', depth: '28 km', label: 'Moho & Mantle', color: '#f97316', temp: '680°C' },
+  ];
+
+  useEffect(() => {
+    const onScroll = () => {
+      const scrollPos = window.scrollY + 350;
+      const ids = ['contact', 'publications', 'about', 'home'];
+      for (let i = 0; i < ids.length; i++) {
+        const el = document.getElementById(ids[i]);
+        if (el && el.offsetTop <= scrollPos) {
+          const matchedIdx = horizons.findIndex(h => h.id === ids[i]);
+          if (matchedIdx !== -1) {
+            setActiveDepthIndex(matchedIdx);
+            return;
+          }
+        }
+      }
+      setActiveDepthIndex(0);
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const handleClick = (id) => {
+    if (onNavigate) onNavigate(id);
+    else if (window.__onNavigate) window.__onNavigate(id);
+  };
+
+  return (
+    <aside className="stratigraphic-hud-container" aria-label="Stratigraphic Depth Navigator">
+      <div style={{
+        padding: '14px 10px',
+        borderRadius: 20,
+        background: 'linear-gradient(180deg, rgba(19,13,28,0.88) 0%, rgba(15,20,38,0.92) 100%)',
+        border: '1px solid rgba(255,255,255,0.15)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.20)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 12,
+      }}>
+        <div style={{
+          fontSize: 8.5,
+          fontWeight: 700,
+          letterSpacing: '0.14em',
+          color: 'rgba(255,255,255,0.60)',
+          textTransform: 'uppercase',
+          fontFamily: 'ui-monospace, monospace',
+          textAlign: 'center',
+          lineHeight: 1.2,
+        }}>
+          DEPTH<br/>STRATA
+        </div>
+
+        {/* Vertical Depth Scale Track */}
+        <div style={{
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 16,
+          padding: '6px 0',
+        }}>
+          {/* Track Line */}
+          <div style={{
+            position: 'absolute',
+            top: 6,
+            bottom: 6,
+            width: 2,
+            background: 'linear-gradient(180deg, #64ffda 0%, #38bdf8 30%, #a855f7 65%, #f97316 100%)',
+            opacity: 0.35,
+            borderRadius: 1,
+          }} />
+
+          {horizons.map((h, idx) => {
+            const isActive = activeDepthIndex === idx;
+            const isHover = hoveredTick === idx;
+
+            return (
+              <div
+                key={h.id}
+                style={{ position: 'relative', cursor: 'pointer', padding: '2px 0' }}
+                onMouseEnter={() => setHoveredTick(idx)}
+                onMouseLeave={() => setHoveredTick(null)}
+                onClick={() => handleClick(h.id)}
+              >
+                {/* Tick node */}
+                <div style={{
+                  width: isActive ? 14 : 9,
+                  height: isActive ? 14 : 9,
+                  borderRadius: '50%',
+                  backgroundColor: h.color,
+                  boxShadow: isActive ? `0 0 14px ${h.color}, inset 0 0 4px #fff` : `0 0 4px ${h.color}`,
+                  border: isActive ? '2px solid #fff' : '1.5px solid rgba(255,255,255,0.4)',
+                  transition: 'all 0.35s cubic-bezier(0.175,0.885,0.32,1.275)',
+                  transform: isHover ? 'scale(1.35)' : 'scale(1)',
+                }} />
+
+                {/* Floating Horizon Tooltip */}
+                {(isHover || isActive) && (
+                  <div style={{
+                    position: 'absolute',
+                    right: 24,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'rgba(14,10,22,0.95)',
+                    border: `1px solid ${h.color}`,
+                    borderRadius: 10,
+                    padding: '6px 10px',
+                    whiteSpace: 'nowrap',
+                    boxShadow: `0 4px 18px rgba(0,0,0,0.55), 0 0 10px ${h.color}33`,
+                    backdropFilter: 'blur(12px)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                    pointerEvents: 'none',
+                    zIndex: 1000,
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: h.color, fontFamily: 'ui-monospace, monospace' }}>
+                      {h.depth} · {h.temp}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>
+                      {h.label}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </aside>
+  );
+};
+
+Object.assign(window, { AboutSection, PublicationsList, ContactSection, StratigraphicDepthHUD });
