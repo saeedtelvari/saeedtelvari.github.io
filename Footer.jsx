@@ -24,7 +24,7 @@ const Footer = ({ onNavigate }) => {
       <div
         style={{
           position: 'absolute', inset: 0,
-          backgroundImage: "url('./assets/strata_core.jpg')",
+          backgroundImage: "url('./assets/strata_core.webp')",
           backgroundSize: 'cover',
           backgroundPosition: 'center bottom',
           opacity: 0.85,

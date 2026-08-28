@@ -788,25 +788,9 @@ const SimulationController = ({ time, setTime, isPlaying, setIsPlaying, speed, s
 };
 
 /* =====================================================
-   Sky — top 42vh: warm-violet gradient + a sprinkling of stars
+   Sky — top 42vh: warm-violet gradient + soft atmospheric blobs
    ===================================================== */
 const Sky = () => {
-  const stars = useMemo(() => Array.from({ length: 36 }, () => ({
-    x: Math.random() * 100,
-    y: Math.random() * 38,
-    s: 0.5 + Math.random() * 1.4,
-    o: 0.25 + Math.random() * 0.55,
-    d: Math.random() * 6,
-  })), []);
-
-  const co2Dots = useMemo(() => Array.from({ length: 14 }, () => ({
-    x: Math.random() * 100,
-    y: Math.random() * 38,
-    s: 1.0 + Math.random() * 1.6,
-    o: 0.35 + Math.random() * 0.50,
-    d: Math.random() * 6,
-  })), []);
-
   return (
     <React.Fragment>
       <div style={{
@@ -821,22 +805,6 @@ const Sky = () => {
           'radial-gradient(circle at 84% 14%, rgba(255,119,178,0.13) 0%, transparent 38%)',
         pointerEvents: 'none',
       }}/>
-      <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '42vh', pointerEvents: 'none' }} aria-hidden="true">
-        {/* White stars */}
-        {stars.map((s, i) => (
-          <circle key={`s-${i}`} cx={`${s.x}%`} cy={`${s.y}%`} r={s.s} fill="#cdeaf0"
-                  style={{ opacity: s.o, animation: `twinkle 4.2s ease-in-out ${s.d}s infinite` }}/>
-        ))}
-        {/* Glowing green CO2 particles */}
-        {co2Dots.map((g, i) => (
-          <circle key={`g-${i}`} cx={`${g.x}%`} cy={`${g.y}%`} r={g.s} fill="#0dfca2"
-                  style={{ 
-                    opacity: g.o, 
-                    animation: `twinkle 3.2s ease-in-out ${g.d}s infinite`,
-                    filter: 'drop-shadow(0 0 2px rgba(13,252,162,0.65))'
-                  }}/>
-        ))}
-      </svg>
     </React.Fragment>
   );
 };
@@ -1740,19 +1708,7 @@ const Plume = ({ h, hMax, h2, h2Max, time, isPlaying, faults = [], geology }) =>
                 }}
               />
 
-              {/* 2. Dispersal / Inflow Emitter Pulse where fault feeds into the secondary shallow reservoir */}
-              <circle 
-                cx={inter2.x} 
-                cy={inter2.y} 
-                r="3.5" 
-                fill="none" 
-                stroke="#0dfca2" 
-                strokeWidth="1.2" 
-                style={{ 
-                  animation: 'dischargePulse 2s ease-out infinite',
-                  animationPlayState: isPlaying ? 'running' : 'paused'
-                }}
-              />
+              {/* 2. Dispersal arrival marker where fault feeds into the secondary shallow reservoir */}
               <circle 
                 cx={inter2.x} 
                 cy={inter2.y} 

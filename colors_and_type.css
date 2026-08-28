@@ -1,9 +1,8 @@
 /* =====================================================
    TELVARI PORTFOLIO — COLORS & TYPE TOKENS
    Liquid glassmorphism over deep navy.
+   (Google Fonts are loaded via <link> in index.html)
    ===================================================== */
-
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:wght@400;600;700&family=Arizonia&display=swap');
 
 :root {
   /* -----------------------------------------------------
@@ -340,48 +339,8 @@ code, kbd, .mono {
 
 /* =====================================================
    RESPONSIVE LAYOUT UTILITIES
+   (about / research strip grids are injected by HomeSections)
    ===================================================== */
-
-.about-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-  gap: 48px;
-  align-items: flex-start;
-}
-@media (max-width: 860px) {
-  .about-grid {
-    grid-template-columns: 1fr !important;
-    gap: 36px !important;
-  }
-}
-
-.highlights-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14px;
-  margin-top: 28px;
-}
-@media (max-width: 520px) {
-  .highlights-grid {
-    grid-template-columns: 1fr !important;
-  }
-}
-
-.research-strip-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-}
-@media (max-width: 900px) {
-  .research-strip-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-}
-@media (max-width: 580px) {
-  .research-strip-grid {
-    grid-template-columns: 1fr !important;
-  }
-}
 
 .cv-skills-grid {
   display: grid;

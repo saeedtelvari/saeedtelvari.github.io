@@ -44,15 +44,16 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
     console.log('✓ Successfully generated bundle.js (' + (combined.length / 1024).toFixed(1) + ' KB)');
 
     // Validate VM execution
-    const mockElement = {
-      appendChild: () => {},
-      classList: { add: () => {}, remove: () => {} },
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      getBoundingClientRect: () => ({ top: 0, left: 0, width: 1000, height: 500 }),
-      style: {},
-      offsetTop: 0
-    };
+  const mockElement = {
+    appendChild: () => {},
+    classList: { add: () => {}, remove: () => {} },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    getBoundingClientRect: () => ({ top: 0, left: 0, width: 1000, height: 500 }),
+    getAttribute: () => null,
+    style: {},
+    offsetTop: 0
+  };
     const mockDoc = {
       getElementById: (id) => mockElement,
       querySelector: () => mockElement,

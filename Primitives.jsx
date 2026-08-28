@@ -271,6 +271,7 @@ const Divider = () => (
    GeologicalStrataBackground — Procedural SVG Earth Layers
    ===================================================== */
 const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
+  const uid = React.useMemo(() => 'gsb-' + Math.random().toString(36).slice(2, 8), []);
   if (theme === 'sedimentary') {
     return (
       <svg
@@ -284,7 +285,7 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
       >
         <defs>
           {/* Sedimentary Base Gradient — seamless flow from Hero Aquifer (#0a1931) into Crystalline (#161329) */}
-          <linearGradient id="sedimentBaseGrad" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={uid + '-sedimentBaseGrad'} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#0b172c" />
             <stop offset="35%" stopColor="#121e33" />
             <stop offset="70%" stopColor="#171b2d" />
@@ -292,40 +293,40 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
           </linearGradient>
 
           {/* Layer Bedding Colors */}
-          <linearGradient id="limestoneBedGrad" x1="0" y1="0" x2="1" y2="0">
+          <linearGradient id={uid + '-limestoneBedGrad'} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="#162238" stopOpacity="0.85" />
             <stop offset="50%" stopColor="#20304c" stopOpacity="0.90" />
             <stop offset="100%" stopColor="#162238" stopOpacity="0.85" />
           </linearGradient>
 
-          <linearGradient id="dolomiteBedGrad" x1="0" y1="0" x2="1" y2="0">
+          <linearGradient id={uid + '-dolomiteBedGrad'} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="#1a253c" stopOpacity="0.75" />
             <stop offset="50%" stopColor="#253552" stopOpacity="0.85" />
             <stop offset="100%" stopColor="#1a253c" stopOpacity="0.75" />
           </linearGradient>
 
-          <linearGradient id="evaporiteBedGrad" x1="0" y1="0" x2="1" y2="0">
+          <linearGradient id={uid + '-evaporiteBedGrad'} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="#181d30" stopOpacity="0.80" />
             <stop offset="50%" stopColor="#212840" stopOpacity="0.90" />
             <stop offset="100%" stopColor="#181d30" stopOpacity="0.80" />
           </linearGradient>
 
           {/* Salt Diapir Dome Gradient */}
-          <radialGradient id="saltDomeGrad" cx="65%" cy="80%" r="55%">
+          <radialGradient id={uid + '-saltDomeGrad'} cx="65%" cy="80%" r="55%">
             <stop offset="0%" stopColor="rgba(56, 189, 248, 0.22)" />
             <stop offset="45%" stopColor="rgba(217, 119, 6, 0.12)" />
             <stop offset="100%" stopColor="transparent" />
           </radialGradient>
 
           {/* Petroleum-Amber Vein Glow */}
-          <linearGradient id="petroAmberVein" x1="0" y1="0" x2="1" y2="1">
+          <linearGradient id={uid + '-petroAmberVein'} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="rgba(217, 119, 6, 0.45)" />
             <stop offset="50%" stopColor="rgba(251, 191, 36, 0.65)" />
             <stop offset="100%" stopColor="rgba(217, 119, 6, 0.20)" />
           </linearGradient>
 
           {/* Carbonate / Limestone Lithology Hatch Pattern */}
-          <pattern id="carbonateBricks" width="48" height="24" patternUnits="userSpaceOnUse">
+          <pattern id={uid + '-carbonateBricks'} width="48" height="24" patternUnits="userSpaceOnUse">
             <line x1="0" y1="0" x2="48" y2="0" stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
             <line x1="0" y1="12" x2="48" y2="12" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
             <line x1="24" y1="0" x2="24" y2="12" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
@@ -334,41 +335,41 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
           </pattern>
 
           {/* Cross-bedding Sandstone Hatch Pattern */}
-          <pattern id="crossBedding" width="32" height="32" patternUnits="userSpaceOnUse" patternTransform="rotate(22)">
+          <pattern id={uid + '-crossBedding'} width="32" height="32" patternUnits="userSpaceOnUse" patternTransform="rotate(22)">
             <line x1="0" y1="0" x2="0" y2="32" stroke="rgba(56, 189, 248, 0.07)" strokeWidth="1.2" strokeDasharray="3 3" />
             <line x1="16" y1="0" x2="16" y2="32" stroke="rgba(217, 119, 6, 0.05)" strokeWidth="1" />
           </pattern>
         </defs>
 
         {/* Base Background Fill */}
-        <rect width="100%" height="100%" fill="url(#sedimentBaseGrad)" />
+        <rect width="100%" height="100%" fill={'url(#' + uid + '-sedimentBaseGrad)'} />
 
         {/* Strata Layer 1: Upper Marine Carbonate Bed */}
         <path
           d="M0,80 Q340,45 720,95 T1440,70 L1440,250 Q1080,285 720,235 T0,260 Z"
-          fill="url(#limestoneBedGrad)"
+          fill={'url(#' + uid + '-limestoneBedGrad)'}
         />
         <path
           d="M0,80 Q340,45 720,95 T1440,70 L1440,250 Q1080,285 720,235 T0,260 Z"
-          fill="url(#carbonateBricks)"
+          fill={'url(#' + uid + '-carbonateBricks)'}
           opacity="0.65"
         />
 
         {/* Strata Layer 2: Interbedded Dolomite & Cross-Bedded Sandstone */}
         <path
           d="M0,255 Q320,290 720,240 T1440,265 L1440,480 Q1080,440 720,490 T0,455 Z"
-          fill="url(#dolomiteBedGrad)"
+          fill={'url(#' + uid + '-dolomiteBedGrad)'}
         />
         <path
           d="M0,255 Q320,290 720,240 T1440,265 L1440,480 Q1080,440 720,490 T0,455 Z"
-          fill="url(#crossBedding)"
+          fill={'url(#' + uid + '-crossBedding)'}
           opacity="0.75"
         />
 
         {/* Strata Layer 3: Evaporite / Halite Deep Marine Strata */}
         <path
           d="M0,450 Q380,490 720,445 T1440,475 L1440,685 Q1080,725 720,675 T0,705 Z"
-          fill="url(#evaporiteBedGrad)"
+          fill={'url(#' + uid + '-evaporiteBedGrad)'}
         />
 
         {/* Strata Layer 4: Deep Sedimentary Basal Bed & Angular Unconformity Seam */}
@@ -380,7 +381,7 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
         {/* Salt Dome Diapir Intrusion (Halite anticlinal upwelling on right flank) */}
         <path
           d="M920,900 C930,510 1100,340 1260,340 C1400,340 1440,510 1440,900 Z"
-          fill="url(#saltDomeGrad)"
+          fill={'url(#' + uid + '-saltDomeGrad)'}
         />
         <path
           d="M920,900 C930,510 1100,340 1260,340 C1400,340 1440,510 1440,900"
@@ -403,7 +404,7 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
         <path
           d="M180,900 Q240,680 320,520 T420,240 T580,0"
           fill="none"
-          stroke="url(#petroAmberVein)"
+          stroke={'url(#' + uid + '-petroAmberVein)'}
           strokeWidth="1.6"
           strokeDasharray="8 5"
         />
@@ -430,7 +431,7 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
       >
         <defs>
           {/* Crystalline Base Gradient — seamless flow from Sedimentary (#161329) into Mantle (#150f24) */}
-          <linearGradient id="crystalBaseGrad" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={uid + '-crystalBaseGrad'} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#161329" />
             <stop offset="35%" stopColor="#1c163b" />
             <stop offset="70%" stopColor="#1c1334" />
@@ -438,34 +439,34 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
           </linearGradient>
 
           {/* Metamorphic Gneiss Foliation Gradient */}
-          <linearGradient id="gneissFoldGrad1" x1="0" y1="0" x2="1" y2="1">
+          <linearGradient id={uid + '-gneissFoldGrad1'} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="#211a47" stopOpacity="0.85" />
             <stop offset="50%" stopColor="#2d225e" stopOpacity="0.90" />
             <stop offset="100%" stopColor="#1c163b" stopOpacity="0.85" />
           </linearGradient>
 
-          <linearGradient id="gneissFoldGrad2" x1="0" y1="1" x2="1" y2="0">
+          <linearGradient id={uid + '-gneissFoldGrad2'} x1="0" y1="1" x2="1" y2="0">
             <stop offset="0%" stopColor="#1b153a" stopOpacity="0.80" />
             <stop offset="50%" stopColor="#261c4f" stopOpacity="0.85" />
             <stop offset="100%" stopColor="#1b153a" stopOpacity="0.80" />
           </linearGradient>
 
           {/* Quartz Vein Glow Gradient */}
-          <linearGradient id="quartzVeinGrad" x1="0" y1="0" x2="1" y2="1">
+          <linearGradient id={uid + '-quartzVeinGrad'} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="rgba(168, 85, 247, 0.85)" />
             <stop offset="50%" stopColor="rgba(100, 255, 218, 0.95)" />
             <stop offset="100%" stopColor="rgba(168, 85, 247, 0.60)" />
           </linearGradient>
 
           {/* Tectonic Metamorphic Foliation Pattern */}
-          <pattern id="foliationHatch" width="40" height="40" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)">
+          <pattern id={uid + '-foliationHatch'} width="40" height="40" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)">
             <line x1="0" y1="0" x2="40" y2="0" stroke="rgba(168, 85, 247, 0.08)" strokeWidth="1.2" />
             <line x1="0" y1="20" x2="40" y2="20" stroke="rgba(100, 255, 218, 0.06)" strokeWidth="1" strokeDasharray="4 4" />
           </pattern>
         </defs>
 
         {/* Base Background Fill */}
-        <rect width="100%" height="100%" fill="url(#crystalBaseGrad)" />
+        <rect width="100%" height="100%" fill={'url(#' + uid + '-crystalBaseGrad)'} />
 
         {/* Top Connecting Unconformity Boundary from Sedimentary */}
         <path
@@ -484,24 +485,24 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
         {/* Metamorphic Fold Band 1 (Ptygmatic folded gneiss) */}
         <path
           d="M0,90 Q240,190 480,85 T960,215 T1440,75 L1440,280 Q1200,370 960,270 T480,380 T0,260 Z"
-          fill="url(#gneissFoldGrad1)"
+          fill={'url(#' + uid + '-gneissFoldGrad1)'}
         />
         <path
           d="M0,90 Q240,190 480,85 T960,215 T1440,75 L1440,280 Q1200,370 960,270 T480,380 T0,260 Z"
-          fill="url(#foliationHatch)"
+          fill={'url(#' + uid + '-foliationHatch)'}
           opacity="0.8"
         />
 
         {/* Metamorphic Fold Band 2 (Isoclinal fold core) */}
         <path
           d="M0,255 Q260,375 480,280 T960,395 T1440,270 L1440,530 Q1200,620 960,520 T480,630 T0,510 Z"
-          fill="url(#gneissFoldGrad2)"
+          fill={'url(#' + uid + '-gneissFoldGrad2)'}
         />
 
         {/* Metamorphic Fold Band 3 (Lower Crystalline Shear Zone & Moho Seam) */}
         <path
           d="M0,505 Q240,625 480,535 T960,645 T1440,525 L1440,760 Q1200,850 960,750 T480,860 T0,740 Z"
-          fill="url(#gneissFoldGrad1)"
+          fill={'url(#' + uid + '-gneissFoldGrad1)'}
         />
         <path
           d="M0,740 C360,820 1080,710 1440,780 L1440,900 L0,900 Z"
@@ -519,9 +520,9 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
 
         {/* Tectonic Brittle Natural Fracture Network (Fault Shears with Quartz Infilling) */}
         <g style={{ filter: 'drop-shadow(0 0 8px rgba(168,85,247,0.4))' }}>
-          <path d="M90,0 L360,460 L290,900" fill="none" stroke="url(#quartzVeinGrad)" strokeWidth="2.4" />
+          <path d="M90,0 L360,460 L290,900" fill="none" stroke={'url(#' + uid + '-quartzVeinGrad)'} strokeWidth="2.4" />
           <path d="M360,460 L680,720 L840,900" fill="none" stroke="rgba(100,255,218,0.45)" strokeWidth="1.8" />
-          <path d="M840,0 L1120,540 L1380,900" fill="none" stroke="url(#quartzVeinGrad)" strokeWidth="2.2" />
+          <path d="M840,0 L1120,540 L1380,900" fill="none" stroke={'url(#' + uid + '-quartzVeinGrad)'} strokeWidth="2.2" />
           <path d="M1120,540 L880,900" fill="none" stroke="rgba(168,85,247,0.40)" strokeWidth="1.5" strokeDasharray="10 5" />
           <path d="M520,0 L640,240 L590,480" fill="none" stroke="rgba(100,255,218,0.30)" strokeWidth="1.4" />
         </g>
@@ -552,7 +553,7 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
       >
         <defs>
           {/* Mantle Base Gradient — seamless flow from Crystalline (#150f24) into Core (#2e0d1d) */}
-          <linearGradient id="mantleBaseGrad" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={uid + '-mantleBaseGrad'} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#150f24" />
             <stop offset="35%" stopColor="#1c0e25" />
             <stop offset="70%" stopColor="#250e23" />
@@ -560,34 +561,34 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
           </linearGradient>
 
           {/* Ductile Peridotite Flow Gradients */}
-          <linearGradient id="peridotiteFlowGrad1" x1="0" y1="0" x2="1" y2="0">
+          <linearGradient id={uid + '-peridotiteFlowGrad1'} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="#1b0f29" stopOpacity="0.85" />
             <stop offset="50%" stopColor="#2a1236" stopOpacity="0.90" />
             <stop offset="100%" stopColor="#1b0f29" stopOpacity="0.85" />
           </linearGradient>
 
-          <linearGradient id="peridotiteFlowGrad2" x1="0" y1="0" x2="1" y2="0">
+          <linearGradient id={uid + '-peridotiteFlowGrad2'} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="#230f2d" stopOpacity="0.80" />
             <stop offset="50%" stopColor="#361338" stopOpacity="0.88" />
             <stop offset="100%" stopColor="#230f2d" stopOpacity="0.80" />
           </linearGradient>
 
           {/* Magma Conduit Glow Gradient */}
-          <linearGradient id="magmaConduitGrad" x1="0" y1="1" x2="0" y2="0">
+          <linearGradient id={uid + '-magmaConduitGrad'} x1="0" y1="1" x2="0" y2="0">
             <stop offset="0%" stopColor="#ef4444" />
             <stop offset="50%" stopColor="#f97316" />
             <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.4" />
           </linearGradient>
 
           {/* Bottom Radiant Geothermal Heat Gradient */}
-          <radialGradient id="geothermalHeatGlow" cx="50%" cy="100%" r="70%">
+          <radialGradient id={uid + '-geothermalHeatGlow'} cx="50%" cy="100%" r="70%">
             <stop offset="0%" stopColor="rgba(239, 68, 68, 0.40)" />
             <stop offset="45%" stopColor="rgba(249, 115, 22, 0.22)" />
             <stop offset="100%" stopColor="transparent" />
           </radialGradient>
 
           {/* Serpentine / Olivine Ductile Grain Pattern */}
-          <pattern id="olivineGrain" width="48" height="48" patternUnits="userSpaceOnUse">
+          <pattern id={uid + '-olivineGrain'} width="48" height="48" patternUnits="userSpaceOnUse">
             <circle cx="12" cy="12" r="1.5" fill="rgba(249, 115, 22, 0.12)" />
             <circle cx="36" cy="24" r="2" fill="rgba(239, 68, 68, 0.10)" />
             <circle cx="20" cy="40" r="1.5" fill="rgba(100, 255, 218, 0.08)" />
@@ -595,7 +596,7 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
         </defs>
 
         {/* Base Background Fill */}
-        <rect width="100%" height="100%" fill="url(#mantleBaseGrad)" />
+        <rect width="100%" height="100%" fill={'url(#' + uid + '-mantleBaseGrad)'} />
 
         {/* Top Connecting Moho Shear Boundary from Crystalline */}
         <path
@@ -612,23 +613,23 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
         />
 
         {/* Radiant Bottom Geothermal Heat Bloom */}
-        <rect width="100%" height="100%" fill="url(#geothermalHeatGlow)" />
+        <rect width="100%" height="100%" fill={'url(#' + uid + '-geothermalHeatGlow)'} />
 
         {/* Ductile Flow Band 1 (Upper Mantle Plastic Rheology Shear Belt) */}
         <path
           d="M0,110 C360,230 1080,50 1440,170 L1440,390 C1080,270 360,450 0,330 Z"
-          fill="url(#peridotiteFlowGrad1)"
+          fill={'url(#' + uid + '-peridotiteFlowGrad1)'}
         />
         <path
           d="M0,110 C360,230 1080,50 1440,170 L1440,390 C1080,270 360,450 0,330 Z"
-          fill="url(#olivineGrain)"
+          fill={'url(#' + uid + '-olivineGrain)'}
           opacity="0.8"
         />
 
         {/* Ductile Flow Band 2 (High-temperature Serpentine Marbling) */}
         <path
           d="M0,325 C380,445 1060,265 1440,385 L1440,650 C1080,530 360,710 0,590 Z"
-          fill="url(#peridotiteFlowGrad2)"
+          fill={'url(#' + uid + '-peridotiteFlowGrad2)'}
         />
 
         {/* Core-Mantle Boundary (CMB / D'' Layer Transition at base) */}
@@ -650,21 +651,21 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
           <path
             d="M240,900 Q280,640 360,420 T440,80"
             fill="none"
-            stroke="url(#magmaConduitGrad)"
+            stroke={'url(#' + uid + '-magmaConduitGrad)'}
             strokeWidth="3.2"
             style={{ animation: 'magmaPulse 3.5s ease-in-out infinite' }}
           />
           <path
             d="M780,900 Q740,620 860,360 T960,0"
             fill="none"
-            stroke="url(#magmaConduitGrad)"
+            stroke={'url(#' + uid + '-magmaConduitGrad)'}
             strokeWidth="3.8"
             style={{ animation: 'magmaPulse 4s ease-in-out infinite 0.8s' }}
           />
           <path
             d="M1220,900 Q1160,670 1260,390 T1310,60"
             fill="none"
-            stroke="url(#magmaConduitGrad)"
+            stroke={'url(#' + uid + '-magmaConduitGrad)'}
             strokeWidth="2.8"
             style={{ animation: 'magmaPulse 3.8s ease-in-out infinite 1.6s' }}
           />
@@ -691,21 +692,21 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
       >
         <defs>
           {/* Core Base Gradient — seamless flow from Mantle (#2e0d1d) into Molten Core (#3d1110) */}
-          <linearGradient id="coreBaseGrad" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={uid + '-coreBaseGrad'} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#2e0d1d" />
             <stop offset="45%" stopColor="#1f0714" />
             <stop offset="100%" stopColor="#3d1110" />
           </linearGradient>
 
           {/* Molten Core Bottom Radiance */}
-          <linearGradient id="coreMoltenGlow" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={uid + '-coreMoltenGlow'} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="transparent" />
             <stop offset="60%" stopColor="rgba(239, 68, 68, 0.25)" />
             <stop offset="100%" stopColor="rgba(251, 191, 36, 0.45)" />
           </linearGradient>
 
           {/* Magnetic Dipolar Flux Gradient */}
-          <linearGradient id="magneticFluxGrad" x1="0" y1="0" x2="1" y2="0">
+          <linearGradient id={uid + '-magneticFluxGrad'} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="rgba(251, 191, 36, 0.15)" />
             <stop offset="50%" stopColor="rgba(251, 191, 36, 0.65)" />
             <stop offset="100%" stopColor="rgba(251, 191, 36, 0.15)" />
@@ -713,7 +714,7 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
         </defs>
 
         {/* Base Background Fill */}
-        <rect width="100%" height="100%" fill="url(#coreBaseGrad)" />
+        <rect width="100%" height="100%" fill={'url(#' + uid + '-coreBaseGrad)'} />
 
         {/* Top Connecting CMB Boundary from Mantle */}
         <path
@@ -734,7 +735,7 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
           <path
             d="M0,450 C320,100 1120,100 1440,450"
             fill="none"
-            stroke="url(#magneticFluxGrad)"
+            stroke={'url(#' + uid + '-magneticFluxGrad)'}
             strokeWidth="1.8"
             strokeDasharray="8 6"
             style={{ animation: 'magneticFlux 18s linear infinite' }}
@@ -778,7 +779,7 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
           y="200"
           width="100%"
           height="250"
-          fill="url(#coreMoltenGlow)"
+          fill={'url(#' + uid + '-coreMoltenGlow)'}
           style={{ animation: 'coreGlowPulse 4s ease-in-out infinite alternate' }}
         />
       </svg>
@@ -856,14 +857,12 @@ const StratigraphicBadge = ({ depth, formation, temp, press, theme = 'sedimentar
 /* =====================================================
    Section panel — large rounded glass with geological stratigraphy
    ===================================================== */
-const SectionPanel = ({ children, strataTheme = 'sedimentary', bg, style = {} }) => {
-  // Default strata background mapping if not explicitly provided
-  const defaultBg = bg || (
-    strataTheme === 'sedimentary' ? './assets/strata_sedimentary.jpg' :
-    strataTheme === 'crystalline' ? './assets/strata_crystalline.jpg' :
-    strataTheme === 'mantle' ? './assets/strata_mantle.jpg' :
-    null
-  );
+const SectionPanel = ({ children, strataTheme = 'sedimentary', style = {} }) => {
+  const strataTexture = {
+    sedimentary: './assets/strata_sedimentary.webp',
+    crystalline: './assets/strata_crystalline.webp',
+    mantle: './assets/strata_mantle.webp',
+  }[strataTheme] || null;
 
   const seamGradients = {
     sedimentary: {
@@ -892,11 +891,11 @@ const SectionPanel = ({ children, strataTheme = 'sedimentary', bg, style = {} })
       ...style,
     }}>
       {/* High-Resolution Geological Strata Texture */}
-      {defaultBg && (
+      {strataTexture && (
         <div
           style={{
             position: 'absolute', inset: 0,
-            backgroundImage: `url('${defaultBg}')`,
+            backgroundImage: `url('${strataTexture}')`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             opacity: 0.82,

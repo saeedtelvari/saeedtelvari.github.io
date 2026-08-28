@@ -31,7 +31,8 @@ Built with React 18, SVG mathematical visualizations, and a custom liquid glassm
 
 ## 📁 Repository Structure
 
-- `index.html` — Entry point with CDN imports (React 18, ReactDOM, Babel Standalone, FontAwesome 6).
+- `index.html` — Home page entry point with CDN imports (React 18, ReactDOM, FontAwesome 6).
+- `simulator.html` — Standalone VE Simulator page (own URL; loads independently of the home page).
 - `colors_and_type.css` — Design system design tokens, glassmorphism filters, accessible focus rings, and typography.
 - `Primitives.jsx` — Reusable glass UI primitives (`GlassCard`, `GlassButton`, `Badge`, `Tag`, `Reveal`, `SectionPanel`).
 - `Header.jsx` — Fixed glassmorphic navigation header with shrink-on-scroll, scroll-spy, and mobile hamburger drawer.

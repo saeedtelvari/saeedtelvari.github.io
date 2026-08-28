@@ -6,14 +6,51 @@
   <meta name="description" content="Sa'eed Telvari - PhD Candidate in Petroleum Engineering at Heriot-Watt University. Specialized in Vertical Equilibrium Models and CO2 Storage Simulation.">
   <title>Sa'eed Telvari | Reservoir Simulation & CCUS Researcher</title>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="dns-prefetch" href="https://unpkg.com">
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:wght@400;600;700&family=Arizonia&display=swap">
   <link rel="stylesheet" href="./colors_and_type.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js">
+  <link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js">
+  <link rel="preload" as="script" href="./bundle.js?v=12.6">
   <link rel="icon" href="./assets/logo-minimalist.png">
-  <script>window.__pageLoadStart = Date.now();</script>
+  <script>
+    window.__pageLoadStart = Date.now();
+    // Real-progress driver: nudge the loader bar on actual asset milestones.
+    (function () {
+      var bar = null, val = 0, trickle = null, done = false;
+      function el() { return bar || (bar = document.getElementById('loader-progress-bar')); }
+      function render() {
+        var b = el();
+        if (b) {
+          b.style.width = val + '%';
+          var track = b.parentNode;
+          if (track && track.hasAttribute('role')) track.setAttribute('aria-valuenow', Math.round(val));
+        }
+      }
+      function tick(p) {
+        if (done) return;
+        val = Math.max(val, Math.min(p, 100));
+        render();
+        if (val >= 100) { done = true; if (trickle) clearInterval(trickle); }
+      }
+      window.__loadTick = tick;
+      window.__appReady = function () { tick(100); };
+      tick(10);
+      // Trickle so the bar keeps creeping on slow connections (caps below done).
+      trickle = setInterval(function () { if (!done) tick(Math.min(val + 2, 88)); }, 500);
+      // Slow-network hint if assets haven't finished after 12s.
+      setTimeout(function () {
+        if (!done) {
+          var hint = document.getElementById('loader-slow-hint');
+          if (hint) hint.classList.add('visible');
+        }
+      }, 12000);
+    })();
+  </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
@@ -39,7 +76,7 @@
       justify-content: center;
       font-family: 'Montserrat', system-ui, sans-serif;
       color: #fff;
-      transition: opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1), transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
       overflow: hidden;
     }
 
@@ -47,6 +84,11 @@
       opacity: 0;
       transform: scale(1.025);
       pointer-events: none;
+    }
+
+    #app-loader.loader-finished .seismic-ring,
+    #app-loader.loader-finished .seismic-beacon {
+      animation: none;
     }
 
     .loader-bg {
@@ -142,7 +184,7 @@
       font-family: ui-monospace, Menlo, Monaco, monospace;
     }
 
-    /* Precision Neon Progress Track */
+    /* Precision Neon Progress Track — width driven by real asset milestones (see __loadTick) */
     .loader-progress-track {
       width: 280px;
       height: 3px;
@@ -159,20 +201,26 @@
       top: 0;
       bottom: 0;
       width: 0%;
+      min-width: 6px;
       background: linear-gradient(90deg, #1a8e8f, #20c997, #0dfca2);
       box-shadow: 0 0 10px rgba(13, 252, 162, 0.8);
-      animation: loaderProgress 1.45s cubic-bezier(0.16, 0.8, 0.25, 1) forwards;
+      transition: width 0.35s ease-out;
     }
 
-    @keyframes loaderProgress {
-      0% { width: 4%; }
-      25% { width: 32%; }
-      55% { width: 68%; }
-      85% { width: 92%; }
-      100% { width: 100%; }
+    /* Slow-network hint — only surfaced by the boot script after 12s */
+    .loader-slow-hint {
+      margin-top: 14px;
+      font-size: 11px;
+      font-family: ui-monospace, Menlo, Monaco, monospace;
+      letter-spacing: 0.08em;
+      color: rgba(255, 255, 255, 0.45);
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      pointer-events: none;
     }
+    .loader-slow-hint.visible { opacity: 1; }
 
-    /* Live Telemetry Cycling Stream */
+    /* Live Telemetry Cycling Stream — one 4.8s loop, four quarter-phase steps, repeats forever */
     .loader-telemetry {
       height: 20px;
       position: relative;
@@ -199,29 +247,30 @@
       margin-right: 4px;
     }
 
-    .step-1 { animation: teleStep1 1.55s ease forwards; }
-    .step-2 { animation: teleStep2 1.55s ease forwards; }
-    .step-3 { animation: teleStep3 1.55s ease forwards; }
-    .step-4 { animation: teleStep4 1.55s ease forwards; }
+    .step-1 { animation: teleStep1 4.8s ease infinite; }
+    .step-2 { animation: teleStep2 4.8s ease infinite; }
+    .step-3 { animation: teleStep3 4.8s ease infinite; }
+    .step-4 { animation: teleStep4 4.8s ease infinite; }
 
     @keyframes teleStep1 {
       0% { opacity: 0; transform: translateY(6px); }
-      6%, 22% { opacity: 1; transform: translateY(0); }
+      3%, 22% { opacity: 1; transform: translateY(0); }
       26%, 100% { opacity: 0; transform: translateY(-6px); }
     }
     @keyframes teleStep2 {
       0%, 25% { opacity: 0; transform: translateY(6px); }
-      31%, 48% { opacity: 1; transform: translateY(0); }
-      52%, 100% { opacity: 0; transform: translateY(-6px); }
+      28%, 47% { opacity: 1; transform: translateY(0); }
+      51%, 100% { opacity: 0; transform: translateY(-6px); }
     }
     @keyframes teleStep3 {
-      0%, 51% { opacity: 0; transform: translateY(6px); }
-      57%, 74% { opacity: 1; transform: translateY(0); }
-      78%, 100% { opacity: 0; transform: translateY(-6px); }
+      0%, 50% { opacity: 0; transform: translateY(6px); }
+      53%, 72% { opacity: 1; transform: translateY(0); }
+      76%, 100% { opacity: 0; transform: translateY(-6px); }
     }
     @keyframes teleStep4 {
-      0%, 77% { opacity: 0; transform: translateY(6px); }
-      83%, 100% { opacity: 1; transform: translateY(0); }
+      0%, 75% { opacity: 0; transform: translateY(6px); }
+      78%, 97% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-6px); }
     }
 
     /* Subsurface hero animations — defined globally so React re-renders can't reset them */
@@ -300,8 +349,8 @@
       50%      { opacity: 0.45; transform: scale(1.01); }
     }
   </style>
-  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" onload="window.__loadTick && window.__loadTick(50)"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" onload="window.__loadTick && window.__loadTick(65)"></script>
 </head>
 <body>
   <!-- 0ms Subsurface Seismic & Telemetry HUD Loading Screen -->
@@ -326,8 +375,8 @@
         <div class="loader-subtitle">GEOLOGIC CO₂ STORAGE &middot; COMPUTATIONAL FLUID DYNAMICS</div>
       </div>
 
-      <div class="loader-progress-track">
-        <div class="loader-progress-bar"></div>
+      <div class="loader-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="10" aria-label="Loading progress">
+        <div class="loader-progress-bar" id="loader-progress-bar"></div>
       </div>
 
       <div class="loader-telemetry">
@@ -344,11 +393,13 @@
           <span class="telemetry-tag">[04/04]</span> SUBSURFACE RESERVOIR DOMAIN READY
         </div>
       </div>
+
+      <div class="loader-slow-hint" id="loader-slow-hint">SLOW NETWORK DETECTED — STILL STREAMING SUBSURFACE DATA...</div>
     </div>
   </div>
 
   <div id="root"></div>
 
-  <script src="bundle.js?v=12.0"></script>
+  <script src="bundle.js?v=12.6" onload="window.__loadTick && window.__loadTick(90)"></script>
 </body>
 </html>

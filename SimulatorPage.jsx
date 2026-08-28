@@ -1,6 +1,183 @@
 // SimulatorPage.jsx — Interactive VE Simulator Page
 const { useEffect, useMemo, useRef, useState } = React;
 
+const SIM_TABS = ['profile', 'uq', 'guide'];
+
+// Declarative registry of every parameter the UQ batch can sample.
+// dec = display decimals; dec 0 params are sampled as integers.
+const UQ_PARAM_DEFS = [
+  { key: 'K', label: 'Permeability (K)', lo: 0.1, hi: 3.5, dec: 2, percentDef: 40 },
+  { key: 'residualTrapFraction', label: 'Residual Trap (Sgr)', lo: 0.0, hi: 0.40, dec: 3, percentDef: 40 },
+  { key: 'porosity', label: 'Porosity (\u03C6)', lo: 0.10, hi: 0.40, dec: 3, percentDef: 20 },
+  { key: 'Q', label: 'Injection Rate (Q)', lo: 0.0, hi: 3.5, dec: 2, percentDef: 30 },
+  { key: 'injLocation', label: 'Well Position (%)', lo: 10, hi: 90, dec: 0, percentDef: 8 },
+  { key: 'dipPercent', label: 'Regional Dip (%)', lo: -5.0, hi: 5.0, dec: 2, percentDef: 35 },
+  { key: 'amplitude', label: 'Anticline Height (px)', lo: 0, hi: 50, dec: 0, percentDef: 25 },
+  { key: 'faultThreshold', label: 'Fault Seal Threshold (m)', lo: 0.0, hi: 2.0, dec: 2, percentDef: 50, group: 'fault' },
+  { key: 'faultLeakRate', label: 'Fault Leak Rate', lo: 0.01, hi: 0.40, dec: 3, percentDef: 40, group: 'fault', leakingOnly: true },
+  { key: 'faultTransmissibility', label: 'Fault Transmissibility', lo: 0.0, hi: 1.0, dec: 2, percentDef: 30, group: 'fault' }
+];
+
+const roundDec = (v, d) => d === 0 ? Math.round(v) : +v.toFixed(d);
+
+// Parse a free-text list like "1.0, 1.5; 2  2.5" into finite numbers.
+// Empty tokens are dropped BEFORE Number() — Number('') is 0, not NaN.
+const parseValueList = (text) =>
+  (text || '').split(/[\s,;]+/).filter(t => t.length > 0).map(Number).filter(v => isFinite(v));
+
+// Draw one sample for a parameter given its config and nominal value.
+// Returns { value, sampled } — sampled=false means the nominal was used unchanged.
+const sampleUqParam = (def, cfg, nominal) => {
+  if (!cfg || !cfg.enabled) return { value: nominal, sampled: false };
+  const clampDef = (v) => Math.max(def.lo, Math.min(def.hi, v));
+
+  if (cfg.mode === 'range') {
+    let a = isFinite(cfg.min) ? cfg.min : def.lo;
+    let b = isFinite(cfg.max) ? cfg.max : def.hi;
+    if (a > b) { const t = a; a = b; b = t; }
+    return { value: roundDec(clampDef(a + Math.random() * (b - a)), def.dec), sampled: true };
+  }
+
+  if (cfg.mode === 'values') {
+    const vals = parseValueList(cfg.values);
+    if (vals.length === 0) return { value: nominal, sampled: false };
+    return { value: roundDec(clampDef(vals[Math.floor(Math.random() * vals.length)]), def.dec), sampled: true };
+  }
+
+  // percent mode (+/- of nominal)
+  const unc = (isFinite(cfg.percent) ? cfg.percent : def.percentDef) / 100;
+  return { value: roundDec(clampDef(nominal * (1.0 - unc) + Math.random() * (2.0 * unc * nominal)), def.dec), sampled: true };
+};
+
+// Per-parameter sampling config editor: enable checkbox + mode toggle + mode inputs
+const UQParamConfig = ({ def, cfg, onChange }) => {
+  const inputStyle = {
+    background: 'rgba(0,0,0,0.3)',
+    border: '1px solid rgba(255,255,255,0.15)',
+    color: '#fff',
+    padding: '3px 6px',
+    borderRadius: 6,
+    fontSize: 10.5,
+    fontFamily: 'monospace',
+    width: 58,
+    outline: 'none'
+  };
+  const numVal = (v) => isFinite(v) ? v : '';
+  const numChange = (e) => e.target.value === '' ? NaN : parseFloat(e.target.value);
+  const stepVal = def.dec === 0 ? 1 : Math.pow(10, -def.dec);
+
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 6,
+      opacity: cfg.enabled ? 1 : 0.45,
+      background: 'rgba(255,255,255,0.02)',
+      border: `1px solid ${cfg.enabled ? 'rgba(100,255,218,0.18)' : 'rgba(255,255,255,0.05)'}`,
+      borderRadius: 10,
+      padding: '8px 10px'
+    }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={cfg.enabled}
+          onChange={e => onChange({ enabled: e.target.checked })}
+          aria-label={`Include ${def.label} in uncertainty analysis`}
+          style={{ accentColor: '#64ffda' }}
+        />
+        <span style={{ color: cfg.enabled ? '#64ffda' : 'rgba(255,255,255,0.7)', fontWeight: cfg.enabled ? 'bold' : 500, flex: 1 }}>
+          {def.label}
+        </span>
+      </label>
+
+      <div style={{ display: 'flex', gap: 3 }} role="group" aria-label={`${def.label} sampling mode`}>
+        {[
+          { id: 'range', label: 'Range' },
+          { id: 'percent', label: '\u00B1%' },
+          { id: 'values', label: 'Values' }
+        ].map(m => (
+          <button
+            key={m.id}
+            onClick={() => onChange({ mode: m.id })}
+            aria-pressed={cfg.mode === m.id}
+            style={{
+              flex: 1,
+              background: cfg.mode === m.id ? 'rgba(100,255,218,0.18)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${cfg.mode === m.id ? '#64ffda' : 'rgba(255,255,255,0.10)'}`,
+              color: cfg.mode === m.id ? '#64ffda' : 'rgba(255,255,255,0.55)',
+              padding: '2px 0',
+              borderRadius: 5,
+              fontSize: 9,
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {cfg.enabled && cfg.mode === 'range' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <input
+            type="number"
+            aria-label={`${def.label} minimum value`}
+            value={numVal(cfg.min)}
+            step={stepVal}
+            min={def.lo}
+            max={def.hi}
+            onChange={e => onChange({ min: numChange(e) })}
+            style={inputStyle}
+          />
+          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>to</span>
+          <input
+            type="number"
+            aria-label={`${def.label} maximum value`}
+            value={numVal(cfg.max)}
+            step={stepVal}
+            min={def.lo}
+            max={def.hi}
+            onChange={e => onChange({ max: numChange(e) })}
+            style={inputStyle}
+          />
+        </div>
+      )}
+
+      {cfg.enabled && cfg.mode === 'percent' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: 'rgba(255,255,255,0.7)' }}>
+          <span style={{ fontFamily: 'monospace' }}>nominal &plusmn;</span>
+          <input
+            type="number"
+            aria-label={`${def.label} percent variation`}
+            value={numVal(cfg.percent)}
+            min={1}
+            max={95}
+            onChange={e => onChange({ percent: numChange(e) })}
+            style={inputStyle}
+          />
+          <span style={{ fontFamily: 'monospace' }}>%</span>
+        </div>
+      )}
+
+      {cfg.enabled && cfg.mode === 'values' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <input
+            type="text"
+            aria-label={`${def.label} discrete values, comma separated`}
+            value={cfg.values}
+            placeholder="e.g. 1.0, 1.5, 2.0"
+            onChange={e => onChange({ values: e.target.value })}
+            style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }}
+          />
+          <span style={{ fontSize: 9, color: parseValueList(cfg.values).length > 0 ? 'rgba(255,255,255,0.35)' : '#ff6b6b' }}>
+            {parseValueList(cfg.values).length} valid value{parseValueList(cfg.values).length === 1 ? '' : 's'} — sampled uniformly
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Main Simulator component
 const SimulatorPage = () => {
   // --- STATE PARAMETERS ---
@@ -47,9 +224,77 @@ const SimulatorPage = () => {
   const [activeSubTab, setActiveSubTab] = useState('profile'); // 'profile' (2D reservoir) or 'uq' (Sensitivity & UQ Analysis)
 
   // SA/UQ uncertainty bounds configuration states (default +/- percentages)
-  const [kUncertainty, setKUncertainty] = useState(0.40); // +/- 40% permeability range
-  const [sgrUncertainty, setSgrUncertainty] = useState(0.40); // +/- 40% Sgr range
-  const [faultThreshUncertainty, setFaultThreshUncertainty] = useState(0.50); // +/- 50% fault threshold range
+  // --- UQ / SA PARAMETER SELECTION CONFIG ---
+  // Each parameter the user may include in the Monte Carlo batch has a config:
+  //   enabled — participate in sampling at all
+  //   mode    — 'range' (absolute min/max) | 'percent' (+/- of nominal) | 'values' (discrete list)
+  //   percent — +/- percentage used by 'percent' mode
+  //   min/max — bounds used by 'range' mode
+  //   values  — raw text parsed to a discrete value list for 'values' mode
+  const [uqParams, setUqParams] = useState(() => {
+    const cfg = {};
+    UQ_PARAM_DEFS.forEach(d => {
+      cfg[d.key] = {
+        enabled: d.key === 'K' || d.key === 'residualTrapFraction',
+        mode: 'percent',
+        percent: d.percentDef,
+        min: roundDec(d.lo + (d.hi - d.lo) * 0.25, d.dec),
+        max: roundDec(d.hi - (d.hi - d.lo) * 0.25, d.dec),
+        values: ''
+      };
+    });
+    return cfg;
+  });
+
+  // Nominal (deterministic) value of a UQ parameter from the live UI state.
+  // Fault-grouped parameters resolve to the average across active faults.
+  const getUqNominal = (key) => {
+    switch (key) {
+      case 'K': return K;
+      case 'residualTrapFraction': return residualTrapFraction;
+      case 'porosity': return porosity;
+      case 'Q': return Q;
+      case 'injLocation': return injLocation;
+      case 'dipPercent': return dipPercent;
+      case 'amplitude': return amplitude;
+      case 'faultThreshold': {
+        const a = faults.slice(0, faultCount);
+        return a.length ? a.reduce((s, f) => s + f.thresholdHeight, 0) / a.length : 0.35;
+      }
+      case 'faultLeakRate': {
+        const a = faults.slice(0, faultCount).filter(f => !f.isSealed);
+        return a.length ? a.reduce((s, f) => s + f.leakRate, 0) / a.length : 0.14;
+      }
+      case 'faultTransmissibility': {
+        const a = faults.slice(0, faultCount);
+        return a.length ? a.reduce((s, f) => s + (f.transmissibility !== undefined ? f.transmissibility : 1.0), 0) / a.length : 1.0;
+      }
+      default: return 0;
+    }
+  };
+
+  // Patch one parameter's config; when the mode changes, seed the new mode's
+  // inputs from the current nominal (nominal ±30% for range/values).
+  const updateUqParam = (key, patch) => {
+    setUqParams(prev => {
+      const def = UQ_PARAM_DEFS.find(d => d.key === key);
+      const cur = prev[key];
+      const next = { ...cur, ...patch };
+      if (patch.mode && patch.mode !== cur.mode) {
+        const nom = getUqNominal(key);
+        if (patch.mode === 'range') {
+          next.min = roundDec(Math.min(nom * 0.7, nom * 1.3), def.dec);
+          next.max = roundDec(Math.max(nom * 0.7, nom * 1.3), def.dec);
+        } else if (patch.mode === 'values') {
+          const triple = [nom * 0.7, nom, nom * 1.3].sort((a, b) => a - b);
+          next.values = triple.map(v => String(roundDec(v, def.dec))).join(', ');
+        } else if (patch.mode === 'percent' && !isFinite(next.percent)) {
+          next.percent = def.percentDef;
+        }
+      }
+      return { ...prev, [key]: next };
+    });
+  };
 
   // Monte Carlo execution states
   const [mcRunsCount, setMcRunsCount] = useState(50); // 25, 50, or 100 simulations
@@ -68,6 +313,13 @@ const SimulatorPage = () => {
 
   // Reset flag / state synchronizer
   const stateRef = useRef({ h: [], hMax: [], masses: { injected: 0, trapped: 0, mobile: 0, leaked: 0 } });
+
+  // Immutable snapshot of the live solver parameters (faults frozen at call time).
+  // Much cheaper than a JSON round-trip and safe for Time-Machine branch diffs.
+  const snapshotParams = () => {
+    const p = solverParamsRef.current;
+    return { ...p, faults: p.faults.map(f => ({ ...f })) };
+  };
   
   // Time travel history ref — stores full solver state at each year for back-and-forth scrubbing
   const historyRef = useRef([]);
@@ -87,7 +339,7 @@ const SimulatorPage = () => {
     injDuration,
     faultCount,
     parentDX: dx,
-    faults: JSON.parse(JSON.stringify(faults)),
+    faults,
     residualTrapFraction
   };
 
@@ -132,7 +384,7 @@ const SimulatorPage = () => {
       h: [...arr],
       hMax: [...arr],
       masses: { ...initialMasses },
-      params: JSON.parse(JSON.stringify(solverParamsRef.current))
+      params: snapshotParams()
     }];
   };
 
@@ -197,57 +449,60 @@ const SimulatorPage = () => {
     }
   };
 
-  // Base unperturbed caprock profile
-  const capRockBaseProfile = (x) => {
-    const dip = 150 + x * (dipPercent / 100.0) * 8.0; // regional dip
-    const wave = - amplitude * Math.sin((x * Math.PI / 1000.0) * frequency * 2);
+  // Geometry helpers accept an optional params object `p` so Monte Carlo
+  // realizations can vary dip/amplitude/faultOffset/faults independently of
+  // the live UI state. Passing no `p` (all render call sites) uses closure state.
+  const capRockBaseProfile = (x, p) => {
+    const dip = 150 + x * ((p ? p.dipPercent : dipPercent) / 100.0) * 8.0; // regional dip
+    const wave = - (p ? p.amplitude : amplitude) * Math.sin((x * Math.PI / 1000.0) * (p ? p.frequency : frequency) * 2);
     return dip + wave;
   };
 
   // Base unperturbed stratum profile for any yOffset
-  const stratumBaseProfile = (x, yOffset = 0) => {
-    return capRockBaseProfile(x) + yOffset;
+  const stratumBaseProfile = (x, yOffset = 0, p) => {
+    return capRockBaseProfile(x, p) + yOffset;
   };
 
   // Computes the exact subpixel intersection (x*, y*) of a sloped fault plane with any geological stratum at depth
-  const getSimStratumFaultIntersection = (f, idx, yOffset = 0) => {
+  const getSimStratumFaultIntersection = (f, idx, yOffset = 0, p) => {
     const x0 = (f.xPercent / 100.0) * 1000.0;
     const defaultSlope = idx % 2 === 0 ? -0.22 : 0.25;
     const slope = f.dipSlope !== undefined ? f.dipSlope : defaultSlope;
     let x = x0;
     for (let iter = 0; iter < 3; iter++) {
-      const y = stratumBaseProfile(x, yOffset);
+      const y = stratumBaseProfile(x, yOffset, p);
       x = x0 + slope * y;
     }
-    const y = stratumBaseProfile(x, yOffset);
+    const y = stratumBaseProfile(x, yOffset, p);
     return { x, y, x0, slope };
   };
 
   // Computes intersection for caprock specifically (yOffset = 0)
-  const getSimFaultIntersection = (f, idx) => {
-    return getSimStratumFaultIntersection(f, idx, 0);
+  const getSimFaultIntersection = (f, idx, p) => {
+    return getSimStratumFaultIntersection(f, idx, 0, p);
   };
 
   // Computes elevation for any geological stratum displaced along the sloped fault
-  const stratumY = (x, cellIdx = null, yOffset = 0) => {
-    const base = stratumBaseProfile(x, yOffset);
+  const stratumY = (x, cellIdx = null, yOffset = 0, p) => {
+    const g = p || { faultOffset, faults, faultCount };
+    const base = stratumBaseProfile(x, yOffset, p);
     let offset = 0;
     const xRef = cellIdx !== null ? (cellIdx * dx + dx / 2.0) : x;
     
-    for (let idx = 0; idx < faultCount; idx++) {
-      const f = faults[idx];
-      const inter = getSimStratumFaultIntersection(f, idx, yOffset);
+    for (let idx = 0; idx < g.faultCount; idx++) {
+      const f = g.faults[idx];
+      const inter = getSimStratumFaultIntersection(f, idx, yOffset, p);
       if (xRef > inter.x) {
         const direction = idx % 2 === 0 ? 1 : -1;
-        offset += direction * faultOffset * 12;
+        offset += direction * g.faultOffset * 12;
       }
     }
     return base + offset;
   };
 
   // Helper: Caprock Underside Topography Function
-  const capRockY = (x, cellIdx = null) => {
-    return stratumY(x, cellIdx, 0);
+  const capRockY = (x, cellIdx = null, p) => {
+    return stratumY(x, cellIdx, 0, p);
   };
 
   // --- SOLVER ITERATOR (FORWARD & REVERSE) ---
@@ -298,7 +553,7 @@ const SimulatorPage = () => {
             h: [...result.h],
             hMax: [...result.hMax],
             masses: { ...result.masses },
-            params: JSON.parse(JSON.stringify(solverParamsRef.current))
+            params: snapshotParams()
           };
 
           return nextTime;
@@ -472,6 +727,15 @@ const SimulatorPage = () => {
     return diffs;
   };
 
+  // Accessible tab switching (Left/Right arrows while focus is inside the tablist)
+  const handleTabKeys = (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const idx = SIM_TABS.indexOf(activeSubTab);
+    const dir = e.key === 'ArrowRight' ? 1 : SIM_TABS.length - 1;
+    setActiveSubTab(SIM_TABS[(idx + dir) % SIM_TABS.length]);
+  };
+
   // Play controls toggles
   const handlePlayToggle = () => {
     if (isReversing) {
@@ -536,7 +800,7 @@ const SimulatorPage = () => {
       h: [...result.h],
       hMax: [...result.hMax],
       masses: { ...result.masses },
-      params: JSON.parse(JSON.stringify(solverParamsRef.current))
+      params: snapshotParams()
     };
   };
 
@@ -578,35 +842,66 @@ const SimulatorPage = () => {
     const nominalK = K;
     const nominalSgr = residualTrapFraction;
     const nominalFaults = faults.map(f => ({ ...f }));
+    const activeFaults = nominalFaults.slice(0, faultCount);
+    const leakingFaults = activeFaults.filter(f => !f.isSealed);
+    const anyLeaking = leakingFaults.length > 0;
 
-    // Generate parameter sets for each realization (Uniform distribution)
+    const nominals = {
+      K: nominalK,
+      residualTrapFraction: nominalSgr,
+      porosity: porosity,
+      Q: Q,
+      injLocation: injLocation,
+      dipPercent: dipPercent,
+      amplitude: amplitude,
+      faultThreshold: activeFaults.length ? activeFaults.reduce((s, f) => s + f.thresholdHeight, 0) / activeFaults.length : 0.35,
+      faultLeakRate: anyLeaking ? leakingFaults.reduce((s, f) => s + f.leakRate, 0) / leakingFaults.length : 0.14,
+      faultTransmissibility: activeFaults.length ? activeFaults.reduce((s, f) => s + (f.transmissibility !== undefined ? f.transmissibility : 1.0), 0) / activeFaults.length : 1.0
+    };
+
+    const defOf = (key) => UQ_PARAM_DEFS.find(d => d.key === key);
+    const sampledKeys = new Set();
+
+    // Generate parameter sets for each realization
     const realizations = [];
     for (let i = 0; i < totalRuns; i++) {
-      // 1. Permeability K
-      const kMin = nominalK * (1.0 - kUncertainty);
-      const kMax = nominalK * (1.0 + kUncertainty);
-      const randK = Math.max(0.1, kMin + Math.random() * (kMax - kMin));
+      const s = {};
+      UQ_PARAM_DEFS.forEach(def => {
+        if (def.group === 'fault') return; // sampled per-fault below
+        const r = sampleUqParam(def, uqParams[def.key], nominals[def.key]);
+        s[def.key] = r.value;
+        if (r.sampled) sampledKeys.add(def.key);
+      });
 
-      // 2. Residual Trap Fraction Sgr
-      const sgrMin = nominalSgr * (1.0 - sgrUncertainty);
-      const sgrMax = nominalSgr * (1.0 + sgrUncertainty);
-      const randSgr = Math.max(0.0, Math.min(0.40, sgrMin + Math.random() * (sgrMax - sgrMin)));
-
-      // 3. Fault Capillary Threshold
       const randFaults = nominalFaults.map(f => {
-        const threshMin = f.thresholdHeight * (1.0 - faultThreshUncertainty);
-        const threshMax = f.thresholdHeight * (1.0 + faultThreshUncertainty);
-        const randThresh = Math.max(0.0, Math.min(2.0, threshMin + Math.random() * (threshMax - threshMin)));
-        return {
-          ...f,
-          thresholdHeight: randThresh
-        };
+        const nf = { ...f };
+        ['faultThreshold', 'faultLeakRate', 'faultTransmissibility'].forEach(key => {
+          if (faultCount === 0) return;
+          const def = defOf(key);
+          if (key === 'faultLeakRate' && (f.isSealed || !anyLeaking)) return;
+          const base = key === 'faultThreshold' ? f.thresholdHeight
+            : key === 'faultLeakRate' ? f.leakRate
+            : (f.transmissibility !== undefined ? f.transmissibility : 1.0);
+          const r = sampleUqParam(def, uqParams[key], base);
+          if (r.sampled) {
+            if (key === 'faultThreshold') nf.thresholdHeight = r.value;
+            else if (key === 'faultLeakRate') nf.leakRate = r.value;
+            else nf.transmissibility = r.value;
+            sampledKeys.add(key);
+          }
+        });
+        return nf;
       });
 
       realizations.push({
         id: i,
-        K: randK,
-        residualTrapFraction: randSgr,
+        K: s.K,
+        residualTrapFraction: s.residualTrapFraction,
+        porosity: s.porosity,
+        Q: s.Q,
+        injLocation: s.injLocation,
+        dipPercent: s.dipPercent,
+        amplitude: s.amplitude,
         faults: randFaults
       });
     }
@@ -621,14 +916,14 @@ const SimulatorPage = () => {
         // Define solver params for this specific run
         const runParams = {
           K: r.K,
-          porosity: porosity,
+          porosity: r.porosity,
           cellCount: cellCount,
-          dipPercent: dipPercent,
-          amplitude: amplitude,
+          dipPercent: r.dipPercent,
+          amplitude: r.amplitude,
           frequency: frequency,
           faultOffset: faultOffset,
-          Q: Q,
-          injLocation: injLocation,
+          Q: r.Q,
+          injLocation: r.injLocation,
           injDuration: injDuration,
           faultCount: faultCount,
           parentDX: dx,
@@ -673,7 +968,7 @@ const SimulatorPage = () => {
         setTimeout(() => runChunk(endIndex), 25);
       } else {
         setUqRunning(false);
-        setMcResults(results);
+        setMcResults({ runs: results, sampledKeys: Array.from(sampledKeys) });
       }
     };
 
@@ -712,20 +1007,21 @@ const SimulatorPage = () => {
   // Memoized UQ statistics computations
   const uqData = useMemo(() => {
     if (!mcResults) return null;
-    
-    const vals = mcResults.map(r => 
+    const runs = mcResults.runs;
+
+    const vals = runs.map(r =>
       uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency
     );
     const sorted = [...vals].sort((a, b) => a - b);
-    
+
     const p10Val = getPercentile(sorted, 10);
     const p50Val = getPercentile(sorted, 50);
     const p90Val = getPercentile(sorted, 90);
-    
+
     const findClosestRealization = (targetVal) => {
-      let closest = mcResults[0];
+      let closest = runs[0];
       let minDiff = Infinity;
-      mcResults.forEach(r => {
+      runs.forEach(r => {
         const val = uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency;
         const diff = Math.abs(val - targetVal);
         if (diff < minDiff) {
@@ -774,96 +1070,141 @@ const SimulatorPage = () => {
     };
   }, [mcResults, uqTargetMetric]);
 
-  // Memoized Sensitivity correlations
+  // Memoized Sensitivity correlations — only ranks parameters actually
+  // sampled in the batch (per mcResults.sampledKeys).
   const sensitivityData = useMemo(() => {
     if (!mcResults) return null;
-    
-    const yVals = mcResults.map(r => 
+    const { runs, sampledKeys } = mcResults;
+    if (!sampledKeys || sampledKeys.length === 0) return [];
+
+    const yVals = runs.map(r =>
       uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency
     );
-    
-    const kVals = mcResults.map(r => r.params.K);
-    const sgrVals = mcResults.map(r => r.params.residualTrapFraction);
-    
-    const faultThreshVals = mcResults.map(r => {
-      const activeFaults = r.params.faults.slice(0, faultCount);
-      if (activeFaults.length === 0) return 0;
-      const sum = activeFaults.reduce((a, b) => a + b.thresholdHeight, 0);
-      return sum / activeFaults.length;
-    });
 
-    const kCorr = computeCorrelation(kVals, yVals);
-    const sgrCorr = computeCorrelation(sgrVals, yVals);
-    const faultCorr = faultCount > 0 ? computeCorrelation(faultThreshVals, yVals) : 0;
-    
-    return [
-      { label: 'Permeability (K)', r: kCorr },
-      { label: 'Residual Trapping (Sgr)', r: sgrCorr },
-      ...(faultCount > 0 ? [{ label: 'Fault Seal Height', r: faultCorr }] : [])
-    ].sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
+    const scalarGetters = {
+      K: r => r.params.K,
+      residualTrapFraction: r => r.params.residualTrapFraction,
+      porosity: r => r.params.porosity,
+      Q: r => r.params.Q,
+      injLocation: r => r.params.injLocation,
+      dipPercent: r => r.params.dipPercent,
+      amplitude: r => r.params.amplitude
+    };
+
+    const faultGetters = {
+      faultThreshold: r => {
+        const a = r.params.faults.slice(0, faultCount);
+        return a.length ? a.reduce((s, f) => s + f.thresholdHeight, 0) / a.length : 0;
+      },
+      faultLeakRate: r => {
+        const a = r.params.faults.slice(0, faultCount).filter(f => !f.isSealed);
+        return a.length ? a.reduce((s, f) => s + f.leakRate, 0) / a.length : 0;
+      },
+      faultTransmissibility: r => {
+        const a = r.params.faults.slice(0, faultCount);
+        return a.length ? a.reduce((s, f) => s + (f.transmissibility !== undefined ? f.transmissibility : 1.0), 0) / a.length : 0;
+      }
+    };
+
+    return sampledKeys.map(key => {
+      const def = UQ_PARAM_DEFS.find(d => d.key === key);
+      const getter = def.group === 'fault' ? faultGetters[key] : scalarGetters[key];
+      return { label: def.label, r: computeCorrelation(runs.map(getter), yVals) };
+    }).sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
   }, [mcResults, uqTargetMetric, faultCount]);
 
   // Load a selected Monte Carlo model back to 2D simulator
   const loadUQRealization = (realization) => {
     if (!realization) return;
-    
-    setK(parseFloat(realization.params.K.toFixed(3)));
-    setResidualTrapFraction(parseFloat(realization.params.residualTrapFraction.toFixed(3)));
-    
+
+    // 1. Apply the realization's parameters to the live UI controls
+    const loadedK = parseFloat(realization.params.K.toFixed(3));
+    const loadedSgr = parseFloat(realization.params.residualTrapFraction.toFixed(3));
+    const loadedPor = parseFloat(realization.params.porosity.toFixed(3));
+    const loadedQ = parseFloat(realization.params.Q.toFixed(3));
+    const loadedInjLoc = Math.round(realization.params.injLocation);
+    const loadedDip = parseFloat(realization.params.dipPercent.toFixed(2));
+    const loadedAmp = Math.round(realization.params.amplitude);
+
+    setK(loadedK);
+    setResidualTrapFraction(loadedSgr);
+    setPorosity(loadedPor);
+    setQ(loadedQ);
+    setInjLocation(loadedInjLoc);
+    setDipPercent(loadedDip);
+    setAmplitude(loadedAmp);
+
     const newFaults = faults.map((f, i) => {
       const rf = realization.params.faults[i];
       if (rf) {
         return {
           ...f,
-          thresholdHeight: parseFloat(rf.thresholdHeight.toFixed(3))
+          thresholdHeight: parseFloat(rf.thresholdHeight.toFixed(3)),
+          leakRate: rf.leakRate !== undefined ? parseFloat(rf.leakRate.toFixed(3)) : f.leakRate,
+          transmissibility: rf.transmissibility !== undefined ? parseFloat(rf.transmissibility.toFixed(3)) : (f.transmissibility !== undefined ? f.transmissibility : 1.0)
         };
       }
       return f;
     });
     setFaults(newFaults);
 
-    setH(realization.h);
-    setHMax(realization.hMax);
-    const finalMasses = {
-      injected: realization.finalInjected,
-      trapped: realization.finalTrapped,
-      mobile: realization.finalMobile,
-      leaked: realization.finalLeaked
+    // 2. Snapshot the realization's EXACT solver params (the ref still holds
+    //    the pre-load values until the next render, so build it explicitly).
+    const loadedParams = {
+      K: loadedK,
+      porosity: loadedPor,
+      cellCount,
+      dipPercent: loadedDip,
+      amplitude: loadedAmp,
+      frequency,
+      faultOffset,
+      Q: loadedQ,
+      injLocation: loadedInjLoc,
+      injDuration,
+      faultCount,
+      parentDX: dx,
+      faults: newFaults.map(f => ({ ...f })),
+      residualTrapFraction: loadedSgr
     };
-    setCurrentMasses(finalMasses);
+    solverParamsRef.current = loadedParams;
+
+    // 3. Replay the realization year-by-year so the ENTIRE timeline is
+    //    scrubbable (previously only years 0 and 1000 existed, which left
+    //    the seek slider, milestones, play and scrub dead after loading).
+    let rH = new Array(cellCount).fill(0);
+    let rHMax = new Array(cellCount).fill(0);
+    let rMasses = { injected: 0, trapped: 0, mobile: 0, leaked: 0 };
+    const replayHistory = [{
+      time: 0, h: [...rH], hMax: [...rHMax], masses: { ...rMasses }, params: snapshotParams()
+    }];
+    const replayMassHistory = [{ time: 0, ...rMasses }];
+    for (let yr = 1; yr <= 1000; yr++) {
+      const res = runSolverStep(rH, rHMax, rMasses, yr, loadedParams);
+      rH = res.h;
+      rHMax = res.hMax;
+      rMasses = res.masses;
+      replayHistory.push({
+        time: yr, h: [...res.h], hMax: [...res.hMax], masses: { ...res.masses }, params: snapshotParams()
+      });
+      if (yr % 5 === 0 || yr === 1) replayMassHistory.push({ time: yr, ...res.masses });
+    }
+
+    setH(rH);
+    setHMax(rHMax);
+    setCurrentMasses(rMasses);
+    setMassHistory(replayMassHistory);
     setSimTime(1000);
     setIsPlaying(false);
     setIsReversing(false);
 
     stateRef.current = {
-      h: [...realization.h],
-      hMax: [...realization.hMax],
-      masses: { ...finalMasses }
+      h: [...rH],
+      hMax: [...rHMax],
+      masses: { ...rMasses }
     };
 
-    const emptyArr = new Array(cellCount).fill(0);
-    historyRef.current = [
-      {
-        time: 0,
-        h: emptyArr,
-        hMax: emptyArr,
-        masses: { injected: 0, trapped: 0, mobile: 0, leaked: 0 },
-        params: JSON.parse(JSON.stringify(solverParamsRef.current))
-      },
-      {
-        time: 1000,
-        h: [...realization.h],
-        hMax: [...realization.hMax],
-        masses: { ...finalMasses },
-        params: JSON.parse(JSON.stringify(solverParamsRef.current))
-      }
-    ];
+    historyRef.current = replayHistory;
 
-    setMassHistory([
-      { time: 0, injected: 0, trapped: 0, mobile: 0, leaked: 0 },
-      { time: 1000, ...finalMasses }
-    ]);
-    
     setActiveSubTab('profile');
   };
 
@@ -938,20 +1279,19 @@ const SimulatorPage = () => {
     );
   };
 
-  // SVG Sensitivity Tornado Renderer
+  // SVG Sensitivity Tornado Renderer (height adapts to number of parameters)
   const renderUQSensitivity = (data) => {
     const width = 450;
-    const height = 200;
     const padding = { left: 140, right: 30, top: 25, bottom: 20 };
+    const barHeight = 24;
+    const gap = 16;
+    const height = padding.top + padding.bottom + Math.max(1, data.length) * (barHeight + gap) - gap;
     
     const centerOffset = padding.left + (width - padding.left - padding.right) / 2;
     const halfPlotWidth = (width - padding.left - padding.right) / 2;
     
     const getX = (r) => centerOffset + r * halfPlotWidth;
-    
-    const barHeight = 24;
-    const gap = 16;
-    
+
     return (
       <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
         {[-1.0, -0.5, 0, 0.5, 1.0].map((tick, i) => {
@@ -1039,7 +1379,7 @@ const SimulatorPage = () => {
     // Physical coordinate depth array (scaled by 1/15)
     const zt = new Array(N).fill(0);
     for (let i = 0; i < N; i++) {
-      zt[i] = capRockY(i * dx + dx / 2.0, i) / 15.0;
+      zt[i] = capRockY(i * dx + dx / 2.0, i, params) / 15.0;
     }
 
     // Run explicit finite volume integration substeps
@@ -1067,7 +1407,7 @@ const SimulatorPage = () => {
         for (let idx = 0; idx < faultCount; idx++) {
           const f = faults[idx];
           if (f) {
-            const inter = getSimFaultIntersection(f, idx);
+            const inter = getSimFaultIntersection(f, idx, params);
             const cellFaultIdx = Math.round(inter.x / dx);
             if (cellFaultIdx - 1 === i) {
               if (f.isSealed) {
@@ -1116,7 +1456,7 @@ const SimulatorPage = () => {
       for (let idx = 0; idx < faultCount; idx++) {
         const f = faults[idx];
         if (!f.isSealed) {
-          const inter = getSimFaultIntersection(f, idx);
+          const inter = getSimFaultIntersection(f, idx, params);
           const cellFaultIdx = Math.round(inter.x / dx);
           const boundedIdx = Math.max(0, Math.min(N - 1, cellFaultIdx));
           
@@ -1230,53 +1570,12 @@ const SimulatorPage = () => {
     return { kStart, kEnd };
   };
 
-  // Trapped CO2 sits directly under the caprock
-  const getTrappedPath = () => {
-    const N = cellCount;
-    const scale = 15.0;
-    
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hTrapped, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    
-    return buildSmoothRibbon(
-      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k),
-      (k, side) => {
-        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-        return Math.min(yBotMax, yTop + getSimNodeValue(hTrapped, k, side) * scale);
-      },
-      bounds.kStart, bounds.kEnd
-    );
-  };
-
-  // Mobile CO2 flows beneath the trapped layer
-  const getMobilePath = () => {
-    const N = cellCount;
-    const scale = 15.0;
-    
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hMobile, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    
-    return buildSmoothRibbon(
-      (k, side) => {
-        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-        return Math.min(yBotMax, yTop + getSimNodeValue(hTrapped, k, side) * scale);
-      },
-      (k, side) => {
-        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-        return Math.min(yBotMax, yTop + (getSimNodeValue(hTrapped, k, side) + getSimNodeValue(hMobile, k, side)) * scale);
-      },
-      bounds.kStart, bounds.kEnd
-    );
-  };
-
   // Swept Residual Trapping Footprint (hTrapped)
+  // Fringe thickness modulated by entry pressure: higher P_e => thinner imbibe transition (Brooks-Corey)
   const getSweptResidualSimPath = () => {
     const N = cellCount;
     const scale = 15.0;
-    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.25 : 0;
+    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.25 * (15.0 / entryPressure) : 0;
     
     const bounds = getSimActiveBounds(k => getSimNodeValue(hTrapped, k, 'avg'), N, 0.001);
     if (!bounds) return "";
@@ -1298,7 +1597,7 @@ const SimulatorPage = () => {
   const getActiveMobileSimPath = () => {
     const N = cellCount;
     const scale = 15.0;
-    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.35 : 0;
+    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.35 * (15.0 / entryPressure) : 0;
     
     const bounds = getSimActiveBounds(k => getSimNodeValue(hMobile, k, 'avg'), N, 0.001);
     if (!bounds) return "";
@@ -1349,6 +1648,15 @@ const SimulatorPage = () => {
     }
     return path;
   };
+
+  // Build the three heavy plume geometry strings once per state/param change
+  // instead of twice per render (they were previously invoked for both the
+  // emptiness check and the path data on every tick).
+  const plumePaths = useMemo(() => ({
+    swept: getSweptResidualSimPath(),
+    mobile: getActiveMobileSimPath(),
+    maxEnv: getMaxHgLinePath()
+  }), [hMobile, hTrapped, hMax, cellCount, dx, dipPercent, amplitude, frequency, faultOffset, faultCount, faults, hasCapillaryFringe, fringeScale, entryPressure]);
 
   // Reservoir Conformable Grid block columns
   const reservoirBlocks = useMemo(() => {
@@ -1520,6 +1828,7 @@ const SimulatorPage = () => {
           </h3>
           <button 
             onClick={() => setSidebarOpen(false)} 
+            aria-label="Close Time Machine panel"
             style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 16 }}
             title="Close panel"
           >
@@ -1530,7 +1839,7 @@ const SimulatorPage = () => {
         {/* Current State / Mode Status Card */}
         {(() => {
           const isPast = simTime < historyRef.current.length - 1;
-          const paramDiffs = getParamDiff();
+          const paramDiffs = sidebarOpen ? getParamDiff() : [];
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
               
@@ -1614,18 +1923,19 @@ const SimulatorPage = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.05)', padding: 8, borderRadius: 10 }}>
                   
                   {/* Step Back */}
-                  <button onClick={stepBackward} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', opacity: simTime > 0 ? 0.8 : 0.3 }} disabled={simTime === 0} title="Step Back 1 Year">
+                  <button onClick={stepBackward} aria-label="Step back 1 year" style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', opacity: simTime > 0 ? 0.8 : 0.3 }} disabled={simTime === 0} title="Step Back 1 Year">
                     <i className="fas fa-step-backward" style={{ fontSize: 10 }} />
                   </button>
                   
                   {/* Play Reverse */}
-                  <button onClick={handlePlayReverseToggle} style={{ background: 'none', border: 'none', color: isReversing ? '#ff6b6b' : '#64ffda', cursor: 'pointer' }} title={isReversing ? "Pause" : "Play Reverse"}>
+                  <button onClick={handlePlayReverseToggle} aria-label={isReversing ? 'Pause reverse playback' : 'Play backward'} style={{ background: 'none', border: 'none', color: isReversing ? '#ff6b6b' : '#64ffda', cursor: 'pointer' }} title={isReversing ? "Pause" : "Play Reverse"}>
                     <i className={`fas ${isReversing ? 'fa-pause' : 'fa-play fa-flip-horizontal'}`} style={{ fontSize: 11 }} />
                   </button>
                   
                   {/* Pause */}
                   <button 
                     onClick={() => { setIsPlaying(false); setIsReversing(false); }} 
+                    aria-label="Pause simulation"
                     style={{ background: 'none', border: 'none', color: (!isPlaying && !isReversing) ? '#ffb300' : '#fff', cursor: 'pointer' }} 
                     title="Pause"
                   >
@@ -1633,12 +1943,12 @@ const SimulatorPage = () => {
                   </button>
                   
                   {/* Play Forward */}
-                  <button onClick={handlePlayToggle} style={{ background: 'none', border: 'none', color: isPlaying ? '#0dfca2' : '#64ffda', cursor: 'pointer' }} title={isPlaying ? "Pause" : "Play Forward"}>
+                  <button onClick={handlePlayToggle} aria-label={isPlaying ? 'Pause simulation' : 'Play simulation forward'} style={{ background: 'none', border: 'none', color: isPlaying ? '#0dfca2' : '#64ffda', cursor: 'pointer' }} title={isPlaying ? "Pause" : "Play Forward"}>
                     <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`} style={{ fontSize: 11 }} />
                   </button>
                   
                   {/* Step Forward */}
-                  <button onClick={stepForward} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', opacity: simTime < 1000 ? 0.8 : 0.3 }} disabled={simTime >= 1000} title="Step Forward 1 Year">
+                  <button onClick={stepForward} aria-label="Step forward 1 year" style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', opacity: simTime < 1000 ? 0.8 : 0.3 }} disabled={simTime >= 1000} title="Step Forward 1 Year">
                     <i className="fas fa-step-forward" style={{ fontSize: 10 }} />
                   </button>
                 </div>
@@ -1707,14 +2017,22 @@ const SimulatorPage = () => {
                     const isCurrent = m === simTime;
                     
                     return (
-                      <div 
-                        key={idx} 
+                      <button
+                        key={idx}
                         onClick={() => isAvailable && handleScrub(m)}
-                        style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: 12, 
-                          padding: '6px 0', 
+                        disabled={!isAvailable}
+                        aria-label={`Jump to year ${m}${isCurrent ? ' (current)' : ''}`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          padding: '6px 0',
+                          background: 'none',
+                          border: 'none',
+                          color: 'inherit',
+                          font: 'inherit',
+                          textAlign: 'left',
+                          width: '100%',
                           cursor: isAvailable ? 'pointer' : 'default',
                           opacity: isAvailable ? 1 : 0.35
                         }}
@@ -1739,9 +2057,9 @@ const SimulatorPage = () => {
                           color: isCurrent ? '#0dfca2' : 'rgba(255,255,255,0.7)',
                           fontWeight: isCurrent ? 'bold' : 'normal'
                         }}>
-                          Year {m} {isCurrent && '←'}
+                          Year {m} {isCurrent && '\u2190'}
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -1912,9 +2230,13 @@ const SimulatorPage = () => {
               background: 'rgba(0,0,0,0.15)',
               minHeight: '48px'
             }}>
-              <div style={{ display: 'flex', gap: 4 }}>
+              <div style={{ display: 'flex', gap: 4 }} role="tablist" aria-label="Simulator views" onKeyDown={handleTabKeys}>
                 <button 
                   onClick={() => setActiveSubTab('profile')}
+                  role="tab"
+                  id="tab-profile"
+                  aria-selected={activeSubTab === 'profile'}
+                  aria-controls="tabpanel-profile"
                   style={{
                     background: activeSubTab === 'profile' ? 'rgba(100, 255, 218, 0.08)' : 'none',
                     border: 'none',
@@ -1934,6 +2256,10 @@ const SimulatorPage = () => {
                 </button>
                 <button 
                   onClick={() => setActiveSubTab('uq')}
+                  role="tab"
+                  id="tab-uq"
+                  aria-selected={activeSubTab === 'uq'}
+                  aria-controls="tabpanel-uq"
                   style={{
                     background: activeSubTab === 'uq' ? 'rgba(100, 255, 218, 0.08)' : 'none',
                     border: 'none',
@@ -1953,6 +2279,10 @@ const SimulatorPage = () => {
                 </button>
                 <button 
                   onClick={() => setActiveSubTab('guide')}
+                  role="tab"
+                  id="tab-guide"
+                  aria-selected={activeSubTab === 'guide'}
+                  aria-controls="tabpanel-guide"
                   style={{
                     background: activeSubTab === 'guide' ? 'rgba(100, 255, 218, 0.08)' : 'none',
                     border: 'none',
@@ -1986,7 +2316,7 @@ const SimulatorPage = () => {
             {(() => {
               if (activeSubTab === 'profile') {
                 return (
-                  <div style={{ flex: 1, position: 'relative', display: 'flex', background: '#1c1626' }}>
+                  <div id="tabpanel-profile" role="tabpanel" aria-labelledby="tab-profile" style={{ flex: 1, position: 'relative', display: 'flex', background: '#1c1626' }}>
                     {/* Floating HUD Legend */}
                     <div style={{
                       position: 'absolute', top: 12, right: 12,
@@ -2112,19 +2442,19 @@ const SimulatorPage = () => {
                 {/* CO2 Plume Multiphase Fluid Body */}
                 <g clipPath="url(#caprock-clipper)">
                   {/* 1. Swept Residual Trapped Gas Footprint (S_gr) */}
-                  {getSweptResidualSimPath() && (
-                    <path d={getSweptResidualSimPath()} fill="url(#residual-trapped-sim-grad)" opacity="0.92" />
+                  {plumePaths.swept && (
+                    <path d={plumePaths.swept} fill="url(#residual-trapped-sim-grad)" opacity="0.92" />
                   )}
 
                   {/* 2. Active Flowing Mobile Plume (S_max) */}
-                  {getActiveMobileSimPath() && (
-                    <path d={getActiveMobileSimPath()} fill="url(#active-mobile-sim-grad)" opacity="0.98" />
+                  {plumePaths.mobile && (
+                    <path d={plumePaths.mobile} fill="url(#active-mobile-sim-grad)" opacity="0.98" />
                   )}
 
                   {/* 3. Maximum Historic Gas Saturation Boundary (hMax Swept Footprint Dashed Line) */}
-                  {getMaxHgLinePath() && (
+                  {plumePaths.maxEnv && (
                     <path 
-                      d={getMaxHgLinePath()} 
+                      d={plumePaths.maxEnv} 
                       fill="none" 
                       stroke="#64ffda" 
                       strokeWidth="1.4" 
@@ -2150,10 +2480,6 @@ const SimulatorPage = () => {
                     <g>
                       {/* Vertical steel casing tubing */}
                       <line x1={xWell} y1="0" x2={xWell} y2={yCap + 120} stroke="url(#well-gradient)" strokeWidth="4"/>
-                      {/* Perforations indicator */}
-                      {Q > 0 && simTime <= injDuration && (
-                        <circle cx={xWell} cy={yCap + 90} r="10" fill="rgba(100,255,218,0.25)" style={{ animation: 'pulseFlare 1.5s infinite' }}/>
-                      )}
                       {/* Flow bubbles in tubing */}
                       {Q > 0 && isPlaying && simTime <= injDuration && [0, 0.3, 0.6, 0.9].map((delay, idx) => (
                         <circle key={idx} cx={xWell} cy={yCap * (idx/4.0)} r="2" fill="#0dfca2" style={{ animation: `streakRise 1.5s linear ${delay}s infinite` }}/>
@@ -2178,8 +2504,10 @@ const SimulatorPage = () => {
                   );
                 })}
 
-                {/* Leaking CO2 conduit stream ascending along the sloped fault plane */}
-                {isPlaying && Array.from({ length: faultCount }).map((_, idx) => {
+                {/* Leaking CO2 conduit stream ascending along the sloped fault plane.
+                    Rendered whenever the plume height exceeds the spill threshold,
+                    so scrubbed/paused states stay visually consistent with the physics. */}
+                {Array.from({ length: faultCount }).map((_, idx) => {
                   const f = faults[idx];
                   if (f.isSealed) return null;
                   const inter = getSimFaultIntersection(f, idx);
@@ -2254,6 +2582,7 @@ const SimulatorPage = () => {
                 {/* Play Reverse */}
                 <button 
                   onClick={handlePlayReverseToggle} 
+                  aria-label={isReversing ? 'Pause reverse playback' : 'Play backward'}
                   style={{ background: 'none', border: 'none', color: isReversing ? '#ff6b6b' : '#64ffda', cursor: 'pointer', outline: 'none' }} 
                   title={isReversing ? "Pause Reverse" : "Reverse Play"}
                 >
@@ -2262,6 +2591,7 @@ const SimulatorPage = () => {
                 {/* Play/Pause Forward */}
                 <button 
                   onClick={handlePlayToggle} 
+                  aria-label={isPlaying ? 'Pause simulation' : 'Play simulation forward'}
                   style={{ background: 'none', border: 'none', color: isPlaying ? '#0dfca2' : '#64ffda', cursor: 'pointer', outline: 'none' }} 
                   title={isPlaying ? "Pause" : "Play Forward"}
                 >
@@ -2270,6 +2600,7 @@ const SimulatorPage = () => {
                 {/* Step Backward */}
                 <button 
                   onClick={stepBackward} 
+                  aria-label="Step 1 year backward"
                   style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', outline: 'none' }} 
                   title="Step 1 Year Backward"
                 >
@@ -2278,13 +2609,14 @@ const SimulatorPage = () => {
                 {/* Step Forward */}
                 <button 
                   onClick={stepForward} 
+                  aria-label="Step 1 year forward"
                   style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', outline: 'none' }} 
                   title="Step 1 Year Forward"
                 >
                   <i className="fas fa-step-forward" style={{ fontSize: 10 }}/>
                 </button>
                 {/* Reset */}
-                <button onClick={resetSimulation} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', outline: 'none' }} title="Reset Simulation">
+                <button onClick={resetSimulation} aria-label="Reset simulation" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', outline: 'none' }} title="Reset Simulation">
                   <i className="fas fa-redo" style={{ fontSize: 11 }}/>
                 </button>
                 <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.2)' }}/>
@@ -2300,6 +2632,7 @@ const SimulatorPage = () => {
                   min="0" 
                   max={Math.max(1, historyRef.current.length - 1)}
                   value={simTime}
+                  aria-label="Seek simulation year"
                   onChange={e => handleScrub(parseInt(e.target.value))}
                   style={{
                     flex: 1,
@@ -2324,13 +2657,18 @@ const SimulatorPage = () => {
         } else if (activeSubTab === 'uq') {
           return (
               /* Sensitivity & UQ Dashboard UI panel */
-              <div style={{ 
-                flex: 1, 
-                display: 'flex', 
-                flexDirection: 'column', 
-                background: '#1c1626', 
-                padding: '20px 25px', 
-                gap: 20, 
+              <div
+                id="tabpanel-uq"
+                role="tabpanel"
+                aria-labelledby="tab-uq"
+                tabIndex={0}
+                style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                background: '#1c1626',
+                padding: '20px 25px',
+                gap: 20,
                 overflowY: 'auto',
                 minHeight: 450
               }}>
@@ -2344,13 +2682,24 @@ const SimulatorPage = () => {
                   borderRadius: 14,
                   padding: 16
                 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Uncertainty Ranges</span>
-                    <Slider label="Permeability (K) range" val={`\u00B1${Math.round(kUncertainty*100)}%`} min="0.10" max="0.80" step="0.05" value={kUncertainty} onChange={v => setKUncertainty(parseFloat(v))} />
-                    <Slider label="Residual Trap (Sgr) range" val={`\u00B1${Math.round(sgrUncertainty*100)}%`} min="0.10" max="0.80" step="0.05" value={sgrUncertainty} onChange={v => setSgrUncertainty(parseFloat(v))} />
-                    {faultCount > 0 && (
-                      <Slider label="Fault Seal Threshold range" val={`\u00B1${Math.round(faultThreshUncertainty*100)}%`} min="0.10" max="0.80" step="0.05" value={faultThreshUncertainty} onChange={v => setFaultThreshUncertainty(parseFloat(v))} />
-                    )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Uncertainty Parameters</span>
+                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', marginTop: -6 }}>
+                      Select parameters, then pick an absolute range, a &plusmn;% band, or discrete values.
+                    </span>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxHeight: 340, overflowY: 'auto', paddingRight: 4 }}>
+                      {UQ_PARAM_DEFS
+                        .filter(def => !(def.group === 'fault' && faultCount === 0))
+                        .filter(def => !(def.key === 'faultLeakRate' && !faults.slice(0, faultCount).some(f => !f.isSealed)))
+                        .map(def => (
+                          <UQParamConfig
+                            key={def.key}
+                            def={def}
+                            cfg={uqParams[def.key]}
+                            onChange={patch => updateUqParam(def.key, patch)}
+                          />
+                        ))}
+                    </div>
                   </div>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -2386,6 +2735,7 @@ const SimulatorPage = () => {
                        <select 
                          value={uqTargetMetric} 
                          onChange={e => setUqTargetMetric(e.target.value)}
+                         aria-label="Target storage metric"
                          style={{
                            background: 'rgba(0,0,0,0.3)',
                            border: '1px solid rgba(255,255,255,0.15)',
@@ -2467,7 +2817,12 @@ const SimulatorPage = () => {
                         <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>
                           Parameter Correlation Coefficients (Pearson r)
                         </span>
-                        {renderUQSensitivity(sensitivityData)}
+                        {sensitivityData && sensitivityData.length > 0 ? renderUQSensitivity(sensitivityData) : (
+                          <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)', fontSize: 10.5, color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 16 }}>
+                            No parameters were varied in this batch.
+                            <br />Enable at least one uncertainty parameter and re-run.
+                          </div>
+                        )}
                       </div>
 
                     </div>
@@ -2551,30 +2906,40 @@ const SimulatorPage = () => {
                    }}>
                      <i className="fas fa-calculator" style={{ fontSize: 36, color: 'rgba(255,255,255,0.15)', marginBottom: 15 }} />
                      <h4 style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>Uncalculated Probability Space</h4>
-                     <p style={{ margin: '6px 0 0', fontSize: 11.5, color: 'rgba(255,255,255,0.45)', maxWidth: 380 }}>
-                       Configure parameter uncertainties above and run the batch simulator to generate risk distributions and sensitivity analyses.
-                     </p>
+                      <p style={{ margin: '6px 0 0', fontSize: 11.5, color: 'rgba(255,255,255,0.45)', maxWidth: 380 }}>
+                        Select which parameters to vary, define each range or set of values, then run the batch simulator to generate risk distributions and sensitivity analyses.
+                      </p>
                    </div>
                  )}
                </div>
                );
              } else {
                return (
-                 <div style={{ 
-                   flex: 1, 
-                   display: 'flex', 
-                   flexDirection: 'column', 
-                   background: '#1c1626', 
-                   padding: '20px 25px', 
-                   overflowY: 'auto',
-                   minHeight: 450
-                 }}>
-                   <GuidePage isEmbedded={true} />
+                  <div
+                    id="tabpanel-guide"
+                    role="tabpanel"
+                    aria-labelledby="tab-guide"
+                    tabIndex={0}
+                    style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    background: '#1c1626',
+                    padding: '20px 25px',
+                    overflowY: 'auto',
+                    minHeight: 450
+                  }}>
+                    <GuidePage isEmbedded={true} />
                  </div>
                );
              }
-           })()}
-           </div>
+            })()}
+            </div>
+
+          {/* Model honesty footnote — scaled toy model disclosure */}
+          <p style={{ margin: '-8px 6px 0', fontSize: 10.5, lineHeight: 1.5, color: 'rgba(255,255,255,0.45)' }}>
+            2D Vertical-Equilibrium toy model &middot; scaled units (1 kt = model mass unit) &middot; buoyancy-driven, viscosity-free gravity tongue with simplified fault conduits. Full assumptions, constitutive laws &amp; numerical scheme in the PDE Guide tab.
+          </p>
 
           {/* Sub-grid containing Parameters (Left) and Faults (Right) directly below Reservoir Grid */}
           <div className="controls-subgrid">
@@ -2641,7 +3006,7 @@ const SimulatorPage = () => {
                 <div>
                   <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Injection Settings</span>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                    <Slider label="Flow Rate (Q)" val={Q} min="0.0" max="3.5" step="0.1" value={Q} onChange={v => setQ(parseFloat(v))} />
+                    <Slider label="Flow Rate (Q)" val={`${Q.toFixed(1)} kt/yr`} min="0.0" max="3.5" step="0.1" value={Q} onChange={v => setQ(parseFloat(v))} />
                     <Slider label="Well Location" val={`${injLocation}%`} min="10" max="90" step="5" value={injLocation} onChange={v => setInjLocation(parseInt(v))} />
                     <Slider label="Inj. Stop Year" val={`${injDuration}y`} min="50" max="400" step="10" value={injDuration} onChange={v => setInjDuration(parseInt(v))} />
                   </div>
@@ -2804,7 +3169,7 @@ const SimulatorPage = () => {
               <h3 style={{ margin: 0, fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif" }}>
                 CO₂ Mass Balance
               </h3>
-              <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'rgba(255,255,255,0.5)' }}>Values in ktonnes</span>
+              <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'rgba(255,255,255,0.5)' }}>Scaled units (ktonnes equiv.)</span>
             </div>
 
             {/* Live Chart Rendering */}
@@ -2848,6 +3213,8 @@ const Slider = ({ label, val, min, max, step, value, onChange }) => {
         max={max} 
         step={step} 
         value={value} 
+        aria-label={label}
+        aria-valuetext={String(val)}
         onChange={e => onChange(e.target.value)}
         style={{
           width: '100%',

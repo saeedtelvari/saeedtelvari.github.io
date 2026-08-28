@@ -332,38 +332,18 @@ const ContactCard = ({ icon, label, url, ariaLabel }) => {
 /* =====================================================
    StratigraphicDepthHUD — Floating Geological Column Navigator
    ===================================================== */
-const StratigraphicDepthHUD = ({ onNavigate }) => {
-  const [activeDepthIndex, setActiveDepthIndex] = useState(0);
+const STRATA_HORIZONS = [
+  { id: 'home', depth: '1.5 km', label: 'CO₂ Storage Reservoir', color: '#64ffda', temp: '45°C' },
+  { id: 'about', depth: '3.5 km', label: 'Sedimentary Basin', color: '#38bdf8', temp: '95°C' },
+  { id: 'publications', depth: '10 km', label: 'Crystalline Basement', color: '#a855f7', temp: '240°C' },
+  { id: 'contact', depth: '28 km', label: 'Moho & Mantle', color: '#f97316', temp: '680°C' },
+];
+
+const StratigraphicDepthHUD = ({ onNavigate, activeSection }) => {
   const [hoveredTick, setHoveredTick] = useState(null);
 
-  const horizons = [
-    { id: 'home', depth: '1.5 km', label: 'CO₂ Storage Reservoir', color: '#64ffda', temp: '45°C' },
-    { id: 'about', depth: '3.5 km', label: 'Sedimentary Basin', color: '#38bdf8', temp: '95°C' },
-    { id: 'publications', depth: '10 km', label: 'Crystalline Basement', color: '#a855f7', temp: '240°C' },
-    { id: 'contact', depth: '28 km', label: 'Moho & Mantle', color: '#f97316', temp: '680°C' },
-  ];
-
-  useEffect(() => {
-    const onScroll = () => {
-      const scrollPos = window.scrollY + 350;
-      const ids = ['contact', 'publications', 'about', 'home'];
-      for (let i = 0; i < ids.length; i++) {
-        const el = document.getElementById(ids[i]);
-        if (el && el.offsetTop <= scrollPos) {
-          const matchedIdx = horizons.findIndex(h => h.id === ids[i]);
-          if (matchedIdx !== -1) {
-            setActiveDepthIndex(matchedIdx);
-            return;
-          }
-        }
-      }
-      setActiveDepthIndex(0);
-    };
-
-    window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  const horizons = STRATA_HORIZONS;
+  const activeDepthIndex = Math.max(0, horizons.findIndex(h => h.id === activeSection));
 
   const handleClick = (id) => {
     if (onNavigate) onNavigate(id);
