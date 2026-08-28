@@ -1815,7 +1815,7 @@ const SimulatorPage = () => {
           onClick={() => setSidebarOpen(true)}
           className="sidebar-toggle-btn"
         >
-          <i className="fas fa-history" /> Time Machine
+          <i className="fas fa-history" /> Timeline
         </button>
       )}
 
@@ -1824,11 +1824,11 @@ const SimulatorPage = () => {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#64ffda', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <i className="fas fa-history" style={{ fontSize: 14 }} /> Time Machine
+            <i className="fas fa-history" style={{ fontSize: 14 }} /> Timeline
           </h3>
           <button 
             onClick={() => setSidebarOpen(false)} 
-            aria-label="Close Time Machine panel"
+            aria-label="Close timeline panel"
             style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 16 }}
             title="Close panel"
           >
@@ -1860,7 +1860,7 @@ const SimulatorPage = () => {
                     boxShadow: `0 0 8px ${isPast ? '#ffb300' : '#64ffda'}`,
                     animation: 'pulseFlare 1.5s infinite'
                   }} />
-                  {isPast ? 'TIMELINE PREVIEW' : 'LIVE RUNNING'}
+                  {isPast ? `VIEWING PAST \u00B7 YEAR ${simTime}` : `SIMULATING \u00B7 YEAR ${simTime}`}
                 </div>
                 <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.65)', lineHeight: 1.4 }}>
                   {isPast 
@@ -2155,7 +2155,7 @@ const SimulatorPage = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 20 }}>
         <div>
           <div style={{ fontSize: 11, letterSpacing: '0.20em', textTransform: 'uppercase', color: '#64ffda', fontWeight: 600, marginBottom: 6 }}>
-            Interactive Numerical PDE Sandbox
+            Interactive Numerical Simulator
           </div>
           <h2 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 38px)', fontFamily: "'Montserrat', sans-serif", fontWeight: 700, display: 'flex', alignItems: 'center', gap: 15 }}>
             VE Gravity Tongue Simulator
@@ -2175,9 +2175,9 @@ const SimulatorPage = () => {
                 gap: 6,
                 transition: 'all 0.2s ease',
               }}
-              title="Toggle Time Machine Sidebar"
+              title="Toggle timeline sidebar"
             >
-              <i className="fas fa-history" /> {sidebarOpen ? 'Close Time Machine' : 'Time Machine'}
+              <i className="fas fa-history" /> {sidebarOpen ? 'Close Timeline' : 'Timeline'}
             </button>
           </h2>
           <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.65)', fontSize: 13.5, maxWidth: 680 }}>
@@ -2836,13 +2836,13 @@ const SimulatorPage = () => {
                       flexDirection: 'column',
                       gap: 8
                     }}>
-                      <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Probabilistic Risk Models</span>
+                      <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>P10 / P50 / P90 Outcomes</span>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                         
                         {/* P10 */}
                         <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
-                            <div style={{ fontSize: 9.5, color: '#64ffda', fontWeight: 'bold' }}>P10 (Low Risk)</div>
+                            <div style={{ fontSize: 9.5, color: '#64ffda', fontWeight: 'bold' }}>P10 &middot; optimistic</div>
                             <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
                               {uqData.p10Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
                             </div>
@@ -2858,7 +2858,7 @@ const SimulatorPage = () => {
                         {/* P50 */}
                         <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
-                            <div style={{ fontSize: 9.5, color: '#ffb300', fontWeight: 'bold' }}>P50 (Expected)</div>
+                            <div style={{ fontSize: 9.5, color: '#ffb300', fontWeight: 'bold' }}>P50 &middot; median</div>
                             <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
                               {uqData.p50Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
                             </div>
@@ -2874,7 +2874,7 @@ const SimulatorPage = () => {
                         {/* P90 */}
                         <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
-                            <div style={{ fontSize: 9.5, color: '#ff6b6b', fontWeight: 'bold' }}>P90 (High Risk)</div>
+                            <div style={{ fontSize: 9.5, color: '#ff6b6b', fontWeight: 'bold' }}>P90 &middot; conservative</div>
                             <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
                               {uqData.p90Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
                             </div>
@@ -2905,7 +2905,7 @@ const SimulatorPage = () => {
                      textAlign: 'center'
                    }}>
                      <i className="fas fa-calculator" style={{ fontSize: 36, color: 'rgba(255,255,255,0.15)', marginBottom: 15 }} />
-                     <h4 style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>Uncalculated Probability Space</h4>
+                     <h4 style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>No results yet</h4>
                       <p style={{ margin: '6px 0 0', fontSize: 11.5, color: 'rgba(255,255,255,0.45)', maxWidth: 380 }}>
                         Select which parameters to vary, define each range or set of values, then run the batch simulator to generate risk distributions and sensitivity analyses.
                       </p>

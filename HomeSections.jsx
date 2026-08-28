@@ -61,8 +61,6 @@ const AboutSection = () => (
               theme="sedimentary"
               depth="2.0 – 5.0 km"
               formation="Deep Sedimentary Basin · Marine Carbonate &amp; Evaporites"
-              temp="95°C"
-              press="35 MPa"
             />
           </div>
           <SectionTitle style={{ marginBottom: 28, fontSize: 34 }}>About Me</SectionTitle>
@@ -70,7 +68,7 @@ const AboutSection = () => (
         
         <Reveal delay="reveal-delay-1">
           <p className="lead" style={{ fontSize: 21, fontWeight: 500, lineHeight: 1.7, color: '#fff', marginTop: 0 }}>
-            I'm <strong style={{ color: '#64ffda', fontWeight: 600 }}>Sa'eed Telvari</strong>, a PhD candidate in Petroleum Engineering at Heriot-Watt University. My research bridges the gap between computational efficiency and physical accuracy in subsurface flow simulation.
+            I'm <strong style={{ color: '#64ffda', fontWeight: 600 }}>Sa'eed Telvari</strong>, a PhD candidate in Petroleum Engineering at Heriot-Watt University. My research keeps subsurface flow simulation both physically faithful and computationally tractable.
           </p>
         </Reveal>
         
@@ -91,7 +89,7 @@ const AboutSection = () => (
             { icon: 'fas fa-graduation-cap', label: 'PhD @ Heriot-Watt' },
             { icon: 'fas fa-flask', label: 'CCUS Research' },
             { icon: 'fas fa-code', label: 'Python, MATLAB, Julia' },
-            { icon: 'fas fa-robot', label: 'Agentic AI' },
+            { icon: 'fas fa-robot', label: 'ML Workflows' },
           ].map((h, i) => (
             <Reveal key={i} delay={`reveal-delay-${i + 1}`}>
               <GlassCard padding={16} radius={16} style={{ display: 'flex', alignItems: 'center', gap: 12, height: '100%' }}>
@@ -218,8 +216,6 @@ const PublicationsList = () => (
           theme="crystalline"
           depth="5.0 – 15.0 km"
           formation="Crystalline Basement · Metamorphic Gneiss Foliation &amp; Shear Fractures"
-          temp="240°C"
-          press="120 MPa"
         />
       </div>
       <SectionTitle>Research &amp; Publications</SectionTitle>
@@ -274,8 +270,6 @@ const ContactSection = () => {
             theme="mantle"
             depth="15 – 35+ km"
             formation="Lower Crust &amp; Moho Boundary · Ductile Mantle &amp; Thermal Conduits"
-            temp="680°C"
-            press="450 MPa"
           />
         </div>
         <SectionTitle>Get In Touch</SectionTitle>
@@ -333,10 +327,10 @@ const ContactCard = ({ icon, label, url, ariaLabel }) => {
    StratigraphicDepthHUD — Floating Geological Column Navigator
    ===================================================== */
 const STRATA_HORIZONS = [
-  { id: 'home', depth: '1.5 km', label: 'CO₂ Storage Reservoir', color: '#64ffda', temp: '45°C' },
-  { id: 'about', depth: '3.5 km', label: 'Sedimentary Basin', color: '#38bdf8', temp: '95°C' },
-  { id: 'publications', depth: '10 km', label: 'Crystalline Basement', color: '#a855f7', temp: '240°C' },
-  { id: 'contact', depth: '28 km', label: 'Moho & Mantle', color: '#f97316', temp: '680°C' },
+  { id: 'home', depth: '1.5 km', label: 'CO₂ Storage Reservoir', color: '#64ffda' },
+  { id: 'about', depth: '3.5 km', label: 'Sedimentary Basin', color: '#38bdf8' },
+  { id: 'publications', depth: '10 km', label: 'Crystalline Basement', color: '#a855f7' },
+  { id: 'contact', depth: '28 km', label: 'Moho & Mantle', color: '#f97316' },
 ];
 
 const StratigraphicDepthHUD = ({ onNavigate, activeSection }) => {
@@ -375,7 +369,7 @@ const StratigraphicDepthHUD = ({ onNavigate, activeSection }) => {
           textAlign: 'center',
           lineHeight: 1.2,
         }}>
-          DEPTH<br/>STRATA
+          DEPTH
         </div>
 
         {/* Vertical Depth Scale Track */}
@@ -443,7 +437,7 @@ const StratigraphicDepthHUD = ({ onNavigate, activeSection }) => {
                     zIndex: 1000,
                   }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: h.color, fontFamily: 'ui-monospace, monospace' }}>
-                      {h.depth} · {h.temp}
+                      {h.depth}
                     </div>
                     <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>
                       {h.label}

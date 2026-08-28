@@ -4220,9 +4220,7 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
 }, /*#__PURE__*/React.createElement(StratigraphicBadge, {
   theme: "sedimentary",
   depth: "2.0 \u2013 5.0 km",
-  formation: "Deep Sedimentary Basin \xB7 Marine Carbonate & Evaporites",
-  temp: "95\xB0C",
-  press: "35 MPa"
+  formation: "Deep Sedimentary Basin \xB7 Marine Carbonate & Evaporites"
 })), /*#__PURE__*/React.createElement(SectionTitle, {
   style: {
     marginBottom: 28,
@@ -4244,7 +4242,7 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
     color: '#64ffda',
     fontWeight: 600
   }
-}, "Sa'eed Telvari"), ", a PhD candidate in Petroleum Engineering at Heriot-Watt University. My research bridges the gap between computational efficiency and physical accuracy in subsurface flow simulation.")), /*#__PURE__*/React.createElement(Reveal, {
+}, "Sa'eed Telvari"), ", a PhD candidate in Petroleum Engineering at Heriot-Watt University. My research keeps subsurface flow simulation both physically faithful and computationally tractable.")), /*#__PURE__*/React.createElement(Reveal, {
   delay: "reveal-delay-2"
 }, /*#__PURE__*/React.createElement("p", {
   style: {
@@ -4273,7 +4271,7 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
   label: 'Python, MATLAB, Julia'
 }, {
   icon: 'fas fa-robot',
-  label: 'Agentic AI'
+  label: 'ML Workflows'
 }].map((h, i) => /*#__PURE__*/React.createElement(Reveal, {
   key: i,
   delay: `reveal-delay-${i + 1}`
@@ -4512,9 +4510,7 @@ const PublicationsList = () => /*#__PURE__*/React.createElement(SectionPanel, {
 }, /*#__PURE__*/React.createElement(StratigraphicBadge, {
   theme: "crystalline",
   depth: "5.0 \u2013 15.0 km",
-  formation: "Crystalline Basement \xB7 Metamorphic Gneiss Foliation & Shear Fractures",
-  temp: "240\xB0C",
-  press: "120 MPa"
+  formation: "Crystalline Basement \xB7 Metamorphic Gneiss Foliation & Shear Fractures"
 })), /*#__PURE__*/React.createElement(SectionTitle, null, "Research & Publications")), /*#__PURE__*/React.createElement(ResearchInterestsStrip, null), /*#__PURE__*/React.createElement("div", {
   style: {
     display: 'flex',
@@ -4622,9 +4618,7 @@ const ContactSection = () => {
   }, /*#__PURE__*/React.createElement(StratigraphicBadge, {
     theme: "mantle",
     depth: "15 \u2013 35+ km",
-    formation: "Lower Crust & Moho Boundary \xB7 Ductile Mantle & Thermal Conduits",
-    temp: "680\xB0C",
-    press: "450 MPa"
+    formation: "Lower Crust & Moho Boundary \xB7 Ductile Mantle & Thermal Conduits"
   })), /*#__PURE__*/React.createElement(SectionTitle, null, "Get In Touch")), /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: 'center'
@@ -4725,26 +4719,22 @@ const STRATA_HORIZONS = [{
   id: 'home',
   depth: '1.5 km',
   label: 'CO₂ Storage Reservoir',
-  color: '#64ffda',
-  temp: '45°C'
+  color: '#64ffda'
 }, {
   id: 'about',
   depth: '3.5 km',
   label: 'Sedimentary Basin',
-  color: '#38bdf8',
-  temp: '95°C'
+  color: '#38bdf8'
 }, {
   id: 'publications',
   depth: '10 km',
   label: 'Crystalline Basement',
-  color: '#a855f7',
-  temp: '240°C'
+  color: '#a855f7'
 }, {
   id: 'contact',
   depth: '28 km',
   label: 'Moho & Mantle',
-  color: '#f97316',
-  temp: '680°C'
+  color: '#f97316'
 }];
 const StratigraphicDepthHUD = ({
   onNavigate,
@@ -4784,7 +4774,7 @@ const StratigraphicDepthHUD = ({
       textAlign: 'center',
       lineHeight: 1.2
     }
-  }, "DEPTH", /*#__PURE__*/React.createElement("br", null), "STRATA"), /*#__PURE__*/React.createElement("div", {
+  }, "DEPTH"), /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'relative',
       display: 'flex',
@@ -4853,7 +4843,7 @@ const StratigraphicDepthHUD = ({
         color: h.color,
         fontFamily: 'ui-monospace, monospace'
       }
-    }, h.depth, " \xB7 ", h.temp), /*#__PURE__*/React.createElement("div", {
+    }, h.depth), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 10,
         color: 'rgba(255,255,255,0.85)',
@@ -8238,7 +8228,7 @@ const SimulatorPage = () => {
     className: "sidebar-toggle-btn"
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-history"
-  }), " Time Machine"), /*#__PURE__*/React.createElement("div", {
+  }), " Timeline"), /*#__PURE__*/React.createElement("div", {
     className: `time-travel-sidebar ${sidebarOpen ? 'open' : 'closed'}`
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -8263,9 +8253,9 @@ const SimulatorPage = () => {
     style: {
       fontSize: 14
     }
-  }), " Time Machine"), /*#__PURE__*/React.createElement("button", {
+  }), " Timeline"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setSidebarOpen(false),
-    "aria-label": "Close Time Machine panel",
+    "aria-label": "Close timeline panel",
     style: {
       background: 'none',
       border: 'none',
@@ -8313,7 +8303,7 @@ const SimulatorPage = () => {
         boxShadow: `0 0 8px ${isPast ? '#ffb300' : '#64ffda'}`,
         animation: 'pulseFlare 1.5s infinite'
       }
-    }), isPast ? 'TIMELINE PREVIEW' : 'LIVE RUNNING'), /*#__PURE__*/React.createElement("div", {
+    }), isPast ? `VIEWING PAST \u00B7 YEAR ${simTime}` : `SIMULATING \u00B7 YEAR ${simTime}`), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 10.5,
         color: 'rgba(255,255,255,0.65)',
@@ -8728,7 +8718,7 @@ const SimulatorPage = () => {
       fontWeight: 600,
       marginBottom: 6
     }
-  }, "Interactive Numerical PDE Sandbox"), /*#__PURE__*/React.createElement("h2", {
+  }, "Interactive Numerical Simulator"), /*#__PURE__*/React.createElement("h2", {
     style: {
       margin: 0,
       fontSize: 'clamp(28px, 4vw, 38px)',
@@ -8754,10 +8744,10 @@ const SimulatorPage = () => {
       gap: 6,
       transition: 'all 0.2s ease'
     },
-    title: "Toggle Time Machine Sidebar"
+    title: "Toggle timeline sidebar"
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-history"
-  }), " ", sidebarOpen ? 'Close Time Machine' : 'Time Machine')), /*#__PURE__*/React.createElement("p", {
+  }), " ", sidebarOpen ? 'Close Timeline' : 'Timeline')), /*#__PURE__*/React.createElement("p", {
     style: {
       margin: '8px 0 0',
       color: 'rgba(255,255,255,0.65)',
@@ -9786,7 +9776,7 @@ const SimulatorPage = () => {
             textTransform: 'uppercase',
             fontWeight: 'bold'
           }
-        }, "Probabilistic Risk Models"), /*#__PURE__*/React.createElement("div", {
+        }, "P10 / P50 / P90 Outcomes"), /*#__PURE__*/React.createElement("div", {
           style: {
             display: 'grid',
             gridTemplateColumns: '1fr 1fr 1fr',
@@ -9808,7 +9798,7 @@ const SimulatorPage = () => {
             color: '#64ffda',
             fontWeight: 'bold'
           }
-        }, "P10 (Low Risk)"), /*#__PURE__*/React.createElement("div", {
+        }, "P10 \xB7 optimistic"), /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 13,
             fontWeight: 'bold',
@@ -9845,7 +9835,7 @@ const SimulatorPage = () => {
             color: '#ffb300',
             fontWeight: 'bold'
           }
-        }, "P50 (Expected)"), /*#__PURE__*/React.createElement("div", {
+        }, "P50 \xB7 median"), /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 13,
             fontWeight: 'bold',
@@ -9882,7 +9872,7 @@ const SimulatorPage = () => {
             color: '#ff6b6b',
             fontWeight: 'bold'
           }
-        }, "P90 (High Risk)"), /*#__PURE__*/React.createElement("div", {
+        }, "P90 \xB7 conservative"), /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 13,
             fontWeight: 'bold',
@@ -9929,7 +9919,7 @@ const SimulatorPage = () => {
             fontSize: 13.5,
             color: 'rgba(255,255,255,0.8)'
           }
-        }, "Uncalculated Probability Space"), /*#__PURE__*/React.createElement("p", {
+        }, "No results yet"), /*#__PURE__*/React.createElement("p", {
           style: {
             margin: '6px 0 0',
             fontSize: 11.5,

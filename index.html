@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js">
   <link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js">
-  <link rel="preload" as="script" href="./bundle.js?v=12.6">
+  <link rel="preload" as="script" href="./bundle.js?v=12.7">
   <link rel="icon" href="./assets/logo-minimalist.png">
   <script>
     window.__pageLoadStart = Date.now();
@@ -247,30 +247,16 @@
       margin-right: 4px;
     }
 
-    .step-1 { animation: teleStep1 4.8s ease infinite; }
-    .step-2 { animation: teleStep2 4.8s ease infinite; }
-    .step-3 { animation: teleStep3 4.8s ease infinite; }
-    .step-4 { animation: teleStep4 4.8s ease infinite; }
+    /* Single honest status line with a gentle breathing pulse */
+    .telemetry-static {
+      opacity: 1;
+      transform: none;
+      animation: softPulse 2.6s ease-in-out infinite;
+    }
 
-    @keyframes teleStep1 {
-      0% { opacity: 0; transform: translateY(6px); }
-      3%, 22% { opacity: 1; transform: translateY(0); }
-      26%, 100% { opacity: 0; transform: translateY(-6px); }
-    }
-    @keyframes teleStep2 {
-      0%, 25% { opacity: 0; transform: translateY(6px); }
-      28%, 47% { opacity: 1; transform: translateY(0); }
-      51%, 100% { opacity: 0; transform: translateY(-6px); }
-    }
-    @keyframes teleStep3 {
-      0%, 50% { opacity: 0; transform: translateY(6px); }
-      53%, 72% { opacity: 1; transform: translateY(0); }
-      76%, 100% { opacity: 0; transform: translateY(-6px); }
-    }
-    @keyframes teleStep4 {
-      0%, 75% { opacity: 0; transform: translateY(6px); }
-      78%, 97% { opacity: 1; transform: translateY(0); }
-      100% { opacity: 0; transform: translateY(-6px); }
+    @keyframes softPulse {
+      0%, 100% { opacity: 0.55; }
+      50%      { opacity: 1; }
     }
 
     /* Subsurface hero animations — defined globally so React re-renders can't reset them */
@@ -354,7 +340,7 @@
 </head>
 <body>
   <!-- 0ms Subsurface Seismic & Telemetry HUD Loading Screen -->
-  <div id="app-loader" aria-label="Loading Subsurface System">
+  <div id="app-loader" aria-label="Loading">
     <div class="loader-bg"></div>
     <div class="loader-content">
       <div class="seismic-scanner">
@@ -372,7 +358,7 @@
 
       <div class="loader-header">
         <div class="loader-name">SAEED TELVARI</div>
-        <div class="loader-subtitle">GEOLOGIC CO₂ STORAGE &middot; COMPUTATIONAL FLUID DYNAMICS</div>
+        <div class="loader-subtitle">GEOLOGIC CO₂ STORAGE &middot; COMPUTATIONAL RESERVOIR MODELING</div>
       </div>
 
       <div class="loader-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="10" aria-label="Loading progress">
@@ -380,26 +366,17 @@
       </div>
 
       <div class="loader-telemetry">
-        <div class="telemetry-item step-1">
-          <span class="telemetry-tag">[01/04]</span> INITIALIZING 200-CELL FINITE VOLUME MESH...
-        </div>
-        <div class="telemetry-item step-2">
-          <span class="telemetry-tag">[02/04]</span> COMPUTING HYDROSTATIC VERTICAL EQUILIBRIUM (VE)...
-        </div>
-        <div class="telemetry-item step-3">
-          <span class="telemetry-tag">[03/04]</span> CALCULATING MULTIPHASE REL-PERM FLUXES...
-        </div>
-        <div class="telemetry-item step-4">
-          <span class="telemetry-tag">[04/04]</span> SUBSURFACE RESERVOIR DOMAIN READY
+        <div class="telemetry-item telemetry-static">
+          <span class="telemetry-tag">SYS</span> PREPARING INTERACTIVE RESERVOIR MODEL...
         </div>
       </div>
 
-      <div class="loader-slow-hint" id="loader-slow-hint">SLOW NETWORK DETECTED — STILL STREAMING SUBSURFACE DATA...</div>
+      <div class="loader-slow-hint" id="loader-slow-hint">SLOW CONNECTION — STILL LOADING ASSETS...</div>
     </div>
   </div>
 
   <div id="root"></div>
 
-  <script src="bundle.js?v=12.6" onload="window.__loadTick && window.__loadTick(90)"></script>
+  <script src="bundle.js?v=12.7" onload="window.__loadTick && window.__loadTick(90)"></script>
 </body>
 </html>
