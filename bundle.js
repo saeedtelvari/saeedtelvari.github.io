@@ -1177,104 +1177,6 @@ const GeologicalStrataBackground = ({
 };
 
 /* =====================================================
-   StratigraphicBadge — Geological Depth Horizon Marker
-   ===================================================== */
-const StratigraphicBadge = ({
-  depth,
-  formation,
-  temp,
-  press,
-  theme = 'sedimentary'
-}) => {
-  const themeColors = {
-    sedimentary: {
-      dot: '#38bdf8',
-      border: 'rgba(56, 189, 248, 0.35)',
-      bg: 'rgba(56, 189, 248, 0.12)',
-      text: '#7dd3fc'
-    },
-    crystalline: {
-      dot: '#a855f7',
-      border: 'rgba(168, 85, 247, 0.35)',
-      bg: 'rgba(168, 85, 247, 0.14)',
-      text: '#c084fc'
-    },
-    mantle: {
-      dot: '#f97316',
-      border: 'rgba(249, 115, 22, 0.40)',
-      bg: 'rgba(249, 115, 22, 0.15)',
-      text: '#fdba74'
-    },
-    core: {
-      dot: '#fbbf24',
-      border: 'rgba(251, 191, 36, 0.45)',
-      bg: 'rgba(251, 191, 36, 0.18)',
-      text: '#fde047'
-    }
-  };
-  const cfg = themeColors[theme] || themeColors.sedimentary;
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      flexWrap: 'wrap',
-      gap: '8px 12px',
-      padding: '6px 16px',
-      borderRadius: 24,
-      background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%)',
-      border: `1px solid ${cfg.border}`,
-      boxShadow: '0 4px 20px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.20)',
-      backdropFilter: 'blur(10px)',
-      WebkitBackdropFilter: 'blur(10px)',
-      fontSize: 11.5,
-      fontFamily: 'ui-monospace, Menlo, Monaco, monospace',
-      letterSpacing: '0.06em',
-      color: '#fff',
-      marginBottom: 20
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 6
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      width: 7,
-      height: 7,
-      borderRadius: '50%',
-      backgroundColor: cfg.dot,
-      boxShadow: `0 0 8px ${cfg.dot}`,
-      display: 'inline-block'
-    }
-  }), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontWeight: 700,
-      color: cfg.text,
-      textTransform: 'uppercase'
-    }
-  }, depth)), /*#__PURE__*/React.createElement("span", {
-    style: {
-      opacity: 0.4
-    }
-  }, "|"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'rgba(255,255,255,0.90)',
-      fontWeight: 500
-    }
-  }, formation), (temp || press) && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    style: {
-      opacity: 0.4
-    }
-  }, "|"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'rgba(255,255,255,0.65)',
-      fontSize: 11
-    }
-  }, temp && `T: ${temp}`, temp && press && ' · ', press && `P: ${press}`)));
-};
-
-/* =====================================================
    Section panel — large rounded glass with geological stratigraphy
    ===================================================== */
 const SectionPanel = ({
@@ -1405,8 +1307,7 @@ Object.assign(window, {
   Divider,
   SectionPanel,
   Reveal,
-  GeologicalStrataBackground,
-  StratigraphicBadge
+  GeologicalStrataBackground
 });
 
 // ==========================================
@@ -4212,16 +4113,7 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
   style: {
     color: 'rgba(255,255,255,0.90)'
   }
-}, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
-  style: {
-    textAlign: 'center',
-    marginBottom: 6
-  }
-}, /*#__PURE__*/React.createElement(StratigraphicBadge, {
-  theme: "sedimentary",
-  depth: "2.0 \u2013 5.0 km",
-  formation: "Deep Sedimentary Basin \xB7 Marine Carbonate & Evaporites"
-})), /*#__PURE__*/React.createElement(SectionTitle, {
+}, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement(SectionTitle, {
   style: {
     marginBottom: 28,
     fontSize: 34
@@ -4502,16 +4394,7 @@ const PUBLICATIONS = [{
 }];
 const PublicationsList = () => /*#__PURE__*/React.createElement(SectionPanel, {
   strataTheme: "crystalline"
-}, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
-  style: {
-    textAlign: 'center',
-    marginBottom: 6
-  }
-}, /*#__PURE__*/React.createElement(StratigraphicBadge, {
-  theme: "crystalline",
-  depth: "5.0 \u2013 15.0 km",
-  formation: "Crystalline Basement \xB7 Metamorphic Gneiss Foliation & Shear Fractures"
-})), /*#__PURE__*/React.createElement(SectionTitle, null, "Research & Publications")), /*#__PURE__*/React.createElement(ResearchInterestsStrip, null), /*#__PURE__*/React.createElement("div", {
+}, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement(SectionTitle, null, "Research & Publications")), /*#__PURE__*/React.createElement(ResearchInterestsStrip, null), /*#__PURE__*/React.createElement("div", {
   style: {
     display: 'flex',
     flexDirection: 'column',
@@ -4610,16 +4493,7 @@ const ContactSection = () => {
   }];
   return /*#__PURE__*/React.createElement(SectionPanel, {
     strataTheme: "mantle"
-  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      textAlign: 'center',
-      marginBottom: 6
-    }
-  }, /*#__PURE__*/React.createElement(StratigraphicBadge, {
-    theme: "mantle",
-    depth: "15 \u2013 35+ km",
-    formation: "Lower Crust & Moho Boundary \xB7 Ductile Mantle & Thermal Conduits"
-  })), /*#__PURE__*/React.createElement(SectionTitle, null, "Get In Touch")), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement(SectionTitle, null, "Get In Touch")), /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: 'center'
     }
@@ -4715,25 +4589,21 @@ const ContactCard = ({
 /* =====================================================
    StratigraphicDepthHUD — Floating Geological Column Navigator
    ===================================================== */
-const STRATA_HORIZONS = [{
+const HUD_SECTIONS = [{
   id: 'home',
-  depth: '1.5 km',
-  label: 'CO₂ Storage Reservoir',
+  label: 'Home',
   color: '#64ffda'
 }, {
   id: 'about',
-  depth: '3.5 km',
-  label: 'Sedimentary Basin',
+  label: 'About',
   color: '#38bdf8'
 }, {
   id: 'publications',
-  depth: '10 km',
-  label: 'Crystalline Basement',
+  label: 'Research',
   color: '#a855f7'
 }, {
   id: 'contact',
-  depth: '28 km',
-  label: 'Moho & Mantle',
+  label: 'Contact',
   color: '#f97316'
 }];
 const StratigraphicDepthHUD = ({
@@ -4741,14 +4611,14 @@ const StratigraphicDepthHUD = ({
   activeSection
 }) => {
   const [hoveredTick, setHoveredTick] = useState(null);
-  const horizons = STRATA_HORIZONS;
-  const activeDepthIndex = Math.max(0, horizons.findIndex(h => h.id === activeSection));
+  const sections = HUD_SECTIONS;
+  const activeSectionIndex = Math.max(0, sections.findIndex(s => s.id === activeSection));
   const handleClick = id => {
     if (onNavigate) onNavigate(id);else if (window.__onNavigate) window.__onNavigate(id);
   };
   return /*#__PURE__*/React.createElement("aside", {
     className: "stratigraphic-hud-container",
-    "aria-label": "Stratigraphic Depth Navigator"
+    "aria-label": "Section navigator"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '14px 10px',
@@ -4774,7 +4644,7 @@ const StratigraphicDepthHUD = ({
       textAlign: 'center',
       lineHeight: 1.2
     }
-  }, "DEPTH"), /*#__PURE__*/React.createElement("div", {
+  }, "SECTIONS"), /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'relative',
       display: 'flex',
@@ -4793,11 +4663,11 @@ const StratigraphicDepthHUD = ({
       opacity: 0.35,
       borderRadius: 1
     }
-  }), horizons.map((h, idx) => {
-    const isActive = activeDepthIndex === idx;
+  }), sections.map((s, idx) => {
+    const isActive = activeSectionIndex === idx;
     const isHover = hoveredTick === idx;
     return /*#__PURE__*/React.createElement("div", {
-      key: h.id,
+      key: s.id,
       style: {
         position: 'relative',
         cursor: 'pointer',
@@ -4805,14 +4675,14 @@ const StratigraphicDepthHUD = ({
       },
       onMouseEnter: () => setHoveredTick(idx),
       onMouseLeave: () => setHoveredTick(null),
-      onClick: () => handleClick(h.id)
+      onClick: () => handleClick(s.id)
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         width: isActive ? 14 : 9,
         height: isActive ? 14 : 9,
         borderRadius: '50%',
-        backgroundColor: h.color,
-        boxShadow: isActive ? `0 0 14px ${h.color}, inset 0 0 4px #fff` : `0 0 4px ${h.color}`,
+        backgroundColor: s.color,
+        boxShadow: isActive ? `0 0 14px ${s.color}, inset 0 0 4px #fff` : `0 0 4px ${s.color}`,
         border: isActive ? '2px solid #fff' : '1.5px solid rgba(255,255,255,0.4)',
         transition: 'all 0.35s cubic-bezier(0.175,0.885,0.32,1.275)',
         transform: isHover ? 'scale(1.35)' : 'scale(1)'
@@ -4824,11 +4694,11 @@ const StratigraphicDepthHUD = ({
         top: '50%',
         transform: 'translateY(-50%)',
         background: 'rgba(14,10,22,0.95)',
-        border: `1px solid ${h.color}`,
+        border: `1px solid ${s.color}`,
         borderRadius: 10,
         padding: '6px 10px',
         whiteSpace: 'nowrap',
-        boxShadow: `0 4px 18px rgba(0,0,0,0.55), 0 0 10px ${h.color}33`,
+        boxShadow: `0 4px 18px rgba(0,0,0,0.55), 0 0 10px ${s.color}33`,
         backdropFilter: 'blur(12px)',
         display: 'flex',
         flexDirection: 'column',
@@ -4840,16 +4710,10 @@ const StratigraphicDepthHUD = ({
       style: {
         fontSize: 11,
         fontWeight: 700,
-        color: h.color,
+        color: s.color,
         fontFamily: 'ui-monospace, monospace'
       }
-    }, h.depth), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: 'rgba(255,255,255,0.85)',
-        fontWeight: 500
-      }
-    }, h.label)));
+    }, s.label)));
   }))));
 };
 Object.assign(window, {

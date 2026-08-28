@@ -56,13 +56,6 @@ const AboutSection = () => (
       {/* Left: About */}
       <div style={{ color: 'rgba(255,255,255,0.90)' }}>
         <Reveal>
-          <div style={{ textAlign: 'center', marginBottom: 6 }}>
-            <StratigraphicBadge
-              theme="sedimentary"
-              depth="2.0 – 5.0 km"
-              formation="Deep Sedimentary Basin · Marine Carbonate &amp; Evaporites"
-            />
-          </div>
           <SectionTitle style={{ marginBottom: 28, fontSize: 34 }}>About Me</SectionTitle>
         </Reveal>
         
@@ -211,13 +204,6 @@ const PUBLICATIONS = [
 const PublicationsList = () => (
   <SectionPanel strataTheme="crystalline">
     <Reveal>
-      <div style={{ textAlign: 'center', marginBottom: 6 }}>
-        <StratigraphicBadge
-          theme="crystalline"
-          depth="5.0 – 15.0 km"
-          formation="Crystalline Basement · Metamorphic Gneiss Foliation &amp; Shear Fractures"
-        />
-      </div>
       <SectionTitle>Research &amp; Publications</SectionTitle>
     </Reveal>
     <ResearchInterestsStrip />
@@ -265,13 +251,6 @@ const ContactSection = () => {
   return (
     <SectionPanel strataTheme="mantle">
       <Reveal>
-        <div style={{ textAlign: 'center', marginBottom: 6 }}>
-          <StratigraphicBadge
-            theme="mantle"
-            depth="15 – 35+ km"
-            formation="Lower Crust &amp; Moho Boundary · Ductile Mantle &amp; Thermal Conduits"
-          />
-        </div>
         <SectionTitle>Get In Touch</SectionTitle>
       </Reveal>
       <div style={{ textAlign: 'center' }}>
@@ -326,18 +305,18 @@ const ContactCard = ({ icon, label, url, ariaLabel }) => {
 /* =====================================================
    StratigraphicDepthHUD — Floating Geological Column Navigator
    ===================================================== */
-const STRATA_HORIZONS = [
-  { id: 'home', depth: '1.5 km', label: 'CO₂ Storage Reservoir', color: '#64ffda' },
-  { id: 'about', depth: '3.5 km', label: 'Sedimentary Basin', color: '#38bdf8' },
-  { id: 'publications', depth: '10 km', label: 'Crystalline Basement', color: '#a855f7' },
-  { id: 'contact', depth: '28 km', label: 'Moho & Mantle', color: '#f97316' },
+const HUD_SECTIONS = [
+  { id: 'home', label: 'Home', color: '#64ffda' },
+  { id: 'about', label: 'About', color: '#38bdf8' },
+  { id: 'publications', label: 'Research', color: '#a855f7' },
+  { id: 'contact', label: 'Contact', color: '#f97316' },
 ];
 
 const StratigraphicDepthHUD = ({ onNavigate, activeSection }) => {
   const [hoveredTick, setHoveredTick] = useState(null);
 
-  const horizons = STRATA_HORIZONS;
-  const activeDepthIndex = Math.max(0, horizons.findIndex(h => h.id === activeSection));
+  const sections = HUD_SECTIONS;
+  const activeSectionIndex = Math.max(0, sections.findIndex(s => s.id === activeSection));
 
   const handleClick = (id) => {
     if (onNavigate) onNavigate(id);
@@ -345,7 +324,7 @@ const StratigraphicDepthHUD = ({ onNavigate, activeSection }) => {
   };
 
   return (
-    <aside className="stratigraphic-hud-container" aria-label="Stratigraphic Depth Navigator">
+    <aside className="stratigraphic-hud-container" aria-label="Section navigator">
       <div style={{
         padding: '14px 10px',
         borderRadius: 20,
@@ -369,10 +348,10 @@ const StratigraphicDepthHUD = ({ onNavigate, activeSection }) => {
           textAlign: 'center',
           lineHeight: 1.2,
         }}>
-          DEPTH
+          SECTIONS
         </div>
 
-        {/* Vertical Depth Scale Track */}
+        {/* Vertical Navigation Track */}
         <div style={{
           position: 'relative',
           display: 'flex',
@@ -392,31 +371,31 @@ const StratigraphicDepthHUD = ({ onNavigate, activeSection }) => {
             borderRadius: 1,
           }} />
 
-          {horizons.map((h, idx) => {
-            const isActive = activeDepthIndex === idx;
+          {sections.map((s, idx) => {
+            const isActive = activeSectionIndex === idx;
             const isHover = hoveredTick === idx;
 
             return (
               <div
-                key={h.id}
+                key={s.id}
                 style={{ position: 'relative', cursor: 'pointer', padding: '2px 0' }}
                 onMouseEnter={() => setHoveredTick(idx)}
                 onMouseLeave={() => setHoveredTick(null)}
-                onClick={() => handleClick(h.id)}
+                onClick={() => handleClick(s.id)}
               >
                 {/* Tick node */}
                 <div style={{
                   width: isActive ? 14 : 9,
                   height: isActive ? 14 : 9,
                   borderRadius: '50%',
-                  backgroundColor: h.color,
-                  boxShadow: isActive ? `0 0 14px ${h.color}, inset 0 0 4px #fff` : `0 0 4px ${h.color}`,
+                  backgroundColor: s.color,
+                  boxShadow: isActive ? `0 0 14px ${s.color}, inset 0 0 4px #fff` : `0 0 4px ${s.color}`,
                   border: isActive ? '2px solid #fff' : '1.5px solid rgba(255,255,255,0.4)',
                   transition: 'all 0.35s cubic-bezier(0.175,0.885,0.32,1.275)',
                   transform: isHover ? 'scale(1.35)' : 'scale(1)',
                 }} />
 
-                {/* Floating Horizon Tooltip */}
+                {/* Section Tooltip */}
                 {(isHover || isActive) && (
                   <div style={{
                     position: 'absolute',
@@ -424,11 +403,11 @@ const StratigraphicDepthHUD = ({ onNavigate, activeSection }) => {
                     top: '50%',
                     transform: 'translateY(-50%)',
                     background: 'rgba(14,10,22,0.95)',
-                    border: `1px solid ${h.color}`,
+                    border: `1px solid ${s.color}`,
                     borderRadius: 10,
                     padding: '6px 10px',
                     whiteSpace: 'nowrap',
-                    boxShadow: `0 4px 18px rgba(0,0,0,0.55), 0 0 10px ${h.color}33`,
+                    boxShadow: `0 4px 18px rgba(0,0,0,0.55), 0 0 10px ${s.color}33`,
                     backdropFilter: 'blur(12px)',
                     display: 'flex',
                     flexDirection: 'column',
@@ -436,11 +415,8 @@ const StratigraphicDepthHUD = ({ onNavigate, activeSection }) => {
                     pointerEvents: 'none',
                     zIndex: 1000,
                   }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: h.color, fontFamily: 'ui-monospace, monospace' }}>
-                      {h.depth}
-                    </div>
-                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>
-                      {h.label}
+                    <div style={{ fontSize: 11, fontWeight: 700, color: s.color, fontFamily: 'ui-monospace, monospace' }}>
+                      {s.label}
                     </div>
                   </div>
                 )}

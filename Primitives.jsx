@@ -790,71 +790,6 @@ const GeologicalStrataBackground = ({ theme = 'sedimentary' }) => {
 };
 
 /* =====================================================
-   StratigraphicBadge — Geological Depth Horizon Marker
-   ===================================================== */
-const StratigraphicBadge = ({ depth, formation, temp, press, theme = 'sedimentary' }) => {
-  const themeColors = {
-    sedimentary: { dot: '#38bdf8', border: 'rgba(56, 189, 248, 0.35)', bg: 'rgba(56, 189, 248, 0.12)', text: '#7dd3fc' },
-    crystalline: { dot: '#a855f7', border: 'rgba(168, 85, 247, 0.35)', bg: 'rgba(168, 85, 247, 0.14)', text: '#c084fc' },
-    mantle:      { dot: '#f97316', border: 'rgba(249, 115, 22, 0.40)', bg: 'rgba(249, 115, 22, 0.15)', text: '#fdba74' },
-    core:        { dot: '#fbbf24', border: 'rgba(251, 191, 36, 0.45)', bg: 'rgba(251, 191, 36, 0.18)', text: '#fde047' },
-  };
-
-  const cfg = themeColors[theme] || themeColors.sedimentary;
-
-  return (
-    <div
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '8px 12px',
-        padding: '6px 16px',
-        borderRadius: 24,
-        background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%)',
-        border: `1px solid ${cfg.border}`,
-        boxShadow: '0 4px 20px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.20)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        fontSize: 11.5,
-        fontFamily: 'ui-monospace, Menlo, Monaco, monospace',
-        letterSpacing: '0.06em',
-        color: '#fff',
-        marginBottom: 20,
-      }}
-    >
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <span
-          style={{
-            width: 7, height: 7, borderRadius: '50%',
-            backgroundColor: cfg.dot,
-            boxShadow: `0 0 8px ${cfg.dot}`,
-            display: 'inline-block',
-          }}
-        />
-        <span style={{ fontWeight: 700, color: cfg.text, textTransform: 'uppercase' }}>
-          {depth}
-        </span>
-      </div>
-
-      <span style={{ opacity: 0.4 }}>|</span>
-      <span style={{ color: 'rgba(255,255,255,0.90)', fontWeight: 500 }}>
-        {formation}
-      </span>
-
-      {(temp || press) && (
-        <React.Fragment>
-          <span style={{ opacity: 0.4 }}>|</span>
-          <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11 }}>
-            {temp && `T: ${temp}`}{temp && press && ' · '}{press && `P: ${press}`}
-          </span>
-        </React.Fragment>
-      )}
-    </div>
-  );
-};
-
-/* =====================================================
    Section panel — large rounded glass with geological stratigraphy
    ===================================================== */
 const SectionPanel = ({ children, strataTheme = 'sedimentary', style = {} }) => {
@@ -986,5 +921,4 @@ Object.assign(window, {
   SectionPanel,
   Reveal,
   GeologicalStrataBackground,
-  StratigraphicBadge,
 });
