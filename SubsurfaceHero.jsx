@@ -587,31 +587,43 @@ const SubsurfaceHero = ({ onNavigate }) => {
   const [time, setTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true); // Auto-play on first load to wow visitors
   const [speed, setSpeed] = useState(1);
+  const [history, setHistory] = useState(null);
 
   // Single unified randomized geology (anticlines, fault throws, layers, petrophysics, well location) generated per page load
   const geology = currentGeology;
   const faults = geology.faults;
 
-  // Precompute the entire physical simulation history (solved in <1ms!) using dynamic geology
-  const history = useMemo(() => precomputeSimulation(faults, geology), [faults, geology]);
-  const currentFrame = history[Math.round(time)] || history[0];
+  useEffect(() => {
+    if (!window.Worker) {
+      const fallback = setTimeout(() => setHistory(precomputeSimulation(faults, geology)), 0);
+      return () => clearTimeout(fallback);
+    }
+    const worker = new Worker('./hero-simulation-worker.js');
+    worker.onmessage = (event) => setHistory(event.data.history);
+    worker.onerror = () => setHistory(precomputeSimulation(faults, geology));
+    worker.postMessage({ geology });
+    return () => worker.terminate();
+  }, [faults, geology]);
+
+  const emptyFrame = useMemo(() => ({ h: new Array(201).fill(0), hMax: new Array(201).fill(0), h2: new Array(201).fill(0), h2Max: new Array(201).fill(0) }), []);
+  const currentFrame = history ? (history[Math.round(time)] || history[0]) : emptyFrame;
   const currentH = currentFrame.h;
   const currentHMax = currentFrame.hMax;
   const currentH2 = currentFrame.h2;
   const currentH2Max = currentFrame.h2Max;
 
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || !history) return;
     const interval = setInterval(() => {
       setTime((t) => {
         if (t >= 1000) {
           return 0; // smooth loop back to Year 0
         }
-        return Math.min(1000, t + 1.5 * speed);
+        return Math.min(1000, t + 2.5 * speed);
       });
-    }, 30);
+    }, 50);
     return () => clearInterval(interval);
-  }, [isPlaying, speed]);
+  }, [isPlaying, speed, history]);
 
   return (
     <section id="home" style={{
@@ -707,6 +719,7 @@ const SimulationController = ({ time, setTime, isPlaying, setIsPlaying, speed, s
         {/* Play/Pause Button */}
         <button 
           onClick={() => setIsPlaying(!isPlaying)}
+          aria-label={isPlaying ? 'Pause hero simulation' : 'Play hero simulation'}
           style={{
             width: 34, height: 34, borderRadius: '50%',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -729,6 +742,8 @@ const SimulationController = ({ time, setTime, isPlaying, setIsPlaying, speed, s
           max="1000" 
           step="1"
           value={time} 
+          aria-label="Simulation year"
+          aria-valuetext={`Year ${Math.round(time)}`}
           onChange={(e) => {
             setTime(parseFloat(e.target.value));
             setIsPlaying(false); // Pause on scrub
@@ -1822,12 +1837,26 @@ const Identity = ({ onNavigate }) => (
 
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 24, flexWrap: 'wrap' }}>
       <div style={{ display: 'flex', gap: 10 }}>
-        <BrandSocial icon="fa-brands fa-linkedin-in" tint="#0a66c2" url="https://www.linkedin.com/in/stelvari/" />
-        <BrandSocial icon="fa-brands fa-github"      tint="#22272e" url="https://github.com/saeedtelvari" />
-        <BrandSocial icon="fa-solid fa-graduation-cap" tint="#4285f4" url="https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330" />
-        <BrandSocial icon="fa-solid fa-envelope"     tint="#ea4335" url="mailto:st4014@hw.ac.uk" />
+        <BrandSocial label="LinkedIn profile" icon="fa-brands fa-linkedin-in" tint="#0a66c2" url="https://www.linkedin.com/in/stelvari/" />
+        <BrandSocial label="GitHub profile" icon="fa-brands fa-github" tint="#22272e" url="https://github.com/saeedtelvari" />
+        <BrandSocial label="Google Scholar profile" icon="fa-solid fa-graduation-cap" tint="#4285f4" url="https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330" />
+        <BrandSocial label="Email Sa'eed Telvari" icon="fa-solid fa-envelope" tint="#ea4335" url="mailto:st4014@hw.ac.uk" />
       </div>
       <div style={{ height: 22, width: 1, background: 'rgba(255,255,255,0.18)' }}/>
+      <a
+        href="./simulator.html"
+        onClick={(e) => { e.preventDefault(); if (onNavigate) onNavigate('simulator'); else window.location.href = './simulator.html'; }}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          padding: '11px 20px', borderRadius: 14,
+          background: 'linear-gradient(135deg, #0dfca2, #159a80)',
+          border: '1px solid rgba(255,255,255,0.45)', color: '#10251f',
+          fontFamily: "'Montserrat', sans-serif", fontWeight: 700, fontSize: 13.5,
+          textDecoration: 'none', boxShadow: '0 7px 22px rgba(13,252,162,0.28)',
+        }}
+      >
+        <i className="fa-solid fa-play" /> Try VE Simulator
+      </a>
       <a 
         href="#cv" 
         onClick={(e) => { 
@@ -1876,7 +1905,7 @@ const Identity = ({ onNavigate }) => (
   </div>
 );
 
-const BrandSocial = ({ icon, tint, url }) => {
+const BrandSocial = ({ label, icon, tint, url }) => {
   const [hover, setHover] = useState(false);
   const toRGBA = (hex, a) => {
     const n = parseInt(hex.slice(1), 16);
@@ -1889,7 +1918,7 @@ const BrandSocial = ({ icon, tint, url }) => {
       rel="noreferrer"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      aria-label="social link"
+      aria-label={label}
       style={{
         width: 40, height: 40, borderRadius: '50%',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',

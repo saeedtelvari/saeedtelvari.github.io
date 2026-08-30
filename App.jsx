@@ -10,7 +10,7 @@ const dismissLoader = () => {
   if (!loader) return () => {};
   const startTime = window.__pageLoadStart || Date.now();
   const elapsed = Date.now() - startTime;
-  const minDuration = 900; // short brand beat; skipped entirely on slow loads
+  const minDuration = 150;
   const remaining = Math.max(0, minDuration - elapsed);
 
   const timer = setTimeout(() => {
@@ -29,28 +29,24 @@ const App = () => {
   const [screen, setScreen] = useState('home');
   const [activeSection, setActiveSection] = useState('home');
 
-  const onNavigate = (id) => {
+  const applyLocation = () => {
+    const id = (window.location.hash || '#home').slice(1);
+    if (id === 'simulator') {
+      window.location.replace('./simulator.html');
+      return;
+    }
     if (id === 'cv') {
       setScreen('cv');
       setActiveSection('cv');
       window.scrollTo(0, 0);
       return;
     }
-    if (id === 'simulator') {
-      // The simulator lives on its own page — navigating is a real URL change
-      // so the home page never mounts the heavy simulator tree.
-      window.location.href = './simulator.html';
-      return;
-    }
-
     setScreen('home');
     if (id === 'home') {
       setActiveSection('home');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
-
-    // smooth-scroll to anchor on home
     setTimeout(() => {
       const targetId = id === 'research' ? 'publications' : id;
       const el = document.getElementById(targetId);
@@ -63,31 +59,32 @@ const App = () => {
     }, 50);
   };
 
+  const onNavigate = (id) => {
+    if (id === 'simulator') {
+      window.location.href = './simulator.html';
+      return;
+    }
+    const hash = id === 'home' ? '' : '#' + id;
+    window.history.pushState({ screen: id }, '', './index.html' + hash);
+    applyLocation();
+  };
+
   // Expose onNavigate globally for child buttons
-  useEffect(() => {
-    window.__onNavigate = onNavigate;
-  }, []);
+  useEffect(() => { window.__onNavigate = onNavigate; });
 
   // Dismiss 0ms pre-React loading screen once components mount and initial simulation renders
   useEffect(() => {
     return dismissLoader();
   }, []);
 
-  // Hash deep links: index.html#cv / #simulator / section anchors
   useEffect(() => {
-    const h = (window.location.hash || '').replace('#', '');
-    if (h === 'cv') {
-      setScreen('cv');
-      setActiveSection('cv');
-      window.scrollTo(0, 0);
-    } else if (h === 'simulator') {
-      window.location.replace('./simulator.html');
-    } else if (h === 'about' || h === 'research' || h === 'publications' || h === 'contact') {
-      setTimeout(() => {
-        const el = document.getElementById(h === 'research' ? 'publications' : h);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 120);
-    }
+    applyLocation();
+    window.addEventListener('hashchange', applyLocation);
+    window.addEventListener('popstate', applyLocation);
+    return () => {
+      window.removeEventListener('hashchange', applyLocation);
+      window.removeEventListener('popstate', applyLocation);
+    };
   }, []);
 
   // Track active section on home screen using scroll listener

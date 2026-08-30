@@ -25,6 +25,14 @@ const roundDec = (v, d) => d === 0 ? Math.round(v) : +v.toFixed(d);
 const parseValueList = (text) =>
   (text || '').split(/[\s,;]+/).filter(t => t.length > 0).map(Number).filter(v => isFinite(v));
 
+const scenarioNumber = (query, key, min, max, fallback, integer = false) => {
+  if (!query.has(key)) return fallback;
+  const value = Number(query.get(key));
+  if (!isFinite(value)) return fallback;
+  const clamped = Math.max(min, Math.min(max, value));
+  return integer ? Math.round(clamped) : clamped;
+};
+
 // Draw one sample for a parameter given its config and nominal value.
 // Returns { value, sampled } — sampled=false means the nominal was used unchanged.
 const sampleUqParam = (def, cfg, nominal) => {
@@ -222,6 +230,11 @@ const SimulatorPage = () => {
 
   // Tab Navigation state
   const [activeSubTab, setActiveSubTab] = useState('profile'); // 'profile' (2D reservoir) or 'uq' (Sensitivity & UQ Analysis)
+  const [selectedPreset, setSelectedPreset] = useState('default');
+  const [shareStatus, setShareStatus] = useState('');
+  const tabRefs = useRef({});
+  const reservoirSvgRef = useRef(null);
+  const uqWorkerRef = useRef(null);
 
   // SA/UQ uncertainty bounds configuration states (default +/- percentages)
   // --- UQ / SA PARAMETER SELECTION CONFIG ---
@@ -390,6 +403,7 @@ const SimulatorPage = () => {
 
   // Preset Scenario Handlers
   const applyPreset = (presetName) => {
+    setSelectedPreset(presetName);
     resetSimulation();
     if (presetName === 'dome') {
       setDipPercent(0.2);
@@ -447,6 +461,89 @@ const SimulatorPage = () => {
       ]);
       setResidualTrapFraction(0.25);
     }
+  };
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const tab = query.get('tab');
+    const preset = query.get('preset');
+    if (['default', 'dome', 'faulted', 'monocline'].includes(preset)) applyPreset(preset);
+    if (SIM_TABS.includes(tab)) setActiveSubTab(tab);
+    setK(scenarioNumber(query, 'k', 0.1, 3.5, K));
+    setPorosity(scenarioNumber(query, 'phi', 0.1, 0.4, porosity));
+    setCellCount(scenarioNumber(query, 'cells', 50, 300, cellCount, true));
+    setResidualTrapFraction(scenarioNumber(query, 'sgr', 0, 0.4, residualTrapFraction));
+    setDipPercent(scenarioNumber(query, 'dip', -5, 5, dipPercent));
+    setAmplitude(scenarioNumber(query, 'amp', 0, 50, amplitude, true));
+    setFrequency(scenarioNumber(query, 'freq', 0.5, 4, frequency));
+    setFaultOffset(scenarioNumber(query, 'slip', 0, 3, faultOffset));
+    setQ(scenarioNumber(query, 'q', 0, 3.5, Q));
+    setInjLocation(scenarioNumber(query, 'well', 10, 90, injLocation, true));
+    setInjDuration(scenarioNumber(query, 'stop', 50, 400, injDuration, true));
+    setFaultCount(scenarioNumber(query, 'faults', 0, 3, faultCount, true));
+    try {
+      const decoded = JSON.parse(query.get('faultData') || 'null');
+      if (Array.isArray(decoded) && decoded.length <= 3) {
+        setFaults(decoded.map((f, i) => ({
+          xPercent: Math.max(10, Math.min(90, Number(f.xPercent) || 30 + i * 20)),
+          isSealed: Boolean(f.isSealed),
+          thresholdHeight: Math.max(0, Math.min(2, Number(f.thresholdHeight) || 0)),
+          leakRate: Math.max(0.01, Math.min(0.4, Number(f.leakRate) || 0.01)),
+          transmissibility: Math.max(0, Math.min(1, Number(f.transmissibility) || 0)),
+          dipSlope: Math.max(-0.5, Math.min(0.5, Number(f.dipSlope) || 0))
+        })));
+      }
+    } catch (_) { /* Invalid shared fault data falls back to the preset. */ }
+  }, []);
+
+  useEffect(() => () => { if (uqWorkerRef.current) uqWorkerRef.current.terminate(); }, []);
+
+  const scenarioUrl = () => {
+    const url = new URL('./simulator.html', window.location.href);
+    const values = {
+      preset: selectedPreset, tab: activeSubTab, k: K, phi: porosity, cells: cellCount,
+      sgr: residualTrapFraction, dip: dipPercent, amp: amplitude, freq: frequency,
+      slip: faultOffset, q: Q, well: injLocation, stop: injDuration, faults: faultCount,
+      faultData: JSON.stringify(faults.slice(0, faultCount))
+    };
+    Object.entries(values).forEach(([key, value]) => url.searchParams.set(key, String(value)));
+    return url.toString();
+  };
+
+  const copyScenarioLink = () => {
+    const url = scenarioUrl();
+    window.history.replaceState({ simulator: true }, '', url);
+    setShareStatus('Scenario link copied');
+    if (navigator.clipboard) navigator.clipboard.writeText(url).catch(() => {
+      const field = document.createElement('textarea');
+      field.value = url;
+      document.body.appendChild(field);
+      field.select();
+      document.execCommand('copy');
+      field.remove();
+    });
+    setTimeout(() => setShareStatus(''), 2400);
+  };
+
+  const downloadBlob = (blob, filename) => {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  };
+
+  const exportCsv = () => {
+    const rows = ['year,injected_kt,mobile_kt,trapped_kt,leaked_kt', ...massHistory.map(r => [r.time, r.injected, r.mobile, r.trapped, r.leaked].join(','))];
+    downloadBlob(new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' }), 've-simulator-mass-balance.csv');
+  };
+
+  const exportSvg = () => {
+    if (!reservoirSvgRef.current) return;
+    const markup = new XMLSerializer().serializeToString(reservoirSvgRef.current);
+    downloadBlob(new Blob([markup], { type: 'image/svg+xml;charset=utf-8' }), 've-simulator-reservoir.svg');
   };
 
   // Geometry helpers accept an optional params object `p` so Monte Carlo
@@ -733,7 +830,9 @@ const SimulatorPage = () => {
     e.preventDefault();
     const idx = SIM_TABS.indexOf(activeSubTab);
     const dir = e.key === 'ArrowRight' ? 1 : SIM_TABS.length - 1;
-    setActiveSubTab(SIM_TABS[(idx + dir) % SIM_TABS.length]);
+    const next = SIM_TABS[(idx + dir) % SIM_TABS.length];
+    setActiveSubTab(next);
+    requestAnimationFrame(() => tabRefs.current[next] && tabRefs.current[next].focus());
   };
 
   // Play controls toggles
@@ -835,8 +934,6 @@ const SimulatorPage = () => {
     setMcResults(null);
 
     const totalRuns = mcRunsCount;
-    const results = [];
-    const batchSize = 5;
 
     // Capture nominal parameter values
     const nominalK = K;
@@ -906,74 +1003,32 @@ const SimulatorPage = () => {
       });
     }
 
-    // Run chunked simulation loop
-    const runChunk = (startIndex) => {
-      const endIndex = Math.min(totalRuns, startIndex + batchSize);
-      
-      for (let idx = startIndex; idx < endIndex; idx++) {
-        const r = realizations[idx];
-        
-        // Define solver params for this specific run
-        const runParams = {
-          K: r.K,
-          porosity: r.porosity,
-          cellCount: cellCount,
-          dipPercent: r.dipPercent,
-          amplitude: r.amplitude,
-          frequency: frequency,
-          faultOffset: faultOffset,
-          Q: r.Q,
-          injLocation: r.injLocation,
-          injDuration: injDuration,
-          faultCount: faultCount,
-          parentDX: dx,
-          faults: r.faults,
-          residualTrapFraction: r.residualTrapFraction
-        };
-
-        // Initialize state vectors for realization
-        let curH = new Array(cellCount).fill(0);
-        let curHMax = new Array(cellCount).fill(0);
-        let curMasses = { injected: 0, trapped: 0, mobile: 0, leaked: 0 };
-
-        // Run explicit solver to Year 1000
-        for (let year = 1; year <= 1000; year++) {
-          const res = runSolverStep(curH, curHMax, curMasses, year, runParams);
-          curH = res.h;
-          curHMax = res.hMax;
-          curMasses = res.masses;
-        }
-
-        // Record outcomes
-        const trappingEfficiency = curMasses.injected > 0 ? (curMasses.trapped / curMasses.injected) * 100 : 0;
-        const leakedFraction = curMasses.injected > 0 ? (curMasses.leaked / curMasses.injected) * 100 : 0;
-
-        results.push({
-          id: idx,
-          params: r,
-          finalLeaked: curMasses.leaked,
-          finalTrapped: curMasses.trapped,
-          finalMobile: curMasses.mobile,
-          finalInjected: curMasses.injected,
-          trappingEfficiency,
-          leakedFraction,
-          h: curH,
-          hMax: curHMax
-        });
-      }
-
-      setUqProgress(Math.round((endIndex / totalRuns) * 100));
-
-      if (endIndex < totalRuns) {
-        setTimeout(() => runChunk(endIndex), 25);
-      } else {
+    if (!window.Worker) {
+      setUqRunning(false);
+      setShareStatus('This browser does not support background simulation workers.');
+      return;
+    }
+    const worker = new Worker('./uq-worker.js');
+    uqWorkerRef.current = worker;
+    worker.onmessage = ({ data }) => {
+      if (data.type === 'progress') setUqProgress(data.value);
+      if (data.type === 'complete') {
         setUqRunning(false);
-        setMcResults({ runs: results, sampledKeys: Array.from(sampledKeys) });
+        setMcResults({ runs: data.results, sampledKeys: Array.from(sampledKeys) });
+        worker.terminate();
+        uqWorkerRef.current = null;
       }
     };
-
-    // Trigger first chunk
-    setTimeout(() => runChunk(0), 10);
+    worker.onerror = () => {
+      setUqRunning(false);
+      setShareStatus('Uncertainty analysis could not start. Please retry.');
+      worker.terminate();
+      uqWorkerRef.current = null;
+    };
+    worker.postMessage({
+      realizations,
+      base: { cellCount, frequency, faultOffset, injDuration, faultCount, parentDX: dx }
+    });
   };
 
   // Helper to calculate percentiles
@@ -1372,7 +1427,7 @@ const SimulatorPage = () => {
     let nextHMax = [...currentHMax];
     let { injected, trapped, mobile, leaked } = masses;
 
-    // 25 substeps per year to guarantee total TVD numerical advection stability
+    // 25 explicit substeps per model year for a stable educational animation
     const substeps = 25;
     const dt = 1.0 / substeps;
 
@@ -1394,7 +1449,7 @@ const SimulatorPage = () => {
         hMob[i] = Math.min(H, mobileVal);
       }
 
-      // 2. Compute fluxes using only the mobile thickness with physical upwind TVD limiter
+      // 2. Compute first-order upwind fluxes using only the mobile thickness
       const fluxes = new Array(N - 1).fill(0);
       for (let i = 0; i < N - 1; i++) {
         const zL = zt[i] + nextH[i];
@@ -1422,7 +1477,7 @@ const SimulatorPage = () => {
         
         let rawFlux = - (K / porosity) * hFace * grad * 0.08 * transMult;
         
-        // TVD physical limiter: flux can never exceed 30% of mobile mass in cell per substep
+        // Practical flux cap: no more than 30% of upstream mobile height per substep
         if (rawFlux > 0) {
           rawFlux = Math.min(rawFlux, (0.30 * hMob[i]) / dt);
         } else {
@@ -1742,7 +1797,9 @@ const SimulatorPage = () => {
           </span>
         </div>
 
-        <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+        <svg role="img" aria-labelledby="mass-chart-title mass-chart-desc" width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+          <title id="mass-chart-title">CO₂ mass balance through year {simTime}</title>
+          <desc id="mass-chart-desc">Line chart of injected, mobile, trapped, and leaked model mass over simulation time.</desc>
           {/* Y Grid axis */}
           {[0.25, 0.5, 0.75, 1.0].map((ratio, i) => {
             const val = maxVal * ratio;
@@ -1790,6 +1847,11 @@ const SimulatorPage = () => {
           <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
           <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
         </svg>
+        <table className="sr-only">
+          <caption>Current CO₂ mass balance at year {simTime}</caption>
+          <thead><tr><th>Injected</th><th>Mobile</th><th>Trapped</th><th>Leaked</th></tr></thead>
+          <tbody><tr><td>{currentMasses.injected}</td><td>{currentMasses.mobile}</td><td>{currentMasses.trapped}</td><td>{currentMasses.leaked}</td></tr></tbody>
+        </table>
       </div>
     );
   };
@@ -1809,18 +1871,8 @@ const SimulatorPage = () => {
         paddingLeft: sidebarOpen ? '360px' : '4%'
       }}
     >
-      {/* Floating fallback toggle button if sidebar is closed */}
-      {!sidebarOpen && (
-        <button 
-          onClick={() => setSidebarOpen(true)}
-          className="sidebar-toggle-btn"
-        >
-          <i className="fas fa-history" /> Timeline
-        </button>
-      )}
-
       {/* --- COLLAPSIBLE TIME-TRAVEL SIDEBAR --- */}
-      <div className={`time-travel-sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
+      {sidebarOpen && <div className="time-travel-sidebar open">
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#64ffda', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2068,7 +2120,7 @@ const SimulatorPage = () => {
             </div>
           );
         })()}
-      </div>
+      </div>}
 
       {/* Dynamic responsive layout style element */}
       <style>{`
@@ -2077,7 +2129,10 @@ const SimulatorPage = () => {
           grid-template-columns: 1.40fr 1fr;
           gap: 25px;
           align-items: start;
+          min-width: 0;
         }
+        .simulator-layout > *, .controls-subgrid > * { min-width: 0; }
+        .sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
         .controls-subgrid {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -2105,39 +2160,17 @@ const SimulatorPage = () => {
         .time-travel-sidebar.open {
           transform: translateX(0);
         }
-        .sidebar-toggle-btn {
-          position: fixed;
-          bottom: 25px;
-          left: 25px;
-          z-index: 999;
-          background: rgba(100,255,218,0.12);
-          border: 1px solid rgba(100,255,218,0.4);
-          color: #64ffda;
-          padding: 10px 15px;
-          border-radius: 30px;
-          font-size: 11px;
-          font-weight: bold;
-          letter-spacing: 0.05em;
-          text-transform: uppercase;
-          cursor: pointer;
-          backdrop-filter: blur(8px);
-          box-shadow: 0 4px 15px rgba(0,0,0,0.25);
-          transition: all 0.25s ease;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .sidebar-toggle-btn:hover {
-          background: rgba(100,255,218,0.22);
-          box-shadow: 0 4px 20px rgba(100,255,218,0.35);
-          transform: translateY(-2px);
-        }
         @media (max-width: 1100px) {
           .simulator-layout {
             grid-template-columns: 1fr;
           }
         }
         @media (max-width: 768px) {
+          .simulator-page-wrapper {
+            padding: 94px 12px 40px !important;
+            max-width: 100vw;
+            overflow: hidden;
+          }
           .controls-subgrid {
             grid-template-columns: 1fr;
           }
@@ -2145,19 +2178,32 @@ const SimulatorPage = () => {
             padding-left: 4% !important;
           }
           .time-travel-sidebar {
-            width: 290px;
+            width: min(330px, 92vw);
             padding-top: 90px;
           }
+          .sim-title-row { align-items: stretch !important; }
+          .sim-title-row { order: 1; }
+          .simulator-layout { order: 2; }
+          .sim-evidence-grid { order: 3; }
+          .sim-tab-header { overflow-x: auto; align-items: stretch !important; }
+          .sim-tab-header [role="tablist"] { min-width: max-content; }
+          .sim-tab-status { display: none; }
+          .sim-hud-legend { max-width: calc(100% - 16px); overflow-x: auto; right: 8px !important; top: 8px !important; white-space: nowrap; }
+          .sim-playback { left: 8px !important; right: 8px !important; gap: 7px !important; padding: 8px 10px !important; }
+          .sim-playback input[type="range"] { min-width: 48px; }
+          .sim-evidence-grid, .uq-config-grid, .uq-results-grid, .uq-percentile-grid { grid-template-columns: 1fr !important; }
+          .sim-stat-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .control-panel > summary { cursor: pointer; }
         }
       `}</style>
 
       {/* --- TOP ROW: Page Title & Preset Scenarios --- */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 20 }}>
+      <div className="sim-title-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 20 }}>
         <div>
           <div style={{ fontSize: 11, letterSpacing: '0.20em', textTransform: 'uppercase', color: '#64ffda', fontWeight: 600, marginBottom: 6 }}>
             Interactive Numerical Simulator
           </div>
-          <h2 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 38px)', fontFamily: "'Montserrat', sans-serif", fontWeight: 700, display: 'flex', alignItems: 'center', gap: 15 }}>
+          <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 38px)', fontFamily: "'Montserrat', sans-serif", fontWeight: 700, display: 'flex', alignItems: 'center', gap: 15, flexWrap: 'wrap' }}>
             VE Gravity Tongue Simulator
             <button 
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -2179,10 +2225,17 @@ const SimulatorPage = () => {
             >
               <i className="fas fa-history" /> {sidebarOpen ? 'Close Timeline' : 'Timeline'}
             </button>
-          </h2>
+          </h1>
           <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.65)', fontSize: 13.5, maxWidth: 680 }}>
-            Solve explicit Finite Volume Vertical Equilibrium (VE) equations dynamically. Tweak caprock topography, sandstone parameters, or injection variables in real-time.
+            Explore an educational finite-volume Vertical Equilibrium model. Adjust caprock structure, rock properties, injection, and simplified fault behavior in real time.
           </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginTop: 12 }}>
+            <button onClick={copyScenarioLink} style={{ background: '#64ffda', color: '#10251f', border: 0, borderRadius: 8, padding: '8px 12px', fontWeight: 700, cursor: 'pointer' }}><i className="fas fa-link" /> Copy Scenario Link</button>
+            <button onClick={exportCsv} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Export CSV</button>
+            <button onClick={exportSvg} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Export SVG</button>
+            <a href="mailto:st4014@hw.ac.uk?subject=VE%20simulator%20enquiry" style={{ color: '#64ffda', padding: '8px 4px' }}>Contact the researcher</a>
+            <span role="status" aria-live="polite" style={{ color: '#64ffda', fontSize: 12, alignSelf: 'center' }}>{shareStatus}</span>
+          </div>
         </div>
         
         {/* Preset Button Bar */}
@@ -2203,13 +2256,23 @@ const SimulatorPage = () => {
         </div>
       </div>
 
+      <div className="sim-evidence-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        {[
+          ['Problem', 'Full-field CO₂ storage forecasts can be computationally expensive.'],
+          ['Method', 'Vertical integration represents large-scale migration through plume height.'],
+          ['Evidence', 'The research model is benchmarked against higher-resolution compositional cases.'],
+          ['Impact', 'Fast screening supports uncertainty analysis and scenario comparison.']
+        ].map(([label, body]) => <div key={label} style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', fontSize: 11.5, lineHeight: 1.45 }}><strong style={{ display: 'block', color: '#64ffda', marginBottom: 4 }}>{label}</strong>{body}</div>)}
+        <a href="https://doi.org/10.31223/X5P49D" target="_blank" rel="noreferrer" style={{ gridColumn: '1 / -1', color: '#64ffda', fontSize: 12 }}>Read the associated EarthArXiv preprint <i className="fas fa-external-link-alt" /></a>
+      </div>
+
       {/* --- MAIN LAYOUT GRID --- */}
       <div className="simulator-layout">
         {/* LEFT COLUMN: Reservoir SVG Visualizer + Parameter & Fault Sliders (below it) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           
           {/* Reservoir Visualizer SVG Window */}
-          <div style={{
+          <div className="sim-reservoir-card" style={{
             background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
             border: '1px solid rgba(100,255,218,0.18)',
             borderRadius: 20,
@@ -2221,7 +2284,7 @@ const SimulatorPage = () => {
             position: 'relative'
           }}>
             {/* Tabbed Header */}
-            <div style={{ 
+            <div className="sim-tab-header" style={{
               padding: '0 10px', 
               borderBottom: '1px solid rgba(255,255,255,0.06)', 
               display: 'flex', 
@@ -2232,11 +2295,13 @@ const SimulatorPage = () => {
             }}>
               <div style={{ display: 'flex', gap: 4 }} role="tablist" aria-label="Simulator views" onKeyDown={handleTabKeys}>
                 <button 
+                  ref={el => { tabRefs.current.profile = el; }}
                   onClick={() => setActiveSubTab('profile')}
                   role="tab"
                   id="tab-profile"
                   aria-selected={activeSubTab === 'profile'}
                   aria-controls="tabpanel-profile"
+                  tabIndex={activeSubTab === 'profile' ? 0 : -1}
                   style={{
                     background: activeSubTab === 'profile' ? 'rgba(100, 255, 218, 0.08)' : 'none',
                     border: 'none',
@@ -2255,11 +2320,13 @@ const SimulatorPage = () => {
                   <i className="fas fa-project-diagram" style={{ marginRight: 6 }} /> 2D Simulator
                 </button>
                 <button 
+                  ref={el => { tabRefs.current.uq = el; }}
                   onClick={() => setActiveSubTab('uq')}
                   role="tab"
                   id="tab-uq"
                   aria-selected={activeSubTab === 'uq'}
                   aria-controls="tabpanel-uq"
+                  tabIndex={activeSubTab === 'uq' ? 0 : -1}
                   style={{
                     background: activeSubTab === 'uq' ? 'rgba(100, 255, 218, 0.08)' : 'none',
                     border: 'none',
@@ -2278,11 +2345,13 @@ const SimulatorPage = () => {
                   <i className="fas fa-chart-bar" style={{ marginRight: 6 }} /> Sensitivity & UQ
                 </button>
                 <button 
+                  ref={el => { tabRefs.current.guide = el; }}
                   onClick={() => setActiveSubTab('guide')}
                   role="tab"
                   id="tab-guide"
                   aria-selected={activeSubTab === 'guide'}
                   aria-controls="tabpanel-guide"
+                  tabIndex={activeSubTab === 'guide' ? 0 : -1}
                   style={{
                     background: activeSubTab === 'guide' ? 'rgba(100, 255, 218, 0.08)' : 'none',
                     border: 'none',
@@ -2301,7 +2370,7 @@ const SimulatorPage = () => {
                   <i className="fas fa-book" style={{ marginRight: 6 }} /> PDE Methodology Guide
                 </button>
               </div>
-              <div style={{ paddingRight: 8 }}>
+              <div className="sim-tab-status" style={{ paddingRight: 8 }}>
                 {activeSubTab === 'profile' ? (
                   <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Year {simTime} / 1000</span>
                 ) : activeSubTab === 'uq' ? (
@@ -2318,7 +2387,7 @@ const SimulatorPage = () => {
                 return (
                   <div id="tabpanel-profile" role="tabpanel" aria-labelledby="tab-profile" style={{ flex: 1, position: 'relative', display: 'flex', background: '#1c1626' }}>
                     {/* Floating HUD Legend */}
-                    <div style={{
+                    <div className="sim-hud-legend" style={{
                       position: 'absolute', top: 12, right: 12,
                       display: 'flex', gap: 12, alignItems: 'center',
                       background: 'rgba(0,0,0,0.50)', backdropFilter: 'blur(10px)',
@@ -2346,7 +2415,9 @@ const SimulatorPage = () => {
                       </span>
                     </div>
 
-              <svg viewBox="0 0 1000 450" preserveAspectRatio="none" style={{ width: '100%', height: '100%', pointerEvents: 'auto' }}>
+              <svg ref={reservoirSvgRef} role="img" aria-labelledby="reservoir-title reservoir-desc" viewBox="0 0 1000 450" preserveAspectRatio="none" style={{ width: '100%', height: '100%', pointerEvents: 'auto' }}>
+                <title id="reservoir-title">CO₂ plume migration cross-section at year {simTime}</title>
+                <desc id="reservoir-desc">Educational reservoir cross-section showing caprock, brine, mobile and trapped CO₂, injection well, and {faultCount} active faults.</desc>
                 <defs>
                   <clipPath id="caprock-clipper">
                     <path d={`M 0 ${reservoirBlocks[0] ? reservoirBlocks[0].yt1 : capRockY(0)} ` + 
@@ -2571,7 +2642,7 @@ const SimulatorPage = () => {
               </svg>
 
               {/* Time Travel Seek/Play Control Bar overlaid at bottom */}
-              <div style={{
+              <div className="sim-playback" style={{
                 position: 'absolute', bottom: 15, left: '5%', right: '5%',
                 display: 'flex', alignItems: 'center', gap: 14,
                 padding: '8px 18px', background: 'rgba(255,255,255,0.08)',
@@ -2673,7 +2744,7 @@ const SimulatorPage = () => {
                 minHeight: 450
               }}>
                 {/* CONFIGURATION ROW */}
-                <div style={{ 
+                <div className="uq-config-grid" style={{
                   display: 'grid', 
                   gridTemplateColumns: '1.2fr 1fr 1fr', 
                   gap: 20,
@@ -2804,7 +2875,7 @@ const SimulatorPage = () => {
                 {uqData ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
                     
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+                    <div className="uq-results-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
                       
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>
@@ -2837,12 +2908,12 @@ const SimulatorPage = () => {
                       gap: 8
                     }}>
                       <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>P10 / P50 / P90 Outcomes</span>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                      <div className="uq-percentile-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                         
                         {/* P10 */}
                         <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
-                            <div style={{ fontSize: 9.5, color: '#64ffda', fontWeight: 'bold' }}>P10 &middot; optimistic</div>
+                            <div style={{ fontSize: 9.5, color: '#64ffda', fontWeight: 'bold' }}>P10 &middot; {uqTargetMetric === 'leaked' ? 'optimistic' : 'conservative'}</div>
                             <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
                               {uqData.p10Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
                             </div>
@@ -2874,7 +2945,7 @@ const SimulatorPage = () => {
                         {/* P90 */}
                         <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
-                            <div style={{ fontSize: 9.5, color: '#ff6b6b', fontWeight: 'bold' }}>P90 &middot; conservative</div>
+                            <div style={{ fontSize: 9.5, color: '#ff6b6b', fontWeight: 'bold' }}>P90 &middot; {uqTargetMetric === 'leaked' ? 'conservative' : 'optimistic'}</div>
                             <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
                               {uqData.p90Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
                             </div>
@@ -2938,14 +3009,14 @@ const SimulatorPage = () => {
 
           {/* Model honesty footnote — scaled toy model disclosure */}
           <p style={{ margin: '-8px 6px 0', fontSize: 10.5, lineHeight: 1.5, color: 'rgba(255,255,255,0.45)' }}>
-            2D Vertical-Equilibrium toy model &middot; scaled units (1 kt = model mass unit) &middot; buoyancy-driven, viscosity-free gravity tongue with simplified fault conduits. Full assumptions, constitutive laws &amp; numerical scheme in the PDE Guide tab.
+            Educational 2D Vertical-Equilibrium model &middot; scaled units (1 kt = one model mass unit) &middot; buoyancy-driven, viscosity-free gravity tongue with simplified fault conduits. The Methodology tab separates reference theory from the implemented scheme.
           </p>
 
           {/* Sub-grid containing Parameters (Left) and Faults (Right) directly below Reservoir Grid */}
           <div className="controls-subgrid">
             
             {/* Simulation Parameters Slider Panel */}
-            <div style={{
+            <details className="control-panel" open={window.innerWidth > 768} style={{
               background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
               border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 20,
@@ -2953,9 +3024,9 @@ const SimulatorPage = () => {
               boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
               backdropFilter: 'blur(12px)'
             }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif" }}>
+              <summary style={{ margin: '0 0 14px', fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>
                 Simulation Parameters
-              </h3>
+              </summary>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {/* Caprock Structure controls */}
@@ -2997,7 +3068,7 @@ const SimulatorPage = () => {
                   {hasCapillaryFringe && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
                       <Slider label="Fringe Height (h_c)" val={`${fringeScale.toFixed(2)} m`} min="0.10" max="3.00" step="0.10" value={fringeScale} onChange={v => setFringeScale(parseFloat(v))} />
-                      <Slider label="Entry Capillary P_e" val={`${entryPressure} kPa`} min="5" max="40" step="1" value={entryPressure} onChange={v => setEntryPressure(parseInt(v))} />
+                      <Slider label="Visual Entry-pressure Scale" val={`${entryPressure} kPa`} min="5" max="40" step="1" value={entryPressure} onChange={v => setEntryPressure(parseInt(v))} />
                     </div>
                   )}
                 </div>
@@ -3012,10 +3083,10 @@ const SimulatorPage = () => {
                   </div>
                 </div>
               </div>
-            </div>
+            </details>
 
             {/* Fault Management Control Panel */}
-            <div style={{
+            <details className="control-panel" open={window.innerWidth > 768} style={{
               background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
               border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 20,
@@ -3023,9 +3094,9 @@ const SimulatorPage = () => {
               boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
               backdropFilter: 'blur(12px)'
             }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif" }}>
+              <summary style={{ margin: '0 0 14px', fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>
                 Fault Management
-              </h3>
+              </summary>
 
               {/* Number of Faults selector */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 15 }}>
@@ -3141,7 +3212,7 @@ const SimulatorPage = () => {
                   })}
                 </div>
               )}
-            </div>
+            </details>
           </div>
         </div>
 
@@ -3154,7 +3225,7 @@ const SimulatorPage = () => {
           top: 110
         }}>
           {/* Mass Balance Analytics Panel */}
-          <div style={{
+          <details className="control-panel" open={window.innerWidth > 768} style={{
             background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
             border: '1px solid rgba(255,255,255,0.08)',
             borderRadius: 20,
@@ -3165,18 +3236,18 @@ const SimulatorPage = () => {
             flexDirection: 'column',
             gap: 12
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif" }}>
+            <summary style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+              <span style={{ margin: 0, fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>
                 CO₂ Mass Balance
-              </h3>
+              </span>
               <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'rgba(255,255,255,0.5)' }}>Scaled units (ktonnes equiv.)</span>
-            </div>
+            </summary>
 
             {/* Live Chart Rendering */}
             {renderSVGChart()}
 
             {/* Mass balance numerical breakdown boxes */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 4 }}>
+            <div className="sim-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 4 }}>
               <StatBox label="Injected" value={Math.round(currentMasses.injected)} color="#ffffff" opacity="0.6"/>
               <StatBox label="Mobile Plume" value={Math.round(currentMasses.mobile)} color="#64ffda"/>
               <StatBox label="Trapped" value={Math.round(currentMasses.trapped)} color="#3ca68e"/>
@@ -3192,7 +3263,7 @@ const SimulatorPage = () => {
                 <ProgressBar label="Cumulative Leaked Fraction" pct={currentMasses.injected > 0 ? (currentMasses.leaked / currentMasses.injected) * 100 : 0} color="#ff6b6b"/>
               </div>
             </div>
-          </div>
+          </details>
         </div>
       </div>
     </div>

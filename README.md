@@ -9,16 +9,16 @@ Built with React 18, SVG mathematical visualizations, and a custom liquid glassm
 ## 🌟 Key Features
 
 1. **Interactive Subsurface Hero (`SubsurfaceHero.jsx`)**:
-   - Real-time numerical solver calculating Vertical Equilibrium (VE) $\mathrm{CO}_2$ plume migration and capillary trapping across faulted sandstone formations.
+   - Educational height-based VE animation for $\mathrm{CO}_2$ plume migration and capillary trapping across faulted sandstone formations; precomputation runs in a Web Worker.
    - Conforming SVG geological cross-section with real-time dynamic fault step interpolation, buoyancy streamlines, active wellbore casing, and glassmorphic simulation playback controls.
 
 2. **Interactive 2D VE Sandbox & UQ Dashboard (`SimulatorPage.jsx`)**:
    - Interactive parameter controls: permeability, porosity, residual trapping coefficients, injection rate, dip angle, and fault transmissibility multipliers.
-   - Monte Carlo Uncertainty Quantification (UQ) engine with box plots, kernel density distributions, and multi-scenario plume envelopes.
+   - Web Worker Monte Carlo uncertainty engine with percentile outcomes, distributions, and correlation-based sensitivity summaries.
    - Live $\mathrm{CO}_2$ Mass Balance accounting with real-time structural vs residual capillary trapping efficiency tracking.
 
 3. **Mathematical & Physical Guide (`GuidePage.jsx`)**:
-   - Comprehensive reference manual detailing 1D/2D Vertical Equilibrium formulations, pseudo-relative permeability upscaling, and boundary conditions.
+   - Reference theory is clearly separated from the simplified equations actually evaluated by the browser model.
 
 4. **Academic CV View (`CVPage.jsx`)**:
    - Academic milestones, education, peer-reviewed publications, honors, and technical skill matrices with clean `@media print` export.
@@ -39,7 +39,9 @@ Built with React 18, SVG mathematical visualizations, and a custom liquid glassm
 - `Footer.jsx` — Translucent footer with copyright and interactive navigation links.
 - `SubsurfaceHero.jsx` — Landing hero with real-time VE fluid solver and animated faulted geological cross-section.
 - `HomeSections.jsx` — Homepage content sections: About, Research Interests, Peer-Reviewed Publications, and Contact.
-- `SimulatorPage.jsx` — Full-featured VE simulation sandbox, Monte Carlo UQ dashboard, and mass balance analytics.
+- `SimulatorPage.jsx` — VE simulation sandbox, Monte Carlo UQ dashboard, share links, exports, and mass-balance analytics.
+- `hero-simulation-worker.js`, `uq-worker.js` — Background numerical work that keeps interaction responsive.
+- `bundle.js`, `simulator-bundle.js` — Generated home/common and simulator-specific bundles; do not edit directly.
 - `GuidePage.jsx` — Mathematical formulation and PDE methodology guide.
 - `CVPage.jsx` — Interactive and printable Curriculum Vitae.
 - `App.jsx` — Top-level router managing multi-view state and smooth scroll anchors.
@@ -60,3 +62,12 @@ npx serve .
 ```
 
 Navigate to `http://localhost:8000` in any modern web browser.
+
+Rebuild generated bundles and run the repository smoke check after source changes:
+
+```bash
+node build.js
+node tests/site-smoke.js
+```
+
+To enable the direct CV download, add the final PDF at `assets/Saeed-Telvari-CV.pdf`. Until then, the CV page offers the browser's Print / Save as PDF flow.

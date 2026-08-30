@@ -5,6 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Sa'eed Telvari - PhD Candidate in Petroleum Engineering at Heriot-Watt University. Interactive Vertical Equilibrium (VE) CO2 storage simulator and UQ dashboard.">
   <title>VE Simulator | Sa'eed Telvari</title>
+  <link rel="canonical" href="https://saeedtelvari.github.io/simulator.html">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Interactive VE CO₂ Storage Simulator | Sa'eed Telvari">
+  <meta property="og:description" content="Explore plume migration, residual trapping, structural uncertainty, and fault leakage with an educational vertical-equilibrium model.">
+  <meta property="og:url" content="https://saeedtelvari.github.io/simulator.html">
+  <meta property="og:image" content="https://saeedtelvari.github.io/assets/social-preview.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Interactive Vertical Equilibrium CO₂ storage simulator">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Interactive VE CO₂ Storage Simulator">
+  <meta name="twitter:description" content="An educational browser model for CO₂ plume migration and trapping.">
+  <meta name="twitter:image" content="https://saeedtelvari.github.io/assets/social-preview.jpg">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Interactive VE CO₂ Storage Simulator","url":"https://saeedtelvari.github.io/simulator.html","applicationCategory":"EducationalApplication","operatingSystem":"Any modern web browser","author":{"@type":"Person","name":"Sa'eed Telvari"}}</script>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15,8 +29,9 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js">
   <link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js">
-  <link rel="preload" as="script" href="./bundle.js?v=12.8">
-  <link rel="icon" href="./assets/logo-minimalist.png">
+  <link rel="preload" as="script" href="./simulator-bundle.js?v=13.1">
+  <link rel="preload" as="script" href="./bundle.js?v=13.1">
+  <link rel="icon" href="./assets/logo-minimalist.webp" type="image/webp">
   <script>
     window.__pageLoadStart = Date.now();
     // Real-progress driver: nudge the loader bar on actual asset milestones.
@@ -387,7 +402,7 @@
           <span class="telemetry-tag">[02/04]</span> COMPUTING HYDROSTATIC VERTICAL EQUILIBRIUM (VE)...
         </div>
         <div class="telemetry-item step-3">
-          <span class="telemetry-tag">[03/04]</span> CALCULATING MULTIPHASE REL-PERM FLUXES...
+          <span class="telemetry-tag">[03/04]</span> ADVANCING UPWIND PLUME-HEIGHT FLUXES...
         </div>
         <div class="telemetry-item step-4">
           <span class="telemetry-tag">[04/04]</span> SUBSURFACE RESERVOIR DOMAIN READY
@@ -400,6 +415,7 @@
 
   <div id="root" data-page="simulator"></div>
 
-  <script src="bundle.js?v=12.8" onload="window.__loadTick && window.__loadTick(90)"></script>
+  <script src="simulator-bundle.js?v=13.1"></script>
+  <script src="bundle.js?v=13.1" onload="window.__loadTick && window.__loadTick(90)"></script>
 </body>
 </html>

@@ -20,28 +20,29 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
       'SubsurfaceHero.jsx',
       'HomeSections.jsx',
       'CVPage.jsx',
-      'GuidePage.jsx',
-      'SimulatorPage.jsx',
       'App.jsx'
     ];
+    const simulatorFiles = ['GuidePage.jsx', 'SimulatorPage.jsx'];
 
-    let combined = '"use strict";\n';
-    combined += '// Auto-generated bundle — Pre-compiled for instant 0ms execution\n';
-    combined += 'var { useState, useEffect, useMemo, useRef, useCallback } = React;\n\n';
+    const compile = (sourceFiles) => {
+      let output = '"use strict";\n';
+      output += '// Auto-generated bundle — Pre-compiled for instant execution\n';
+      output += 'var { useState, useEffect, useMemo, useRef, useCallback } = React;\n\n';
+      for (const file of sourceFiles) {
+        let code = fs.readFileSync(file, 'utf8');
+        code = code.replace(/const\s*\{\s*[^}]+\s*\}\s*=\s*React\s*;?/g, '// [destructured React]');
+        output += '// File: ' + file + '\n' + Babel.transform(code, { presets: ['react'] }).code + '\n\n';
+      }
+      return output;
+    };
 
-    for (const file of files) {
-      let code = fs.readFileSync(file, 'utf8');
-      // Replace duplicate top-level React destructuring statements to avoid re-declaration errors
-      code = code.replace(/const\s*\{\s*[^}]+\s*\}\s*=\s*React\s*;?/g, '// [destructured React]');
-      const compiled = Babel.transform(code, { presets: ['react'] }).code;
-      combined += '// ==========================================\n';
-      combined += '// File: ' + file + '\n';
-      combined += '// ==========================================\n';
-      combined += compiled + '\n\n';
-    }
+    const combined = compile(files);
+    const simulatorCombined = compile(simulatorFiles);
 
     fs.writeFileSync('bundle.js', combined, 'utf8');
+    fs.writeFileSync('simulator-bundle.js', simulatorCombined, 'utf8');
     console.log('✓ Successfully generated bundle.js (' + (combined.length / 1024).toFixed(1) + ' KB)');
+    console.log('✓ Successfully generated simulator-bundle.js (' + (simulatorCombined.length / 1024).toFixed(1) + ' KB)');
 
     // Validate VM execution
   const mockElement = {
@@ -109,8 +110,9 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
     };
     vm.createContext(testContext);
     try {
+      vm.runInContext(simulatorCombined, testContext);
       vm.runInContext(combined, testContext);
-      console.log('✓ bundle.js executed cleanly with 0 syntax or runtime errors!');
+      console.log('✓ Both bundles executed cleanly with 0 syntax or runtime errors!');
     } catch (err) {
       console.error('✗ Execution error:', err);
       process.exit(1);

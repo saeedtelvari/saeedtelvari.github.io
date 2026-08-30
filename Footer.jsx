@@ -1,11 +1,12 @@
 // Footer.jsx
 const Footer = ({ onNavigate }) => {
   const links = [
-    { id: 'home',         label: 'Home' },
-    { id: 'about',        label: 'About' },
-    { id: 'publications', label: 'Research' },
-    { id: 'simulator',    label: 'VE Simulator' },
-    { id: 'cv',           label: 'CV' },
+    { id: 'home',         label: 'Home', href: './index.html' },
+    { id: 'about',        label: 'About', href: './index.html#about' },
+    { id: 'publications', label: 'Research', href: './index.html#publications' },
+    { id: 'simulator',    label: 'VE Simulator', href: './simulator.html' },
+    { id: 'contact',      label: 'Contact', href: './index.html#contact' },
+    { id: 'cv',           label: 'CV', href: './index.html#cv' },
   ];
 
   return (
@@ -82,6 +83,7 @@ const Footer = ({ onNavigate }) => {
               <FooterLink 
                 key={l.id} 
                 label={l.label} 
+                href={l.href}
                 onClick={() => {
                   if (onNavigate) onNavigate(l.id);
                   else if (window.__onNavigate) window.__onNavigate(l.id);
@@ -95,11 +97,11 @@ const Footer = ({ onNavigate }) => {
   );
 };
 
-const FooterLink = ({ label, onClick }) => {
+const FooterLink = ({ label, href, onClick }) => {
   const [hover, setHover] = useState(false);
   return (
     <a
-      href="#"
+      href={href}
       onClick={(e) => { e.preventDefault(); onClick(); }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}

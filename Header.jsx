@@ -6,6 +6,8 @@ const Header = ({ active, onNavigate }) => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [currentSection, setCurrentSection] = useState(active);
+  const menuButtonRef = useRef(null);
+  const closeButtonRef = useRef(null);
 
   // Shrink-on-scroll
   useEffect(() => {
@@ -45,18 +47,26 @@ const Header = ({ active, onNavigate }) => {
   // Close drawer on escape key
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (e.key === 'Escape' && mobileOpen) setMobileOpen(false);
+      if (e.key === 'Escape' && mobileOpen) {
+        setMobileOpen(false);
+        menuButtonRef.current && menuButtonRef.current.focus();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [mobileOpen]);
 
+  useEffect(() => {
+    if (mobileOpen && closeButtonRef.current) closeButtonRef.current.focus();
+  }, [mobileOpen]);
+
   const items = [
-    { id: 'home',         label: 'Home' },
-    { id: 'about',        label: 'About' },
-    { id: 'publications', label: 'Research' },
-    { id: 'simulator',    label: 'VE Simulator' },
-    { id: 'cv',           label: 'CV' },
+    { id: 'home',         label: 'Home', href: './index.html' },
+    { id: 'about',        label: 'About', href: './index.html#about' },
+    { id: 'publications', label: 'Research', href: './index.html#publications' },
+    { id: 'simulator',    label: 'VE Simulator', href: './simulator.html' },
+    { id: 'contact',      label: 'Contact', href: './index.html#contact' },
+    { id: 'cv',           label: 'CV', href: './index.html#cv' },
   ];
 
   const handleItemClick = (id) => {
@@ -168,7 +178,7 @@ const Header = ({ active, onNavigate }) => {
         }}
       >
         <a
-          href="#"
+          href="./index.html"
           onClick={(e) => { e.preventDefault(); handleItemClick('home'); }}
           aria-label="Sa'eed Telvari Homepage"
           style={{
@@ -178,7 +188,7 @@ const Header = ({ active, onNavigate }) => {
           }}
         >
           <img 
-            src="./assets/logo-minimalist.png" 
+            src="./assets/logo-minimalist.webp"
             alt="Sa'eed Telvari" 
             style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
           />
@@ -191,6 +201,7 @@ const Header = ({ active, onNavigate }) => {
               <NavItem
                 key={it.id}
                 label={it.label}
+                href={it.href}
                 active={currentSection === it.id}
                 onClick={() => handleItemClick(it.id)}
               />
@@ -201,6 +212,7 @@ const Header = ({ active, onNavigate }) => {
         {/* Mobile Hamburger Toggle Button */}
         <button
           type="button"
+          ref={menuButtonRef}
           className="hamburger-btn"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-expanded={mobileOpen}
@@ -211,21 +223,17 @@ const Header = ({ active, onNavigate }) => {
       </div>
 
       {/* Mobile Navigation Drawer Backdrop */}
-      <div 
-        className={`mobile-drawer-backdrop ${mobileOpen ? 'open' : ''}`}
-        onClick={() => setMobileOpen(false)}
-        aria-hidden="true"
-      />
-
-      {/* Mobile Navigation Drawer Panel */}
-      <div className={`mobile-drawer-panel ${mobileOpen ? 'open' : ''}`} role="dialog" aria-modal="true" aria-label="Mobile Navigation">
+      {mobileOpen && <React.Fragment>
+      <div className="mobile-drawer-backdrop open" onClick={() => setMobileOpen(false)} aria-hidden="true" />
+      <div className="mobile-drawer-panel open" role="dialog" aria-modal="true" aria-label="Mobile Navigation">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src="./assets/logo-minimalist.png" alt="Logo" style={{ width: 32, height: 32, objectFit: 'contain' }} />
+            <img src="./assets/logo-minimalist.webp" alt="" style={{ width: 32, height: 32, objectFit: 'contain' }} />
             <span style={{ fontSize: 15, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>Sa&rsquo;eed Telvari</span>
           </div>
           <button
             type="button"
+            ref={closeButtonRef}
             onClick={() => setMobileOpen(false)}
             aria-label="Close menu"
             style={{
@@ -242,9 +250,9 @@ const Header = ({ active, onNavigate }) => {
             const isActive = currentSection === it.id;
             return (
               <li key={it.id}>
-                <button
-                  type="button"
-                  onClick={() => handleItemClick(it.id)}
+                <a
+                  href={it.href}
+                  onClick={(e) => { e.preventDefault(); handleItemClick(it.id); }}
                   style={{
                     width: '100%',
                     textAlign: 'left',
@@ -264,7 +272,7 @@ const Header = ({ active, onNavigate }) => {
                 >
                   <span>{it.label}</span>
                   {isActive && <i className="fas fa-chevron-right" style={{ fontSize: 11, color: '#64ffda' }} />}
-                </button>
+                </a>
               </li>
             );
           })}
@@ -287,20 +295,21 @@ const Header = ({ active, onNavigate }) => {
           </div>
         </div>
       </div>
+      </React.Fragment>}
     </header>
   );
 };
 
-const NavItem = ({ label, active, onClick }) => {
+const NavItem = ({ label, href, active, onClick }) => {
   const [hover, setHover] = useState(false);
   const showPill = hover || active;
   return (
     <li>
-      <button
-        type="button"
+      <a
+        href={href}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
-        onClick={onClick}
+        onClick={(e) => { e.preventDefault(); onClick(); }}
         aria-current={active ? 'page' : undefined}
         style={{
           position: 'relative',
@@ -328,7 +337,7 @@ const NavItem = ({ label, active, onClick }) => {
             : showPill 
               ? '0 4px 15px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.30)' 
               : 'none',
-          outline: 'none',
+          textDecoration: 'none',
           display: 'inline-flex',
           alignItems: 'center',
           gap: 6,
@@ -348,7 +357,7 @@ const NavItem = ({ label, active, onClick }) => {
             boxShadow: '0 0 8px #64ffda',
           }} />
         )}
-      </button>
+      </a>
     </li>
   );
 };

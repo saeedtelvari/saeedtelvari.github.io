@@ -1,8 +1,21 @@
 // CVPage.jsx — single long glass page mirroring cv.html
 
 const CVPage = ({ onNavigate }) => {
+  const cvPdf = './assets/Saeed-Telvari-CV.pdf';
+  const [pdfAvailable, setPdfAvailable] = useState(false);
+
+  useEffect(() => {
+    fetch(cvPdf, { method: 'HEAD' }).then(r => setPdfAvailable(r.ok)).catch(() => setPdfAvailable(false));
+  }, []);
+
   const handlePrint = () => {
     window.print();
+  };
+  const handlePdfDownload = () => {
+    const link = document.createElement('a');
+    link.href = cvPdf;
+    link.download = 'Saeed-Telvari-CV.pdf';
+    link.click();
   };
 
   return (
@@ -92,7 +105,13 @@ const CVPage = ({ onNavigate }) => {
             <a href="https://www.linkedin.com/in/stelvari/" target="_blank" rel="noreferrer" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, textDecoration: 'none' }}><i className="fab fa-linkedin" style={{ color: '#4ecdc4', marginRight: 8 }}></i>/in/stelvari</a>
           </div>
           <div className="cv-download-btn">
-            <GlassButton variant="mint" icon="fas fa-download" onClick={handlePrint}>Download PDF / Print</GlassButton>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              {pdfAvailable && <GlassButton variant="mint" icon="fas fa-download" onClick={handlePdfDownload}>Download CV PDF</GlassButton>}
+              <GlassButton variant={pdfAvailable ? 'default' : 'mint'} icon="fas fa-print" onClick={handlePrint}>Print / Save as PDF</GlassButton>
+            </div>
+            {!pdfAvailable && <p style={{ margin: '10px 0 0', color: 'rgba(255,255,255,0.58)', fontSize: 12 }}>
+              A direct download will appear automatically when <code>assets/Saeed-Telvari-CV.pdf</code> is added.
+            </p>}
           </div>
         </header>
 
@@ -120,6 +139,34 @@ const CVPage = ({ onNavigate }) => {
             { title: 'B.Sc. in Petroleum Engineering', date: '2018 – 2022', inst: 'Amirkabir University of Technology, Tehran',
               details: ['GPA: 17.43/20', 'Thesis: Prediction of two-phase flow properties for digital sandstones using 3D CNNs'] },
           ]}/>
+        </CVSection>
+
+        <Divider />
+
+        <CVSection icon="fas fa-microscope" title="Research Experience & Selected Projects">
+          <Timeline items={[
+            { title: 'Doctoral Researcher — Vertical Equilibrium Modeling', date: '2024 – Present', inst: 'Institute of GeoEnergy Engineering, Heriot-Watt University',
+              details: ['Developing reduced-order models for CO₂–methane–brine migration in depleted gas reservoirs, with applications to screening, uncertainty analysis, and field-scale forecasting.'] },
+            { title: 'Machine-Learning Permeability Upscaling', date: '2022 – 2026', inst: 'Amirkabir University of Technology',
+              details: ['Developed CNN-based workflows for estimating effective permeability from heterogeneous fine-scale reservoir models.'] },
+            { title: 'Digital Sandstone Two-Phase Flow Prediction', date: '2021 – 2023', inst: 'Amirkabir University of Technology',
+              details: ['Built 3D convolutional neural networks to predict relative-permeability and capillary-pressure behavior from digital-rock images.'] },
+          ]}/>
+        </CVSection>
+
+        <Divider />
+
+        <CVSection icon="fas fa-book-open" title="Selected Publications">
+          <Timeline items={[
+            { title: 'A Vertical Equilibrium Model for CO₂ Migration in Depleted Gas Fields', date: '2026', inst: 'EarthArXiv preprint · DOI 10.31223/X5P49D', details: ['Telvari, S.; Ramachandran, H.; Wang, G.; Doster, F.'] },
+            { title: 'Three-Phase VE Simulation of CO₂–Methane–Brine Flow in Reservoirs', date: '2025', inst: 'Sixth EAGE Global Energy Transition Conference & Exhibition', details: ['Telvari, S.; Ramachandran, H.; Wang, G.; Doster, F.'] },
+            { title: 'Accelerated Permeability Upscaling: A Convolutional Neural Network Approach', date: '2026', inst: 'SPE Journal 31(04), 2242–2260', details: ['Sayyafzadeh, M.; Telvari, S.; Guérillot, D.; Sharifi, M.'] },
+            { title: 'Prediction of two-phase flow properties for digital sandstones using 3D convolutional neural networks', date: '2023', inst: 'Advances in Water Resources 176, 104442', details: ['Telvari, S.; Sayyafzadeh, M.; Siavashi, J.; Sharifi, M.'] },
+          ]}/>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <a href="https://orcid.org/0000-0002-4896-295X" target="_blank" rel="noreferrer" style={{ color: '#64ffda' }}>ORCID profile</a>
+            <a href="https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330" target="_blank" rel="noreferrer" style={{ color: '#64ffda' }}>Google Scholar</a>
+          </div>
         </CVSection>
 
         <Divider />
