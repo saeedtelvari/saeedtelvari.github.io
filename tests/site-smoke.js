@@ -48,7 +48,10 @@ has('SimulatorPage.jsx', /<details/, 'mobile controls need progressive disclosur
 assert.ok(fs.existsSync(path.join(root, 'uq-worker.js')), 'UQ worker must exist');
 
 has('build.js', /simulator-bundle\.js/, 'the heavy simulator must have a page-specific bundle');
-has('simulator.html', /simulator-bundle\.js\?v=13\.1/, 'simulator page must load its page-specific bundle');
+const simulatorBundleVersions = [...read('simulator.html').matchAll(/simulator-bundle\.js\?v=([^"']+)/g)].map(match => match[1]);
+assert.ok(simulatorBundleVersions.length >= 2, 'simulator bundle must be preloaded and executed');
+assert.equal(new Set(simulatorBundleVersions).size, 1, 'simulator preload and script URLs must use the same cache version');
+assert.equal(simulatorBundleVersions[0], '14', 'simulator page must load the current bundle version');
 lacks('index.html', /simulator-bundle\.js/, 'home page must not download the simulator bundle');
 
 console.log('site smoke contracts passed');

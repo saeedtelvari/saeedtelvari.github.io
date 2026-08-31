@@ -1,7 +1,7 @@
 // SimulatorPage.jsx — Interactive VE Simulator Page
 const { useEffect, useMemo, useRef, useState } = React;
 
-const SIM_TABS = ['profile', 'uq', 'guide'];
+const SIM_TABS = ['profile', 'map', 'uq', 'guide'];
 
 // Declarative registry of every parameter the UQ batch can sample.
 // dec = display decimals; dec 0 params are sampled as integers.
@@ -186,6 +186,240 @@ const UQParamConfig = ({ def, cfg, onChange }) => {
   );
 };
 
+const Ve2DMapPanel = ({
+  K, porosity, residualTrapFraction, dipPercent, amplitude, frequency, faultOffset,
+  Q, injLocation, injDuration, faultCount, faults, mapCols, wellY, preset
+}) => {
+  const mapRows = Math.max(12, Math.round(mapCols * 0.6));
+  const canvasRef = useRef(null);
+  const stateRef = useRef(globalThis.VE2D.createVe2dState({ cols: mapCols, rows: mapRows }));
+  const timeRef = useRef(0);
+  const paramsRef = useRef(null);
+  const [mapState, setMapState] = useState(stateRef.current);
+  const [mapTime, setMapTime] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const [mapSpeed, setMapSpeed] = useState(1);
+
+  paramsRef.current = {
+    width: 1000,
+    height: 600,
+    permeability: K,
+    porosity,
+    residualTrapFraction,
+    injectionRate: Q,
+    injectionDuration: injDuration,
+    wellX: injLocation,
+    wellY,
+    dipX: dipPercent,
+    dipY: dipPercent * 0.35,
+    structureAmplitude: amplitude,
+    structureFrequency: frequency,
+    faultOffset,
+    faults: faults.slice(0, faultCount).map(fault => ({ ...fault }))
+  };
+
+  const resetMap = useCallback(() => {
+    const next = globalThis.VE2D.createVe2dState({ cols: mapCols, rows: mapRows });
+    stateRef.current = next;
+    timeRef.current = 0;
+    setMapState(next);
+    setMapTime(0);
+    setIsRunning(false);
+  }, [mapCols, mapRows]);
+
+  const advanceMap = () => {
+    if (timeRef.current >= 1000) {
+      setIsRunning(false);
+      return;
+    }
+    const nextTime = timeRef.current + 1;
+    const next = globalThis.VE2D.stepVe2d(stateRef.current, paramsRef.current, nextTime);
+    stateRef.current = next;
+    timeRef.current = nextTime;
+    setMapState(next);
+    setMapTime(nextTime);
+  };
+
+  useEffect(() => resetMap(), [resetMap, preset]);
+
+  useEffect(() => {
+    if (!isRunning) return;
+    const timer = setInterval(advanceMap, 70 / mapSpeed);
+    return () => clearInterval(timer);
+  }, [isRunning, mapSpeed]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const width = 1000;
+    const height = 600;
+    const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = width * pixelRatio;
+    canvas.height = height * pixelRatio;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    const cellWidth = width / mapState.cols;
+    const cellHeight = height / mapState.rows;
+    const depths = mapState.h.map((_, index) => {
+      const col = index % mapState.cols;
+      const row = Math.floor(index / mapState.cols);
+      return globalThis.VE2D.topDepth((col + 0.5) * cellWidth, (row + 0.5) * cellHeight, paramsRef.current);
+    });
+    const minDepth = Math.min(...depths);
+    const maxDepth = Math.max(...depths);
+    const depthSpan = Math.max(0.001, maxDepth - minDepth);
+    const maxPlume = Math.max(0.001, ...mapState.h);
+
+    for (let index = 0; index < mapState.h.length; index++) {
+      const col = index % mapState.cols;
+      const row = Math.floor(index / mapState.cols);
+      const depthRatio = (depths[index] - minDepth) / depthSpan;
+      ctx.fillStyle = `rgb(${20 + Math.round(depthRatio * 16)}, ${28 + Math.round(depthRatio * 12)}, ${42 + Math.round(depthRatio * 16)})`;
+      ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
+
+      if (mapState.h[index] > 0.0001) {
+        const intensity = Math.sqrt(mapState.h[index] / maxPlume);
+        const historic = mapState.hMax[index];
+        const mobile = residualTrapFraction < 1
+          ? Math.min(mapState.h[index], Math.max(0, (mapState.h[index] - residualTrapFraction * historic) / (1 - residualTrapFraction)))
+          : 0;
+        const trappedRatio = mapState.h[index] > 0 ? 1 - mobile / mapState.h[index] : 0;
+        ctx.fillStyle = `rgba(${Math.round(13 + trappedRatio * 18)}, ${Math.round(252 - trappedRatio * 72)}, ${Math.round(162 - trappedRatio * 32)}, ${0.24 + intensity * 0.72})`;
+        ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
+      }
+    }
+
+    ctx.lineWidth = 1.2;
+    for (const ratio of [0.25, 0.5, 0.75]) {
+      const level = maxPlume * ratio;
+      ctx.strokeStyle = `rgba(255,255,255,${0.22 + ratio * 0.38})`;
+      for (let row = 0; row < mapState.rows; row++) {
+        for (let col = 0; col < mapState.cols; col++) {
+          const index = row * mapState.cols + col;
+          if (mapState.h[index] < level) continue;
+          const edge = col === 0 || row === 0 || col === mapState.cols - 1 || row === mapState.rows - 1 ||
+            mapState.h[index - 1] < level || mapState.h[index + 1] < level ||
+            mapState.h[index - mapState.cols] < level || mapState.h[index + mapState.cols] < level;
+          if (edge) ctx.strokeRect(col * cellWidth, row * cellHeight, cellWidth, cellHeight);
+        }
+      }
+    }
+
+    paramsRef.current.faults.forEach(fault => {
+      ctx.beginPath();
+      ctx.moveTo((fault.xPercent / 100) * width - (fault.dipSlope || 0) * height / 2, 0);
+      ctx.lineTo((fault.xPercent / 100) * width + (fault.dipSlope || 0) * height / 2, height);
+      ctx.strokeStyle = fault.isSealed ? '#64ffda' : '#ff6b6b';
+      ctx.lineWidth = fault.isSealed ? 3 : 2;
+      ctx.setLineDash(fault.isSealed ? [] : [9, 7]);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+
+    const wellX = (injLocation / 100) * width;
+    const wellMapY = (wellY / 100) * height;
+    ctx.beginPath();
+    ctx.arc(wellX, wellMapY, 10, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffb300';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(wellX - 15, wellMapY);
+    ctx.lineTo(wellX + 15, wellMapY);
+    ctx.moveTo(wellX, wellMapY - 15);
+    ctx.lineTo(wellX, wellMapY + 15);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(22, height - 62, 250, 40);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(42, height - 40);
+    ctx.lineTo(242, height - 40);
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = '16px monospace';
+    ctx.fillText('200 m', 108, height - 46);
+    ctx.fillText('N', width - 48, 38);
+    ctx.beginPath();
+    ctx.moveTo(width - 42, 48);
+    ctx.lineTo(width - 42, 88);
+    ctx.lineTo(width - 50, 72);
+    ctx.moveTo(width - 42, 88);
+    ctx.lineTo(width - 34, 72);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }, [mapState, residualTrapFraction, injLocation, wellY, K, porosity, dipPercent, amplitude, frequency, faultOffset, faultCount, faults]);
+
+  const downloadMap = (type) => {
+    const link = document.createElement('a');
+    if (type === 'png') {
+      link.href = canvasRef.current.toDataURL('image/png');
+      link.download = 've-2d-plan-view.png';
+    } else {
+      const cellWidth = 1000 / mapState.cols;
+      const cellHeight = 600 / mapState.rows;
+      const rows = ['x_m,y_m,h_m,h_max_m'];
+      mapState.h.forEach((value, index) => rows.push([
+        ((index % mapState.cols) + 0.5) * cellWidth,
+        (Math.floor(index / mapState.cols) + 0.5) * cellHeight,
+        value,
+        mapState.hMax[index]
+      ].join(',')));
+      link.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' }));
+      link.download = 've-2d-grid.csv';
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    }
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  return (
+    <div id="tabpanel-map" role="tabpanel" aria-labelledby="tab-map" tabIndex={0} style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#111823', minHeight: 520 }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 420 }}>
+        <canvas
+          ref={canvasRef}
+          role="img"
+          aria-label={`Plan-view CO2 plume at year ${mapTime}. ${mapState.masses.mobile.toFixed(1)} mobile and ${mapState.masses.trapped.toFixed(1)} trapped mass units.`}
+          style={{ width: '100%', height: '100%', minHeight: 420, display: 'block' }}
+        />
+        <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', flexWrap: 'wrap', gap: 10, padding: '7px 11px', borderRadius: 14, background: 'rgba(0,0,0,0.58)', fontSize: 10, color: '#fff', pointerEvents: 'none' }}>
+          <span><b style={{ color: '#0dfca2' }}>■</b> Mobile CO₂</span>
+          <span><b style={{ color: '#20b894' }}>■</b> Residual CO₂</span>
+          <span><b style={{ color: '#ffb300' }}>●</b> Injector</span>
+          <span><b style={{ color: '#64ffda' }}>━</b> Sealed fault</span>
+          <span><b style={{ color: '#ff6b6b' }}>┄</b> Transmissive fault</span>
+        </div>
+      </div>
+      <div style={{ padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <button onClick={() => setIsRunning(value => !value)} aria-label={isRunning ? 'Pause 2D map simulation' : 'Run 2D map simulation'} style={{ background: '#64ffda', color: '#10251f', border: 0, borderRadius: 8, padding: '7px 12px', fontWeight: 700, cursor: 'pointer' }}>
+          <i className={`fas ${isRunning ? 'fa-pause' : 'fa-play'}`} /> {isRunning ? 'Pause' : 'Run'}
+        </button>
+        <button onClick={advanceMap} aria-label="Advance 2D map one year" style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}><i className="fas fa-step-forward" /></button>
+        <button onClick={resetMap} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}><i className="fas fa-redo" /> Reset</button>
+        <button onClick={() => setMapSpeed(value => value === 1 ? 2 : value === 2 ? 4 : 1)} style={{ background: 'none', color: '#64ffda', border: 0, cursor: 'pointer', fontWeight: 700 }}>{mapSpeed}×</button>
+        <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.72)' }}>Year {mapTime} · {mapCols}×{mapRows} cells</span>
+        <div style={{ flex: 1 }} />
+        <button onClick={() => downloadMap('csv')} style={{ background: 'none', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '6px 9px', cursor: 'pointer' }}>Grid CSV</button>
+        <button onClick={() => downloadMap('png')} style={{ background: 'none', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '6px 9px', cursor: 'pointer' }}>Map PNG</button>
+      </div>
+      <div className="sim-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '0 14px 12px', background: 'rgba(0,0,0,0.2)' }}>
+        <StatBox label="Injected" value={mapState.masses.injected.toFixed(1)} color="#fff" opacity="0.7" />
+        <StatBox label="Mobile" value={mapState.masses.mobile.toFixed(1)} color="#64ffda" />
+        <StatBox label="Trapped" value={mapState.masses.trapped.toFixed(1)} color="#3ca68e" />
+        <StatBox label="Leaked" value={mapState.masses.leaked.toFixed(1)} color="#ff6b6b" />
+      </div>
+    </div>
+  );
+};
+
 // Main Simulator component
 const SimulatorPage = () => {
   // --- STATE PARAMETERS ---
@@ -207,6 +441,8 @@ const SimulatorPage = () => {
   // Injection parameters
   const [Q, setQ] = useState(2.30); // Constant injection rate (0.0 to 3.5)
   const [injLocation, setInjLocation] = useState(70); // Injection cell index % (10% to 90%)
+  const [wellY, setWellY] = useState(50); // Plan-view injector y-coordinate %
+  const [mapCols, setMapCols] = useState(48); // Plan-view x resolution; y follows domain aspect ratio
   const [injDuration, setInjDuration] = useState(240); // Frame count of active injection (50 to 400)
   
   // Fault parameters
@@ -404,6 +640,7 @@ const SimulatorPage = () => {
   // Preset Scenario Handlers
   const applyPreset = (presetName) => {
     setSelectedPreset(presetName);
+    setWellY(50);
     resetSimulation();
     if (presetName === 'dome') {
       setDipPercent(0.2);
@@ -479,6 +716,8 @@ const SimulatorPage = () => {
     setFaultOffset(scenarioNumber(query, 'slip', 0, 3, faultOffset));
     setQ(scenarioNumber(query, 'q', 0, 3.5, Q));
     setInjLocation(scenarioNumber(query, 'well', 10, 90, injLocation, true));
+    setWellY(scenarioNumber(query, 'wellY', 10, 90, wellY, true));
+    setMapCols(scenarioNumber(query, 'mapCells', 24, 80, mapCols, true));
     setInjDuration(scenarioNumber(query, 'stop', 50, 400, injDuration, true));
     setFaultCount(scenarioNumber(query, 'faults', 0, 3, faultCount, true));
     try {
@@ -503,7 +742,7 @@ const SimulatorPage = () => {
     const values = {
       preset: selectedPreset, tab: activeSubTab, k: K, phi: porosity, cells: cellCount,
       sgr: residualTrapFraction, dip: dipPercent, amp: amplitude, freq: frequency,
-      slip: faultOffset, q: Q, well: injLocation, stop: injDuration, faults: faultCount,
+      slip: faultOffset, q: Q, well: injLocation, wellY, mapCells: mapCols, stop: injDuration, faults: faultCount,
       faultData: JSON.stringify(faults.slice(0, faultCount))
     };
     Object.entries(values).forEach(([key, value]) => url.searchParams.set(key, String(value)));
@@ -1868,11 +2107,11 @@ const SimulatorPage = () => {
         flexDirection: 'column',
         gap: 25,
         transition: 'padding-left 0.3s ease-in-out',
-        paddingLeft: sidebarOpen ? '360px' : '4%'
+        paddingLeft: sidebarOpen && activeSubTab === 'profile' ? '360px' : '4%'
       }}
     >
       {/* --- COLLAPSIBLE TIME-TRAVEL SIDEBAR --- */}
-      {sidebarOpen && <div className="time-travel-sidebar open">
+      {sidebarOpen && activeSubTab === 'profile' && <div className="time-travel-sidebar open">
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#64ffda', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2205,7 +2444,7 @@ const SimulatorPage = () => {
           </div>
           <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 38px)', fontFamily: "'Montserrat', sans-serif", fontWeight: 700, display: 'flex', alignItems: 'center', gap: 15, flexWrap: 'wrap' }}>
             VE Gravity Tongue Simulator
-            <button 
+            {activeSubTab === 'profile' && <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               style={{
                 background: sidebarOpen ? 'rgba(100, 255, 218, 0.25)' : 'rgba(100, 255, 218, 0.1)',
@@ -2224,15 +2463,15 @@ const SimulatorPage = () => {
               title="Toggle timeline sidebar"
             >
               <i className="fas fa-history" /> {sidebarOpen ? 'Close Timeline' : 'Timeline'}
-            </button>
+            </button>}
           </h1>
           <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.65)', fontSize: 13.5, maxWidth: 680 }}>
             Explore an educational finite-volume Vertical Equilibrium model. Adjust caprock structure, rock properties, injection, and simplified fault behavior in real time.
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginTop: 12 }}>
             <button onClick={copyScenarioLink} style={{ background: '#64ffda', color: '#10251f', border: 0, borderRadius: 8, padding: '8px 12px', fontWeight: 700, cursor: 'pointer' }}><i className="fas fa-link" /> Copy Scenario Link</button>
-            <button onClick={exportCsv} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Export CSV</button>
-            <button onClick={exportSvg} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Export SVG</button>
+            {activeSubTab === 'profile' && <button onClick={exportCsv} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Export CSV</button>}
+            {activeSubTab === 'profile' && <button onClick={exportSvg} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Export SVG</button>}
             <a href="mailto:st4014@hw.ac.uk?subject=VE%20simulator%20enquiry" style={{ color: '#64ffda', padding: '8px 4px' }}>Contact the researcher</a>
             <span role="status" aria-live="polite" style={{ color: '#64ffda', fontSize: 12, alignSelf: 'center' }}>{shareStatus}</span>
           </div>
@@ -2267,7 +2506,7 @@ const SimulatorPage = () => {
       </div>
 
       {/* --- MAIN LAYOUT GRID --- */}
-      <div className="simulator-layout">
+      <div className="simulator-layout" style={activeSubTab === 'map' ? { gridTemplateColumns: '1fr' } : undefined}>
         {/* LEFT COLUMN: Reservoir SVG Visualizer + Parameter & Fault Sliders (below it) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           
@@ -2317,7 +2556,32 @@ const SimulatorPage = () => {
                     outline: 'none'
                   }}
                 >
-                  <i className="fas fa-project-diagram" style={{ marginRight: 6 }} /> 2D Simulator
+                  <i className="fas fa-project-diagram" style={{ marginRight: 6 }} /> Cross-section
+                </button>
+                <button
+                  ref={el => { tabRefs.current.map = el; }}
+                  onClick={() => setActiveSubTab('map')}
+                  role="tab"
+                  id="tab-map"
+                  aria-selected={activeSubTab === 'map'}
+                  aria-controls="tabpanel-map"
+                  tabIndex={activeSubTab === 'map' ? 0 : -1}
+                  style={{
+                    background: activeSubTab === 'map' ? 'rgba(100, 255, 218, 0.08)' : 'none',
+                    border: 'none',
+                    borderBottom: activeSubTab === 'map' ? '2px solid #64ffda' : '2px solid transparent',
+                    color: activeSubTab === 'map' ? '#64ffda' : 'rgba(255,255,255,0.6)',
+                    padding: '12px 16px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    letterSpacing: '0.05em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    outline: 'none'
+                  }}
+                >
+                  <i className="fas fa-map" style={{ marginRight: 6 }} /> 2D Map
                 </button>
                 <button 
                   ref={el => { tabRefs.current.uq = el; }}
@@ -2373,6 +2637,8 @@ const SimulatorPage = () => {
               <div className="sim-tab-status" style={{ paddingRight: 8 }}>
                 {activeSubTab === 'profile' ? (
                   <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Year {simTime} / 1000</span>
+                ) : activeSubTab === 'map' ? (
+                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>x–y plume-height model</span>
                 ) : activeSubTab === 'uq' ? (
                   <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Monte Carlo Analysis</span>
                 ) : (
@@ -2725,7 +2991,27 @@ const SimulatorPage = () => {
               </div>
             </div>
           );
-        } else if (activeSubTab === 'uq') {
+                } else if (activeSubTab === 'map') {
+                  return (
+                    <Ve2DMapPanel
+                      K={K}
+                      porosity={porosity}
+                      residualTrapFraction={residualTrapFraction}
+                      dipPercent={dipPercent}
+                      amplitude={amplitude}
+                      frequency={frequency}
+                      faultOffset={faultOffset}
+                      Q={Q}
+                      injLocation={injLocation}
+                      injDuration={injDuration}
+                      faultCount={faultCount}
+                      faults={faults}
+                      mapCols={mapCols}
+                      wellY={wellY}
+                      preset={selectedPreset}
+                    />
+                  );
+                } else if (activeSubTab === 'uq') {
           return (
               /* Sensitivity & UQ Dashboard UI panel */
               <div
@@ -3009,7 +3295,7 @@ const SimulatorPage = () => {
 
           {/* Model honesty footnote — scaled toy model disclosure */}
           <p style={{ margin: '-8px 6px 0', fontSize: 10.5, lineHeight: 1.5, color: 'rgba(255,255,255,0.45)' }}>
-            Educational 2D Vertical-Equilibrium model &middot; scaled units (1 kt = one model mass unit) &middot; buoyancy-driven, viscosity-free gravity tongue with simplified fault conduits. The Methodology tab separates reference theory from the implemented scheme.
+            Educational {activeSubTab === 'map' ? 'x–y plan-view' : 'cross-section'} Vertical-Equilibrium model &middot; scaled units (1 kt = one model mass unit) &middot; buoyancy-driven, viscosity-free gravity tongue with simplified faults. The Methodology tab separates reference theory from the implemented scheme.
           </p>
 
           {/* Sub-grid containing Parameters (Left) and Faults (Right) directly below Reservoir Grid */}
@@ -3078,7 +3364,9 @@ const SimulatorPage = () => {
                   <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Injection Settings</span>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
                     <Slider label="Flow Rate (Q)" val={`${Q.toFixed(1)} kt/yr`} min="0.0" max="3.5" step="0.1" value={Q} onChange={v => setQ(parseFloat(v))} />
-                    <Slider label="Well Location" val={`${injLocation}%`} min="10" max="90" step="5" value={injLocation} onChange={v => setInjLocation(parseInt(v))} />
+                    <Slider label={activeSubTab === 'map' ? 'Well X Location' : 'Well Location'} val={`${injLocation}%`} min="10" max="90" step="5" value={injLocation} onChange={v => setInjLocation(parseInt(v))} />
+                    {activeSubTab === 'map' && <Slider label="Well Y Location" val={`${wellY}%`} min="10" max="90" step="5" value={wellY} onChange={v => setWellY(parseInt(v))} />}
+                    {activeSubTab === 'map' && <Slider label="2D Grid Resolution" val={`${mapCols} × ${Math.max(12, Math.round(mapCols * 0.6))}`} min="24" max="80" step="8" value={mapCols} onChange={v => setMapCols(parseInt(v))} />}
                     <Slider label="Inj. Stop Year" val={`${injDuration}y`} min="50" max="400" step="10" value={injDuration} onChange={v => setInjDuration(parseInt(v))} />
                   </div>
                 </div>
@@ -3217,7 +3505,7 @@ const SimulatorPage = () => {
         </div>
 
         {/* RIGHT COLUMN: Mass Balance Analytics & Charting Window */}
-        <div style={{
+        {activeSubTab !== 'map' && <div style={{
           display: 'flex',
           flexDirection: 'column',
           gap: 20,
@@ -3264,7 +3552,7 @@ const SimulatorPage = () => {
               </div>
             </div>
           </details>
-        </div>
+        </div>}
       </div>
     </div>
   );

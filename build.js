@@ -22,7 +22,7 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
       'CVPage.jsx',
       'App.jsx'
     ];
-    const simulatorFiles = ['GuidePage.jsx', 'SimulatorPage.jsx'];
+    const simulatorFiles = ['ve2d-model.js', 'GuidePage.jsx', 'SimulatorPage.jsx'];
 
     const compile = (sourceFiles) => {
       let output = '"use strict";\n';

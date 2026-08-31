@@ -2,6 +2,207 @@
 // Auto-generated bundle — Pre-compiled for instant execution
 var { useState, useEffect, useMemo, useRef, useCallback } = React;
 
+// File: ve2d-model.js
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  root.VE2D = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const createVe2dState = ({
+    cols = 48,
+    rows = 30
+  } = {}) => {
+    cols = clamp(Math.round(cols), 6, 120);
+    rows = clamp(Math.round(rows), 6, 80);
+    const size = cols * rows;
+    return {
+      cols,
+      rows,
+      h: new Array(size).fill(0),
+      hMax: new Array(size).fill(0),
+      masses: {
+        injected: 0,
+        trapped: 0,
+        mobile: 0,
+        leaked: 0
+      }
+    };
+  };
+  const faultSide = (x, y, fault, width, height) => {
+    const lineX = fault.xPercent / 100 * width + (fault.dipSlope || 0) * (y - height / 2);
+    return x - lineX;
+  };
+  const faceTransmissibility = (x1, y1, x2, y2, faults, width, height) => {
+    let multiplier = 1;
+    for (const fault of faults) {
+      if (faultSide(x1, y1, fault, width, height) * faultSide(x2, y2, fault, width, height) <= 0) {
+        multiplier = Math.min(multiplier, fault.isSealed ? 0 : clamp(fault.transmissibility ?? 1, 0, 1));
+      }
+    }
+    return multiplier;
+  };
+  const topDepth = (x, y, params) => {
+    const {
+      width,
+      height
+    } = params;
+    const xn = x / width - 0.5;
+    const yn = y / height - 0.5;
+    const dip = xn * (params.dipX || 0) * 4 + yn * (params.dipY || 0) * 4;
+    const amplitude = (params.structureAmplitude || 0) / 15;
+    const frequency = params.structureFrequency || 1;
+    let depth = dip - amplitude * Math.cos(xn * Math.PI * 2 * frequency) * Math.cos(yn * Math.PI);
+    for (let i = 0; i < params.faults.length; i++) {
+      const fault = params.faults[i];
+      if (faultSide(x, y, fault, width, height) > 0) {
+        depth += (i % 2 === 0 ? 1 : -1) * (params.faultOffset || 0) * 0.8;
+      }
+    }
+    return depth;
+  };
+  const partition = (height, maximum, residualFraction) => {
+    const mobile = residualFraction < 1 ? Math.max(0, (height - residualFraction * maximum) / (1 - residualFraction)) : 0;
+    const boundedMobile = Math.min(height, mobile);
+    return {
+      mobile: boundedMobile,
+      trapped: Math.max(0, height - boundedMobile)
+    };
+  };
+  const stepVe2d = (state, inputParams, frame) => {
+    const cols = state.cols;
+    const rows = state.rows;
+    const params = {
+      width: 1000,
+      height: 600,
+      permeability: 1.7,
+      porosity: 0.25,
+      residualTrapFraction: 0.25,
+      injectionRate: 0,
+      injectionDuration: 0,
+      wellX: 50,
+      wellY: 50,
+      dipX: 0,
+      dipY: 0,
+      structureAmplitude: 0,
+      structureFrequency: 1,
+      faultOffset: 0,
+      faults: [],
+      ...inputParams
+    };
+    params.faults = (params.faults || []).filter(Boolean);
+    params.porosity = clamp(params.porosity, 0.01, 0.8);
+    params.residualTrapFraction = clamp(params.residualTrapFraction, 0, 0.95);
+    const dx = params.width / cols;
+    const dy = params.height / rows;
+    const scaledArea = dx / 5 * (dy / 5);
+    const substeps = 6;
+    const dt = 1 / substeps;
+    const capacity = 12;
+    const mobility = 0.12 * clamp(params.permeability / params.porosity, 0.05, 20);
+    let h = state.h.slice();
+    const hMax = state.hMax.slice();
+    let injected = state.masses.injected;
+    let leaked = state.masses.leaked;
+    const coordinates = index => ({
+      x: (index % cols + 0.5) * dx,
+      y: (Math.floor(index / cols) + 0.5) * dy
+    });
+    for (let substep = 0; substep < substeps; substep++) {
+      const mobile = h.map((value, index) => partition(value, hMax[index], params.residualTrapFraction).mobile);
+      const delta = new Array(h.length).fill(0);
+      const transfer = (from, to, distance) => {
+        const a = coordinates(from);
+        const b = coordinates(to);
+        const trans = faceTransmissibility(a.x, a.y, b.x, b.y, params.faults, params.width, params.height);
+        if (trans === 0) return;
+        const potentialA = topDepth(a.x, a.y, params) + h[from];
+        const potentialB = topDepth(b.x, b.y, params) + h[to];
+        if (Math.abs(potentialA - potentialB) < 1e-12) return;
+        const donor = potentialA > potentialB ? from : to;
+        const receiver = donor === from ? to : from;
+        const gradient = Math.abs(potentialA - potentialB) / Math.max(1, distance / 50);
+        const amount = Math.min(mobile[donor] * 0.22, mobility * mobile[donor] * gradient * dt * trans);
+        delta[donor] -= amount;
+        delta[receiver] += amount;
+      };
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const index = row * cols + col;
+          if (col + 1 < cols) transfer(index, index + 1, dx);
+          if (row + 1 < rows) transfer(index, index + cols, dy);
+        }
+      }
+      h = h.map((value, index) => Math.max(0, value + delta[index]));
+      if (params.injectionRate > 0 && frame <= params.injectionDuration) {
+        const wellCol = clamp(Math.floor(params.wellX / 100 * cols), 0, cols - 1);
+        const wellRow = clamp(Math.floor(params.wellY / 100 * rows), 0, rows - 1);
+        const cells = [];
+        let weightSum = 0;
+        for (let oy = -1; oy <= 1; oy++) {
+          for (let ox = -1; ox <= 1; ox++) {
+            const col = wellCol + ox;
+            const row = wellRow + oy;
+            if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
+            const weight = Math.exp(-(ox * ox + oy * oy));
+            cells.push({
+              index: row * cols + col,
+              weight
+            });
+            weightSum += weight;
+          }
+        }
+        const injectedThisStep = params.injectionRate * dt;
+        for (const cell of cells) {
+          h[cell.index] += injectedThisStep * cell.weight / weightSum / (params.porosity * scaledArea);
+        }
+        injected += injectedThisStep;
+      }
+      for (let index = 0; index < h.length; index++) {
+        const point = coordinates(index);
+        for (const fault of params.faults) {
+          if (fault.isSealed || !fault.leakRate) continue;
+          const distance = Math.abs(faultSide(point.x, point.y, fault, params.width, params.height));
+          if (distance > Math.max(dx, dy) * 0.55 || h[index] <= (fault.thresholdHeight || 0)) continue;
+          const lostHeight = Math.min(h[index] - (fault.thresholdHeight || 0), fault.leakRate * dt * 0.12);
+          h[index] -= lostHeight;
+          leaked += lostHeight * params.porosity * scaledArea;
+        }
+        if (h[index] > capacity) {
+          leaked += (h[index] - capacity) * params.porosity * scaledArea;
+          h[index] = capacity;
+        }
+        hMax[index] = Math.max(hMax[index], h[index]);
+      }
+    }
+    let mobileMass = 0;
+    let trappedMass = 0;
+    for (let index = 0; index < h.length; index++) {
+      const phases = partition(h[index], hMax[index], params.residualTrapFraction);
+      mobileMass += phases.mobile * params.porosity * scaledArea;
+      trappedMass += phases.trapped * params.porosity * scaledArea;
+    }
+    return {
+      cols,
+      rows,
+      h,
+      hMax,
+      masses: {
+        injected: +injected.toFixed(4),
+        trapped: +trappedMass.toFixed(4),
+        mobile: +mobileMass.toFixed(4),
+        leaked: +leaked.toFixed(4)
+      }
+    };
+  };
+  return {
+    createVe2dState,
+    stepVe2d,
+    topDepth,
+    faceTransmissibility
+  };
+});
+
 // File: GuidePage.jsx
 // GuidePage.jsx — Interactive VE Simulator Equations & Methodology Guide
 // [destructured React]
@@ -455,15 +656,23 @@ const GuidePage = ({
     className: "math-header"
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-wave-square"
-  }), " 5. Implemented Height Transport Scheme"), /*#__PURE__*/React.createElement("p", {
+  }), " 5. Implemented 1D & 2D Height Transport"), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "The plume column thickness ", /*#__PURE__*/React.createElement("span", {
+  }, "The cross-section evolves ", /*#__PURE__*/React.createElement("span", {
     className: "variable"
   }, "h"), "(", /*#__PURE__*/React.createElement("span", {
     className: "variable"
   }, "x"), ", ", /*#__PURE__*/React.createElement("span", {
     className: "variable"
-  }, "t"), ") evolves according to the 1D vertically-integrated mass conservation law:"), /*#__PURE__*/React.createElement("div", {
+  }, "t"), "), while the plan-view model evolves ", /*#__PURE__*/React.createElement("span", {
+    className: "variable"
+  }, "h"), "(", /*#__PURE__*/React.createElement("span", {
+    className: "variable"
+  }, "x"), ", ", /*#__PURE__*/React.createElement("span", {
+    className: "variable"
+  }, "y"), ", ", /*#__PURE__*/React.createElement("span", {
+    className: "variable"
+  }, "t"), ") on a rectangular grid. Both use vertically integrated mass conservation; the 2D form is:"), /*#__PURE__*/React.createElement("div", {
     className: "equation-block"
   }, "\u03C6 ", /*#__PURE__*/React.createElement("span", {
     className: "fraction"
@@ -481,11 +690,25 @@ const GuidePage = ({
     className: "numerator"
   }, "\u2202 ", /*#__PURE__*/React.createElement("span", {
     className: "variable"
-  }, "q")), /*#__PURE__*/React.createElement("span", {
+  }, "q"), /*#__PURE__*/React.createElement("span", {
+    className: "subscript"
+  }, "x")), /*#__PURE__*/React.createElement("span", {
     className: "denominator"
   }, "\u2202 ", /*#__PURE__*/React.createElement("span", {
     className: "variable"
-  }, "x"))), " =", /*#__PURE__*/React.createElement("span", {
+  }, "x"))), " +", /*#__PURE__*/React.createElement("span", {
+    className: "fraction"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "numerator"
+  }, "\u2202 ", /*#__PURE__*/React.createElement("span", {
+    className: "variable"
+  }, "q"), /*#__PURE__*/React.createElement("span", {
+    className: "subscript"
+  }, "y")), /*#__PURE__*/React.createElement("span", {
+    className: "denominator"
+  }, "\u2202 ", /*#__PURE__*/React.createElement("span", {
+    className: "variable"
+  }, "y"))), " =", /*#__PURE__*/React.createElement("span", {
     className: "variable"
   }, "Q"), /*#__PURE__*/React.createElement("span", {
     className: "subscript"
@@ -495,7 +718,7 @@ const GuidePage = ({
     className: "subscript"
   }, "leak")), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "The browser implementation uses an explicit first-order upwind finite-volume flux and caps each substep\u2019s outgoing mobile volume for numerical robustness:"), /*#__PURE__*/React.createElement("div", {
+  }, "The browser implementation uses explicit first-order upwind finite-volume fluxes between two neighbours in the cross-section and four neighbours in the x\u2013y map. Each substep caps outgoing mobile volume for numerical robustness:"), /*#__PURE__*/React.createElement("div", {
     className: "equation-block"
   }, "|", /*#__PURE__*/React.createElement("span", {
     className: "variable"
@@ -525,7 +748,7 @@ const GuidePage = ({
     className: "math-text"
   }, "The vertically-integrated Darcy flux ", /*#__PURE__*/React.createElement("span", {
     className: "variable"
-  }, "q"), " combines regional structural dipping and buoyant hydrostatic spreading:"), /*#__PURE__*/React.createElement("div", {
+  }, "q"), " combines structural gradients and buoyant spreading. In the map, the same expression is evaluated independently on x and y cell faces:"), /*#__PURE__*/React.createElement("div", {
     className: "equation-block"
   }, /*#__PURE__*/React.createElement("span", {
     className: "variable"
@@ -647,9 +870,7 @@ const GuidePage = ({
     className: "variable"
   }, "h"), /*#__PURE__*/React.createElement("span", {
     className: "subscript"
-  }, "max"), "(", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "x"), ") is the historical maximum gas envelope, visualized as the ", /*#__PURE__*/React.createElement("strong", null, "cyan dashed boundary"), ".")), /*#__PURE__*/React.createElement("div", {
+  }, "max"), " is the historical maximum gas envelope at each x or x\u2013y cell. It appears as the cyan dashed boundary in cross-section and contributes to the trapped-gas colour in plan view.")), /*#__PURE__*/React.createElement("div", {
     className: "math-card full-width-card"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "math-header"
@@ -729,7 +950,7 @@ Object.assign(window, {
 // SimulatorPage.jsx — Interactive VE Simulator Page
 // [destructured React]
 
-const SIM_TABS = ['profile', 'uq', 'guide'];
+const SIM_TABS = ['profile', 'map', 'uq', 'guide'];
 
 // Declarative registry of every parameter the UQ batch can sample.
 // dec = display decimals; dec 0 params are sampled as integers.
@@ -1035,6 +1256,379 @@ const UQParamConfig = ({
     }
   }, parseValueList(cfg.values).length, " valid value", parseValueList(cfg.values).length === 1 ? '' : 's', " \u2014 sampled uniformly")));
 };
+const Ve2DMapPanel = ({
+  K,
+  porosity,
+  residualTrapFraction,
+  dipPercent,
+  amplitude,
+  frequency,
+  faultOffset,
+  Q,
+  injLocation,
+  injDuration,
+  faultCount,
+  faults,
+  mapCols,
+  wellY,
+  preset
+}) => {
+  const mapRows = Math.max(12, Math.round(mapCols * 0.6));
+  const canvasRef = useRef(null);
+  const stateRef = useRef(globalThis.VE2D.createVe2dState({
+    cols: mapCols,
+    rows: mapRows
+  }));
+  const timeRef = useRef(0);
+  const paramsRef = useRef(null);
+  const [mapState, setMapState] = useState(stateRef.current);
+  const [mapTime, setMapTime] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const [mapSpeed, setMapSpeed] = useState(1);
+  paramsRef.current = {
+    width: 1000,
+    height: 600,
+    permeability: K,
+    porosity,
+    residualTrapFraction,
+    injectionRate: Q,
+    injectionDuration: injDuration,
+    wellX: injLocation,
+    wellY,
+    dipX: dipPercent,
+    dipY: dipPercent * 0.35,
+    structureAmplitude: amplitude,
+    structureFrequency: frequency,
+    faultOffset,
+    faults: faults.slice(0, faultCount).map(fault => ({
+      ...fault
+    }))
+  };
+  const resetMap = useCallback(() => {
+    const next = globalThis.VE2D.createVe2dState({
+      cols: mapCols,
+      rows: mapRows
+    });
+    stateRef.current = next;
+    timeRef.current = 0;
+    setMapState(next);
+    setMapTime(0);
+    setIsRunning(false);
+  }, [mapCols, mapRows]);
+  const advanceMap = () => {
+    if (timeRef.current >= 1000) {
+      setIsRunning(false);
+      return;
+    }
+    const nextTime = timeRef.current + 1;
+    const next = globalThis.VE2D.stepVe2d(stateRef.current, paramsRef.current, nextTime);
+    stateRef.current = next;
+    timeRef.current = nextTime;
+    setMapState(next);
+    setMapTime(nextTime);
+  };
+  useEffect(() => resetMap(), [resetMap, preset]);
+  useEffect(() => {
+    if (!isRunning) return;
+    const timer = setInterval(advanceMap, 70 / mapSpeed);
+    return () => clearInterval(timer);
+  }, [isRunning, mapSpeed]);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const width = 1000;
+    const height = 600;
+    const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = width * pixelRatio;
+    canvas.height = height * pixelRatio;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    const cellWidth = width / mapState.cols;
+    const cellHeight = height / mapState.rows;
+    const depths = mapState.h.map((_, index) => {
+      const col = index % mapState.cols;
+      const row = Math.floor(index / mapState.cols);
+      return globalThis.VE2D.topDepth((col + 0.5) * cellWidth, (row + 0.5) * cellHeight, paramsRef.current);
+    });
+    const minDepth = Math.min(...depths);
+    const maxDepth = Math.max(...depths);
+    const depthSpan = Math.max(0.001, maxDepth - minDepth);
+    const maxPlume = Math.max(0.001, ...mapState.h);
+    for (let index = 0; index < mapState.h.length; index++) {
+      const col = index % mapState.cols;
+      const row = Math.floor(index / mapState.cols);
+      const depthRatio = (depths[index] - minDepth) / depthSpan;
+      ctx.fillStyle = `rgb(${20 + Math.round(depthRatio * 16)}, ${28 + Math.round(depthRatio * 12)}, ${42 + Math.round(depthRatio * 16)})`;
+      ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
+      if (mapState.h[index] > 0.0001) {
+        const intensity = Math.sqrt(mapState.h[index] / maxPlume);
+        const historic = mapState.hMax[index];
+        const mobile = residualTrapFraction < 1 ? Math.min(mapState.h[index], Math.max(0, (mapState.h[index] - residualTrapFraction * historic) / (1 - residualTrapFraction))) : 0;
+        const trappedRatio = mapState.h[index] > 0 ? 1 - mobile / mapState.h[index] : 0;
+        ctx.fillStyle = `rgba(${Math.round(13 + trappedRatio * 18)}, ${Math.round(252 - trappedRatio * 72)}, ${Math.round(162 - trappedRatio * 32)}, ${0.24 + intensity * 0.72})`;
+        ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
+      }
+    }
+    ctx.lineWidth = 1.2;
+    for (const ratio of [0.25, 0.5, 0.75]) {
+      const level = maxPlume * ratio;
+      ctx.strokeStyle = `rgba(255,255,255,${0.22 + ratio * 0.38})`;
+      for (let row = 0; row < mapState.rows; row++) {
+        for (let col = 0; col < mapState.cols; col++) {
+          const index = row * mapState.cols + col;
+          if (mapState.h[index] < level) continue;
+          const edge = col === 0 || row === 0 || col === mapState.cols - 1 || row === mapState.rows - 1 || mapState.h[index - 1] < level || mapState.h[index + 1] < level || mapState.h[index - mapState.cols] < level || mapState.h[index + mapState.cols] < level;
+          if (edge) ctx.strokeRect(col * cellWidth, row * cellHeight, cellWidth, cellHeight);
+        }
+      }
+    }
+    paramsRef.current.faults.forEach(fault => {
+      ctx.beginPath();
+      ctx.moveTo(fault.xPercent / 100 * width - (fault.dipSlope || 0) * height / 2, 0);
+      ctx.lineTo(fault.xPercent / 100 * width + (fault.dipSlope || 0) * height / 2, height);
+      ctx.strokeStyle = fault.isSealed ? '#64ffda' : '#ff6b6b';
+      ctx.lineWidth = fault.isSealed ? 3 : 2;
+      ctx.setLineDash(fault.isSealed ? [] : [9, 7]);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    const wellX = injLocation / 100 * width;
+    const wellMapY = wellY / 100 * height;
+    ctx.beginPath();
+    ctx.arc(wellX, wellMapY, 10, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffb300';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(wellX - 15, wellMapY);
+    ctx.lineTo(wellX + 15, wellMapY);
+    ctx.moveTo(wellX, wellMapY - 15);
+    ctx.lineTo(wellX, wellMapY + 15);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(22, height - 62, 250, 40);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(42, height - 40);
+    ctx.lineTo(242, height - 40);
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = '16px monospace';
+    ctx.fillText('200 m', 108, height - 46);
+    ctx.fillText('N', width - 48, 38);
+    ctx.beginPath();
+    ctx.moveTo(width - 42, 48);
+    ctx.lineTo(width - 42, 88);
+    ctx.lineTo(width - 50, 72);
+    ctx.moveTo(width - 42, 88);
+    ctx.lineTo(width - 34, 72);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }, [mapState, residualTrapFraction, injLocation, wellY, K, porosity, dipPercent, amplitude, frequency, faultOffset, faultCount, faults]);
+  const downloadMap = type => {
+    const link = document.createElement('a');
+    if (type === 'png') {
+      link.href = canvasRef.current.toDataURL('image/png');
+      link.download = 've-2d-plan-view.png';
+    } else {
+      const cellWidth = 1000 / mapState.cols;
+      const cellHeight = 600 / mapState.rows;
+      const rows = ['x_m,y_m,h_m,h_max_m'];
+      mapState.h.forEach((value, index) => rows.push([(index % mapState.cols + 0.5) * cellWidth, (Math.floor(index / mapState.cols) + 0.5) * cellHeight, value, mapState.hMax[index]].join(',')));
+      link.href = URL.createObjectURL(new Blob([rows.join('\n')], {
+        type: 'text/csv;charset=utf-8'
+      }));
+      link.download = 've-2d-grid.csv';
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    }
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    id: "tabpanel-map",
+    role: "tabpanel",
+    "aria-labelledby": "tab-map",
+    tabIndex: 0,
+    style: {
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      background: '#111823',
+      minHeight: 520
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'relative',
+      flex: 1,
+      minHeight: 420
+    }
+  }, /*#__PURE__*/React.createElement("canvas", {
+    ref: canvasRef,
+    role: "img",
+    "aria-label": `Plan-view CO2 plume at year ${mapTime}. ${mapState.masses.mobile.toFixed(1)} mobile and ${mapState.masses.trapped.toFixed(1)} trapped mass units.`,
+    style: {
+      width: '100%',
+      height: '100%',
+      minHeight: 420,
+      display: 'block'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      top: 12,
+      left: 12,
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 10,
+      padding: '7px 11px',
+      borderRadius: 14,
+      background: 'rgba(0,0,0,0.58)',
+      fontSize: 10,
+      color: '#fff',
+      pointerEvents: 'none'
+    }
+  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: '#0dfca2'
+    }
+  }, "\u25A0"), " Mobile CO\u2082"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: '#20b894'
+    }
+  }, "\u25A0"), " Residual CO\u2082"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: '#ffb300'
+    }
+  }, "\u25CF"), " Injector"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: '#64ffda'
+    }
+  }, "\u2501"), " Sealed fault"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: '#ff6b6b'
+    }
+  }, "\u2504"), " Transmissive fault"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '10px 14px',
+      borderTop: '1px solid rgba(255,255,255,0.08)',
+      background: 'rgba(0,0,0,0.2)',
+      display: 'flex',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setIsRunning(value => !value),
+    "aria-label": isRunning ? 'Pause 2D map simulation' : 'Run 2D map simulation',
+    style: {
+      background: '#64ffda',
+      color: '#10251f',
+      border: 0,
+      borderRadius: 8,
+      padding: '7px 12px',
+      fontWeight: 700,
+      cursor: 'pointer'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: `fas ${isRunning ? 'fa-pause' : 'fa-play'}`
+  }), " ", isRunning ? 'Pause' : 'Run'), /*#__PURE__*/React.createElement("button", {
+    onClick: advanceMap,
+    "aria-label": "Advance 2D map one year",
+    style: {
+      background: 'rgba(255,255,255,0.08)',
+      color: '#fff',
+      border: '1px solid rgba(255,255,255,0.15)',
+      borderRadius: 8,
+      padding: '7px 10px',
+      cursor: 'pointer'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-step-forward"
+  })), /*#__PURE__*/React.createElement("button", {
+    onClick: resetMap,
+    style: {
+      background: 'rgba(255,255,255,0.08)',
+      color: '#fff',
+      border: '1px solid rgba(255,255,255,0.15)',
+      borderRadius: 8,
+      padding: '7px 10px',
+      cursor: 'pointer'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-redo"
+  }), " Reset"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setMapSpeed(value => value === 1 ? 2 : value === 2 ? 4 : 1),
+    style: {
+      background: 'none',
+      color: '#64ffda',
+      border: 0,
+      cursor: 'pointer',
+      fontWeight: 700
+    }
+  }, mapSpeed, "\xD7"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: 'monospace',
+      fontSize: 11,
+      color: 'rgba(255,255,255,0.72)'
+    }
+  }, "Year ", mapTime, " \xB7 ", mapCols, "\xD7", mapRows, " cells"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => downloadMap('csv'),
+    style: {
+      background: 'none',
+      color: '#fff',
+      border: '1px solid rgba(255,255,255,0.15)',
+      borderRadius: 8,
+      padding: '6px 9px',
+      cursor: 'pointer'
+    }
+  }, "Grid CSV"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => downloadMap('png'),
+    style: {
+      background: 'none',
+      color: '#fff',
+      border: '1px solid rgba(255,255,255,0.15)',
+      borderRadius: 8,
+      padding: '6px 9px',
+      cursor: 'pointer'
+    }
+  }, "Map PNG")), /*#__PURE__*/React.createElement("div", {
+    className: "sim-stat-grid",
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(4, 1fr)',
+      gap: 8,
+      padding: '0 14px 12px',
+      background: 'rgba(0,0,0,0.2)'
+    }
+  }, /*#__PURE__*/React.createElement(StatBox, {
+    label: "Injected",
+    value: mapState.masses.injected.toFixed(1),
+    color: "#fff",
+    opacity: "0.7"
+  }), /*#__PURE__*/React.createElement(StatBox, {
+    label: "Mobile",
+    value: mapState.masses.mobile.toFixed(1),
+    color: "#64ffda"
+  }), /*#__PURE__*/React.createElement(StatBox, {
+    label: "Trapped",
+    value: mapState.masses.trapped.toFixed(1),
+    color: "#3ca68e"
+  }), /*#__PURE__*/React.createElement(StatBox, {
+    label: "Leaked",
+    value: mapState.masses.leaked.toFixed(1),
+    color: "#ff6b6b"
+  })));
+};
 
 // Main Simulator component
 const SimulatorPage = () => {
@@ -1057,6 +1651,8 @@ const SimulatorPage = () => {
   // Injection parameters
   const [Q, setQ] = useState(2.30); // Constant injection rate (0.0 to 3.5)
   const [injLocation, setInjLocation] = useState(70); // Injection cell index % (10% to 90%)
+  const [wellY, setWellY] = useState(50); // Plan-view injector y-coordinate %
+  const [mapCols, setMapCols] = useState(48); // Plan-view x resolution; y follows domain aspect ratio
   const [injDuration, setInjDuration] = useState(240); // Frame count of active injection (50 to 400)
 
   // Fault parameters
@@ -1321,6 +1917,7 @@ const SimulatorPage = () => {
   // Preset Scenario Handlers
   const applyPreset = presetName => {
     setSelectedPreset(presetName);
+    setWellY(50);
     resetSimulation();
     if (presetName === 'dome') {
       setDipPercent(0.2);
@@ -1422,6 +2019,8 @@ const SimulatorPage = () => {
     setFaultOffset(scenarioNumber(query, 'slip', 0, 3, faultOffset));
     setQ(scenarioNumber(query, 'q', 0, 3.5, Q));
     setInjLocation(scenarioNumber(query, 'well', 10, 90, injLocation, true));
+    setWellY(scenarioNumber(query, 'wellY', 10, 90, wellY, true));
+    setMapCols(scenarioNumber(query, 'mapCells', 24, 80, mapCols, true));
     setInjDuration(scenarioNumber(query, 'stop', 50, 400, injDuration, true));
     setFaultCount(scenarioNumber(query, 'faults', 0, 3, faultCount, true));
     try {
@@ -1456,6 +2055,8 @@ const SimulatorPage = () => {
       slip: faultOffset,
       q: Q,
       well: injLocation,
+      wellY,
+      mapCells: mapCols,
       stop: injDuration,
       faults: faultCount,
       faultData: JSON.stringify(faults.slice(0, faultCount))
@@ -2988,9 +3589,9 @@ const SimulatorPage = () => {
       flexDirection: 'column',
       gap: 25,
       transition: 'padding-left 0.3s ease-in-out',
-      paddingLeft: sidebarOpen ? '360px' : '4%'
+      paddingLeft: sidebarOpen && activeSubTab === 'profile' ? '360px' : '4%'
     }
-  }, sidebarOpen && /*#__PURE__*/React.createElement("div", {
+  }, sidebarOpen && activeSubTab === 'profile' && /*#__PURE__*/React.createElement("div", {
     className: "time-travel-sidebar open"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -3486,7 +4087,7 @@ const SimulatorPage = () => {
       gap: 15,
       flexWrap: 'wrap'
     }
-  }, "VE Gravity Tongue Simulator", /*#__PURE__*/React.createElement("button", {
+  }, "VE Gravity Tongue Simulator", activeSubTab === 'profile' && /*#__PURE__*/React.createElement("button", {
     onClick: () => setSidebarOpen(!sidebarOpen),
     style: {
       background: sidebarOpen ? 'rgba(100, 255, 218, 0.25)' : 'rgba(100, 255, 218, 0.1)',
@@ -3532,7 +4133,7 @@ const SimulatorPage = () => {
     }
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-link"
-  }), " Copy Scenario Link"), /*#__PURE__*/React.createElement("button", {
+  }), " Copy Scenario Link"), activeSubTab === 'profile' && /*#__PURE__*/React.createElement("button", {
     onClick: exportCsv,
     style: {
       background: 'rgba(255,255,255,0.08)',
@@ -3542,7 +4143,7 @@ const SimulatorPage = () => {
       padding: '8px 12px',
       cursor: 'pointer'
     }
-  }, "Export CSV"), /*#__PURE__*/React.createElement("button", {
+  }, "Export CSV"), activeSubTab === 'profile' && /*#__PURE__*/React.createElement("button", {
     onClick: exportSvg,
     style: {
       background: 'rgba(255,255,255,0.08)',
@@ -3665,7 +4266,10 @@ const SimulatorPage = () => {
   }, "Read the associated EarthArXiv preprint ", /*#__PURE__*/React.createElement("i", {
     className: "fas fa-external-link-alt"
   }))), /*#__PURE__*/React.createElement("div", {
-    className: "simulator-layout"
+    className: "simulator-layout",
+    style: activeSubTab === 'map' ? {
+      gridTemplateColumns: '1fr'
+    } : undefined
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
@@ -3733,7 +4337,36 @@ const SimulatorPage = () => {
     style: {
       marginRight: 6
     }
-  }), " 2D Simulator"), /*#__PURE__*/React.createElement("button", {
+  }), " Cross-section"), /*#__PURE__*/React.createElement("button", {
+    ref: el => {
+      tabRefs.current.map = el;
+    },
+    onClick: () => setActiveSubTab('map'),
+    role: "tab",
+    id: "tab-map",
+    "aria-selected": activeSubTab === 'map',
+    "aria-controls": "tabpanel-map",
+    tabIndex: activeSubTab === 'map' ? 0 : -1,
+    style: {
+      background: activeSubTab === 'map' ? 'rgba(100, 255, 218, 0.08)' : 'none',
+      border: 'none',
+      borderBottom: activeSubTab === 'map' ? '2px solid #64ffda' : '2px solid transparent',
+      color: activeSubTab === 'map' ? '#64ffda' : 'rgba(255,255,255,0.6)',
+      padding: '12px 16px',
+      fontSize: '11px',
+      fontWeight: 600,
+      letterSpacing: '0.05em',
+      textTransform: 'uppercase',
+      cursor: 'pointer',
+      transition: 'all 0.2s ease',
+      outline: 'none'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-map",
+    style: {
+      marginRight: 6
+    }
+  }), " 2D Map"), /*#__PURE__*/React.createElement("button", {
     ref: el => {
       tabRefs.current.uq = el;
     },
@@ -3801,7 +4434,12 @@ const SimulatorPage = () => {
       fontSize: 10.5,
       color: 'rgba(255,255,255,0.5)'
     }
-  }, "Year ", simTime, " / 1000") : activeSubTab === 'uq' ? /*#__PURE__*/React.createElement("span", {
+  }, "Year ", simTime, " / 1000") : activeSubTab === 'map' ? /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10.5,
+      color: 'rgba(255,255,255,0.5)'
+    }
+  }, "x\u2013y plume-height model") : activeSubTab === 'uq' ? /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10.5,
       color: 'rgba(255,255,255,0.5)'
@@ -4382,6 +5020,24 @@ const SimulatorPage = () => {
           outline: 'none'
         }
       }, speed, "x")));
+    } else if (activeSubTab === 'map') {
+      return /*#__PURE__*/React.createElement(Ve2DMapPanel, {
+        K: K,
+        porosity: porosity,
+        residualTrapFraction: residualTrapFraction,
+        dipPercent: dipPercent,
+        amplitude: amplitude,
+        frequency: frequency,
+        faultOffset: faultOffset,
+        Q: Q,
+        injLocation: injLocation,
+        injDuration: injDuration,
+        faultCount: faultCount,
+        faults: faults,
+        mapCols: mapCols,
+        wellY: wellY,
+        preset: selectedPreset
+      });
     } else if (activeSubTab === 'uq') {
       return (
         /*#__PURE__*/
@@ -4827,7 +5483,7 @@ const SimulatorPage = () => {
       lineHeight: 1.5,
       color: 'rgba(255,255,255,0.45)'
     }
-  }, "Educational 2D Vertical-Equilibrium model \xB7 scaled units (1 kt = one model mass unit) \xB7 buoyancy-driven, viscosity-free gravity tongue with simplified fault conduits. The Methodology tab separates reference theory from the implemented scheme."), /*#__PURE__*/React.createElement("div", {
+  }, "Educational ", activeSubTab === 'map' ? 'x–y plan-view' : 'cross-section', " Vertical-Equilibrium model \xB7 scaled units (1 kt = one model mass unit) \xB7 buoyancy-driven, viscosity-free gravity tongue with simplified faults. The Methodology tab separates reference theory from the implemented scheme."), /*#__PURE__*/React.createElement("div", {
     className: "controls-subgrid"
   }, /*#__PURE__*/React.createElement("details", {
     className: "control-panel",
@@ -5039,13 +5695,29 @@ const SimulatorPage = () => {
     value: Q,
     onChange: v => setQ(parseFloat(v))
   }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Well Location",
+    label: activeSubTab === 'map' ? 'Well X Location' : 'Well Location',
     val: `${injLocation}%`,
     min: "10",
     max: "90",
     step: "5",
     value: injLocation,
     onChange: v => setInjLocation(parseInt(v))
+  }), activeSubTab === 'map' && /*#__PURE__*/React.createElement(Slider, {
+    label: "Well Y Location",
+    val: `${wellY}%`,
+    min: "10",
+    max: "90",
+    step: "5",
+    value: wellY,
+    onChange: v => setWellY(parseInt(v))
+  }), activeSubTab === 'map' && /*#__PURE__*/React.createElement(Slider, {
+    label: "2D Grid Resolution",
+    val: `${mapCols} × ${Math.max(12, Math.round(mapCols * 0.6))}`,
+    min: "24",
+    max: "80",
+    step: "8",
+    value: mapCols,
+    onChange: v => setMapCols(parseInt(v))
   }), /*#__PURE__*/React.createElement(Slider, {
     label: "Inj. Stop Year",
     val: `${injDuration}y`,
@@ -5213,7 +5885,7 @@ const SimulatorPage = () => {
         setFaults(newFaults);
       }
     }) : /*#__PURE__*/React.createElement("div", null)));
-  }))))), /*#__PURE__*/React.createElement("div", {
+  }))))), activeSubTab !== 'map' && /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',

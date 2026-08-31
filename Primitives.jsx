@@ -45,28 +45,28 @@ const Reveal = ({ children, delay = '', className = '', style = {} }) => {
 const GlassCard = ({ children, hover = true, padding = 24, radius = 24, style = {}, className = '', onClick }) => {
   const [hovered, setHovered] = useState(false);
   const base = {
-    background: 'linear-gradient(135deg, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.08) 100%)',
-    backdropFilter: 'blur(20px) saturate(150%)',
-    WebkitBackdropFilter: 'blur(20px) saturate(150%)',
-    border: '1px solid rgba(255,255,255,0.25)',
-    borderTop: '1px solid rgba(255,255,255,0.40)',
-    borderLeft: '1px solid rgba(255,255,255,0.30)',
+    background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.045) 100%)',
+    backdropFilter: 'blur(12px) saturate(135%)',
+    WebkitBackdropFilter: 'blur(12px) saturate(135%)',
+    border: '1px solid rgba(255,255,255,0.16)',
+    borderTop: '1px solid rgba(255,255,255,0.24)',
+    borderLeft: '1px solid rgba(255,255,255,0.20)',
     borderRadius: radius,
     padding,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.15), inset 0 2px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.05)',
+    boxShadow: '0 6px 22px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.16)',
     transition: 'transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275), box-shadow 0.4s ease, border-color 0.4s ease',
     color: 'rgba(255,255,255,0.85)',
     cursor: onClick ? 'pointer' : 'default',
     ...style,
   };
   if (hover && hovered) {
-    base.transform = 'translateY(-8px)';
-    base.borderColor = 'rgba(100, 255, 218, 0.45)';
-    base.boxShadow = '0 20px 45px rgba(0,0,0,0.25), inset 0 2px 0 rgba(255,255,255,0.30), 0 0 25px rgba(100,255,218,0.15)';
+    base.transform = 'translateY(-4px)';
+    base.borderColor = 'rgba(100, 255, 218, 0.35)';
+    base.boxShadow = '0 12px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.20), 0 0 18px rgba(100,255,218,0.10)';
   }
   return (
     <div
-      className={className}
+      className={`glass-card ${className}`.trim()}
       style={base}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -817,7 +817,7 @@ const SectionPanel = ({ children, strataTheme = 'sedimentary', style = {} }) => 
   const seam = seamGradients[strataTheme] || seamGradients.sedimentary;
 
   return (
-    <section style={{
+    <section className="section-panel" style={{
       position: 'relative',
       minHeight: '60vh',
       padding: '90px 24px',

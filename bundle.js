@@ -55,27 +55,27 @@ const GlassCard = ({
 }) => {
   const [hovered, setHovered] = useState(false);
   const base = {
-    background: 'linear-gradient(135deg, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.08) 100%)',
-    backdropFilter: 'blur(20px) saturate(150%)',
-    WebkitBackdropFilter: 'blur(20px) saturate(150%)',
-    border: '1px solid rgba(255,255,255,0.25)',
-    borderTop: '1px solid rgba(255,255,255,0.40)',
-    borderLeft: '1px solid rgba(255,255,255,0.30)',
+    background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.045) 100%)',
+    backdropFilter: 'blur(12px) saturate(135%)',
+    WebkitBackdropFilter: 'blur(12px) saturate(135%)',
+    border: '1px solid rgba(255,255,255,0.16)',
+    borderTop: '1px solid rgba(255,255,255,0.24)',
+    borderLeft: '1px solid rgba(255,255,255,0.20)',
     borderRadius: radius,
     padding,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.15), inset 0 2px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.05)',
+    boxShadow: '0 6px 22px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.16)',
     transition: 'transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275), box-shadow 0.4s ease, border-color 0.4s ease',
     color: 'rgba(255,255,255,0.85)',
     cursor: onClick ? 'pointer' : 'default',
     ...style
   };
   if (hover && hovered) {
-    base.transform = 'translateY(-8px)';
-    base.borderColor = 'rgba(100, 255, 218, 0.45)';
-    base.boxShadow = '0 20px 45px rgba(0,0,0,0.25), inset 0 2px 0 rgba(255,255,255,0.30), 0 0 25px rgba(100,255,218,0.15)';
+    base.transform = 'translateY(-4px)';
+    base.borderColor = 'rgba(100, 255, 218, 0.35)';
+    base.boxShadow = '0 12px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.20), 0 0 18px rgba(100,255,218,0.10)';
   }
   return /*#__PURE__*/React.createElement("div", {
-    className: className,
+    className: `glass-card ${className}`.trim(),
     style: base,
     onMouseEnter: () => setHovered(true),
     onMouseLeave: () => setHovered(false),
@@ -1203,6 +1203,7 @@ const SectionPanel = ({
   };
   const seam = seamGradients[strataTheme] || seamGradients.sedimentary;
   return /*#__PURE__*/React.createElement("section", {
+    className: "section-panel",
     style: {
       position: 'relative',
       minHeight: '60vh',
@@ -3904,6 +3905,7 @@ const Identity = ({
     WebkitTextFillColor: 'transparent'
   }
 }, "Sa\u2019eed Telvari"), /*#__PURE__*/React.createElement("p", {
+  className: "hero-summary",
   style: {
     margin: '18px 0 0',
     maxWidth: 540,
@@ -3921,7 +3923,10 @@ const Identity = ({
     color: '#64ffda',
     fontWeight: 600
   }
-}, "CO", /*#__PURE__*/React.createElement("sub", null, "2"), " storage"), " in depleted gas reservoirs \u2014 the cross-section below is essentially the thing I simulate."), /*#__PURE__*/React.createElement("div", {
+}, "CO", /*#__PURE__*/React.createElement("sub", null, "2"), " storage"), " in depleted gas reservoirs", /*#__PURE__*/React.createElement("span", {
+  className: "hero-detail"
+}, " \u2014 the cross-section below is essentially the thing I simulate.")), /*#__PURE__*/React.createElement("div", {
+  className: "hero-actions",
   style: {
     display: 'flex',
     alignItems: 'center',
@@ -3930,6 +3935,7 @@ const Identity = ({
     flexWrap: 'wrap'
   }
 }, /*#__PURE__*/React.createElement("div", {
+  className: "hero-socials",
   style: {
     display: 'flex',
     gap: 10
@@ -3955,12 +3961,14 @@ const Identity = ({
   tint: "#ea4335",
   url: "mailto:st4014@hw.ac.uk"
 })), /*#__PURE__*/React.createElement("div", {
+  className: "hero-actions-divider",
   style: {
     height: 22,
     width: 1,
     background: 'rgba(255,255,255,0.18)'
   }
 }), /*#__PURE__*/React.createElement("a", {
+  className: "hero-cta-primary",
   href: "./simulator.html",
   onClick: e => {
     e.preventDefault();
@@ -3984,6 +3992,7 @@ const Identity = ({
 }, /*#__PURE__*/React.createElement("i", {
   className: "fa-solid fa-play"
 }), " Try VE Simulator"), /*#__PURE__*/React.createElement("a", {
+  className: "hero-cta-secondary",
   href: "#cv",
   onClick: e => {
     e.preventDefault();
@@ -4009,6 +4018,7 @@ const Identity = ({
 }, /*#__PURE__*/React.createElement("i", {
   className: "fa-solid fa-file-lines"
 }), " View CV"), /*#__PURE__*/React.createElement("a", {
+  className: "hero-cta-tertiary",
   href: "#contact",
   onClick: e => {
     e.preventDefault();
@@ -4177,10 +4187,12 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
       }
       @media (max-width: 600px) {
         .about-badges-grid {
-          grid-template-columns: 1fr !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          gap: 10px !important;
         }
         .research-strip-grid {
-          grid-template-columns: 1fr !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          gap: 10px !important;
         }
       }
     `), /*#__PURE__*/React.createElement("div", {
@@ -4197,11 +4209,9 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
 }, "About Me")), /*#__PURE__*/React.createElement(Reveal, {
   delay: "reveal-delay-1"
 }, /*#__PURE__*/React.createElement("p", {
-  className: "lead",
+  className: "lead about-lead",
   style: {
-    fontSize: 21,
     fontWeight: 500,
-    lineHeight: 1.7,
     color: '#fff',
     marginTop: 0
   }
@@ -4213,17 +4223,15 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
 }, "Sa'eed Telvari"), ", a PhD candidate in Petroleum Engineering at Heriot-Watt University. My research keeps subsurface flow simulation both physically faithful and computationally tractable.")), /*#__PURE__*/React.createElement(Reveal, {
   delay: "reveal-delay-2"
 }, /*#__PURE__*/React.createElement("p", {
+  className: "about-copy",
   style: {
-    fontSize: 16,
-    lineHeight: 1.8,
     color: 'rgba(255,255,255,0.85)'
   }
 }, "I completed both my B.Sc. and M.Sc. in Petroleum Engineering with a focus on reservoir simulation and machine learning applications. Based on academic excellence, I was granted direct admission for graduate study, ranking within the top 2% in the national entrance exam.")), /*#__PURE__*/React.createElement(Reveal, {
   delay: "reveal-delay-3"
 }, /*#__PURE__*/React.createElement("p", {
+  className: "about-copy",
   style: {
-    fontSize: 16,
-    lineHeight: 1.8,
     color: 'rgba(255,255,255,0.85)'
   }
 }, "Currently, I'm developing Vertical Equilibrium (VE) models for simulating CO", /*#__PURE__*/React.createElement("sub", null, "2"), " storage in depleted gas reservoirs \u2014 a key simulation strategy for achieving net-zero emissions.")), /*#__PURE__*/React.createElement("div", {
@@ -4244,6 +4252,7 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
   key: i,
   delay: `reveal-delay-${i + 1}`
 }, /*#__PURE__*/React.createElement(GlassCard, {
+  className: "about-badge-card",
   padding: 16,
   radius: 16,
   style: {
@@ -4270,6 +4279,7 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
     fontSize: 34
   }
 }, "Recent Activity")), /*#__PURE__*/React.createElement("div", {
+  className: "activity-list",
   style: {
     display: 'flex',
     flexDirection: 'column',
@@ -4277,6 +4287,7 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
   }
 }, NEWS.map((n, i) => /*#__PURE__*/React.createElement(Reveal, {
   key: i,
+  className: "activity-item",
   delay: `reveal-delay-${i + 1}`
 }, /*#__PURE__*/React.createElement(GlassCard, {
   padding: 18
@@ -4380,6 +4391,7 @@ const ResearchInterestsStrip = () => /*#__PURE__*/React.createElement("div", {
   key: i,
   delay: `reveal-delay-${i % 3 + 1}`
 }, /*#__PURE__*/React.createElement(GlassCard, {
+  className: "research-interest-card",
   padding: 16,
   radius: 14,
   style: {
@@ -4412,9 +4424,10 @@ const ResearchInterestsStrip = () => /*#__PURE__*/React.createElement("div", {
     __html: r.title
   }
 }), /*#__PURE__*/React.createElement("p", {
+  className: "research-interest-copy",
   style: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.65)',
+    color: 'rgba(255,255,255,0.72)',
     lineHeight: 1.45,
     margin: 0
   }
@@ -4480,6 +4493,7 @@ const PublicationsList = () => /*#__PURE__*/React.createElement(SectionPanel, {
   key: i,
   delay: `reveal-delay-${i % 2 + 1}`
 }, /*#__PURE__*/React.createElement(GlassCard, {
+  className: "publication-card",
   padding: 28
 }, /*#__PURE__*/React.createElement(Badge, {
   kind: p.badge
@@ -4508,8 +4522,9 @@ const PublicationsList = () => /*#__PURE__*/React.createElement(SectionPanel, {
     fontSize: 14
   }
 }, p.venue), /*#__PURE__*/React.createElement("p", {
+  className: "publication-abstract",
   style: {
-    color: 'rgba(255,255,255,0.75)',
+    color: 'rgba(255,255,255,0.78)',
     fontSize: 14,
     lineHeight: 1.6,
     margin: '0 0 16px'

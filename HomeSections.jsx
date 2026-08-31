@@ -45,10 +45,12 @@ const AboutSection = () => (
       }
       @media (max-width: 600px) {
         .about-badges-grid {
-          grid-template-columns: 1fr !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          gap: 10px !important;
         }
         .research-strip-grid {
-          grid-template-columns: 1fr !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          gap: 10px !important;
         }
       }
     `}</style>
@@ -60,19 +62,19 @@ const AboutSection = () => (
         </Reveal>
         
         <Reveal delay="reveal-delay-1">
-          <p className="lead" style={{ fontSize: 21, fontWeight: 500, lineHeight: 1.7, color: '#fff', marginTop: 0 }}>
+          <p className="lead about-lead" style={{ fontWeight: 500, color: '#fff', marginTop: 0 }}>
             I'm <strong style={{ color: '#64ffda', fontWeight: 600 }}>Sa'eed Telvari</strong>, a PhD candidate in Petroleum Engineering at Heriot-Watt University. My research keeps subsurface flow simulation both physically faithful and computationally tractable.
           </p>
         </Reveal>
         
         <Reveal delay="reveal-delay-2">
-          <p style={{ fontSize: 16, lineHeight: 1.8, color: 'rgba(255,255,255,0.85)' }}>
+          <p className="about-copy" style={{ color: 'rgba(255,255,255,0.85)' }}>
             I completed both my B.Sc. and M.Sc. in Petroleum Engineering with a focus on reservoir simulation and machine learning applications. Based on academic excellence, I was granted direct admission for graduate study, ranking within the top 2% in the national entrance exam.
           </p>
         </Reveal>
         
         <Reveal delay="reveal-delay-3">
-          <p style={{ fontSize: 16, lineHeight: 1.8, color: 'rgba(255,255,255,0.85)' }}>
+          <p className="about-copy" style={{ color: 'rgba(255,255,255,0.85)' }}>
             Currently, I'm developing Vertical Equilibrium (VE) models for simulating CO<sub>2</sub> storage in depleted gas reservoirs &mdash; a key simulation strategy for achieving net-zero emissions.
           </p>
         </Reveal>
@@ -85,7 +87,7 @@ const AboutSection = () => (
             { icon: 'fas fa-robot', label: 'ML Workflows' },
           ].map((h, i) => (
             <Reveal key={i} delay={`reveal-delay-${i + 1}`}>
-              <GlassCard padding={16} radius={16} style={{ display: 'flex', alignItems: 'center', gap: 12, height: '100%' }}>
+              <GlassCard className="about-badge-card" padding={16} radius={16} style={{ display: 'flex', alignItems: 'center', gap: 12, height: '100%' }}>
                 <i className={h.icon} style={{ fontSize: 22, color: '#64ffda' }}></i>
                 <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.90)', fontWeight: 500 }}>{h.label}</span>
               </GlassCard>
@@ -100,9 +102,9 @@ const AboutSection = () => (
           <SectionTitle style={{ marginBottom: 28, fontSize: 34 }}>Recent Activity</SectionTitle>
         </Reveal>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="activity-list" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {NEWS.map((n, i) => (
-            <Reveal key={i} delay={`reveal-delay-${i + 1}`}>
+            <Reveal key={i} className="activity-item" delay={`reveal-delay-${i + 1}`}>
               <GlassCard padding={18}>
                 <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
                   <div style={{
@@ -152,12 +154,12 @@ const ResearchInterestsStrip = () => (
     <div className="research-strip-grid">
       {RESEARCH.map((r, i) => (
         <Reveal key={i} delay={`reveal-delay-${(i % 3) + 1}`}>
-          <GlassCard padding={16} radius={14} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, height: '100%' }}>
+          <GlassCard className="research-interest-card" padding={16} radius={14} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, height: '100%' }}>
             <i className={r.icon} style={{ fontSize: 18, color: '#64ffda', marginTop: 2, flexShrink: 0 }}></i>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 14, color: '#fff', fontWeight: 600, margin: '0 0 3px', lineHeight: 1.3 }}
                    dangerouslySetInnerHTML={{ __html: r.title }} />
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', lineHeight: 1.45, margin: 0 }}>{r.body}</p>
+              <p className="research-interest-copy" style={{ fontSize: 12, color: 'rgba(255,255,255,0.72)', lineHeight: 1.45, margin: 0 }}>{r.body}</p>
             </div>
           </GlassCard>
         </Reveal>
@@ -210,13 +212,13 @@ const PublicationsList = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {PUBLICATIONS.map((p, i) => (
         <Reveal key={i} delay={`reveal-delay-${(i % 2) + 1}`}>
-          <GlassCard padding={28}>
+          <GlassCard className="publication-card" padding={28}>
             <Badge kind={p.badge}>{p.badgeLabel}</Badge>
             <h3 style={{ fontSize: 21, color: '#fff', fontWeight: 600, margin: '0 0 10px', lineHeight: 1.4 }}
                 dangerouslySetInnerHTML={{ __html: p.title }} />
             <p style={{ color: 'rgba(255,255,255,0.85)', margin: '0 0 6px', fontSize: 15 }}>{p.authors}</p>
             <p style={{ color: 'rgba(255,255,255,0.60)', fontStyle: 'italic', margin: '0 0 14px', fontSize: 14 }}>{p.venue}</p>
-            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 14, lineHeight: 1.6, margin: '0 0 16px' }}
+            <p className="publication-abstract" style={{ color: 'rgba(255,255,255,0.78)', fontSize: 14, lineHeight: 1.6, margin: '0 0 16px' }}
                 dangerouslySetInnerHTML={{ __html: p.abstract }} />
             {p.link && (
               <a href={p.link} target="_blank" rel="noreferrer" style={{

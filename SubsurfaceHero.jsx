@@ -1825,25 +1825,26 @@ const Identity = ({ onNavigate }) => (
       WebkitTextFillColor: 'transparent',
     }}>Sa&rsquo;eed Telvari</h1>
 
-    <p style={{
+    <p className="hero-summary" style={{
       margin: '18px 0 0',
       maxWidth: 540,
       fontSize: 16,
       lineHeight: 1.6,
       color: 'rgba(255,255,255,0.82)',
     }}>
-      Building <strong style={{ color: '#64ffda', fontWeight: 600 }}>Vertical Equilibrium models</strong> for simulating <strong style={{ color: '#64ffda', fontWeight: 600 }}>CO<sub>2</sub> storage</strong> in depleted gas reservoirs — the cross-section below is essentially the thing I simulate.
+      Building <strong style={{ color: '#64ffda', fontWeight: 600 }}>Vertical Equilibrium models</strong> for simulating <strong style={{ color: '#64ffda', fontWeight: 600 }}>CO<sub>2</sub> storage</strong> in depleted gas reservoirs<span className="hero-detail"> — the cross-section below is essentially the thing I simulate.</span>
     </p>
 
-    <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 24, flexWrap: 'wrap' }}>
-      <div style={{ display: 'flex', gap: 10 }}>
+    <div className="hero-actions" style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 24, flexWrap: 'wrap' }}>
+      <div className="hero-socials" style={{ display: 'flex', gap: 10 }}>
         <BrandSocial label="LinkedIn profile" icon="fa-brands fa-linkedin-in" tint="#0a66c2" url="https://www.linkedin.com/in/stelvari/" />
         <BrandSocial label="GitHub profile" icon="fa-brands fa-github" tint="#22272e" url="https://github.com/saeedtelvari" />
         <BrandSocial label="Google Scholar profile" icon="fa-solid fa-graduation-cap" tint="#4285f4" url="https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330" />
         <BrandSocial label="Email Sa'eed Telvari" icon="fa-solid fa-envelope" tint="#ea4335" url="mailto:st4014@hw.ac.uk" />
       </div>
-      <div style={{ height: 22, width: 1, background: 'rgba(255,255,255,0.18)' }}/>
+      <div className="hero-actions-divider" style={{ height: 22, width: 1, background: 'rgba(255,255,255,0.18)' }}/>
       <a
+        className="hero-cta-primary"
         href="./simulator.html"
         onClick={(e) => { e.preventDefault(); if (onNavigate) onNavigate('simulator'); else window.location.href = './simulator.html'; }}
         style={{
@@ -1858,6 +1859,7 @@ const Identity = ({ onNavigate }) => (
         <i className="fa-solid fa-play" /> Try VE Simulator
       </a>
       <a 
+        className="hero-cta-secondary"
         href="#cv" 
         onClick={(e) => { 
           e.preventDefault(); 
@@ -1878,6 +1880,7 @@ const Identity = ({ onNavigate }) => (
         <i className="fa-solid fa-file-lines"/> View CV
       </a>
       <a 
+        className="hero-cta-tertiary"
         href="#contact" 
         onClick={(e) => {
           e.preventDefault();

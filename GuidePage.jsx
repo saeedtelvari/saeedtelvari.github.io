@@ -215,18 +215,19 @@ const GuidePage = ({ isEmbedded = false }) => {
         {/* Card 5: Transport PDE & TVD Scheme */}
         <div className="math-card">
           <h3 className="math-header">
-            <i className="fas fa-wave-square" /> 5. Implemented Height Transport Scheme
+            <i className="fas fa-wave-square" /> 5. Implemented 1D &amp; 2D Height Transport
           </h3>
           <p className="math-text">
-            The plume column thickness <span className="variable">h</span>(<span className="variable">x</span>, <span className="variable">t</span>) evolves according to the 1D vertically-integrated mass conservation law:
+            The cross-section evolves <span className="variable">h</span>(<span className="variable">x</span>, <span className="variable">t</span>), while the plan-view model evolves <span className="variable">h</span>(<span className="variable">x</span>, <span className="variable">y</span>, <span className="variable">t</span>) on a rectangular grid. Both use vertically integrated mass conservation; the 2D form is:
           </p>
           <div className="equation-block">
             &phi; <span className="fraction"><span className="numerator">&part; <span className="variable">h</span></span><span className="denominator">&part; <span className="variable">t</span></span></span> + 
-            <span className="fraction"><span className="numerator">&part; <span className="variable">q</span></span><span className="denominator">&part; <span className="variable">x</span></span></span> = 
+            <span className="fraction"><span className="numerator">&part; <span className="variable">q</span><span className="subscript">x</span></span><span className="denominator">&part; <span className="variable">x</span></span></span> +
+            <span className="fraction"><span className="numerator">&part; <span className="variable">q</span><span className="subscript">y</span></span><span className="denominator">&part; <span className="variable">y</span></span></span> =
             <span className="variable">Q</span><span className="subscript">inj</span> - <span className="variable">Q</span><span className="subscript">leak</span>
           </div>
           <p className="math-text">
-            The browser implementation uses an explicit first-order upwind finite-volume flux and caps each substep’s outgoing mobile volume for numerical robustness:
+            The browser implementation uses explicit first-order upwind finite-volume fluxes between two neighbours in the cross-section and four neighbours in the x–y map. Each substep caps outgoing mobile volume for numerical robustness:
           </p>
           <div className="equation-block">
             |<span className="variable">q</span><span className="subscript">i+1/2</span>| &le; <span className="fraction"><span className="numerator">0.30 &bull; &phi; &bull; <span className="variable">h</span><span className="subscript">mob,upwind</span></span><span className="denominator">&Delta;<span className="variable">t</span></span></span>
@@ -242,7 +243,7 @@ const GuidePage = ({ isEmbedded = false }) => {
             <i className="fas fa-exchange-alt" /> 6. Integrated Darcy Fluid Flux & Faults
           </h3>
           <p className="math-text">
-            The vertically-integrated Darcy flux <span className="variable">q</span> combines regional structural dipping and buoyant hydrostatic spreading:
+            The vertically-integrated Darcy flux <span className="variable">q</span> combines structural gradients and buoyant spreading. In the map, the same expression is evaluated independently on x and y cell faces:
           </p>
           <div className="equation-block">
             <span className="variable">q</span> = - <span className="fraction"><span className="numerator"><span className="variable">K</span> <span className="variable">h</span><span className="subscript">mob</span> &Delta;&rho; <span className="variable">g</span></span><span className="denominator">&mu;</span></span> 
@@ -274,7 +275,7 @@ const GuidePage = ({ isEmbedded = false }) => {
             <span className="variable">h</span><span className="subscript">mob</span> = max<span className="parenthesis">(</span>0, <span className="fraction"><span className="numerator"><span className="variable">h</span> - <span className="variable">S</span><span className="subscript">gr</span> <span className="variable">h</span><span className="subscript">max</span></span><span className="denominator">1 - <span className="variable">S</span><span className="subscript">gr</span></span></span><span className="parenthesis">)</span>
           </div>
           <p className="math-text">
-            Here <span className="variable">h</span><span className="subscript">max</span>(<span className="variable">x</span>) is the historical maximum gas envelope, visualized as the <strong>cyan dashed boundary</strong>.
+            Here <span className="variable">h</span><span className="subscript">max</span> is the historical maximum gas envelope at each x or x–y cell. It appears as the cyan dashed boundary in cross-section and contributes to the trapped-gas colour in plan view.
           </p>
         </div>
 

@@ -12,8 +12,9 @@ Built with React 18, SVG mathematical visualizations, and a custom liquid glassm
    - Educational height-based VE animation for $\mathrm{CO}_2$ plume migration and capillary trapping across faulted sandstone formations; precomputation runs in a Web Worker.
    - Conforming SVG geological cross-section with real-time dynamic fault step interpolation, buoyancy streamlines, active wellbore casing, and glassmorphic simulation playback controls.
 
-2. **Interactive 2D VE Sandbox & UQ Dashboard (`SimulatorPage.jsx`)**:
+2. **Interactive VE Cross-section, x–y Map & UQ Dashboard (`SimulatorPage.jsx`)**:
    - Interactive parameter controls: permeability, porosity, residual trapping coefficients, injection rate, dip angle, and fault transmissibility multipliers.
+   - True x–y finite-volume plume-height model with heatmap contours, well placement, cross-fault flow, residual trapping, PNG export, and grid CSV export.
    - Web Worker Monte Carlo uncertainty engine with percentile outcomes, distributions, and correlation-based sensitivity summaries.
    - Live $\mathrm{CO}_2$ Mass Balance accounting with real-time structural vs residual capillary trapping efficiency tracking.
 
@@ -40,6 +41,7 @@ Built with React 18, SVG mathematical visualizations, and a custom liquid glassm
 - `SubsurfaceHero.jsx` — Landing hero with real-time VE fluid solver and animated faulted geological cross-section.
 - `HomeSections.jsx` — Homepage content sections: About, Research Interests, Peer-Reviewed Publications, and Contact.
 - `SimulatorPage.jsx` — VE simulation sandbox, Monte Carlo UQ dashboard, share links, exports, and mass-balance analytics.
+- `ve2d-model.js` — Dependency-free x–y VE plume-height solver shared by the browser and Node tests.
 - `hero-simulation-worker.js`, `uq-worker.js` — Background numerical work that keeps interaction responsive.
 - `bundle.js`, `simulator-bundle.js` — Generated home/common and simulator-specific bundles; do not edit directly.
 - `GuidePage.jsx` — Mathematical formulation and PDE methodology guide.
@@ -67,6 +69,7 @@ Rebuild generated bundles and run the repository smoke check after source change
 
 ```bash
 node build.js
+node --test tests/ve2d-model.test.js
 node tests/site-smoke.js
 ```
 
