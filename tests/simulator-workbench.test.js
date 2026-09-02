@@ -206,7 +206,9 @@ test('risk controls expose approved labels, selection, progress, and realization
   assert.match(page, />Run count<\/span>/);
   assert.match(page, /aria-pressed=\{mcRunsCount === cnt\}/);
   assert.match(page, />Target metric<\/span>/);
+  assert.match(page, /aria-label="Target metric"/);
   assert.match(page, /<option value="leaked">Leaked mass \(kt\)<\/option>/);
+  assert.match(page, /<option value="trapped">Trapping efficiency<\/option>/);
   assert.match(page, /<progress[^>]+value=\{uqProgress\}[^>]+max="100"/);
   assert.equal((page.match(/>\s*Load realization\s*<\/button>/g) || []).length, 3);
 
@@ -217,10 +219,14 @@ test('risk controls expose approved labels, selection, progress, and realization
 test('risk and methodology accessibility remains visible in the restrained theme', () => {
   const page = read('SimulatorPage.jsx');
   const css = read('simulator-workbench.css');
+  const riskSettings = page.slice(page.indexOf('<div className="ve-uq-settings"'), page.indexOf('<div className="ve-risk-results">'));
 
   assert.doesNotMatch(page, /Load realization[\s\S]{0,250}outline: 'none'/);
+  assert.doesNotMatch(riskSettings, /outline: 'none'/);
   assert.match(css, /\.ve-uq-realization:focus-visible[\s\S]*outline:/);
   assert.doesNotMatch(css, /guide-page-wrapper > div:first-of-type\s*\{[^}]*display:\s*none/);
+  assert.match(css, /guide-page-wrapper > div:first-of-type > p[\s\S]*color: var\(--ve-muted\)/);
+  assert.match(css, /\.ve-methodology-workspace \.numerator[\s\S]*border-bottom:[^;]*var\(--ve-(?:ink|muted)\)/);
   assert.match(css, /prefers-reduced-motion: reduce[\s\S]*\.ve-workspace-nav button:active[\s\S]*transform: none/);
 });
 

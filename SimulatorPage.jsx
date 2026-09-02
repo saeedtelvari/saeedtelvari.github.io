@@ -3119,8 +3119,7 @@ const SimulatorPage = () => {
                                borderRadius: 6,
                                fontSize: 10.5,
                                fontWeight: 'bold',
-                               cursor: 'pointer',
-                               outline: 'none'
+                               cursor: 'pointer'
                              }}
                            >
                              {cnt} runs
@@ -3134,7 +3133,7 @@ const SimulatorPage = () => {
                        <select 
                          value={uqTargetMetric} 
                          onChange={e => setUqTargetMetric(e.target.value)}
-                         aria-label="Target storage metric"
+                         aria-label="Target metric"
                          style={{
                            background: 'rgba(0,0,0,0.3)',
                            border: '1px solid rgba(255,255,255,0.15)',
@@ -3142,12 +3141,11 @@ const SimulatorPage = () => {
                            padding: '6px 10px',
                            borderRadius: 8,
                            fontSize: 11,
-                           cursor: 'pointer',
-                           outline: 'none'
+                           cursor: 'pointer'
                          }}
                        >
                          <option value="leaked">Leaked mass (kt)</option>
-                         <option value="trapped">Residual Trapping Efficiency (%)</option>
+                         <option value="trapped">Trapping efficiency</option>
                        </select>
                      </div>
                   </div>

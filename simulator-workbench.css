@@ -761,6 +761,10 @@
   display: none;
 }
 
+.ve-methodology-workspace .guide-page-wrapper > div:first-of-type > p {
+  color: var(--ve-muted) !important;
+}
+
 .ve-methodology-workspace .guide-grid {
   gap: 0 !important;
   grid-template-columns: minmax(0, 1fr) !important;
@@ -798,6 +802,10 @@
   border-color: var(--ve-border) !important;
   border-radius: 4px !important;
   text-shadow: none !important;
+}
+
+.ve-methodology-workspace .numerator {
+  border-bottom: 1.2px solid var(--ve-ink) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
