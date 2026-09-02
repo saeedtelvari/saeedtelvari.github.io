@@ -46,6 +46,8 @@ has('SimulatorPage.jsx', /Export SVG/, 'simulator visualization needs image expo
 has('SimulatorPage.jsx', /new Worker\(['"]\.\/uq-worker\.js/, 'UQ batches must run off the main thread');
 has('SimulatorPage.jsx', /<details/, 'mobile controls need progressive disclosure');
 assert.ok(fs.existsSync(path.join(root, 'uq-worker.js')), 'UQ worker must exist');
+has('simulator.html', /simulator-workbench\.css/, 'simulator needs its dedicated workbench stylesheet');
+assert.ok(fs.existsSync(path.join(root, 'simulator-workbench.css')), 'workbench stylesheet must exist');
 
 has('build.js', /simulator-bundle\.js/, 'the heavy simulator must have a page-specific bundle');
 const simulatorBundleVersions = [...read('simulator.html').matchAll(/simulator-bundle\.js\?v=([^"']+)/g)].map(match => match[1]);
