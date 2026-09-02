@@ -40,9 +40,9 @@ lacks('GuidePage.jsx', /\*\*Brooks-Corey/, 'raw Markdown markers must not be vis
 
 has('SimulatorPage.jsx', /role="tab"/, 'simulator tabs need tab semantics');
 has('SimulatorPage.jsx', /tabIndex=\{activeSubTab ===/, 'simulator tabs need roving keyboard focus');
-has('SimulatorPage.jsx', /Copy Scenario Link/, 'simulator state needs a share action');
-has('SimulatorPage.jsx', /Export CSV/, 'simulator results need CSV export');
-has('SimulatorPage.jsx', /Export SVG/, 'simulator visualization needs image export');
+has('SimulatorPage.jsx', /Copy scenario link/, 'simulator state needs a share action');
+has('SimulatorPage.jsx', /Mass balance CSV/, 'simulator results need CSV export');
+has('SimulatorPage.jsx', /Reservoir SVG/, 'simulator visualization needs image export');
 has('SimulatorPage.jsx', /new Worker\(['"]\.\/uq-worker\.js/, 'UQ batches must run off the main thread');
 has('SimulatorPage.jsx', /<details/, 'mobile controls need progressive disclosure');
 assert.ok(fs.existsSync(path.join(root, 'uq-worker.js')), 'UQ worker must exist');

@@ -11,7 +11,7 @@ const loadRunStateHelpers = () => {
   const page = read('SimulatorPage.jsx');
   const prelude = page.slice(0, page.indexOf('const UQParamConfig'));
   const context = { React: {} };
-  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction\n  };`, context);
+  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard\n  };`, context);
   return context.helpers;
 };
 
@@ -70,6 +70,58 @@ test('a failed file action reports failure without retrying the action', () => {
   assert.equal(completed, false);
   assert.equal(actionCalls, 1);
   assert.equal(failureCalls, 1);
+});
+
+test('playback routes fresh or modified scenarios through the run lifecycle', () => {
+  const getAction = loadRunStateHelpers().getPlaybackAction || (() => 'resume');
+
+  assert.equal(getAction({ isPlaying: false, simTime: 0, scenarioChanged: false }), 'run-scenario');
+  assert.equal(getAction({ isPlaying: false, simTime: 40, scenarioChanged: true }), 'run-scenario');
+});
+
+test('clipboard success is reported only after the text is written', async () => {
+  const copy = loadRunStateHelpers().copyTextToClipboard || (async () => true);
+  let writtenText = '';
+  let fallbackCalls = 0;
+  let finishWrite;
+  let settled = false;
+  const writeFinished = new Promise(resolve => { finishWrite = resolve; });
+
+  const copyFinished = copy('scenario-url', {
+    writeText: text => { writtenText = text; return writeFinished; }
+  }, () => { fallbackCalls += 1; return true; }).then(copied => { settled = true; return copied; });
+
+  await Promise.resolve();
+  assert.equal(settled, false);
+  finishWrite();
+  const copied = await copyFinished;
+
+  assert.equal(copied, true);
+  assert.equal(writtenText, 'scenario-url');
+  assert.equal(fallbackCalls, 0);
+});
+
+test('unsupported or rejected clipboard writes report the fallback result', async () => {
+  const copy = loadRunStateHelpers().copyTextToClipboard || (async () => true);
+  let fallbackCalls = 0;
+  const fallback = () => { fallbackCalls += 1; return false; };
+
+  assert.equal(await copy('scenario-url', null, fallback), false);
+  assert.equal(await copy('scenario-url', { writeText: async () => { throw new Error('denied'); } }, fallback), false);
+  assert.equal(fallbackCalls, 2);
+});
+
+test('export accessible names contain their visible labels', () => {
+  const page = read('SimulatorPage.jsx');
+  const accessibleName = visibleLabel => {
+    const button = page.split(/\r?\n/).find(line => line.includes(`>${visibleLabel}</button>`));
+    assert.ok(button, `${visibleLabel} button must exist`);
+    const ariaLabel = button.match(/aria-label="([^"]+)"/);
+    return ariaLabel ? ariaLabel[1] : visibleLabel;
+  };
+
+  assert.match(accessibleName('Mass balance CSV'), /Mass balance CSV/);
+  assert.match(accessibleName('Reservoir SVG'), /Reservoir SVG/);
 });
 
 test('standalone simulator exposes the engineering workbench', () => {

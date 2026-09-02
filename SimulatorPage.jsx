@@ -56,6 +56,23 @@ const executeFileAction = (action, onFailure) => {
   }
 };
 
+const getPlaybackAction = ({ isPlaying, simTime, scenarioChanged }) =>
+  isPlaying ? 'pause' : simTime === 0 || scenarioChanged ? 'run-scenario' : 'resume';
+
+const copyTextToClipboard = async (text, clipboard, fallback) => {
+  if (clipboard && typeof clipboard.writeText === 'function') {
+    try {
+      await clipboard.writeText(text);
+      return true;
+    } catch (_) { /* Try the legacy copy path below. */ }
+  }
+  try {
+    return Boolean(fallback(text));
+  } catch (_) {
+    return false;
+  }
+};
+
 // Draw one sample for a parameter given its config and nominal value.
 // Returns { value, sampled } — sampled=false means the nominal was used unchanged.
 const sampleUqParam = (def, cfg, nominal) => {
@@ -797,19 +814,22 @@ const SimulatorPage = () => {
     return url.toString();
   };
 
-  const copyScenarioLink = () => {
+  const copyScenarioLink = async () => {
     const url = scenarioUrl();
     window.history.replaceState({ simulator: true }, '', url);
-    setShareStatus('Scenario link copied');
-    if (navigator.clipboard) navigator.clipboard.writeText(url).catch(() => {
+    const copied = await copyTextToClipboard(url, navigator.clipboard, text => {
       const field = document.createElement('textarea');
-      field.value = url;
+      field.value = text;
       document.body.appendChild(field);
       field.select();
-      document.execCommand('copy');
-      field.remove();
+      try {
+        return document.execCommand('copy');
+      } finally {
+        field.remove();
+      }
     });
-    setTimeout(() => setShareStatus(''), 2400);
+    setShareStatus(copied ? 'Scenario link copied' : 'Scenario link copy failed. Please retry.');
+    setTimeout(() => setShareStatus(''), copied ? 2400 : 3200);
   };
 
   const downloadBlob = (blob, filename) => {
@@ -1129,17 +1149,22 @@ const SimulatorPage = () => {
 
   // Play controls toggles
   const handlePlayToggle = () => {
-    if (isReversing) {
-      setIsReversing(false);
-    }
-    if (!isPlaying) {
-      if (simTime < historyRef.current.length - 1) {
-        commitBranch();
-      }
-      setIsPlaying(true);
-    } else {
+    if (isReversing) setIsReversing(false);
+    const action = getPlaybackAction({
+      isPlaying,
+      simTime,
+      scenarioChanged: scenarioSignature !== lastRunSignatureRef.current
+    });
+    if (action === 'pause') {
       setIsPlaying(false);
+      return;
     }
+    if (action === 'run-scenario') {
+      handleRunScenario();
+      return;
+    }
+    if (simTime < historyRef.current.length - 1) commitBranch();
+    setIsPlaying(true);
   };
 
   const handlePlayReverseToggle = () => {
@@ -2218,7 +2243,7 @@ const SimulatorPage = () => {
               {isPast && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', padding: 12, borderRadius: 12 }}>
                   <button 
-                    onClick={() => { commitBranch(); handlePlayToggle(); }}
+                    onClick={() => { commitBranch(); lastRunSignatureRef.current = scenarioSignature; handlePlayToggle(); }}
                     style={{
                       background: '#0dfca2',
                       border: 'none',
@@ -2499,11 +2524,11 @@ const SimulatorPage = () => {
         </div>
         <span className={`ve-run-status ve-run-status--${runStatus.toLowerCase().replace(/\s+/g, '-')}`} role="status">{runStatus}</span>
         <button onClick={resetSimulation}>Reset</button>
-        <button aria-label="Copy Scenario Link" onClick={copyScenarioLink}>Copy scenario link</button>
+        <button onClick={copyScenarioLink}>Copy scenario link</button>
         <details className="ve-export-menu">
           <summary>Export</summary>
-          <button aria-label="Export CSV" onClick={() => runFileAction(exportCsv, 'Mass balance export failed. Please retry.')}>Mass balance CSV</button>
-          <button aria-label="Export SVG" onClick={() => runFileAction(exportSvg, 'Reservoir export failed. Please retry.')}>Reservoir SVG</button>
+          <button onClick={() => runFileAction(exportCsv, 'Mass balance export failed. Please retry.')}>Mass balance CSV</button>
+          <button onClick={() => runFileAction(exportSvg, 'Reservoir export failed. Please retry.')}>Reservoir SVG</button>
         </details>
         <button className="ve-run-button" onClick={handleRunScenario}>Run scenario</button>
       </section>
