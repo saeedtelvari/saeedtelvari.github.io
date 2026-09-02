@@ -2,6 +2,7 @@
 const { useEffect, useMemo, useRef, useState } = React;
 
 const SIM_TABS = ['profile', 'map', 'uq', 'guide'];
+const VISUALIZATION_TABS = ['profile', 'map'];
 
 // Declarative registry of every parameter the UQ batch can sample.
 // dec = display decimals; dec 0 params are sampled as integers.
@@ -1140,9 +1141,9 @@ const SimulatorPage = () => {
   const handleTabKeys = (e) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
-    const idx = SIM_TABS.indexOf(activeSubTab);
-    const dir = e.key === 'ArrowRight' ? 1 : SIM_TABS.length - 1;
-    const next = SIM_TABS[(idx + dir) % SIM_TABS.length];
+    const idx = VISUALIZATION_TABS.indexOf(activeSubTab);
+    const dir = e.key === 'ArrowRight' ? 1 : VISUALIZATION_TABS.length - 1;
+    const next = VISUALIZATION_TABS[(idx + dir) % VISUALIZATION_TABS.length];
     setActiveSubTab(next);
     requestAnimationFrame(() => tabRefs.current[next] && tabRefs.current[next].focus());
   };
@@ -2174,22 +2175,9 @@ const SimulatorPage = () => {
   };
 
   return (
-    <div 
-      className="simulator-page-wrapper"
-      style={{
-        padding: '110px 4% 60px',
-        minHeight: '100vh',
-        background: '#130d1c',
-        color: '#fff',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 25,
-        transition: 'padding-left 0.3s ease-in-out',
-        paddingLeft: sidebarOpen && activeSubTab === 'profile' ? '360px' : '4%'
-      }}
-    >
+    <div className="simulator-page-wrapper">
       {/* --- COLLAPSIBLE TIME-TRAVEL SIDEBAR --- */}
-      {sidebarOpen && activeSubTab === 'profile' && <div className="time-travel-sidebar open">
+      {sidebarOpen && activeSubTab === 'profile' && <aside className="ve-history-sheet" aria-label="Simulation timeline">
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#64ffda', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2257,7 +2245,7 @@ const SimulatorPage = () => {
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: 6,
-                      transition: 'all 0.2s ease'
+                      transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1)'
                     }}
                   >
                     <i className="fas fa-code-branch" /> Branch & Run (Yr {simTime})
@@ -2278,7 +2266,7 @@ const SimulatorPage = () => {
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: 6,
-                      transition: 'all 0.2s ease'
+                      transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1)'
                     }}
                   >
                     <i className="fas fa-fast-forward" /> Return to Present (Yr {historyRef.current.length - 1})
@@ -2413,7 +2401,7 @@ const SimulatorPage = () => {
                           border: `2px solid ${isCurrent ? '#fff' : 'transparent'}`,
                           boxShadow: isCurrent ? '0 0 6px #0dfca2' : 'none',
                           zIndex: 2,
-                          transition: 'all 0.2s ease',
+                          transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center'
@@ -2437,68 +2425,12 @@ const SimulatorPage = () => {
             </div>
           );
         })()}
-      </div>}
+      </aside>}
 
       {/* Dynamic responsive layout style element */}
       <style>{`
-        .simulator-layout {
-          display: grid;
-          grid-template-columns: 1.40fr 1fr;
-          gap: 25px;
-          align-items: start;
-          min-width: 0;
-        }
-        .simulator-layout > *, .controls-subgrid > * { min-width: 0; }
         .sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-        .controls-subgrid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
-        }
-        .time-travel-sidebar {
-          position: fixed;
-          top: 0;
-          left: 0;
-          height: 100vh;
-          width: 330px;
-          background: linear-gradient(135deg, rgba(25, 18, 38, 0.96) 0%, rgba(16, 20, 38, 0.96) 100%);
-          border-right: 1px solid rgba(100, 255, 218, 0.18);
-          box-shadow: 8px 0 32px rgba(0,0,0,0.5);
-          backdrop-filter: blur(15px);
-          z-index: 1000;
-          transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          display: flex;
-          flex-direction: column;
-          padding: 100px 22px 30px;
-        }
-        .time-travel-sidebar.closed {
-          transform: translateX(-100%);
-        }
-        .time-travel-sidebar.open {
-          transform: translateX(0);
-        }
-        @media (max-width: 1100px) {
-          .simulator-layout {
-            grid-template-columns: 1fr;
-          }
-        }
         @media (max-width: 768px) {
-          .simulator-page-wrapper {
-            padding: 94px 12px 40px !important;
-            max-width: 100vw;
-            overflow: hidden;
-          }
-          .controls-subgrid {
-            grid-template-columns: 1fr;
-          }
-          .simulator-page-wrapper {
-            padding-left: 4% !important;
-          }
-          .time-travel-sidebar {
-            width: min(330px, 92vw);
-            padding-top: 90px;
-          }
-          .simulator-layout { order: 2; }
           .sim-tab-header { overflow-x: auto; align-items: stretch !important; }
           .sim-tab-header [role="tablist"] { min-width: max-content; }
           .sim-tab-status { display: none; }
@@ -2525,6 +2457,8 @@ const SimulatorPage = () => {
         <span className={`ve-run-status ve-run-status--${runStatus.toLowerCase().replace(/\s+/g, '-')}`} role="status">{runStatus}</span>
         <button onClick={resetSimulation}>Reset</button>
         <button onClick={copyScenarioLink}>Copy scenario link</button>
+        <button id="tab-uq" onClick={() => setActiveSubTab('uq')}>Risk analysis</button>
+        <button id="tab-guide" onClick={() => setActiveSubTab('guide')}>Methodology</button>
         <details className="ve-export-menu">
           <summary>Export</summary>
           <button onClick={() => runFileAction(exportCsv, 'Mass balance export failed. Please retry.')}>Mass balance CSV</button>
@@ -2535,9 +2469,9 @@ const SimulatorPage = () => {
       <span className="ve-action-status" role="status" aria-live="polite">{shareStatus}</span>
 
       {/* --- MAIN LAYOUT GRID --- */}
-      <div className="simulator-layout" style={activeSubTab === 'map' ? { gridTemplateColumns: '1fr' } : undefined}>
+      <div className="ve-workbench" data-workspace={activeSubTab}>
         {/* LEFT COLUMN: Reservoir SVG Visualizer + Parameter & Fault Sliders (below it) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <VisualizationWorkspace>
           
           {/* Reservoir Visualizer SVG Window */}
           <div className="sim-reservoir-card" style={{
@@ -2581,7 +2515,7 @@ const SimulatorPage = () => {
                     letterSpacing: '0.05em',
                     textTransform: 'uppercase',
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease',
+                    transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease',
                     outline: 'none'
                   }}
                 >
@@ -2606,61 +2540,11 @@ const SimulatorPage = () => {
                     letterSpacing: '0.05em',
                     textTransform: 'uppercase',
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease',
+                    transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease',
                     outline: 'none'
                   }}
                 >
                   <i className="fas fa-map" style={{ marginRight: 6 }} /> 2D Map
-                </button>
-                <button 
-                  ref={el => { tabRefs.current.uq = el; }}
-                  onClick={() => setActiveSubTab('uq')}
-                  role="tab"
-                  id="tab-uq"
-                  aria-selected={activeSubTab === 'uq'}
-                  aria-controls="tabpanel-uq"
-                  tabIndex={activeSubTab === 'uq' ? 0 : -1}
-                  style={{
-                    background: activeSubTab === 'uq' ? 'rgba(100, 255, 218, 0.08)' : 'none',
-                    border: 'none',
-                    borderBottom: activeSubTab === 'uq' ? '2px solid #64ffda' : '2px solid transparent',
-                    color: activeSubTab === 'uq' ? '#64ffda' : 'rgba(255,255,255,0.6)',
-                    padding: '12px 16px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    letterSpacing: '0.05em',
-                    textTransform: 'uppercase',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    outline: 'none'
-                  }}
-                >
-                  <i className="fas fa-chart-bar" style={{ marginRight: 6 }} /> Sensitivity & UQ
-                </button>
-                <button 
-                  ref={el => { tabRefs.current.guide = el; }}
-                  onClick={() => setActiveSubTab('guide')}
-                  role="tab"
-                  id="tab-guide"
-                  aria-selected={activeSubTab === 'guide'}
-                  aria-controls="tabpanel-guide"
-                  tabIndex={activeSubTab === 'guide' ? 0 : -1}
-                  style={{
-                    background: activeSubTab === 'guide' ? 'rgba(100, 255, 218, 0.08)' : 'none',
-                    border: 'none',
-                    borderBottom: activeSubTab === 'guide' ? '2px solid #64ffda' : '2px solid transparent',
-                    color: activeSubTab === 'guide' ? '#64ffda' : 'rgba(255,255,255,0.6)',
-                    padding: '12px 16px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    letterSpacing: '0.05em',
-                    textTransform: 'uppercase',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    outline: 'none'
-                  }}
-                >
-                  <i className="fas fa-book" style={{ marginRight: 6 }} /> PDE Methodology Guide
                 </button>
               </div>
               <div className="sim-tab-status" style={{ paddingRight: 8 }}>
@@ -2936,15 +2820,7 @@ const SimulatorPage = () => {
                 </defs>
               </svg>
 
-              {/* Time Travel Seek/Play Control Bar overlaid at bottom */}
-              <div className="sim-playback" style={{
-                position: 'absolute', bottom: 15, left: '5%', right: '5%',
-                display: 'flex', alignItems: 'center', gap: 14,
-                padding: '8px 18px', background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.12)', borderRadius: '30px',
-                backdropFilter: 'blur(10px)', boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
-                zIndex: 10
-              }}>
+              <div className="ve-playback-bar" aria-label="Simulation playback">
                 {/* Play Reverse */}
                 <button 
                   onClick={handlePlayReverseToggle} 
@@ -2985,6 +2861,7 @@ const SimulatorPage = () => {
                 <button onClick={resetSimulation} aria-label="Reset simulation" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', outline: 'none' }} title="Reset Simulation">
                   <i className="fas fa-redo" style={{ fontSize: 11 }}/>
                 </button>
+                <button onClick={() => setSidebarOpen(true)} aria-label="Open simulation timeline">Timeline</button>
                 <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.2)' }}/>
                 
                 {/* Seek Year indicator */}
@@ -3156,7 +3033,7 @@ const SimulatorPage = () => {
                         alignItems: 'center',
                         gap: 8,
                         boxShadow: uqRunning ? 'none' : '0 4px 15px rgba(100,255,218,0.25)',
-                        transition: 'all 0.2s ease',
+                        transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1)',
                         width: '100%',
                         justifyContent: 'center'
                       }}
@@ -3235,7 +3112,7 @@ const SimulatorPage = () => {
                           </div>
                           <button 
                             onClick={() => loadUQRealization(uqData.p10Realization)}
-                            style={{ background: 'rgba(100,255,218,0.1)', border: '1px solid rgba(100,255,218,0.3)', color: '#64ffda', padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease', outline: 'none' }}
+                            style={{ background: 'rgba(100,255,218,0.1)', border: '1px solid rgba(100,255,218,0.3)', color: '#64ffda', padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease', outline: 'none' }}
                           >
                             Load Model
                           </button>
@@ -3251,7 +3128,7 @@ const SimulatorPage = () => {
                           </div>
                           <button 
                             onClick={() => loadUQRealization(uqData.p50Realization)}
-                            style={{ background: 'rgba(255,179,0,0.1)', border: '1px solid rgba(255,179,0,0.3)', color: '#ffb300', padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease', outline: 'none' }}
+                            style={{ background: 'rgba(255,179,0,0.1)', border: '1px solid rgba(255,179,0,0.3)', color: '#ffb300', padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease', outline: 'none' }}
                           >
                             Load Model
                           </button>
@@ -3267,7 +3144,7 @@ const SimulatorPage = () => {
                           </div>
                           <button 
                             onClick={() => loadUQRealization(uqData.p90Realization)}
-                            style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', color: '#ff6b6b', padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease', outline: 'none' }}
+                            style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', color: '#ff6b6b', padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease', outline: 'none' }}
                           >
                             Load Model
                           </button>
@@ -3328,10 +3205,11 @@ const SimulatorPage = () => {
           </p>
 
           {/* Sub-grid containing Parameters (Left) and Faults (Right) directly below Reservoir Grid */}
-          <div className="controls-subgrid">
+          <InputRail>
+            <div className="ve-rail-heading"><h2>Scenario inputs</h2></div>
             
             {/* Simulation Parameters Slider Panel */}
-            <details className="control-panel" open={window.innerWidth > 768} style={{
+            <details className="control-panel ve-parameter-groups" open={window.innerWidth > 768} style={{
               background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
               border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 20,
@@ -3339,37 +3217,34 @@ const SimulatorPage = () => {
               boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
               backdropFilter: 'blur(12px)'
             }}>
-              <summary style={{ margin: '0 0 14px', fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>
-                Simulation Parameters
-              </summary>
+              <summary className="sr-only">Simulation parameters</summary>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {/* Caprock Structure controls */}
-                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 10 }}>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Topography Spline (Caprock)</span>
+                <section className="ve-input-group ve-input-group--structure">
+                  <h3>Structure</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                    <Slider label="Regional Dip" val={`${dipPercent}%`} min="-5" max="5" step="0.5" value={dipPercent} onChange={v => setDipPercent(parseFloat(v))} />
-                    <Slider label="Anticline Height" val={`${amplitude}px`} min="0" max="50" step="5" value={amplitude} onChange={v => setAmplitude(parseInt(v))} />
-                    <Slider label="Anticline Count" val={frequency} min="0.5" max="4.0" step="0.5" value={frequency} onChange={v => setFrequency(parseFloat(v))} />
-                    <Slider label="Fault Slip" val={`${faultOffset}x`} min="0" max="3" step="0.2" value={faultOffset} onChange={v => setFaultOffset(parseFloat(v))} />
+                    <ParameterField label="Regional dip" unit="%" min={-5} max={5} step={0.5} value={dipPercent} onChange={setDipPercent} />
+                    <ParameterField label="Anticline height" unit="px" min={0} max={50} step={5} value={amplitude} onChange={setAmplitude} />
+                    <ParameterField label="Anticline count" unit="" min={0.5} max={4} step={0.5} value={frequency} onChange={setFrequency} />
+                    <ParameterField label="Fault slip" unit="×" min={0} max={3} step={0.2} value={faultOffset} onChange={setFaultOffset} />
                   </div>
-                </div>
+                </section>
 
                 {/* Rock & Fluids properties */}
-                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 10 }}>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Sandstone Properties</span>
+                <section className="ve-input-group ve-input-group--rock">
+                  <h3>Rock properties</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                    <Slider label="Permeability (K)" val={`${Math.round(K*1000)} mD`} min="0.1" max="3.5" step="0.1" value={K} onChange={v => setK(parseFloat(v))} />
-                    <Slider label="Porosity (phi)" val={`${Math.round(porosity*100)}%`} min="0.1" max="0.4" step="0.05" value={porosity} onChange={v => setPorosity(parseFloat(v))} />
-                    <Slider label="Grid Cells (N)" val={cellCount} min="50" max="300" step="10" value={cellCount} onChange={v => setCellCount(parseInt(v))} />
-                    <Slider label="Residual Trap (Sgr)" val={`${Math.round(residualTrapFraction*100)}%`} min="0.0" max="0.4" step="0.05" value={residualTrapFraction} onChange={v => setResidualTrapFraction(parseFloat(v))} />
+                    <ParameterField label="Permeability (K)" unit="×10³ mD" min={0.1} max={3.5} step={0.1} value={K} onChange={setK} />
+                    <ParameterField label="Porosity (φ)" unit="fraction" min={0.1} max={0.4} step={0.05} value={porosity} onChange={setPorosity} />
+                    <ParameterField label="Residual trap (Sgr)" unit="fraction" min={0} max={0.4} step={0.05} value={residualTrapFraction} onChange={setResidualTrapFraction} />
                   </div>
-                </div>
+                </section>
 
                 {/* Capillary Fringe & Pressure Parameters */}
-                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 10 }}>
+                <section className="ve-input-group ve-input-group--capillary">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Capillary Fringe (P_c Transition)</span>
+                    <h3>Capillary behavior</h3>
                     <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, cursor: 'pointer', color: hasCapillaryFringe ? '#64ffda' : 'rgba(255,255,255,0.5)' }}>
                       <input 
                         type="checkbox" 
@@ -3382,28 +3257,35 @@ const SimulatorPage = () => {
                   </div>
                   {hasCapillaryFringe && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                      <Slider label="Fringe Height (h_c)" val={`${fringeScale.toFixed(2)} m`} min="0.10" max="3.00" step="0.10" value={fringeScale} onChange={v => setFringeScale(parseFloat(v))} />
-                      <Slider label="Visual Entry-pressure Scale" val={`${entryPressure} kPa`} min="5" max="40" step="1" value={entryPressure} onChange={v => setEntryPressure(parseInt(v))} />
+                      <ParameterField label="Fringe height (h_c)" unit="m" min={0.1} max={3} step={0.1} value={fringeScale} onChange={setFringeScale} />
+                      <ParameterField label="Entry-pressure scale" unit="kPa" min={5} max={40} step={1} value={entryPressure} onChange={setEntryPressure} />
                     </div>
                   )}
-                </div>
+                </section>
 
                 {/* Injection Settings */}
-                <div>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Injection Settings</span>
+                <section className="ve-input-group ve-input-group--injection">
+                  <h3>Injection</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                    <Slider label="Flow Rate (Q)" val={`${Q.toFixed(1)} kt/yr`} min="0.0" max="3.5" step="0.1" value={Q} onChange={v => setQ(parseFloat(v))} />
-                    <Slider label={activeSubTab === 'map' ? 'Well X Location' : 'Well Location'} val={`${injLocation}%`} min="10" max="90" step="5" value={injLocation} onChange={v => setInjLocation(parseInt(v))} />
-                    {activeSubTab === 'map' && <Slider label="Well Y Location" val={`${wellY}%`} min="10" max="90" step="5" value={wellY} onChange={v => setWellY(parseInt(v))} />}
-                    {activeSubTab === 'map' && <Slider label="2D Grid Resolution" val={`${mapCols} × ${Math.max(12, Math.round(mapCols * 0.6))}`} min="24" max="80" step="8" value={mapCols} onChange={v => setMapCols(parseInt(v))} />}
-                    <Slider label="Inj. Stop Year" val={`${injDuration}y`} min="50" max="400" step="10" value={injDuration} onChange={v => setInjDuration(parseInt(v))} />
+                    <ParameterField label="Flow rate (Q)" unit="kt/yr" min={0} max={3.5} step={0.1} value={Q} onChange={setQ} />
+                    <ParameterField label={activeSubTab === 'map' ? 'Well X location' : 'Well location'} unit="%" min={10} max={90} step={5} value={injLocation} onChange={setInjLocation} />
+                    <ParameterField label="Injection stop year" unit="y" min={50} max={400} step={10} value={injDuration} onChange={setInjDuration} />
                   </div>
-                </div>
+                </section>
+
+                <section className="ve-input-group ve-input-group--grid">
+                  <h3>Grid detail</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
+                    <ParameterField label="Grid cells (N)" unit="cells" min={50} max={300} step={10} value={cellCount} onChange={setCellCount} />
+                    {activeSubTab === 'map' && <ParameterField label="Well Y location" unit="%" min={10} max={90} step={5} value={wellY} onChange={setWellY} />}
+                    {activeSubTab === 'map' && <ParameterField label="2D grid resolution" unit="columns" min={24} max={80} step={8} value={mapCols} onChange={setMapCols} />}
+                  </div>
+                </section>
               </div>
             </details>
 
             {/* Fault Management Control Panel */}
-            <details className="control-panel" open={window.innerWidth > 768} style={{
+            <details className="control-panel ve-fault-section" open={window.innerWidth > 768} style={{
               background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
               border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 20,
@@ -3412,7 +3294,7 @@ const SimulatorPage = () => {
               backdropFilter: 'blur(12px)'
             }}>
               <summary style={{ margin: '0 0 14px', fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>
-                Fault Management
+                Faults
               </summary>
 
               {/* Number of Faults selector */}
@@ -3432,7 +3314,7 @@ const SimulatorPage = () => {
                         fontSize: 11,
                         fontWeight: 'bold',
                         cursor: 'pointer',
-                        transition: 'all 0.2s ease',
+                        transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1)',
                         outline: 'none'
                       }}
                     >
@@ -3467,56 +3349,56 @@ const SimulatorPage = () => {
                           </label>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                          <Slider
+                          <ParameterField
                             label="Position"
-                            val={`${f.xPercent}%`}
-                            min="10"
-                            max="90"
-                            step="5"
+                            unit="%"
+                            min={10}
+                            max={90}
+                            step={5}
                             value={f.xPercent}
                             onChange={v => {
                               const newFaults = [...faults];
-                              newFaults[idx].xPercent = parseInt(v);
+                              newFaults[idx].xPercent = v;
                               setFaults(newFaults);
                             }}
                           />
-                          <Slider
+                          <ParameterField
                             label="Capillary Threshold"
-                            val={`${f.thresholdHeight} m`}
-                            min="0.0"
-                            max="2.0"
-                            step="0.1"
+                            unit="m"
+                            min={0}
+                            max={2}
+                            step={0.1}
                             value={f.thresholdHeight}
                             onChange={v => {
                               const newFaults = [...faults];
-                              newFaults[idx].thresholdHeight = parseFloat(v);
+                              newFaults[idx].thresholdHeight = v;
                               setFaults(newFaults);
                             }}
                           />
-                          <Slider
+                          <ParameterField
                             label="Horiz. Transmissibility"
-                            val={f.transmissibility !== undefined ? f.transmissibility.toFixed(2) : "1.00"}
-                            min="0.0"
-                            max="1.0"
-                            step="0.05"
+                            unit="fraction"
+                            min={0}
+                            max={1}
+                            step={0.05}
                             value={f.transmissibility !== undefined ? f.transmissibility : 1.0}
                             onChange={v => {
                               const newFaults = [...faults];
-                              newFaults[idx].transmissibility = parseFloat(v);
+                              newFaults[idx].transmissibility = v;
                               setFaults(newFaults);
                             }}
                           />
                           {!f.isSealed ? (
-                            <Slider
+                            <ParameterField
                               label="Leakage Rate"
-                              val={f.leakRate}
-                              min="0.01"
-                              max="0.40"
-                              step="0.02"
+                              unit="scaled"
+                              min={0.01}
+                              max={0.4}
+                              step={0.02}
                               value={f.leakRate}
                               onChange={v => {
                                 const newFaults = [...faults];
-                                newFaults[idx].leakRate = parseFloat(v);
+                                newFaults[idx].leakRate = v;
                                 setFaults(newFaults);
                               }}
                             />
@@ -3530,46 +3412,22 @@ const SimulatorPage = () => {
                 </div>
               )}
             </details>
-          </div>
-        </div>
+          </InputRail>
+        </VisualizationWorkspace>
 
         {/* RIGHT COLUMN: Mass Balance Analytics & Charting Window */}
-        {activeSubTab !== 'map' && <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 20,
-          position: 'sticky',
-          top: 110
-        }}>
+        {(activeSubTab === 'profile' || activeSubTab === 'map') && <OutcomeRail>
           {/* Mass Balance Analytics Panel */}
-          <details className="control-panel" open={window.innerWidth > 768} style={{
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 20,
-            padding: '18px 20px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
-            backdropFilter: 'blur(12px)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12
-          }}>
-            <summary style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
-              <span style={{ margin: 0, fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>
-                CO₂ Mass Balance
-              </span>
-              <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'rgba(255,255,255,0.5)' }}>Scaled units (ktonnes equiv.)</span>
-            </summary>
-
+          <div className="ve-outcome-content">
+            <div className="ve-rail-heading"><h2>Live outcome</h2><span>Year {simTime}</span></div>
+            <dl className="ve-metric-list">
+              <div><dt>Injected</dt><dd>{formatMass(currentMasses.injected)}</dd></div>
+              <div><dt>Mobile</dt><dd>{formatMass(currentMasses.mobile)}</dd></div>
+              <div><dt>Residually trapped</dt><dd>{formatMass(currentMasses.trapped)}</dd></div>
+              <div className={currentMasses.leaked > 0 ? 'is-danger' : ''}><dt>Leaked</dt><dd>{formatMass(currentMasses.leaked)}</dd></div>
+            </dl>
             {/* Live Chart Rendering */}
             {renderSVGChart()}
-
-            {/* Mass balance numerical breakdown boxes */}
-            <div className="sim-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 4 }}>
-              <StatBox label="Injected" value={Math.round(currentMasses.injected)} color="#ffffff" opacity="0.6"/>
-              <StatBox label="Mobile Plume" value={Math.round(currentMasses.mobile)} color="#64ffda"/>
-              <StatBox label="Trapped" value={Math.round(currentMasses.trapped)} color="#3ca68e"/>
-              <StatBox label="Leaked" value={Math.round(currentMasses.leaked)} color="#ff6b6b"/>
-            </div>
 
             {/* Real-time Storage Efficiency Trapping Mechanism Progress Bars */}
             <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12 }}>
@@ -3580,41 +3438,31 @@ const SimulatorPage = () => {
                 <ProgressBar label="Cumulative Leaked Fraction" pct={currentMasses.injected > 0 ? (currentMasses.leaked / currentMasses.injected) * 100 : 0} color="#ff6b6b"/>
               </div>
             </div>
-          </details>
-        </div>}
+          </div>
+        </OutcomeRail>}
       </div>
     </div>
   );
 };
 
-// Slider Input helper component
-const Slider = ({ label, val, min, max, step, value, onChange }) => {
+const formatMass = value => `${Number(value || 0).toLocaleString('en-GB', { maximumFractionDigits: 1 })} kt`;
+
+const InputRail = ({ children }) => <aside className="ve-input-rail" aria-label="Scenario inputs">{children}</aside>;
+const VisualizationWorkspace = ({ children }) => <section className="ve-visualization-workspace" aria-label="Reservoir visualization">{children}</section>;
+const OutcomeRail = ({ children }) => <aside className="ve-outcome-rail" aria-label="Simulation outcomes">{children}</aside>;
+
+const ParameterField = ({ label, value, min, max, step, unit, format = v => v, onChange }) => {
+  const setValue = raw => {
+    const number = Number(raw);
+    if (!Number.isFinite(number)) return;
+    onChange(Math.max(min, Math.min(max, number)));
+  };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'rgba(255,255,255,0.8)' }}>
-        <span>{label}</span>
-        <span style={{ fontFamily: 'monospace', color: '#64ffda' }}>{val}</span>
-      </div>
-      <input 
-        type="range" 
-        min={min} 
-        max={max} 
-        step={step} 
-        value={value} 
-        aria-label={label}
-        aria-valuetext={String(val)}
-        onChange={e => onChange(e.target.value)}
-        style={{
-          width: '100%',
-          height: 3,
-          background: 'rgba(255,255,255,0.15)',
-          borderRadius: 2,
-          outline: 'none',
-          cursor: 'pointer',
-          accentColor: '#64ffda'
-        }}
-      />
-    </div>
+    <label className="ve-parameter-field">
+      <span className="ve-parameter-heading"><span>{label}</span><span className="ve-parameter-value"><input type="number" value={value} min={min} max={max} step={step} onChange={event => setValue(event.target.value)} /><span>{unit}</span></span></span>
+      <input type="range" aria-label={label} value={value} min={min} max={max} step={step} onChange={event => setValue(event.target.value)} />
+      <span className="sr-only">Displayed value {format(value)} {unit}</span>
+    </label>
   );
 };
 
