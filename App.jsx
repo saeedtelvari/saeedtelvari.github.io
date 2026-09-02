@@ -163,17 +163,9 @@ const SimulatorStandalone = () => {
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'var(--bg-gradient)',
-      color: '#fff',
-      fontFamily: "'Montserrat', sans-serif",
-    }} data-screen-label="03 VE Simulator">
-      <Header active="simulator" onNavigate={simNav} />
-      <main>
-        <SimulatorPage />
-        <Footer onNavigate={simNav} />
-      </main>
+    <div className="ve-standalone" data-screen-label="03 VE Simulator">
+      <Header active="simulator" onNavigate={simNav} variant="workbench" />
+      <main id="main-content"><SimulatorPage /></main>
     </div>
   );
 };

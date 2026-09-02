@@ -2,7 +2,7 @@
 
 const { useEffect, useState, useRef } = React;
 
-const Header = ({ active, onNavigate }) => {
+const Header = ({ active, onNavigate, variant = 'site' }) => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [currentSection, setCurrentSection] = useState(active);
@@ -75,8 +75,15 @@ const Header = ({ active, onNavigate }) => {
     else if (window.__onNavigate) window.__onNavigate(id);
   };
 
+  const isWorkbench = variant === 'workbench';
+  const siteScrolledBackground = 'linear-gradient(180deg, rgba(19, 13, 28, 0.92) 0%, rgba(19, 13, 28, 0.75) 100%)';
+  const siteTopBackground = 'linear-gradient(180deg, rgba(19, 13, 28, 0.60) 0%, rgba(19, 13, 28, 0.20) 60%, transparent 100%)';
+  const siteBorderBottom = scrolled ? '1px solid rgba(255,255,255,0.12)' : '1px solid transparent';
+  const siteBoxShadow = scrolled ? '0 4px 30px rgba(0,0,0,0.30), inset 0 -1px 0 rgba(255,255,255,0.08)' : 'none';
+
   return (
-    <header 
+    <header
+      className={isWorkbench ? 'app-header app-header--workbench' : 'app-header'}
       role="banner"
       style={{
         position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000,
@@ -163,17 +170,15 @@ const Header = ({ active, onNavigate }) => {
       <div 
         className="header-container"
         style={{
-          height: scrolled ? 64 : 88,
+          height: isWorkbench ? 56 : (scrolled ? 64 : 88),
           padding: '0 36px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           transition: 'all 0.4s ease',
-          background: scrolled
-            ? 'linear-gradient(180deg, rgba(19, 13, 28, 0.92) 0%, rgba(19, 13, 28, 0.75) 100%)'
-            : 'linear-gradient(180deg, rgba(19, 13, 28, 0.60) 0%, rgba(19, 13, 28, 0.20) 60%, transparent 100%)',
-          backdropFilter: scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)',
-          WebkitBackdropFilter: scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)',
-          borderBottom: scrolled ? '1px solid rgba(255,255,255,0.12)' : '1px solid transparent',
-          boxShadow: scrolled ? '0 4px 30px rgba(0,0,0,0.30), inset 0 -1px 0 rgba(255,255,255,0.08)' : 'none',
+          background: isWorkbench ? '#ffffff' : (scrolled ? siteScrolledBackground : siteTopBackground),
+          backdropFilter: isWorkbench ? 'none' : (scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)'),
+          WebkitBackdropFilter: isWorkbench ? 'none' : (scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)'),
+          borderBottom: isWorkbench ? '1px solid var(--ve-border)' : siteBorderBottom,
+          boxShadow: isWorkbench ? 'none' : siteBoxShadow,
           pointerEvents: 'auto',
         }}
       >
@@ -204,6 +209,7 @@ const Header = ({ active, onNavigate }) => {
                 href={it.href}
                 active={currentSection === it.id}
                 onClick={() => handleItemClick(it.id)}
+                variant={variant}
               />
             ))}
           </ul>
@@ -300,9 +306,18 @@ const Header = ({ active, onNavigate }) => {
   );
 };
 
-const NavItem = ({ label, href, active, onClick }) => {
+const NavItem = ({ label, href, active, onClick, variant = 'site' }) => {
   const [hover, setHover] = useState(false);
   const showPill = hover || active;
+  const existingBackground = showPill
+    ? 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.05) 100%)'
+    : 'transparent';
+  const existingBorder = active
+    ? '1px solid rgba(100,255,218,0.40)'
+    : showPill
+      ? '1px solid rgba(255,255,255,0.15)'
+      : '1px solid transparent';
+  const existingTransform = hover ? 'translateY(-2px)' : 'translateY(0)';
   return (
     <li>
       <a
@@ -317,21 +332,17 @@ const NavItem = ({ label, href, active, onClick }) => {
           fontFamily: "'Montserrat', sans-serif",
           fontSize: 14.5,
           fontWeight: active ? 600 : 400,
-          color: active ? '#64ffda' : 'azure',
+          color: variant === 'workbench' ? (active ? 'var(--ve-accent)' : 'var(--ve-ink)') : (active ? '#64ffda' : 'azure'),
           cursor: 'pointer',
           borderRadius: 12,
-          transition: 'all 0.35s cubic-bezier(0.175,0.885,0.32,1.275)',
-          transform: hover ? 'translateY(-2px)' : 'translateY(0)',
-          background: showPill
-            ? 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.05) 100%)'
-            : 'transparent',
+          transition: variant === 'workbench'
+            ? 'color 140ms ease, background-color 140ms ease, border-color 140ms ease, transform 140ms cubic-bezier(0.23,1,0.32,1)'
+            : 'all 0.35s cubic-bezier(0.175,0.885,0.32,1.275)',
+          transform: variant === 'workbench' && hover ? 'translateY(-1px)' : existingTransform,
+          background: variant === 'workbench' && showPill ? 'var(--ve-accent-soft)' : existingBackground,
           backdropFilter: showPill ? 'blur(10px)' : 'none',
           WebkitBackdropFilter: showPill ? 'blur(10px)' : 'none',
-          border: active 
-            ? '1px solid rgba(100,255,218,0.40)' 
-            : showPill 
-              ? '1px solid rgba(255,255,255,0.15)' 
-              : '1px solid transparent',
+          border: variant === 'workbench' && active ? '1px solid rgba(23,111,104,0.28)' : existingBorder,
           boxShadow: active 
             ? '0 4px 15px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.20), 0 0 10px rgba(100,255,218,0.15)'
             : showPill 

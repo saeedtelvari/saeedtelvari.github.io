@@ -1,0 +1,51 @@
+:root {
+  --ve-app: #edf1f4;
+  --ve-surface: #ffffff;
+  --ve-surface-subtle: #f7f9fa;
+  --ve-ink: #17212b;
+  --ve-muted: #617080;
+  --ve-border: #d6dde4;
+  --ve-accent: #176f68;
+  --ve-accent-soft: #e3f1ef;
+  --ve-warning: #a86616;
+  --ve-danger: #b42318;
+  --ve-canvas: #10202d;
+  --ve-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ve-ease-move: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+.app-header--workbench {
+  min-height: 56px;
+}
+
+.ve-standalone {
+  min-height: 100vh;
+  color: var(--ve-ink);
+  background: var(--ve-app);
+}
+
+.ve-app-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--ve-muted);
+  background: var(--ve-app);
+  font: 600 13px/1.4 var(--font-prose);
+}
+
+.ve-standalone :focus-visible {
+  outline: 2px solid var(--ve-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-header--workbench .header-container,
+  .app-header--workbench a,
+  .app-header--workbench button {
+    transition-duration: 0.01ms !important;
+  }
+}
