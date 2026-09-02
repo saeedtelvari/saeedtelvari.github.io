@@ -86,6 +86,20 @@ const copyTextToClipboard = async (text, clipboard, fallback) => {
   }
 };
 
+const toggleMobilePanel = (currentPanel, requestedPanel) =>
+  currentPanel === requestedPanel ? null : requestedPanel;
+
+const focusMobilePanelTrigger = (panel, triggers) => {
+  const trigger = triggers[panel];
+  if (trigger && typeof trigger.focus === 'function') trigger.focus();
+};
+
+const lockPageScroll = pageDocument => {
+  const previousOverflow = pageDocument.body.style.overflow;
+  pageDocument.body.style.overflow = 'hidden';
+  return () => { pageDocument.body.style.overflow = previousOverflow; };
+};
+
 // Draw one sample for a parameter given its config and nominal value.
 // Returns { value, sampled } — sampled=false means the nominal was used unchanged.
 const sampleUqParam = (def, cfg, nominal) => {
@@ -536,9 +550,41 @@ const SimulatorPage = () => {
   const [activeSubTab, setActiveSubTab] = useState('profile'); // 'profile' (2D reservoir) or 'uq' (Sensitivity & UQ Analysis)
   const [selectedPreset, setSelectedPreset] = useState('default');
   const [shareStatus, setShareStatus] = useState('');
+  const [mobilePanel, setMobilePanel] = useState(null);
   const tabRefs = useRef({});
+  const mobileTriggerRefs = useRef({});
+  const mobileCloseRefs = useRef({});
   const reservoirSvgRef = useRef(null);
   const uqWorkerRef = useRef(null);
+
+  const dismissMobilePanel = useCallback(() => {
+    if (!mobilePanel) return;
+    const closingPanel = mobilePanel;
+    setMobilePanel(null);
+    requestAnimationFrame(() => focusMobilePanelTrigger(closingPanel, mobileTriggerRefs.current));
+  }, [mobilePanel]);
+
+  const handleMobilePanelToggle = panel => {
+    if (mobilePanel === panel) dismissMobilePanel();
+    else setMobilePanel(toggleMobilePanel(mobilePanel, panel));
+  };
+
+  useEffect(() => {
+    if (!mobilePanel) return undefined;
+    const releaseScroll = lockPageScroll(document);
+    const closeOnEscape = event => {
+      if (event.key === 'Escape') dismissMobilePanel();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    requestAnimationFrame(() => {
+      const closeButton = mobileCloseRefs.current[mobilePanel];
+      if (closeButton) closeButton.focus();
+    });
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape);
+      releaseScroll();
+    };
+  }, [mobilePanel, dismissMobilePanel]);
 
   const scenarioSignature = useMemo(() => createScenarioSignature({
     K, porosity, cellCount, residualTrapFraction, dipPercent, amplitude,
@@ -2533,9 +2579,41 @@ const SimulatorPage = () => {
       </nav>
       <span className="ve-action-status" role="status" aria-live="polite">{shareStatus}</span>
 
+      {VISUALIZATION_TABS.includes(activeSubTab) && <div className="ve-mobile-panel-triggers" role="group" aria-label="Workbench panels">
+        <button
+          type="button"
+          ref={element => { mobileTriggerRefs.current.inputs = element; }}
+          aria-controls="ve-input-rail"
+          aria-expanded={mobilePanel === 'inputs'}
+          onClick={() => handleMobilePanelToggle('inputs')}
+        >
+          <i className="fas fa-sliders-h" aria-hidden="true" /> Inputs
+        </button>
+        <button
+          type="button"
+          ref={element => { mobileTriggerRefs.current.outcomes = element; }}
+          aria-controls="ve-outcome-rail"
+          aria-expanded={mobilePanel === 'outcomes'}
+          onClick={() => handleMobilePanelToggle('outcomes')}
+        >
+          <i className="fas fa-chart-line" aria-hidden="true" /> Outcomes
+        </button>
+      </div>}
+
+      {mobilePanel && VISUALIZATION_TABS.includes(activeSubTab) && <button
+        type="button"
+        className="ve-mobile-panel-backdrop"
+        aria-label={`Close ${mobilePanel} panel`}
+        onClick={dismissMobilePanel}
+      />}
+
       {/* --- MAIN LAYOUT GRID --- */}
       <div className="ve-workbench" data-workspace={activeSubTab}>
-        <InputRail>
+        <InputRail
+          data-mobile-open={mobilePanel === 'inputs'}
+          closeRef={element => { mobileCloseRefs.current.inputs = element; }}
+          onClose={dismissMobilePanel}
+        >
           <div className="ve-rail-heading"><h2>Scenario inputs</h2></div>
 
           <section className="ve-input-group">
@@ -3316,7 +3394,11 @@ const SimulatorPage = () => {
         </VisualizationWorkspace>
 
         {/* RIGHT COLUMN: Mass Balance Analytics & Charting Window */}
-        {(activeSubTab === 'profile' || activeSubTab === 'map') && <OutcomeRail>
+        {(activeSubTab === 'profile' || activeSubTab === 'map') && <OutcomeRail
+          data-mobile-open={mobilePanel === 'outcomes'}
+          closeRef={element => { mobileCloseRefs.current.outcomes = element; }}
+          onClose={dismissMobilePanel}
+        >
           {/* Mass Balance Analytics Panel */}
           <div className="ve-outcome-content">
             <div className="ve-rail-heading"><h2>Live outcome</h2><span>Year {activeTime}</span></div>
@@ -3345,9 +3427,29 @@ const SimulatorPage = () => {
   );
 };
 
-const InputRail = ({ children }) => <aside className="ve-input-rail" aria-label="Scenario inputs">{children}</aside>;
+const InputRail = ({ children, closeRef, onClose, ...props }) => <aside
+  {...props}
+  id="ve-input-rail"
+  className="ve-input-rail"
+  aria-label="Scenario inputs"
+  role={props['data-mobile-open'] ? 'dialog' : undefined}
+  aria-modal={props['data-mobile-open'] ? 'true' : undefined}
+>
+  <button type="button" className="ve-mobile-panel-close" ref={closeRef} onClick={onClose} aria-label="Close inputs panel"><i className="fas fa-times" aria-hidden="true" /></button>
+  {children}
+</aside>;
 const VisualizationWorkspace = ({ children }) => <section className="ve-visualization-workspace" aria-label="Reservoir visualization">{children}</section>;
-const OutcomeRail = ({ children }) => <aside className="ve-outcome-rail" aria-label="Simulation outcomes">{children}</aside>;
+const OutcomeRail = ({ children, closeRef, onClose, ...props }) => <aside
+  {...props}
+  id="ve-outcome-rail"
+  className="ve-outcome-rail"
+  aria-label="Simulation outcomes"
+  role={props['data-mobile-open'] ? 'dialog' : undefined}
+  aria-modal={props['data-mobile-open'] ? 'true' : undefined}
+>
+  <button type="button" className="ve-mobile-panel-close" ref={closeRef} onClick={onClose} aria-label="Close outcomes panel"><i className="fas fa-times" aria-hidden="true" /></button>
+  {children}
+</aside>;
 
 const ParameterField = ({ label, value, min, max, step, unit, format = v => v, onChange }) => {
   const setValue = raw => {

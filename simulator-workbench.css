@@ -207,6 +207,34 @@
   transform: scale(0.97);
 }
 
+.ve-mobile-panel-triggers,
+.ve-mobile-panel-close,
+.ve-mobile-panel-backdrop {
+  display: none;
+}
+
+.ve-mobile-panel-triggers button {
+  min-height: 44px;
+  padding: 0 16px;
+  color: var(--ve-muted);
+  background: var(--ve-surface);
+  border: 1px solid var(--ve-border);
+  font: 650 12px/1 var(--font-prose);
+  cursor: pointer;
+  transition: background-color 140ms var(--ve-ease-out), border-color 140ms var(--ve-ease-out), color 140ms var(--ve-ease-out), transform 140ms var(--ve-ease-out);
+}
+
+.ve-mobile-panel-triggers button[aria-expanded="true"] {
+  color: var(--ve-accent);
+  background: var(--ve-accent-soft);
+  border-color: #9fc7c2;
+}
+
+.ve-mobile-panel-triggers button:active,
+.ve-mobile-panel-close:active {
+  transform: scale(0.97);
+}
+
 .ve-workbench {
   display: grid;
   grid-template-columns: 280px minmax(480px, 1fr) 300px;
@@ -811,7 +839,8 @@
 @media (hover: hover) and (pointer: fine) {
   .ve-scenario-bar button:hover,
   .ve-export-menu > summary:hover,
-  .ve-workspace-nav button:hover {
+  .ve-workspace-nav button:hover,
+  .ve-mobile-panel-triggers button:hover {
     color: var(--ve-accent);
     background-color: var(--ve-accent-soft);
     border-color: #9fc7c2;
@@ -826,6 +855,237 @@
   .ve-workspace-heading .ve-run-button:hover:not(:disabled) {
     background-color: #115c56;
     border-color: #115c56;
+  }
+}
+
+@media (max-width: 1180px) {
+  .ve-workbench {
+    grid-template-columns: 260px minmax(440px, 1fr);
+  }
+
+  .ve-outcome-rail {
+    position: fixed;
+    top: 106px;
+    right: 0;
+    bottom: 0;
+    z-index: 31;
+    width: min(340px, 92vw);
+    visibility: hidden;
+    box-shadow: -16px 0 32px rgba(23, 33, 43, 0.16);
+    transform: translateX(100%);
+    transition: transform 200ms var(--ve-ease-out), visibility 0s linear 200ms;
+    overscroll-behavior: contain;
+  }
+
+  .ve-outcome-rail[data-mobile-open="true"] {
+    visibility: visible;
+    transform: translateX(0);
+    transition-delay: 0s;
+  }
+
+  .ve-mobile-panel-triggers {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 29;
+    display: flex;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(23, 33, 43, 0.18);
+  }
+
+  .ve-mobile-panel-triggers button {
+    border-radius: 6px;
+  }
+
+  .ve-mobile-panel-triggers button:first-child {
+    display: none;
+  }
+
+  .ve-mobile-panel-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: block;
+    padding: 0;
+    background: rgba(16, 32, 45, 0.24);
+    border: 0;
+    cursor: default;
+  }
+
+  .ve-mobile-panel-close {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    z-index: 1;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    color: var(--ve-muted);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: color 140ms var(--ve-ease-out), transform 140ms var(--ve-ease-out);
+  }
+
+  .ve-outcome-rail .ve-mobile-panel-close {
+    display: inline-flex;
+  }
+
+  .ve-outcome-rail .ve-rail-heading {
+    padding-right: 48px;
+  }
+}
+
+@media (max-width: 760px) {
+  .simulator-page-wrapper {
+    padding-top: 56px;
+  }
+
+  .ve-scenario-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 6px;
+  }
+
+  .ve-presets {
+    min-width: 0;
+    margin-right: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .ve-presets button {
+    flex: 0 0 auto;
+  }
+
+  .ve-scenario-bar > button:not(.ve-run-button),
+  .ve-scenario-bar > .ve-export-menu {
+    display: none;
+  }
+
+  .ve-run-status {
+    min-height: 32px;
+    padding-inline: 7px;
+    font-size: 10px;
+  }
+
+  .ve-scenario-bar .ve-run-button {
+    min-height: 44px;
+  }
+
+  .ve-workspace-nav {
+    padding: 0;
+  }
+
+  .ve-workspace-nav button {
+    flex: 1;
+    min-height: 44px;
+    padding-inline: 8px;
+  }
+
+  .ve-workbench {
+    display: block;
+    min-height: 0;
+  }
+
+  .ve-input-rail,
+  .ve-outcome-rail {
+    position: fixed;
+    top: auto;
+    right: auto;
+    bottom: 0;
+    left: 0;
+    z-index: 31;
+    width: 100%;
+    max-height: min(72dvh, 620px);
+    visibility: hidden;
+    border: 1px solid var(--ve-border);
+    border-width: 1px 0 0;
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -16px 32px rgba(23, 33, 43, 0.18);
+    transform: translateY(100%);
+    transition: transform 200ms var(--ve-ease-out), visibility 0s linear 200ms;
+    overscroll-behavior: contain;
+  }
+
+  .ve-input-rail[data-mobile-open="true"],
+  .ve-outcome-rail[data-mobile-open="true"] {
+    visibility: visible;
+    transform: translateY(0);
+    transition-delay: 0s;
+  }
+
+  .ve-input-rail::before,
+  .ve-outcome-rail::before {
+    content: "";
+    position: sticky;
+    top: 7px;
+    z-index: 2;
+    display: block;
+    width: 38px;
+    height: 4px;
+    margin: 7px auto -11px;
+    background: #c7cfd6;
+    border-radius: 999px;
+  }
+
+  .ve-input-rail .ve-rail-heading,
+  .ve-outcome-rail .ve-rail-heading {
+    min-height: 58px;
+    padding-top: 8px;
+    padding-right: 52px;
+  }
+
+  .ve-mobile-panel-close {
+    top: 12px;
+  }
+
+  .ve-input-rail .ve-mobile-panel-close,
+  .ve-outcome-rail .ve-mobile-panel-close {
+    display: inline-flex;
+  }
+
+  .ve-mobile-panel-triggers {
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-top: 1px solid var(--ve-border);
+    border-radius: 0;
+    box-shadow: 0 -6px 18px rgba(23, 33, 43, 0.1);
+  }
+
+  .ve-mobile-panel-triggers button,
+  .ve-mobile-panel-triggers button:first-child {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 52px;
+    border-width: 0 1px 0 0;
+    border-radius: 0;
+  }
+
+  .ve-mobile-panel-triggers button:last-child {
+    border-right: 0;
+  }
+
+  .ve-visualization-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(360px, 1fr) auto;
+    min-height: calc(100dvh - 150px);
+    padding-bottom: 52px;
+  }
+
+  .ve-visualization-workspace > .sim-reservoir-card {
+    min-height: 440px !important;
+  }
+
+  .ve-playback-bar {
+    overflow-x: auto;
   }
 }
 
@@ -844,6 +1104,10 @@
   .app-header--workbench .header-container,
   .app-header--workbench a,
   .app-header--workbench button,
+  .ve-input-rail,
+  .ve-outcome-rail,
+  .ve-mobile-panel-close,
+  .ve-mobile-panel-triggers button,
   .ve-scenario-bar button,
   .ve-workspace-nav button,
   .ve-workspace-heading .ve-run-button,
@@ -856,6 +1120,11 @@
   }
 
   .ve-workspace-nav button:active {
+    transform: none;
+  }
+
+  .ve-mobile-panel-triggers button:active,
+  .ve-mobile-panel-close:active {
     transform: none;
   }
 }

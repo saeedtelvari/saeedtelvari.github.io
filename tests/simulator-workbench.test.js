@@ -11,7 +11,7 @@ const loadRunStateHelpers = () => {
   const page = read('SimulatorPage.jsx');
   const prelude = page.slice(0, page.indexOf('const UQParamConfig'));
   const context = { React: {} };
-  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard\n  };`, context);
+  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard,\n    toggleMobilePanel: typeof toggleMobilePanel === 'undefined' ? undefined : toggleMobilePanel,\n    focusMobilePanelTrigger: typeof focusMobilePanelTrigger === 'undefined' ? undefined : focusMobilePanelTrigger,\n    lockPageScroll: typeof lockPageScroll === 'undefined' ? undefined : lockPageScroll\n  };`, context);
   return context.helpers;
 };
 
@@ -127,6 +127,65 @@ test('unsupported or rejected clipboard writes report the fallback result', asyn
   assert.equal(fallbackCalls, 2);
 });
 
+test('mobile panel toggles open, switches panels, and closes the active panel', () => {
+  const toggle = loadRunStateHelpers().toggleMobilePanel;
+
+  assert.equal(typeof toggle, 'function');
+  assert.equal(toggle(null, 'inputs'), 'inputs');
+  assert.equal(toggle('inputs', 'outcomes'), 'outcomes');
+  assert.equal(toggle('outcomes', 'outcomes'), null);
+});
+
+test('dismissing a mobile panel restores focus to its trigger', () => {
+  const focusTrigger = loadRunStateHelpers().focusMobilePanelTrigger;
+  const focused = [];
+  const triggers = {
+    inputs: { focus: () => focused.push('inputs') },
+    outcomes: { focus: () => focused.push('outcomes') }
+  };
+
+  assert.equal(typeof focusTrigger, 'function');
+  focusTrigger('outcomes', triggers);
+  assert.deepEqual(focused, ['outcomes']);
+});
+
+test('mobile panel scroll lock restores the page overflow it replaced', () => {
+  const lockScroll = loadRunStateHelpers().lockPageScroll;
+  const pageDocument = { body: { style: { overflow: 'clip' } } };
+
+  assert.equal(typeof lockScroll, 'function');
+  const release = lockScroll(pageDocument);
+  assert.equal(pageDocument.body.style.overflow, 'hidden');
+  release();
+  assert.equal(pageDocument.body.style.overflow, 'clip');
+});
+
+test('responsive rails expose accessible sheet controls and mobile layout contracts', () => {
+  const page = read('SimulatorPage.jsx');
+  const css = read('simulator-workbench.css');
+
+  assert.match(page, /className="ve-mobile-panel-triggers"[^>]+aria-label="Workbench panels"/);
+  assert.match(page, /aria-controls="ve-input-rail"/);
+  assert.match(page, /aria-controls="ve-outcome-rail"/);
+  assert.match(page, /aria-label="Close inputs panel"/);
+  assert.match(page, /aria-label="Close outcomes panel"/);
+  assert.match(page, /data-mobile-open=\{mobilePanel === 'inputs'\}/);
+  assert.match(page, /data-mobile-open=\{mobilePanel === 'outcomes'\}/);
+  assert.match(css, /@media \(max-width: 1180px\)[\s\S]*\.ve-outcome-rail\[data-mobile-open="true"\]/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.ve-input-rail[\s\S]*translateY\(100%\)/);
+  assert.match(css, /\.ve-mobile-panel-triggers button[\s\S]*min-height: 44px/);
+  assert.match(css, /prefers-reduced-motion: reduce[\s\S]*\.ve-input-rail[\s\S]*transition-duration: 0\.01ms/);
+});
+
+test('tablet keeps the docked input rail close control hidden', () => {
+  const css = read('simulator-workbench.css');
+  const tabletRules = css.slice(css.indexOf('@media (max-width: 1180px)'), css.indexOf('@media (max-width: 760px)'));
+  const genericCloseRule = tabletRules.match(/(?:^|\n)\s*\.ve-mobile-panel-close\s*\{([^}]*)\}/)?.[1] || '';
+
+  assert.doesNotMatch(genericCloseRule, /display: inline-flex/);
+  assert.match(tabletRules, /\.ve-outcome-rail \.ve-mobile-panel-close\s*\{[\s\S]*?display: inline-flex/);
+});
+
 test('export accessible names contain their visible labels', () => {
   const page = read('SimulatorPage.jsx');
   const accessibleName = visibleLabel => {
@@ -232,9 +291,9 @@ test('risk and methodology accessibility remains visible in the restrained theme
 
 test('workbench landmarks and input groups follow visual focus order', () => {
   const page = read('SimulatorPage.jsx');
-  const input = page.indexOf('<InputRail>');
-  const visualization = page.indexOf('<VisualizationWorkspace>');
-  const outcome = page.indexOf('<OutcomeRail>');
+  const input = page.indexOf('<InputRail');
+  const visualization = page.indexOf('<VisualizationWorkspace');
+  const outcome = page.indexOf('<OutcomeRail');
   const headings = ['Injection', 'Rock properties', 'Structure', 'Faults', 'Capillary behavior', 'Grid detail']
     .map(heading => page.indexOf(`<h3>${heading}</h3>`));
 
