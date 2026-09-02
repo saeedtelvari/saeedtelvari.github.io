@@ -33,6 +33,29 @@ const scenarioNumber = (query, key, min, max, fallback, integer = false) => {
   return integer ? Math.round(clamped) : clamped;
 };
 
+const createScenarioSignature = parameters => JSON.stringify(parameters);
+
+const deriveRunStatus = ({ isPlaying, isReversing, scenarioSignature, lastRunSignature, simTime }) =>
+  isPlaying
+    ? 'Running'
+    : isReversing
+      ? 'Running backward'
+      : scenarioSignature !== lastRunSignature
+        ? 'Inputs changed'
+        : simTime > 0
+          ? 'Paused'
+          : 'Ready';
+
+const executeFileAction = (action, onFailure) => {
+  try {
+    action();
+    return true;
+  } catch (_) {
+    onFailure();
+    return false;
+  }
+};
+
 // Draw one sample for a parameter given its config and nominal value.
 // Returns { value, sampled } — sampled=false means the nominal was used unchanged.
 const sampleUqParam = (def, cfg, nominal) => {
@@ -472,6 +495,17 @@ const SimulatorPage = () => {
   const reservoirSvgRef = useRef(null);
   const uqWorkerRef = useRef(null);
 
+  const scenarioSignature = useMemo(() => createScenarioSignature({
+    K, porosity, cellCount, residualTrapFraction, dipPercent, amplitude,
+    frequency, faultOffset, Q, injLocation, wellY, mapCols, injDuration,
+    faultCount, faults, hasCapillaryFringe, fringeScale, entryPressure
+  }), [
+    K, porosity, cellCount, residualTrapFraction, dipPercent, amplitude,
+    frequency, faultOffset, Q, injLocation, wellY, mapCols, injDuration,
+    faultCount, faults, hasCapillaryFringe, fringeScale, entryPressure
+  ]);
+  const lastRunSignatureRef = useRef(scenarioSignature);
+
   // SA/UQ uncertainty bounds configuration states (default +/- percentages)
   // --- UQ / SA PARAMETER SELECTION CONFIG ---
   // Each parameter the user may include in the Monte Carlo batch has a config:
@@ -637,6 +671,20 @@ const SimulatorPage = () => {
     }];
   };
 
+  const handleRunScenario = () => {
+    resetSimulation();
+    lastRunSignatureRef.current = scenarioSignature;
+    setIsPlaying(true);
+  };
+
+  const runStatus = deriveRunStatus({
+    isPlaying,
+    isReversing,
+    scenarioSignature,
+    lastRunSignature: lastRunSignatureRef.current,
+    simTime
+  });
+
   // Preset Scenario Handlers
   const applyPreset = (presetName) => {
     setSelectedPreset(presetName);
@@ -780,10 +828,15 @@ const SimulatorPage = () => {
   };
 
   const exportSvg = () => {
-    if (!reservoirSvgRef.current) return;
+    if (!reservoirSvgRef.current) throw new Error('Reservoir figure is unavailable');
     const markup = new XMLSerializer().serializeToString(reservoirSvgRef.current);
     downloadBlob(new Blob([markup], { type: 'image/svg+xml;charset=utf-8' }), 've-simulator-reservoir.svg');
   };
+
+  const runFileAction = (action, failureMessage) => executeFileAction(action, () => {
+    setShareStatus(failureMessage);
+    setTimeout(() => setShareStatus(''), 3200);
+  });
 
   // Geometry helpers accept an optional params object `p` so Monte Carlo
   // realizations can vary dip/amplitude/faultOffset/faults independently of
@@ -2420,90 +2473,41 @@ const SimulatorPage = () => {
             width: min(330px, 92vw);
             padding-top: 90px;
           }
-          .sim-title-row { align-items: stretch !important; }
-          .sim-title-row { order: 1; }
           .simulator-layout { order: 2; }
-          .sim-evidence-grid { order: 3; }
           .sim-tab-header { overflow-x: auto; align-items: stretch !important; }
           .sim-tab-header [role="tablist"] { min-width: max-content; }
           .sim-tab-status { display: none; }
           .sim-hud-legend { max-width: calc(100% - 16px); overflow-x: auto; right: 8px !important; top: 8px !important; white-space: nowrap; }
           .sim-playback { left: 8px !important; right: 8px !important; gap: 7px !important; padding: 8px 10px !important; }
           .sim-playback input[type="range"] { min-width: 48px; }
-          .sim-evidence-grid, .uq-config-grid, .uq-results-grid, .uq-percentile-grid { grid-template-columns: 1fr !important; }
+          .uq-config-grid, .uq-results-grid, .uq-percentile-grid { grid-template-columns: 1fr !important; }
           .sim-stat-grid { grid-template-columns: repeat(2, 1fr) !important; }
           .control-panel > summary { cursor: pointer; }
         }
       `}</style>
 
-      {/* --- TOP ROW: Page Title & Preset Scenarios --- */}
-      <div className="sim-title-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 20 }}>
-        <div>
-          <div style={{ fontSize: 11, letterSpacing: '0.20em', textTransform: 'uppercase', color: '#64ffda', fontWeight: 600, marginBottom: 6 }}>
-            Interactive Numerical Simulator
-          </div>
-          <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 38px)', fontFamily: "'Montserrat', sans-serif", fontWeight: 700, display: 'flex', alignItems: 'center', gap: 15, flexWrap: 'wrap' }}>
-            VE Gravity Tongue Simulator
-            {activeSubTab === 'profile' && <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              style={{
-                background: sidebarOpen ? 'rgba(100, 255, 218, 0.25)' : 'rgba(100, 255, 218, 0.1)',
-                border: `1px solid ${sidebarOpen ? '#64ffda' : 'rgba(100, 255, 218, 0.3)'}`,
-                color: '#64ffda',
-                padding: '6px 12px',
-                borderRadius: '8px',
-                fontSize: '11px',
-                cursor: 'pointer',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                transition: 'all 0.2s ease',
-              }}
-              title="Toggle timeline sidebar"
-            >
-              <i className="fas fa-history" /> {sidebarOpen ? 'Close Timeline' : 'Timeline'}
-            </button>}
-          </h1>
-          <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.65)', fontSize: 13.5, maxWidth: 680 }}>
-            Explore an educational finite-volume Vertical Equilibrium model. Adjust caprock structure, rock properties, injection, and simplified fault behavior in real time.
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginTop: 12 }}>
-            <button onClick={copyScenarioLink} style={{ background: '#64ffda', color: '#10251f', border: 0, borderRadius: 8, padding: '8px 12px', fontWeight: 700, cursor: 'pointer' }}><i className="fas fa-link" /> Copy Scenario Link</button>
-            {activeSubTab === 'profile' && <button onClick={exportCsv} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Export CSV</button>}
-            {activeSubTab === 'profile' && <button onClick={exportSvg} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Export SVG</button>}
-            <a href="mailto:st4014@hw.ac.uk?subject=VE%20simulator%20enquiry" style={{ color: '#64ffda', padding: '8px 4px' }}>Contact the researcher</a>
-            <span role="status" aria-live="polite" style={{ color: '#64ffda', fontSize: 12, alignSelf: 'center' }}>{shareStatus}</span>
-          </div>
+      <section className="ve-scenario-bar" aria-label="Scenario controls">
+        <div className="ve-presets" aria-label="Reservoir presets">
+          {[
+            ['default', 'Default'],
+            ['dome', 'Anticline'],
+            ['faulted', 'Faulted trap'],
+            ['monocline', 'Dipping layer']
+          ].map(([id, label]) => (
+            <button key={id} className={selectedPreset === id ? 'is-active' : ''} onClick={() => applyPreset(id)}>{label}</button>
+          ))}
         </div>
-        
-        {/* Preset Button Bar */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', padding: '10px 14px', borderRadius: 14, backdropFilter: 'blur(8px)' }}>
-          <span style={{ fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>Synthetic Reservoir Cases</span>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {[
-              { id: 'default', label: 'Default Case', icon: 'fa-project-diagram' },
-              { id: 'dome', label: 'Anticline Dome', icon: 'fa-mountain' },
-              { id: 'faulted', label: 'Faulted Trap', icon: 'fa-bolt' },
-              { id: 'monocline', label: 'Dipping Layer', icon: 'fa-sliders' },
-            ].map(p => (
-              <button key={p.id} onClick={() => applyPreset(p.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'azure', padding: '6px 12px', borderRadius: 8, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', transition: 'all 0.3s ease' }}>
-                <i className={`fas ${p.icon}`} style={{ fontSize: 9.5, color: '#64ffda' }}/> {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="sim-evidence-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-        {[
-          ['Problem', 'Full-field CO₂ storage forecasts can be computationally expensive.'],
-          ['Method', 'Vertical integration represents large-scale migration through plume height.'],
-          ['Evidence', 'The research model is benchmarked against higher-resolution compositional cases.'],
-          ['Impact', 'Fast screening supports uncertainty analysis and scenario comparison.']
-        ].map(([label, body]) => <div key={label} style={{ padding: 12, borderRadius: 12, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)', fontSize: 11.5, lineHeight: 1.45 }}><strong style={{ display: 'block', color: '#64ffda', marginBottom: 4 }}>{label}</strong>{body}</div>)}
-        <a href="https://doi.org/10.31223/X5P49D" target="_blank" rel="noreferrer" style={{ gridColumn: '1 / -1', color: '#64ffda', fontSize: 12 }}>Read the associated EarthArXiv preprint <i className="fas fa-external-link-alt" /></a>
-      </div>
+        <span className={`ve-run-status ve-run-status--${runStatus.toLowerCase().replace(/\s+/g, '-')}`} role="status">{runStatus}</span>
+        <button onClick={resetSimulation}>Reset</button>
+        <button aria-label="Copy Scenario Link" onClick={copyScenarioLink}>Copy scenario link</button>
+        <details className="ve-export-menu">
+          <summary>Export</summary>
+          <button aria-label="Export CSV" onClick={() => runFileAction(exportCsv, 'Mass balance export failed. Please retry.')}>Mass balance CSV</button>
+          <button aria-label="Export SVG" onClick={() => runFileAction(exportSvg, 'Reservoir export failed. Please retry.')}>Reservoir SVG</button>
+        </details>
+        <button className="ve-run-button" onClick={handleRunScenario}>Run scenario</button>
+      </section>
+      <span className="ve-action-status" role="status" aria-live="polite">{shareStatus}</span>
 
       {/* --- MAIN LAYOUT GRID --- */}
       <div className="simulator-layout" style={activeSubTab === 'map' ? { gridTemplateColumns: '1fr' } : undefined}>

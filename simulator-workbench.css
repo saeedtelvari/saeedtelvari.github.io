@@ -42,10 +42,145 @@
   outline-offset: 2px;
 }
 
+.ve-scenario-bar {
+  position: sticky;
+  top: 64px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 7px 9px;
+  color: var(--ve-ink);
+  background-color: var(--ve-surface);
+  border: 1px solid var(--ve-border);
+  border-radius: 8px;
+  font: 600 12px/1.2 var(--font-prose);
+}
+
+.ve-presets {
+  display: flex;
+  gap: 3px;
+  margin-right: auto;
+}
+
+.ve-scenario-bar button,
+.ve-export-menu > summary {
+  min-height: 32px;
+  padding: 7px 10px;
+  color: var(--ve-muted);
+  background-color: var(--ve-surface);
+  border: 1px solid var(--ve-border);
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 140ms var(--ve-ease-out), border-color 140ms var(--ve-ease-out), color 140ms var(--ve-ease-out), transform 140ms var(--ve-ease-out);
+}
+
+.ve-presets button.is-active {
+  color: var(--ve-accent);
+  background-color: var(--ve-accent-soft);
+  border-color: #9fc7c2;
+}
+
+.ve-run-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  color: var(--ve-accent);
+  background-color: var(--ve-accent-soft);
+  border: 1px solid #b8d6d2;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.ve-run-status--running-backward,
+.ve-run-status--inputs-changed {
+  color: var(--ve-warning);
+  background-color: #fff7e8;
+  border-color: #ead4ad;
+}
+
+.ve-run-status--paused {
+  color: var(--ve-muted);
+  background-color: var(--ve-surface-subtle);
+  border-color: var(--ve-border);
+}
+
+.ve-export-menu {
+  position: relative;
+}
+
+.ve-export-menu > summary {
+  display: list-item;
+}
+
+.ve-export-menu[open] {
+  z-index: 2;
+}
+
+.ve-export-menu[open] > summary {
+  color: var(--ve-accent);
+  background-color: var(--ve-accent-soft);
+  border-color: #9fc7c2;
+}
+
+.ve-export-menu > button {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  width: 180px;
+  text-align: left;
+  background-color: var(--ve-surface);
+}
+
+.ve-export-menu > button + button {
+  top: calc(200% + 6px);
+}
+
+.ve-scenario-bar .ve-run-button {
+  color: #ffffff;
+  background-color: var(--ve-accent);
+  border-color: var(--ve-accent);
+  padding-inline: 15px;
+}
+
+.ve-run-button:active {
+  transform: scale(0.97);
+}
+
+.ve-action-status {
+  min-height: 17px;
+  color: #8ce1d4;
+  font: 600 12px/1.4 var(--font-prose);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ve-scenario-bar button:hover,
+  .ve-export-menu > summary:hover {
+    color: var(--ve-accent);
+    background-color: var(--ve-accent-soft);
+    border-color: #9fc7c2;
+  }
+
+  .ve-scenario-bar .ve-run-button:hover {
+    color: #ffffff;
+    background-color: #115c56;
+    border-color: #115c56;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-header--workbench .header-container,
   .app-header--workbench a,
-  .app-header--workbench button {
+  .app-header--workbench button,
+  .ve-scenario-bar button,
+  .ve-export-menu > summary {
     transition-duration: 0.01ms !important;
+  }
+
+  .ve-run-button:active {
+    transform: none;
   }
 }
