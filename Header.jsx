@@ -173,7 +173,7 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
           height: isWorkbench ? 56 : (scrolled ? 64 : 88),
           padding: '0 36px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          transition: 'all 0.4s ease',
+          transition: isWorkbench ? 'none' : 'all 0.4s ease',
           background: isWorkbench ? '#ffffff' : (scrolled ? siteScrolledBackground : siteTopBackground),
           backdropFilter: isWorkbench ? 'none' : (scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)'),
           WebkitBackdropFilter: isWorkbench ? 'none' : (scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)'),
@@ -189,7 +189,7 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             width: scrolled ? 44 : 58, height: scrolled ? 44 : 58,
-            transition: 'all 0.4s ease',
+            transition: isWorkbench ? 'none' : 'all 0.4s ease',
           }}
         >
           <img 
@@ -340,14 +340,16 @@ const NavItem = ({ label, href, active, onClick, variant = 'site' }) => {
             : 'all 0.35s cubic-bezier(0.175,0.885,0.32,1.275)',
           transform: variant === 'workbench' && hover ? 'translateY(-1px)' : existingTransform,
           background: variant === 'workbench' && showPill ? 'var(--ve-accent-soft)' : existingBackground,
-          backdropFilter: showPill ? 'blur(10px)' : 'none',
-          WebkitBackdropFilter: showPill ? 'blur(10px)' : 'none',
+          backdropFilter: variant === 'workbench' ? 'none' : (showPill ? 'blur(10px)' : 'none'),
+          WebkitBackdropFilter: variant === 'workbench' ? 'none' : (showPill ? 'blur(10px)' : 'none'),
           border: variant === 'workbench' && active ? '1px solid rgba(23,111,104,0.28)' : existingBorder,
-          boxShadow: active 
-            ? '0 4px 15px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.20), 0 0 10px rgba(100,255,218,0.15)'
-            : showPill 
-              ? '0 4px 15px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.30)' 
-              : 'none',
+          boxShadow: variant === 'workbench'
+            ? 'none'
+            : active
+              ? '0 4px 15px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.20), 0 0 10px rgba(100,255,218,0.15)'
+              : showPill
+                ? '0 4px 15px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.30)'
+                : 'none',
           textDecoration: 'none',
           display: 'inline-flex',
           alignItems: 'center',
@@ -364,8 +366,8 @@ const NavItem = ({ label, href, active, onClick, variant = 'site' }) => {
             width: 4,
             height: 4,
             borderRadius: '50%',
-            backgroundColor: '#64ffda',
-            boxShadow: '0 0 8px #64ffda',
+            backgroundColor: variant === 'workbench' ? 'var(--ve-accent)' : '#64ffda',
+            boxShadow: variant === 'workbench' ? 'none' : '0 0 8px #64ffda',
           }} />
         )}
       </a>
