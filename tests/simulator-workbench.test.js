@@ -15,6 +15,14 @@ const loadRunStateHelpers = () => {
   return context.helpers;
 };
 
+const loadActiveResultSelector = () => {
+  const page = read('SimulatorPage.jsx');
+  const prelude = page.slice(0, page.indexOf('const UQParamConfig'));
+  const context = { React: {} };
+  vm.runInNewContext(`${prelude}\nthis.select = typeof selectActiveResults === 'undefined' ? undefined : selectActiveResults;`, context);
+  return context.select;
+};
+
 test('scenario signature changes when a nested fault input changes', () => {
   const createSignature = loadRunStateHelpers().createScenarioSignature || (() => '');
   const scenario = {
@@ -137,6 +145,37 @@ test('standalone simulator exposes the engineering workbench', () => {
   assert.match(page, /className="ve-outcome-rail"/);
   assert.match(page, />Run scenario</);
   assert.match(page, />Risk analysis</);
+});
+
+test('map view reports map simulation results', () => {
+  const select = loadActiveResultSelector() || (() => ({ time: -1, masses: {} }));
+  const crossSection = { time: 120, masses: { injected: 12 } };
+  const map = { time: 44, masses: { injected: 7 } };
+
+  assert.deepEqual(select('map', crossSection, map), map);
+  assert.deepEqual(select('profile', crossSection, map), crossSection);
+});
+
+test('workbench landmarks and input groups follow visual focus order', () => {
+  const page = read('SimulatorPage.jsx');
+  const input = page.indexOf('<InputRail>');
+  const visualization = page.indexOf('<VisualizationWorkspace>');
+  const outcome = page.indexOf('<OutcomeRail>');
+  const headings = ['Injection', 'Rock properties', 'Structure', 'Faults', 'Capillary behavior', 'Grid detail']
+    .map(heading => page.indexOf(`<h3>${heading}</h3>`));
+
+  assert.ok(input > -1 && input < visualization && visualization < outcome);
+  assert.ok(headings.every((position, index) => position > -1 && (index === 0 || headings[index - 1] < position)));
+  assert.doesNotMatch(page, /<summary className="sr-only">/);
+});
+
+test('outcome chart uses the shared mass formatter', () => {
+  const page = read('SimulatorPage.jsx');
+
+  assert.match(page, /formatMass\(chartMasses\.injected\)/);
+  assert.match(page, /formatMass\(chartMasses\.mobile\)/);
+  assert.match(page, /formatMass\(chartMasses\.trapped\)/);
+  assert.match(page, /formatMass\(chartMasses\.leaked\)/);
 });
 
 test('workbench removes the old marketing presentation', () => {

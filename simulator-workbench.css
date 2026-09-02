@@ -185,16 +185,15 @@
 }
 
 .ve-visualization-workspace {
-  grid-column: 1 / 3;
   display: grid;
-  grid-template-columns: 280px minmax(480px, 1fr);
+  grid-template-columns: minmax(480px, 1fr);
   grid-template-rows: minmax(420px, 1fr) auto;
   min-width: 0;
   background: var(--ve-canvas);
 }
 
 .ve-visualization-workspace > .sim-reservoir-card {
-  grid-column: 2;
+  grid-column: 1;
   grid-row: 1;
   min-width: 0;
   min-height: 620px !important;
@@ -204,7 +203,7 @@
 }
 
 .ve-visualization-workspace > p {
-  grid-column: 2;
+  grid-column: 1;
   grid-row: 2;
   margin: 0 !important;
   padding: 8px 14px;
@@ -222,16 +221,12 @@
 }
 
 .ve-input-rail {
-  grid-column: 1;
-  grid-row: 1 / 3;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--ve-border);
 }
 
 .ve-outcome-rail {
-  grid-column: 3;
-  grid-row: 1;
   border-left: 1px solid var(--ve-border);
 }
 
@@ -247,7 +242,7 @@
 
 .ve-rail-heading h2,
 .ve-input-group h3,
-.ve-fault-section > summary {
+.ve-fault-section > h3 {
   margin: 0;
   color: var(--ve-ink);
   font-family: var(--font-prose);
@@ -262,11 +257,6 @@
   font: 600 11px/1.2 var(--font-mono, monospace);
 }
 
-.ve-parameter-groups,
-.ve-parameter-groups > div {
-  display: contents;
-}
-
 .ve-input-group,
 .ve-fault-section {
   margin: 0;
@@ -278,26 +268,64 @@
   box-shadow: none !important;
 }
 
-.ve-input-group--injection { order: 1; }
-.ve-input-group--rock { order: 2; }
-.ve-input-group--structure { order: 3; }
-.ve-fault-section { order: 4; }
-.ve-input-group--capillary { order: 5; }
-.ve-input-group--grid { order: 6; }
-
-.ve-input-group > div,
-.ve-input-group > div > div,
-.ve-fault-section [style*="grid-template-columns"] {
+.ve-input-group > div:not(.ve-toggle-heading),
+.ve-fault-editor {
+  display: grid;
   grid-template-columns: 1fr !important;
+  gap: 10px;
 }
 
 .ve-input-group h3 {
   margin-bottom: 10px;
 }
 
-.ve-fault-section > summary {
-  margin-bottom: 12px !important;
-  color: var(--ve-ink) !important;
+.ve-fault-section > h3 {
+  margin-bottom: 12px;
+}
+
+.ve-fault-count,
+.ve-fault-heading,
+.ve-toggle-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ve-fault-count {
+  margin-bottom: 12px;
+  color: var(--ve-muted);
+  font-size: 11px;
+}
+
+.ve-fault-count button {
+  min-width: 30px;
+  min-height: 30px;
+  color: var(--ve-muted);
+  background: var(--ve-surface);
+  border: 1px solid var(--ve-border);
+  cursor: pointer;
+}
+
+.ve-fault-count button.is-active {
+  color: var(--ve-accent);
+  background: var(--ve-accent-soft);
+  border-color: #9fc7c2;
+}
+
+.ve-fault-editor {
+  padding: 12px 0;
+  border-top: 1px solid var(--ve-border);
+}
+
+.ve-fault-heading label,
+.ve-toggle-heading label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ve-muted);
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .ve-input-rail label,
@@ -471,7 +499,6 @@
 
 .ve-workbench[data-workspace="uq"] .ve-visualization-workspace,
 .ve-workbench[data-workspace="guide"] .ve-visualization-workspace {
-  grid-column: 1;
   grid-template-columns: minmax(0, 1fr);
 }
 

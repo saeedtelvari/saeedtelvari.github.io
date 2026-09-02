@@ -1,5 +1,5 @@
 // SimulatorPage.jsx — Interactive VE Simulator Page
-const { useEffect, useMemo, useRef, useState } = React;
+const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
 const SIM_TABS = ['profile', 'map', 'uq', 'guide'];
 const VISUALIZATION_TABS = ['profile', 'map'];
@@ -59,6 +59,10 @@ const executeFileAction = (action, onFailure) => {
 
 const getPlaybackAction = ({ isPlaying, simTime, scenarioChanged }) =>
   isPlaying ? 'pause' : simTime === 0 || scenarioChanged ? 'run-scenario' : 'resume';
+
+const selectActiveResults = (activeView, crossSection, map) => activeView === 'map' ? map : crossSection;
+
+const formatMass = value => `${Number(value || 0).toLocaleString('en-GB', { maximumFractionDigits: 1 })} kt`;
 
 const copyTextToClipboard = async (text, clipboard, fallback) => {
   if (clipboard && typeof clipboard.writeText === 'function') {
@@ -229,13 +233,14 @@ const UQParamConfig = ({ def, cfg, onChange }) => {
 
 const Ve2DMapPanel = ({
   K, porosity, residualTrapFraction, dipPercent, amplitude, frequency, faultOffset,
-  Q, injLocation, injDuration, faultCount, faults, mapCols, wellY, preset
+  Q, injLocation, injDuration, faultCount, faults, mapCols, wellY, preset, command, onSnapshot
 }) => {
   const mapRows = Math.max(12, Math.round(mapCols * 0.6));
   const canvasRef = useRef(null);
   const stateRef = useRef(globalThis.VE2D.createVe2dState({ cols: mapCols, rows: mapRows }));
   const timeRef = useRef(0);
   const paramsRef = useRef(null);
+  const historyRef = useRef([{ time: 0, ...stateRef.current.masses }]);
   const [mapState, setMapState] = useState(stateRef.current);
   const [mapTime, setMapTime] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -263,6 +268,7 @@ const Ve2DMapPanel = ({
     const next = globalThis.VE2D.createVe2dState({ cols: mapCols, rows: mapRows });
     stateRef.current = next;
     timeRef.current = 0;
+    historyRef.current = [{ time: 0, ...next.masses }];
     setMapState(next);
     setMapTime(0);
     setIsRunning(false);
@@ -277,11 +283,22 @@ const Ve2DMapPanel = ({
     const next = globalThis.VE2D.stepVe2d(stateRef.current, paramsRef.current, nextTime);
     stateRef.current = next;
     timeRef.current = nextTime;
+    historyRef.current = [...historyRef.current, { time: nextTime, ...next.masses }];
     setMapState(next);
     setMapTime(nextTime);
   };
 
   useEffect(() => resetMap(), [resetMap, preset]);
+
+  useEffect(() => {
+    if (!command) return;
+    resetMap();
+    if (command.type === 'run') setIsRunning(true);
+  }, [command, resetMap]);
+
+  useEffect(() => {
+    onSnapshot({ time: mapTime, masses: mapState.masses, history: historyRef.current, isRunning, speed: mapSpeed });
+  }, [mapState, mapTime, isRunning, mapSpeed, onSnapshot]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -611,6 +628,14 @@ const SimulatorPage = () => {
   // Cumulative masses tracking state
   const [massHistory, setMassHistory] = useState([]); // Array of { time, injected, trapped, mobile, leaked }
   const [currentMasses, setCurrentMasses] = useState({ injected: 0, trapped: 0, mobile: 0, leaked: 0 });
+  const [mapSnapshot, setMapSnapshot] = useState({
+    time: 0,
+    masses: { injected: 0, trapped: 0, mobile: 0, leaked: 0 },
+    history: [],
+    isRunning: false,
+    speed: 1
+  });
+  const [mapCommand, setMapCommand] = useState(null);
 
   // Reset flag / state synchronizer
   const stateRef = useRef({ h: [], hMax: [], masses: { injected: 0, trapped: 0, mobile: 0, leaked: 0 } });
@@ -695,13 +720,20 @@ const SimulatorPage = () => {
     setIsPlaying(true);
   };
 
-  const runStatus = deriveRunStatus({
+  const sendMapCommand = type => setMapCommand(previous => ({ type, id: (previous?.id || 0) + 1 }));
+  const resetActiveSimulation = () => activeSubTab === 'map' ? sendMapCommand('reset') : resetSimulation();
+  const runActiveSimulation = () => activeSubTab === 'map' ? sendMapCommand('run') : handleRunScenario();
+
+  const crossSectionRunStatus = deriveRunStatus({
     isPlaying,
     isReversing,
     scenarioSignature,
     lastRunSignature: lastRunSignatureRef.current,
     simTime
   });
+  const runStatus = activeSubTab === 'map'
+    ? mapSnapshot.isRunning ? 'Running' : mapSnapshot.time > 0 ? 'Paused' : 'Ready'
+    : crossSectionRunStatus;
 
   // Preset Scenario Handlers
   const applyPreset = (presetName) => {
@@ -2061,12 +2093,12 @@ const SimulatorPage = () => {
   }, [cellCount, dipPercent, amplitude, frequency, faultOffset, faultCount, faults]);
 
   // --- Dynamic SVG Chart Drawing ---
-  const renderSVGChart = () => {
+  const renderSVGChart = (chartMasses, chartHistory, chartTime) => {
     const width = 450;
     const height = 210;
     const padding = { left: 45, right: 15, top: 15, bottom: 25 };
     
-    const maxVal = Math.max(10, Math.max(currentMasses.injected, currentMasses.mobile + currentMasses.trapped + currentMasses.leaked) * 1.08);
+    const maxVal = Math.max(10, Math.max(chartMasses.injected, chartMasses.mobile + chartMasses.trapped + chartMasses.leaked) * 1.08);
     
     // Scale helper
     const getX = (t) => padding.left + (t / 1000.0) * (width - padding.left - padding.right);
@@ -2074,14 +2106,14 @@ const SimulatorPage = () => {
     
     let pathInj = "", pathTrap = "", pathMob = "", pathLeak = "";
     
-    if (massHistory.length > 0) {
-      pathInj = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].injected)}`;
-      pathTrap = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].trapped)}`;
-      pathMob = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].mobile)}`;
-      pathLeak = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].leaked)}`;
+    if (chartHistory.length > 0) {
+      pathInj = `M ${getX(chartHistory[0].time)} ${getY(chartHistory[0].injected)}`;
+      pathTrap = `M ${getX(chartHistory[0].time)} ${getY(chartHistory[0].trapped)}`;
+      pathMob = `M ${getX(chartHistory[0].time)} ${getY(chartHistory[0].mobile)}`;
+      pathLeak = `M ${getX(chartHistory[0].time)} ${getY(chartHistory[0].leaked)}`;
       
-      for (let idx = 1; idx < massHistory.length; idx++) {
-        const pt = massHistory[idx];
+      for (let idx = 1; idx < chartHistory.length; idx++) {
+        const pt = chartHistory[idx];
         pathInj += ` L ${getX(pt.time)} ${getY(pt.injected)}`;
         pathTrap += ` L ${getX(pt.time)} ${getY(pt.trapped)}`;
         pathMob += ` L ${getX(pt.time)} ${getY(pt.mobile)}`;
@@ -2096,27 +2128,27 @@ const SimulatorPage = () => {
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <span style={{ width: 10, height: 2, background: '#ffffff', opacity: 0.6, borderTop: '1px dashed #fff' }} />
             <span style={{ color: 'rgba(255,255,255,0.7)' }}>Injected:</span>
-            <strong style={{ color: '#fff', fontFamily: 'monospace' }}>{Math.round(currentMasses.injected)} kt</strong>
+            <strong style={{ color: '#fff', fontFamily: 'monospace' }}>{formatMass(chartMasses.injected)}</strong>
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <span style={{ width: 10, height: 2.5, background: '#64ffda' }} />
             <span style={{ color: 'rgba(255,255,255,0.7)' }}>Mobile:</span>
-            <strong style={{ color: '#64ffda', fontFamily: 'monospace' }}>{Math.round(currentMasses.mobile)} kt</strong>
+            <strong style={{ color: '#64ffda', fontFamily: 'monospace' }}>{formatMass(chartMasses.mobile)}</strong>
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <span style={{ width: 10, height: 2.5, background: '#3ca68e' }} />
             <span style={{ color: 'rgba(255,255,255,0.7)' }}>Trapped:</span>
-            <strong style={{ color: '#3ca68e', fontFamily: 'monospace' }}>{Math.round(currentMasses.trapped)} kt</strong>
+            <strong style={{ color: '#3ca68e', fontFamily: 'monospace' }}>{formatMass(chartMasses.trapped)}</strong>
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <span style={{ width: 10, height: 2.5, background: '#ff6b6b' }} />
             <span style={{ color: 'rgba(255,255,255,0.7)' }}>Leaked:</span>
-            <strong style={{ color: '#ff6b6b', fontFamily: 'monospace' }}>{Math.round(currentMasses.leaked)} kt</strong>
+            <strong style={{ color: '#ff6b6b', fontFamily: 'monospace' }}>{formatMass(chartMasses.leaked)}</strong>
           </span>
         </div>
 
         <svg role="img" aria-labelledby="mass-chart-title mass-chart-desc" width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
-          <title id="mass-chart-title">CO₂ mass balance through year {simTime}</title>
+          <title id="mass-chart-title">CO₂ mass balance through year {chartTime}</title>
           <desc id="mass-chart-desc">Line chart of injected, mobile, trapped, and leaked model mass over simulation time.</desc>
           {/* Y Grid axis */}
           {[0.25, 0.5, 0.75, 1.0].map((ratio, i) => {
@@ -2150,29 +2182,38 @@ const SimulatorPage = () => {
           
           {/* Vertical line indicator for current simTime */}
           <line 
-            x1={getX(simTime)} 
+            x1={getX(chartTime)}
             y1={padding.top} 
-            x2={getX(simTime)} 
+            x2={getX(chartTime)}
             y2={height - padding.bottom} 
             stroke="#64ffda" 
             strokeWidth="1.2" 
             strokeDasharray="2 2"
             opacity="0.8"
           />
-          <circle cx={getX(simTime)} cy={padding.top} r="3" fill="#64ffda" />
+          <circle cx={getX(chartTime)} cy={padding.top} r="3" fill="#64ffda" />
           
           {/* Axes borders */}
           <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
           <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
         </svg>
         <table className="sr-only">
-          <caption>Current CO₂ mass balance at year {simTime}</caption>
+          <caption>Current CO₂ mass balance at year {chartTime}</caption>
           <thead><tr><th>Injected</th><th>Mobile</th><th>Trapped</th><th>Leaked</th></tr></thead>
-          <tbody><tr><td>{currentMasses.injected}</td><td>{currentMasses.mobile}</td><td>{currentMasses.trapped}</td><td>{currentMasses.leaked}</td></tr></tbody>
+          <tbody><tr><td>{chartMasses.injected}</td><td>{chartMasses.mobile}</td><td>{chartMasses.trapped}</td><td>{chartMasses.leaked}</td></tr></tbody>
         </table>
       </div>
     );
   };
+
+  const activeResults = selectActiveResults(
+    activeSubTab,
+    { time: simTime, masses: currentMasses, history: massHistory },
+    mapSnapshot
+  );
+  const activeTime = activeResults.time;
+  const activeMasses = activeResults.masses;
+  const activeMassHistory = activeResults.history;
 
   return (
     <div className="simulator-page-wrapper">
@@ -2455,7 +2496,7 @@ const SimulatorPage = () => {
           ))}
         </div>
         <span className={`ve-run-status ve-run-status--${runStatus.toLowerCase().replace(/\s+/g, '-')}`} role="status">{runStatus}</span>
-        <button onClick={resetSimulation}>Reset</button>
+        <button onClick={resetActiveSimulation}>Reset</button>
         <button onClick={copyScenarioLink}>Copy scenario link</button>
         <button id="tab-uq" onClick={() => setActiveSubTab('uq')}>Risk analysis</button>
         <button id="tab-guide" onClick={() => setActiveSubTab('guide')}>Methodology</button>
@@ -2464,13 +2505,115 @@ const SimulatorPage = () => {
           <button onClick={() => runFileAction(exportCsv, 'Mass balance export failed. Please retry.')}>Mass balance CSV</button>
           <button onClick={() => runFileAction(exportSvg, 'Reservoir export failed. Please retry.')}>Reservoir SVG</button>
         </details>
-        <button className="ve-run-button" onClick={handleRunScenario}>Run scenario</button>
+        <button className="ve-run-button" onClick={runActiveSimulation}>Run scenario</button>
       </section>
       <span className="ve-action-status" role="status" aria-live="polite">{shareStatus}</span>
 
       {/* --- MAIN LAYOUT GRID --- */}
       <div className="ve-workbench" data-workspace={activeSubTab}>
-        {/* LEFT COLUMN: Reservoir SVG Visualizer + Parameter & Fault Sliders (below it) */}
+        <InputRail>
+          <div className="ve-rail-heading"><h2>Scenario inputs</h2></div>
+
+          <section className="ve-input-group">
+            <h3>Injection</h3>
+            <div>
+              <ParameterField label="Flow rate (Q)" unit="kt/yr" min={0} max={3.5} step={0.1} value={Q} onChange={setQ} />
+              <ParameterField label={activeSubTab === 'map' ? 'Well X location' : 'Well location'} unit="%" min={10} max={90} step={5} value={injLocation} onChange={setInjLocation} />
+              <ParameterField label="Injection stop year" unit="y" min={50} max={400} step={10} value={injDuration} onChange={setInjDuration} />
+            </div>
+          </section>
+
+          <section className="ve-input-group">
+            <h3>Rock properties</h3>
+            <div>
+              <ParameterField label="Permeability (K)" unit="×10³ mD" min={0.1} max={3.5} step={0.1} value={K} onChange={setK} />
+              <ParameterField label="Porosity (φ)" unit="fraction" min={0.1} max={0.4} step={0.05} value={porosity} onChange={setPorosity} />
+              <ParameterField label="Residual trap (Sgr)" unit="fraction" min={0} max={0.4} step={0.05} value={residualTrapFraction} onChange={setResidualTrapFraction} />
+            </div>
+          </section>
+
+          <section className="ve-input-group">
+            <h3>Structure</h3>
+            <div>
+              <ParameterField label="Regional dip" unit="%" min={-5} max={5} step={0.5} value={dipPercent} onChange={setDipPercent} />
+              <ParameterField label="Anticline height" unit="px" min={0} max={50} step={5} value={amplitude} onChange={setAmplitude} />
+              <ParameterField label="Anticline count" unit="" min={0.5} max={4} step={0.5} value={frequency} onChange={setFrequency} />
+              <ParameterField label="Fault slip" unit="×" min={0} max={3} step={0.2} value={faultOffset} onChange={setFaultOffset} />
+            </div>
+          </section>
+
+          <section className="ve-fault-section">
+            <h3>Faults</h3>
+            <div className="ve-fault-count">
+              <span>Active faults</span>
+              <div>
+                {[0, 1, 2, 3].map(count => (
+                  <button key={count} className={faultCount === count ? 'is-active' : ''} onClick={() => setFaultCount(count)}>{count}</button>
+                ))}
+              </div>
+            </div>
+            {faults.slice(0, faultCount).map((fault, index) => (
+              <div className="ve-fault-editor" key={index}>
+                <div className="ve-fault-heading">
+                  <strong>Fault {String.fromCharCode(65 + index)}</strong>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={fault.isSealed}
+                      onChange={event => {
+                        const next = [...faults];
+                        next[index].isSealed = event.target.checked;
+                        setFaults(next);
+                      }}
+                    />
+                    Sealed
+                  </label>
+                </div>
+                <ParameterField label="Position" unit="%" min={10} max={90} step={5} value={fault.xPercent} onChange={value => {
+                  const next = [...faults];
+                  next[index].xPercent = value;
+                  setFaults(next);
+                }} />
+                <ParameterField label="Capillary threshold" unit="m" min={0} max={2} step={0.1} value={fault.thresholdHeight} onChange={value => {
+                  const next = [...faults];
+                  next[index].thresholdHeight = value;
+                  setFaults(next);
+                }} />
+                <ParameterField label="Horizontal transmissibility" unit="fraction" min={0} max={1} step={0.05} value={fault.transmissibility ?? 1} onChange={value => {
+                  const next = [...faults];
+                  next[index].transmissibility = value;
+                  setFaults(next);
+                }} />
+                {!fault.isSealed && <ParameterField label="Leakage rate" unit="scaled" min={0.01} max={0.4} step={0.02} value={fault.leakRate} onChange={value => {
+                  const next = [...faults];
+                  next[index].leakRate = value;
+                  setFaults(next);
+                }} />}
+              </div>
+            ))}
+          </section>
+
+          <section className="ve-input-group">
+            <div className="ve-toggle-heading">
+              <h3>Capillary behavior</h3>
+              <label><input type="checkbox" checked={hasCapillaryFringe} onChange={event => setHasCapillaryFringe(event.target.checked)} /> Enable fringe</label>
+            </div>
+            {hasCapillaryFringe && <div>
+              <ParameterField label="Fringe height (h_c)" unit="m" min={0.1} max={3} step={0.1} value={fringeScale} onChange={setFringeScale} />
+              <ParameterField label="Entry-pressure scale" unit="kPa" min={5} max={40} step={1} value={entryPressure} onChange={setEntryPressure} />
+            </div>}
+          </section>
+
+          <section className="ve-input-group">
+            <h3>Grid detail</h3>
+            <div>
+              <ParameterField label="Grid cells (N)" unit="cells" min={50} max={300} step={10} value={cellCount} onChange={setCellCount} />
+              {activeSubTab === 'map' && <ParameterField label="Well Y location" unit="%" min={10} max={90} step={5} value={wellY} onChange={setWellY} />}
+              {activeSubTab === 'map' && <ParameterField label="2D grid resolution" unit="columns" min={24} max={80} step={8} value={mapCols} onChange={setMapCols} />}
+            </div>
+          </section>
+        </InputRail>
+
         <VisualizationWorkspace>
           
           {/* Reservoir Visualizer SVG Window */}
@@ -2915,6 +3058,8 @@ const SimulatorPage = () => {
                       mapCols={mapCols}
                       wellY={wellY}
                       preset={selectedPreset}
+                      command={mapCommand}
+                      onSnapshot={setMapSnapshot}
                     />
                   );
                 } else if (activeSubTab === 'uq') {
@@ -3205,237 +3350,29 @@ const SimulatorPage = () => {
           </p>
 
           {/* Sub-grid containing Parameters (Left) and Faults (Right) directly below Reservoir Grid */}
-          <InputRail>
-            <div className="ve-rail-heading"><h2>Scenario inputs</h2></div>
-            
-            {/* Simulation Parameters Slider Panel */}
-            <details className="control-panel ve-parameter-groups" open={window.innerWidth > 768} style={{
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 20,
-              padding: '18px 20px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
-              backdropFilter: 'blur(12px)'
-            }}>
-              <summary className="sr-only">Simulation parameters</summary>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {/* Caprock Structure controls */}
-                <section className="ve-input-group ve-input-group--structure">
-                  <h3>Structure</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                    <ParameterField label="Regional dip" unit="%" min={-5} max={5} step={0.5} value={dipPercent} onChange={setDipPercent} />
-                    <ParameterField label="Anticline height" unit="px" min={0} max={50} step={5} value={amplitude} onChange={setAmplitude} />
-                    <ParameterField label="Anticline count" unit="" min={0.5} max={4} step={0.5} value={frequency} onChange={setFrequency} />
-                    <ParameterField label="Fault slip" unit="×" min={0} max={3} step={0.2} value={faultOffset} onChange={setFaultOffset} />
-                  </div>
-                </section>
-
-                {/* Rock & Fluids properties */}
-                <section className="ve-input-group ve-input-group--rock">
-                  <h3>Rock properties</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                    <ParameterField label="Permeability (K)" unit="×10³ mD" min={0.1} max={3.5} step={0.1} value={K} onChange={setK} />
-                    <ParameterField label="Porosity (φ)" unit="fraction" min={0.1} max={0.4} step={0.05} value={porosity} onChange={setPorosity} />
-                    <ParameterField label="Residual trap (Sgr)" unit="fraction" min={0} max={0.4} step={0.05} value={residualTrapFraction} onChange={setResidualTrapFraction} />
-                  </div>
-                </section>
-
-                {/* Capillary Fringe & Pressure Parameters */}
-                <section className="ve-input-group ve-input-group--capillary">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <h3>Capillary behavior</h3>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, cursor: 'pointer', color: hasCapillaryFringe ? '#64ffda' : 'rgba(255,255,255,0.5)' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={hasCapillaryFringe} 
-                        onChange={e => setHasCapillaryFringe(e.target.checked)} 
-                        style={{ accentColor: '#64ffda' }} 
-                      />
-                      Enable Fringe
-                    </label>
-                  </div>
-                  {hasCapillaryFringe && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                      <ParameterField label="Fringe height (h_c)" unit="m" min={0.1} max={3} step={0.1} value={fringeScale} onChange={setFringeScale} />
-                      <ParameterField label="Entry-pressure scale" unit="kPa" min={5} max={40} step={1} value={entryPressure} onChange={setEntryPressure} />
-                    </div>
-                  )}
-                </section>
-
-                {/* Injection Settings */}
-                <section className="ve-input-group ve-input-group--injection">
-                  <h3>Injection</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                    <ParameterField label="Flow rate (Q)" unit="kt/yr" min={0} max={3.5} step={0.1} value={Q} onChange={setQ} />
-                    <ParameterField label={activeSubTab === 'map' ? 'Well X location' : 'Well location'} unit="%" min={10} max={90} step={5} value={injLocation} onChange={setInjLocation} />
-                    <ParameterField label="Injection stop year" unit="y" min={50} max={400} step={10} value={injDuration} onChange={setInjDuration} />
-                  </div>
-                </section>
-
-                <section className="ve-input-group ve-input-group--grid">
-                  <h3>Grid detail</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                    <ParameterField label="Grid cells (N)" unit="cells" min={50} max={300} step={10} value={cellCount} onChange={setCellCount} />
-                    {activeSubTab === 'map' && <ParameterField label="Well Y location" unit="%" min={10} max={90} step={5} value={wellY} onChange={setWellY} />}
-                    {activeSubTab === 'map' && <ParameterField label="2D grid resolution" unit="columns" min={24} max={80} step={8} value={mapCols} onChange={setMapCols} />}
-                  </div>
-                </section>
-              </div>
-            </details>
-
-            {/* Fault Management Control Panel */}
-            <details className="control-panel ve-fault-section" open={window.innerWidth > 768} style={{
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 20,
-              padding: '18px 20px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
-              backdropFilter: 'blur(12px)'
-            }}>
-              <summary style={{ margin: '0 0 14px', fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>
-                Faults
-              </summary>
-
-              {/* Number of Faults selector */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 15 }}>
-                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>Active Faults:</span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {[0, 1, 2, 3].map(cnt => (
-                    <button
-                      key={cnt}
-                      onClick={() => setFaultCount(cnt)}
-                      style={{
-                        background: faultCount === cnt ? 'rgba(100,255,218,0.2)' : 'rgba(255,255,255,0.05)',
-                        border: `1px solid ${faultCount === cnt ? '#64ffda' : 'rgba(255,255,255,0.12)'}`,
-                        color: faultCount === cnt ? '#64ffda' : 'azure',
-                        padding: '4px 10px',
-                        borderRadius: 6,
-                        fontSize: 11,
-                        fontWeight: 'bold',
-                        cursor: 'pointer',
-                        transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1)',
-                        outline: 'none'
-                      }}
-                    >
-                      {cnt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Fault controls rows */}
-              {faultCount > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {Array.from({ length: faultCount }).map((_, idx) => {
-                    const f = faults[idx];
-                    const label = `Fault ${String.fromCharCode(65 + idx)}`;
-                    return (
-                      <div key={idx} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 12, padding: '10px 12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                          <span style={{ fontSize: 11.5, fontWeight: 'bold', color: f.isSealed ? '#64ffda' : '#ff6b6b' }}>{label}</span>
-                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={f.isSealed}
-                              onChange={e => {
-                                const newFaults = [...faults];
-                                newFaults[idx].isSealed = e.target.checked;
-                                setFaults(newFaults);
-                              }}
-                              style={{ accentColor: '#64ffda' }}
-                            />
-                            Sealed (Infinite Barrier)
-                          </label>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                          <ParameterField
-                            label="Position"
-                            unit="%"
-                            min={10}
-                            max={90}
-                            step={5}
-                            value={f.xPercent}
-                            onChange={v => {
-                              const newFaults = [...faults];
-                              newFaults[idx].xPercent = v;
-                              setFaults(newFaults);
-                            }}
-                          />
-                          <ParameterField
-                            label="Capillary Threshold"
-                            unit="m"
-                            min={0}
-                            max={2}
-                            step={0.1}
-                            value={f.thresholdHeight}
-                            onChange={v => {
-                              const newFaults = [...faults];
-                              newFaults[idx].thresholdHeight = v;
-                              setFaults(newFaults);
-                            }}
-                          />
-                          <ParameterField
-                            label="Horiz. Transmissibility"
-                            unit="fraction"
-                            min={0}
-                            max={1}
-                            step={0.05}
-                            value={f.transmissibility !== undefined ? f.transmissibility : 1.0}
-                            onChange={v => {
-                              const newFaults = [...faults];
-                              newFaults[idx].transmissibility = v;
-                              setFaults(newFaults);
-                            }}
-                          />
-                          {!f.isSealed ? (
-                            <ParameterField
-                              label="Leakage Rate"
-                              unit="scaled"
-                              min={0.01}
-                              max={0.4}
-                              step={0.02}
-                              value={f.leakRate}
-                              onChange={v => {
-                                const newFaults = [...faults];
-                                newFaults[idx].leakRate = v;
-                                setFaults(newFaults);
-                              }}
-                            />
-                          ) : (
-                            <div />
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </details>
-          </InputRail>
         </VisualizationWorkspace>
 
         {/* RIGHT COLUMN: Mass Balance Analytics & Charting Window */}
         {(activeSubTab === 'profile' || activeSubTab === 'map') && <OutcomeRail>
           {/* Mass Balance Analytics Panel */}
           <div className="ve-outcome-content">
-            <div className="ve-rail-heading"><h2>Live outcome</h2><span>Year {simTime}</span></div>
+            <div className="ve-rail-heading"><h2>Live outcome</h2><span>Year {activeTime}</span></div>
             <dl className="ve-metric-list">
-              <div><dt>Injected</dt><dd>{formatMass(currentMasses.injected)}</dd></div>
-              <div><dt>Mobile</dt><dd>{formatMass(currentMasses.mobile)}</dd></div>
-              <div><dt>Residually trapped</dt><dd>{formatMass(currentMasses.trapped)}</dd></div>
-              <div className={currentMasses.leaked > 0 ? 'is-danger' : ''}><dt>Leaked</dt><dd>{formatMass(currentMasses.leaked)}</dd></div>
+              <div><dt>Injected</dt><dd>{formatMass(activeMasses.injected)}</dd></div>
+              <div><dt>Mobile</dt><dd>{formatMass(activeMasses.mobile)}</dd></div>
+              <div><dt>Residually trapped</dt><dd>{formatMass(activeMasses.trapped)}</dd></div>
+              <div className={activeMasses.leaked > 0 ? 'is-danger' : ''}><dt>Leaked</dt><dd>{formatMass(activeMasses.leaked)}</dd></div>
             </dl>
             {/* Live Chart Rendering */}
-            {renderSVGChart()}
+            {renderSVGChart(activeMasses, activeMassHistory, activeTime)}
 
             {/* Real-time Storage Efficiency Trapping Mechanism Progress Bars */}
             <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12 }}>
               <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Storage Efficiency</span>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                <ProgressBar label="Structural Trapping (Mobile)" pct={currentMasses.injected > 0 ? (currentMasses.mobile / currentMasses.injected) * 100 : 0} color="#64ffda"/>
-                <ProgressBar label="Residual Capillary Trapping" pct={currentMasses.injected > 0 ? (currentMasses.trapped / currentMasses.injected) * 100 : 0} color="#3ca68e"/>
-                <ProgressBar label="Cumulative Leaked Fraction" pct={currentMasses.injected > 0 ? (currentMasses.leaked / currentMasses.injected) * 100 : 0} color="#ff6b6b"/>
+                <ProgressBar label="Structural Trapping (Mobile)" pct={activeMasses.injected > 0 ? (activeMasses.mobile / activeMasses.injected) * 100 : 0} color="#64ffda"/>
+                <ProgressBar label="Residual Capillary Trapping" pct={activeMasses.injected > 0 ? (activeMasses.trapped / activeMasses.injected) * 100 : 0} color="#3ca68e"/>
+                <ProgressBar label="Cumulative Leaked Fraction" pct={activeMasses.injected > 0 ? (activeMasses.leaked / activeMasses.injected) * 100 : 0} color="#ff6b6b"/>
               </div>
             </div>
           </div>
@@ -3444,8 +3381,6 @@ const SimulatorPage = () => {
     </div>
   );
 };
-
-const formatMass = value => `${Number(value || 0).toLocaleString('en-GB', { maximumFractionDigits: 1 })} kt`;
 
 const InputRail = ({ children }) => <aside className="ve-input-rail" aria-label="Scenario inputs">{children}</aside>;
 const VisualizationWorkspace = ({ children }) => <section className="ve-visualization-workspace" aria-label="Reservoir visualization">{children}</section>;
