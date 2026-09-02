@@ -23,6 +23,14 @@ const loadActiveResultSelector = () => {
   return context.select;
 };
 
+const loadMapLifecycleHelpers = () => {
+  const page = read('SimulatorPage.jsx');
+  const prelude = page.slice(0, page.indexOf('const UQParamConfig'));
+  const context = { React: {} };
+  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    consumeMapCommand: typeof consumeMapCommand === 'undefined' ? undefined : consumeMapCommand,\n    deriveMapRunStatus: typeof deriveMapRunStatus === 'undefined' ? undefined : deriveMapRunStatus\n  };`, context);
+  return context.helpers;
+};
+
 test('scenario signature changes when a nested fault input changes', () => {
   const createSignature = loadRunStateHelpers().createScenarioSignature || (() => '');
   const scenario = {
@@ -154,6 +162,30 @@ test('map view reports map simulation results', () => {
 
   assert.deepEqual(select('map', crossSection, map), map);
   assert.deepEqual(select('profile', crossSection, map), crossSection);
+});
+
+test('map commands are consumed once without clearing a newer command', () => {
+  const consume = loadMapLifecycleHelpers().consumeMapCommand || (() => ({ type: 'missing' }));
+  const handled = { type: 'run', id: 2 };
+  const newer = { type: 'reset', id: 3 };
+
+  assert.equal(consume(handled, 2), null);
+  assert.deepEqual(consume(newer, 2), newer);
+});
+
+test('map lifecycle stays mounted while workspace tabs change', () => {
+  const page = read('SimulatorPage.jsx');
+
+  assert.match(page, /hidden=\{activeSubTab !== 'map'\}[\s\S]*<Ve2DMapPanel/);
+  assert.equal((page.match(/<Ve2DMapPanel/g) || []).length, 1);
+});
+
+test('map run status reports changed inputs after the last run', () => {
+  const deriveStatus = loadMapLifecycleHelpers().deriveMapRunStatus || (() => 'missing');
+  const snapshot = { isRunning: false, time: 18 };
+
+  assert.equal(deriveStatus(snapshot, 'new-inputs', 'last-run'), 'Inputs changed');
+  assert.equal(deriveStatus({ ...snapshot, isRunning: true }, 'new-inputs', 'last-run'), 'Running');
 });
 
 test('workbench landmarks and input groups follow visual focus order', () => {

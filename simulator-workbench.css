@@ -393,6 +393,16 @@
   flex-direction: column;
 }
 
+.ve-map-workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.ve-map-workspace[hidden] {
+  display: none;
+}
+
 .ve-playback-bar {
   display: flex;
   align-items: center;

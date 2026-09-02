@@ -61,6 +61,14 @@ const getPlaybackAction = ({ isPlaying, simTime, scenarioChanged }) =>
   isPlaying ? 'pause' : simTime === 0 || scenarioChanged ? 'run-scenario' : 'resume';
 
 const selectActiveResults = (activeView, crossSection, map) => activeView === 'map' ? map : crossSection;
+const consumeMapCommand = (command, handledId) => command?.id === handledId ? null : command;
+const deriveMapRunStatus = (snapshot, scenarioSignature, lastRunSignature) => deriveRunStatus({
+  isPlaying: snapshot.isRunning,
+  isReversing: false,
+  scenarioSignature,
+  lastRunSignature,
+  simTime: snapshot.time
+});
 
 const formatMass = value => `${Number(value || 0).toLocaleString('en-GB', { maximumFractionDigits: 1 })} kt`;
 
@@ -233,7 +241,8 @@ const UQParamConfig = ({ def, cfg, onChange }) => {
 
 const Ve2DMapPanel = ({
   K, porosity, residualTrapFraction, dipPercent, amplitude, frequency, faultOffset,
-  Q, injLocation, injDuration, faultCount, faults, mapCols, wellY, preset, command, onSnapshot
+  Q, injLocation, injDuration, faultCount, faults, mapCols, wellY, preset,
+  command, onCommandConsumed, onRun, onReset, onSnapshot
 }) => {
   const mapRows = Math.max(12, Math.round(mapCols * 0.6));
   const canvasRef = useRef(null);
@@ -294,7 +303,8 @@ const Ve2DMapPanel = ({
     if (!command) return;
     resetMap();
     if (command.type === 'run') setIsRunning(true);
-  }, [command, resetMap]);
+    onCommandConsumed(command.id);
+  }, [command, onCommandConsumed, resetMap]);
 
   useEffect(() => {
     onSnapshot({ time: mapTime, masses: mapState.masses, history: historyRef.current, isRunning, speed: mapSpeed });
@@ -457,11 +467,11 @@ const Ve2DMapPanel = ({
         </div>
       </div>
       <div style={{ padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-        <button onClick={() => setIsRunning(value => !value)} aria-label={isRunning ? 'Pause 2D map simulation' : 'Run 2D map simulation'} style={{ background: '#64ffda', color: '#10251f', border: 0, borderRadius: 8, padding: '7px 12px', fontWeight: 700, cursor: 'pointer' }}>
+        <button onClick={() => isRunning ? setIsRunning(false) : onRun()} aria-label={isRunning ? 'Pause 2D map simulation' : 'Run 2D map simulation'} style={{ background: '#64ffda', color: '#10251f', border: 0, borderRadius: 8, padding: '7px 12px', fontWeight: 700, cursor: 'pointer' }}>
           <i className={`fas ${isRunning ? 'fa-pause' : 'fa-play'}`} /> {isRunning ? 'Pause' : 'Run'}
         </button>
         <button onClick={advanceMap} aria-label="Advance 2D map one year" style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}><i className="fas fa-step-forward" /></button>
-        <button onClick={resetMap} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}><i className="fas fa-redo" /> Reset</button>
+        <button onClick={onReset} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}><i className="fas fa-redo" /> Reset</button>
         <button onClick={() => setMapSpeed(value => value === 1 ? 2 : value === 2 ? 4 : 1)} style={{ background: 'none', color: '#64ffda', border: 0, cursor: 'pointer', fontWeight: 700 }}>{mapSpeed}×</button>
         <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.72)' }}>Year {mapTime} · {mapCols}×{mapRows} cells</span>
         <div style={{ flex: 1 }} />
@@ -540,6 +550,7 @@ const SimulatorPage = () => {
     faultCount, faults, hasCapillaryFringe, fringeScale, entryPressure
   ]);
   const lastRunSignatureRef = useRef(scenarioSignature);
+  const mapLastRunSignatureRef = useRef(scenarioSignature);
 
   // SA/UQ uncertainty bounds configuration states (default +/- percentages)
   // --- UQ / SA PARAMETER SELECTION CONFIG ---
@@ -721,8 +732,18 @@ const SimulatorPage = () => {
   };
 
   const sendMapCommand = type => setMapCommand(previous => ({ type, id: (previous?.id || 0) + 1 }));
+  const consumeMapCommandOnce = useCallback(handledId => {
+    setMapCommand(current => consumeMapCommand(current, handledId));
+  }, []);
   const resetActiveSimulation = () => activeSubTab === 'map' ? sendMapCommand('reset') : resetSimulation();
-  const runActiveSimulation = () => activeSubTab === 'map' ? sendMapCommand('run') : handleRunScenario();
+  const runActiveSimulation = () => {
+    if (activeSubTab !== 'map') {
+      handleRunScenario();
+      return;
+    }
+    mapLastRunSignatureRef.current = scenarioSignature;
+    sendMapCommand('run');
+  };
 
   const crossSectionRunStatus = deriveRunStatus({
     isPlaying,
@@ -732,7 +753,7 @@ const SimulatorPage = () => {
     simTime
   });
   const runStatus = activeSubTab === 'map'
-    ? mapSnapshot.isRunning ? 'Running' : mapSnapshot.time > 0 ? 'Paused' : 'Ready'
+    ? deriveMapRunStatus(mapSnapshot, scenarioSignature, mapLastRunSignatureRef.current)
     : crossSectionRunStatus;
 
   // Preset Scenario Handlers
@@ -3041,27 +3062,7 @@ const SimulatorPage = () => {
             </div>
           );
                 } else if (activeSubTab === 'map') {
-                  return (
-                    <Ve2DMapPanel
-                      K={K}
-                      porosity={porosity}
-                      residualTrapFraction={residualTrapFraction}
-                      dipPercent={dipPercent}
-                      amplitude={amplitude}
-                      frequency={frequency}
-                      faultOffset={faultOffset}
-                      Q={Q}
-                      injLocation={injLocation}
-                      injDuration={injDuration}
-                      faultCount={faultCount}
-                      faults={faults}
-                      mapCols={mapCols}
-                      wellY={wellY}
-                      preset={selectedPreset}
-                      command={mapCommand}
-                      onSnapshot={setMapSnapshot}
-                    />
-                  );
+                  return null;
                 } else if (activeSubTab === 'uq') {
           return (
               /* Sensitivity & UQ Dashboard UI panel */
@@ -3342,6 +3343,30 @@ const SimulatorPage = () => {
                );
              }
             })()}
+            <div className="ve-map-workspace" hidden={activeSubTab !== 'map'}>
+              <Ve2DMapPanel
+                K={K}
+                porosity={porosity}
+                residualTrapFraction={residualTrapFraction}
+                dipPercent={dipPercent}
+                amplitude={amplitude}
+                frequency={frequency}
+                faultOffset={faultOffset}
+                Q={Q}
+                injLocation={injLocation}
+                injDuration={injDuration}
+                faultCount={faultCount}
+                faults={faults}
+                mapCols={mapCols}
+                wellY={wellY}
+                preset={selectedPreset}
+                command={mapCommand}
+                onCommandConsumed={consumeMapCommandOnce}
+                onRun={runActiveSimulation}
+                onReset={resetActiveSimulation}
+                onSnapshot={setMapSnapshot}
+              />
+            </div>
             </div>
 
           {/* Model honesty footnote — scaled toy model disclosure */}
