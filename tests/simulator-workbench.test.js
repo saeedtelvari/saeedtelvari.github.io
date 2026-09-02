@@ -11,7 +11,7 @@ const loadRunStateHelpers = () => {
   const page = read('SimulatorPage.jsx');
   const prelude = page.slice(0, page.indexOf('const UQParamConfig'));
   const context = { React: {} };
-  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard,\n    resolveWorkspaceTab: typeof resolveWorkspaceTab === 'undefined' ? undefined : resolveWorkspaceTab\n  };`, context);
+  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard\n  };`, context);
   return context.helpers;
 };
 
@@ -188,15 +188,6 @@ test('map run status reports changed inputs after the last run', () => {
   assert.equal(deriveStatus({ ...snapshot, isRunning: true }, 'new-inputs', 'last-run'), 'Running');
 });
 
-test('workspace actions select the correct view and loaded realizations return to the simulator', () => {
-  const resolveTab = loadRunStateHelpers().resolveWorkspaceTab || (() => 'missing');
-
-  assert.equal(resolveTab('simulator'), 'profile');
-  assert.equal(resolveTab('risk'), 'uq');
-  assert.equal(resolveTab('methodology'), 'guide');
-  assert.equal(resolveTab('loaded-realization'), 'profile');
-});
-
 test('risk and methodology render as peer workspaces outside the visualization tabs', () => {
   const page = read('SimulatorPage.jsx');
 
@@ -207,6 +198,30 @@ test('risk and methodology render as peer workspaces outside the visualization t
   assert.match(page, /<section className="ve-methodology-workspace" aria-labelledby="methodology-title">[\s\S]*<GuidePage isEmbedded=\{true\} \/>/);
   assert.doesNotMatch(page, /id="tab-uq"/);
   assert.doesNotMatch(page, /id="tab-guide"/);
+});
+
+test('risk controls expose approved labels, selection, progress, and realization loading', () => {
+  const page = read('SimulatorPage.jsx');
+
+  assert.match(page, />Run count<\/span>/);
+  assert.match(page, /aria-pressed=\{mcRunsCount === cnt\}/);
+  assert.match(page, />Target metric<\/span>/);
+  assert.match(page, /<option value="leaked">Leaked mass \(kt\)<\/option>/);
+  assert.match(page, /<progress[^>]+value=\{uqProgress\}[^>]+max="100"/);
+  assert.equal((page.match(/>\s*Load realization\s*<\/button>/g) || []).length, 3);
+
+  const loadPath = page.slice(page.indexOf('const loadUQRealization'), page.indexOf('// SVG Histogram Renderer'));
+  assert.match(loadPath, /setActiveSubTab\('profile'\)/);
+});
+
+test('risk and methodology accessibility remains visible in the restrained theme', () => {
+  const page = read('SimulatorPage.jsx');
+  const css = read('simulator-workbench.css');
+
+  assert.doesNotMatch(page, /Load realization[\s\S]{0,250}outline: 'none'/);
+  assert.match(css, /\.ve-uq-realization:focus-visible[\s\S]*outline:/);
+  assert.doesNotMatch(css, /guide-page-wrapper > div:first-of-type\s*\{[^}]*display:\s*none/);
+  assert.match(css, /prefers-reduced-motion: reduce[\s\S]*\.ve-workspace-nav button:active[\s\S]*transform: none/);
 });
 
 test('workbench landmarks and input groups follow visual focus order', () => {

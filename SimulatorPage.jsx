@@ -3,12 +3,6 @@ const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
 const SIM_TABS = ['profile', 'map', 'uq', 'guide'];
 const VISUALIZATION_TABS = ['profile', 'map'];
-const resolveWorkspaceTab = workspace => ({
-  simulator: 'profile',
-  risk: 'uq',
-  methodology: 'guide',
-  'loaded-realization': 'profile'
-})[workspace] || 'profile';
 
 // Declarative registry of every parameter the UQ batch can sample.
 // dec = display decimals; dec 0 params are sampled as integers.
@@ -1637,7 +1631,7 @@ const SimulatorPage = () => {
 
     historyRef.current = replayHistory;
 
-    setActiveSubTab(resolveWorkspaceTab('loaded-realization'));
+    setActiveSubTab('profile');
   };
 
   // SVG Histogram Renderer
@@ -2533,9 +2527,9 @@ const SimulatorPage = () => {
         <button className="ve-run-button" onClick={runActiveSimulation}>Run scenario</button>
       </section>
       <nav className="ve-workspace-nav" aria-label="Simulator workspace">
-        <button aria-current={VISUALIZATION_TABS.includes(activeSubTab) ? 'page' : undefined} onClick={() => setActiveSubTab(resolveWorkspaceTab('simulator'))}>Simulator</button>
-        <button aria-current={activeSubTab === 'uq' ? 'page' : undefined} onClick={() => setActiveSubTab(resolveWorkspaceTab('risk'))}>Risk analysis</button>
-        <button aria-current={activeSubTab === 'guide' ? 'page' : undefined} onClick={() => setActiveSubTab(resolveWorkspaceTab('methodology'))}>Methodology</button>
+        <button aria-current={VISUALIZATION_TABS.includes(activeSubTab) ? 'page' : undefined} onClick={() => setActiveSubTab('profile')}>Simulator</button>
+        <button aria-current={activeSubTab === 'uq' ? 'page' : undefined} onClick={() => setActiveSubTab('uq')}>Risk analysis</button>
+        <button aria-current={activeSubTab === 'guide' ? 'page' : undefined} onClick={() => setActiveSubTab('guide')}>Methodology</button>
       </nav>
       <span className="ve-action-status" role="status" aria-live="polite">{shareStatus}</span>
 
@@ -3110,12 +3104,13 @@ const SimulatorPage = () => {
                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Simulation Settings</span>
                      
                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                       <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)' }}>Monte Carlo Realizations:</span>
+                       <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)' }}>Run count</span>
                        <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
                          {[25, 50, 100].map(cnt => (
                            <button
                              key={cnt}
                              onClick={() => setMcRunsCount(cnt)}
+                             aria-pressed={mcRunsCount === cnt}
                              style={{
                                background: mcRunsCount === cnt ? 'rgba(100,255,218,0.2)' : 'rgba(255,255,255,0.05)',
                                border: `1px solid ${mcRunsCount === cnt ? '#64ffda' : 'rgba(255,255,255,0.12)'}`,
@@ -3135,7 +3130,7 @@ const SimulatorPage = () => {
                      </div>
 
                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                       <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)' }}>Target Storage Metric:</span>
+                       <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)' }}>Target metric</span>
                        <select 
                          value={uqTargetMetric} 
                          onChange={e => setUqTargetMetric(e.target.value)}
@@ -3151,7 +3146,7 @@ const SimulatorPage = () => {
                            outline: 'none'
                          }}
                        >
-                         <option value="leaked">CO\u2082 Leakage Mass (ktonnes)</option>
+                         <option value="leaked">Leaked mass (kt)</option>
                          <option value="trapped">Residual Trapping Efficiency (%)</option>
                        </select>
                      </div>
@@ -3163,7 +3158,7 @@ const SimulatorPage = () => {
                       <div className="ve-uq-progress">
                         <span>Running batch</span>
                         <span>{uqProgress}%</span>
-                        <div><span style={{ width: `${uqProgress}%` }} /></div>
+                        <progress className="ve-uq-progress-meter" value={uqProgress} max="100" aria-label="Uncertainty analysis progress" />
                       </div>
                     )}
 
@@ -3209,48 +3204,45 @@ const SimulatorPage = () => {
                         {/* P10 */}
                         <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
-                            <div style={{ fontSize: 9.5, color: '#64ffda', fontWeight: 'bold' }}>P10 &middot; {uqTargetMetric === 'leaked' ? 'optimistic' : 'conservative'}</div>
+                            <div className="ve-uq-percentile-label" style={{ fontSize: 9.5, fontWeight: 'bold' }}>P10 &middot; {uqTargetMetric === 'leaked' ? 'optimistic' : 'conservative'}</div>
                             <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
                               {uqData.p10Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
                             </div>
                           </div>
-                          <button 
+                          <button className="ve-uq-realization"
                             onClick={() => loadUQRealization(uqData.p10Realization)}
-                            style={{ background: 'rgba(100,255,218,0.1)', border: '1px solid rgba(100,255,218,0.3)', color: '#64ffda', padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease', outline: 'none' }}
                           >
-                            Load Model
+                            Load realization
                           </button>
                         </div>
                         
                         {/* P50 */}
                         <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
-                            <div style={{ fontSize: 9.5, color: '#ffb300', fontWeight: 'bold' }}>P50 &middot; median</div>
+                            <div className="ve-uq-percentile-label" style={{ fontSize: 9.5, fontWeight: 'bold' }}>P50 &middot; median</div>
                             <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
                               {uqData.p50Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
                             </div>
                           </div>
-                          <button 
+                          <button className="ve-uq-realization"
                             onClick={() => loadUQRealization(uqData.p50Realization)}
-                            style={{ background: 'rgba(255,179,0,0.1)', border: '1px solid rgba(255,179,0,0.3)', color: '#ffb300', padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease', outline: 'none' }}
                           >
-                            Load Model
+                            Load realization
                           </button>
                         </div>
                         
                         {/* P90 */}
                         <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
-                            <div style={{ fontSize: 9.5, color: '#ff6b6b', fontWeight: 'bold' }}>P90 &middot; {uqTargetMetric === 'leaked' ? 'conservative' : 'optimistic'}</div>
+                            <div className="ve-uq-percentile-label" style={{ fontSize: 9.5, fontWeight: 'bold' }}>P90 &middot; {uqTargetMetric === 'leaked' ? 'conservative' : 'optimistic'}</div>
                             <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
                               {uqData.p90Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
                             </div>
                           </div>
-                          <button 
+                          <button className="ve-uq-realization"
                             onClick={() => loadUQRealization(uqData.p90Realization)}
-                            style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', color: '#ff6b6b', padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease', outline: 'none' }}
                           >
-                            Load Model
+                            Load realization
                           </button>
                         </div>
 

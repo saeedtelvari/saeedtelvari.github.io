@@ -693,19 +693,11 @@
   font: 600 11px/1.2 var(--font-prose);
 }
 
-.ve-uq-progress > div {
+.ve-uq-progress-meter {
   grid-column: 1 / -1;
+  width: 100%;
   height: 4px;
-  overflow: hidden;
-  background: var(--ve-border);
-  border-radius: 999px;
-}
-
-.ve-uq-progress > div > span {
-  display: block;
-  height: 100%;
-  background: var(--ve-accent);
-  transition: width 100ms linear;
+  accent-color: var(--ve-accent);
 }
 
 .ve-uq-results-content > div,
@@ -728,6 +720,27 @@
   color: var(--ve-ink);
 }
 
+.ve-uq-percentile-label {
+  color: var(--ve-accent) !important;
+}
+
+.ve-uq-realization {
+  min-height: 30px;
+  padding: 6px 10px;
+  color: var(--ve-accent);
+  background: var(--ve-accent-soft);
+  border: 1px solid #9fc7c2;
+  border-radius: 4px;
+  font: 700 10px/1.2 var(--font-prose);
+  cursor: pointer;
+  transition: background-color 140ms var(--ve-ease-out), border-color 140ms var(--ve-ease-out), color 140ms var(--ve-ease-out);
+}
+
+.ve-uq-realization:focus-visible {
+  outline: 2px solid var(--ve-accent);
+  outline-offset: 2px;
+}
+
 .ve-uq-empty h4 {
   color: var(--ve-ink) !important;
 }
@@ -743,7 +756,8 @@
   background: var(--ve-surface) !important;
 }
 
-.ve-methodology-workspace .guide-page-wrapper > div:first-of-type {
+.ve-methodology-workspace .guide-page-wrapper > div:first-of-type > div,
+.ve-methodology-workspace .guide-page-wrapper > div:first-of-type > h2 {
   display: none;
 }
 
@@ -830,6 +844,10 @@
   }
 
   .ve-run-button:active {
+    transform: none;
+  }
+
+  .ve-workspace-nav button:active {
     transform: none;
   }
 }
