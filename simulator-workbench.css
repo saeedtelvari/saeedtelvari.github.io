@@ -177,6 +177,36 @@
   background: var(--ve-surface);
 }
 
+.ve-workspace-nav {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 12px;
+  background: var(--ve-surface);
+  border-bottom: 1px solid var(--ve-border);
+}
+
+.ve-workspace-nav button {
+  padding: 0 20px;
+  color: var(--ve-muted);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font: 650 12px/1 var(--font-prose);
+  cursor: pointer;
+  transition: border-color 140ms var(--ve-ease-out), color 140ms var(--ve-ease-out), transform 140ms var(--ve-ease-out);
+}
+
+.ve-workspace-nav button[aria-current="page"] {
+  color: var(--ve-accent);
+  border-bottom-color: var(--ve-accent);
+}
+
+.ve-workspace-nav button:active {
+  transform: scale(0.97);
+}
+
 .ve-workbench {
   display: grid;
   grid-template-columns: 280px minmax(480px, 1fr) 300px;
@@ -504,7 +534,6 @@
 .ve-workbench[data-workspace="uq"],
 .ve-workbench[data-workspace="guide"] {
   grid-template-columns: minmax(0, 1fr);
-  padding: 16px;
 }
 
 .ve-workbench[data-workspace="uq"] .ve-visualization-workspace,
@@ -524,12 +553,243 @@
 .ve-workbench[data-workspace="uq"] .sim-reservoir-card,
 .ve-workbench[data-workspace="guide"] .sim-reservoir-card {
   grid-column: 1;
-  border: 1px solid var(--ve-border) !important;
+  border: 0 !important;
+}
+
+.ve-risk-workspace,
+.ve-methodology-workspace {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  color: var(--ve-ink);
+  background: var(--ve-surface);
+}
+
+.ve-workspace-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 76px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--ve-border);
+}
+
+.ve-workspace-heading h1 {
+  margin: 0;
+  color: var(--ve-ink);
+  font: 700 20px/1.2 var(--font-display);
+}
+
+.ve-workspace-heading p {
+  margin: 4px 0 0;
+  color: var(--ve-muted);
+  font-size: 12px;
+}
+
+.ve-workspace-heading .ve-run-button {
+  min-height: 36px;
+  padding: 8px 14px;
+  color: #fff;
+  background: var(--ve-accent);
+  border: 1px solid var(--ve-accent);
+  border-radius: 5px;
+  font: 650 12px/1.2 var(--font-prose);
+  cursor: pointer;
+  transition: background-color 140ms var(--ve-ease-out), border-color 140ms var(--ve-ease-out), transform 140ms var(--ve-ease-out);
+}
+
+.ve-workspace-heading .ve-run-button:disabled {
+  color: var(--ve-muted);
+  background: var(--ve-surface-subtle);
+  border-color: var(--ve-border);
+  cursor: wait;
+}
+
+.ve-risk-layout {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  min-height: calc(100dvh - 222px);
+}
+
+.ve-risk-config {
+  min-width: 0;
+  padding: 16px;
+  border-right: 1px solid var(--ve-border);
+}
+
+.ve-uq-settings {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ve-border);
+}
+
+.ve-uq-parameters > span:first-child,
+.ve-uq-settings > span:first-child,
+.ve-chart-title,
+.ve-uq-percentiles > span:first-child {
+  color: var(--ve-muted) !important;
+  letter-spacing: 0.08em;
+}
+
+.ve-uq-parameters > span:nth-child(2),
+.ve-uq-settings span {
+  color: var(--ve-muted) !important;
+}
+
+.ve-uq-parameters > div {
+  grid-template-columns: minmax(0, 1fr) !important;
+  max-height: none !important;
+  overflow: visible !important;
+  padding-right: 0 !important;
+}
+
+.ve-uq-parameter {
+  background: var(--ve-surface) !important;
+  border-color: var(--ve-border) !important;
+  border-radius: 4px !important;
+}
+
+.ve-uq-parameter span {
+  color: var(--ve-muted) !important;
+}
+
+.ve-uq-parameter label > span {
+  color: var(--ve-ink) !important;
+}
+
+.ve-uq-parameter button,
+.ve-uq-settings button,
+.ve-uq-parameter input,
+.ve-uq-settings select {
+  color: var(--ve-ink) !important;
+  background: var(--ve-surface-subtle) !important;
+  border-color: var(--ve-border) !important;
+  border-radius: 4px !important;
+}
+
+.ve-uq-parameter button[aria-pressed="true"] {
+  color: var(--ve-accent) !important;
+  background: var(--ve-accent-soft) !important;
+  border-color: #9fc7c2 !important;
+}
+
+.ve-uq-settings button {
+  min-height: 30px;
+}
+
+.ve-risk-results {
+  min-width: 0;
+  padding: 18px;
+  background: var(--ve-surface-subtle);
+}
+
+.ve-uq-progress {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 12px;
+  margin-bottom: 16px;
+  color: var(--ve-muted);
+  font: 600 11px/1.2 var(--font-prose);
+}
+
+.ve-uq-progress > div {
+  grid-column: 1 / -1;
+  height: 4px;
+  overflow: hidden;
+  background: var(--ve-border);
+  border-radius: 999px;
+}
+
+.ve-uq-progress > div > span {
+  display: block;
+  height: 100%;
+  background: var(--ve-accent);
+  transition: width 100ms linear;
+}
+
+.ve-uq-results-content > div,
+.ve-uq-empty {
+  border-color: var(--ve-border) !important;
+}
+
+.ve-uq-percentiles,
+.ve-uq-percentiles > div > div,
+.ve-uq-empty {
+  background: var(--ve-surface) !important;
+}
+
+.ve-uq-percentiles > div > div {
+  border-color: var(--ve-border) !important;
+  border-radius: 4px !important;
+}
+
+.ve-uq-percentiles > div > div > div > div:last-child {
+  color: var(--ve-ink);
+}
+
+.ve-uq-empty h4 {
+  color: var(--ve-ink) !important;
+}
+
+.ve-uq-empty p {
+  color: var(--ve-muted) !important;
+}
+
+.ve-methodology-workspace .guide-page-wrapper {
+  gap: 20px !important;
+  padding: 20px !important;
+  color: var(--ve-ink) !important;
+  background: var(--ve-surface) !important;
+}
+
+.ve-methodology-workspace .guide-page-wrapper > div:first-of-type {
+  display: none;
+}
+
+.ve-methodology-workspace .guide-grid {
+  gap: 0 !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.ve-methodology-workspace .full-width-card {
+  grid-column: auto !important;
+}
+
+.ve-methodology-workspace .math-card {
+  gap: 10px !important;
+  padding: 20px 0 !important;
+  color: var(--ve-ink) !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--ve-border) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  transition: border-color 140ms var(--ve-ease-out) !important;
+}
+
+.ve-methodology-workspace .math-header {
+  color: var(--ve-accent) !important;
+  font-size: 14px !important;
+}
+
+.ve-methodology-workspace .math-text {
+  color: var(--ve-muted) !important;
+}
+
+.ve-methodology-workspace .equation-block {
+  color: var(--ve-ink) !important;
+  background: var(--ve-surface-subtle) !important;
+  border-color: var(--ve-border) !important;
+  border-radius: 4px !important;
+  text-shadow: none !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .ve-scenario-bar button:hover,
-  .ve-export-menu > summary:hover {
+  .ve-export-menu > summary:hover,
+  .ve-workspace-nav button:hover {
     color: var(--ve-accent);
     background-color: var(--ve-accent-soft);
     border-color: #9fc7c2;
@@ -540,6 +800,22 @@
     background-color: #115c56;
     border-color: #115c56;
   }
+
+  .ve-workspace-heading .ve-run-button:hover:not(:disabled) {
+    background-color: #115c56;
+    border-color: #115c56;
+  }
+}
+
+@media (max-width: 900px) {
+  .ve-risk-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ve-risk-config {
+    border-right: 0;
+    border-bottom: 1px solid var(--ve-border);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -547,6 +823,8 @@
   .app-header--workbench a,
   .app-header--workbench button,
   .ve-scenario-bar button,
+  .ve-workspace-nav button,
+  .ve-workspace-heading .ve-run-button,
   .ve-export-menu > summary {
     transition-duration: 0.01ms !important;
   }

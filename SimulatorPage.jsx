@@ -3,6 +3,12 @@ const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
 const SIM_TABS = ['profile', 'map', 'uq', 'guide'];
 const VISUALIZATION_TABS = ['profile', 'map'];
+const resolveWorkspaceTab = workspace => ({
+  simulator: 'profile',
+  risk: 'uq',
+  methodology: 'guide',
+  'loaded-realization': 'profile'
+})[workspace] || 'profile';
 
 // Declarative registry of every parameter the UQ batch can sample.
 // dec = display decimals; dec 0 params are sampled as integers.
@@ -128,7 +134,7 @@ const UQParamConfig = ({ def, cfg, onChange }) => {
   const stepVal = def.dec === 0 ? 1 : Math.pow(10, -def.dec);
 
   return (
-    <div style={{
+    <div className="ve-uq-parameter" style={{
       display: 'flex',
       flexDirection: 'column',
       gap: 6,
@@ -1631,7 +1637,7 @@ const SimulatorPage = () => {
 
     historyRef.current = replayHistory;
 
-    setActiveSubTab('profile');
+    setActiveSubTab(resolveWorkspaceTab('loaded-realization'));
   };
 
   // SVG Histogram Renderer
@@ -2519,8 +2525,6 @@ const SimulatorPage = () => {
         <span className={`ve-run-status ve-run-status--${runStatus.toLowerCase().replace(/\s+/g, '-')}`} role="status">{runStatus}</span>
         <button onClick={resetActiveSimulation}>Reset</button>
         <button onClick={copyScenarioLink}>Copy scenario link</button>
-        <button id="tab-uq" onClick={() => setActiveSubTab('uq')}>Risk analysis</button>
-        <button id="tab-guide" onClick={() => setActiveSubTab('guide')}>Methodology</button>
         <details className="ve-export-menu">
           <summary>Export</summary>
           <button onClick={() => runFileAction(exportCsv, 'Mass balance export failed. Please retry.')}>Mass balance CSV</button>
@@ -2528,6 +2532,11 @@ const SimulatorPage = () => {
         </details>
         <button className="ve-run-button" onClick={runActiveSimulation}>Run scenario</button>
       </section>
+      <nav className="ve-workspace-nav" aria-label="Simulator workspace">
+        <button aria-current={VISUALIZATION_TABS.includes(activeSubTab) ? 'page' : undefined} onClick={() => setActiveSubTab(resolveWorkspaceTab('simulator'))}>Simulator</button>
+        <button aria-current={activeSubTab === 'uq' ? 'page' : undefined} onClick={() => setActiveSubTab(resolveWorkspaceTab('risk'))}>Risk analysis</button>
+        <button aria-current={activeSubTab === 'guide' ? 'page' : undefined} onClick={() => setActiveSubTab(resolveWorkspaceTab('methodology'))}>Methodology</button>
+      </nav>
       <span className="ve-action-status" role="status" aria-live="polite">{shareStatus}</span>
 
       {/* --- MAIN LAYOUT GRID --- */}
@@ -3065,33 +3074,19 @@ const SimulatorPage = () => {
                   return null;
                 } else if (activeSubTab === 'uq') {
           return (
-              /* Sensitivity & UQ Dashboard UI panel */
-              <div
-                id="tabpanel-uq"
-                role="tabpanel"
-                aria-labelledby="tab-uq"
-                tabIndex={0}
-                style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                background: '#1c1626',
-                padding: '20px 25px',
-                gap: 20,
-                overflowY: 'auto',
-                minHeight: 450
-              }}>
-                {/* CONFIGURATION ROW */}
-                <div className="uq-config-grid" style={{
-                  display: 'grid', 
-                  gridTemplateColumns: '1.2fr 1fr 1fr', 
-                  gap: 20,
-                  background: 'rgba(255,255,255,0.02)',
-                  border: '1px solid rgba(255,255,255,0.05)',
-                  borderRadius: 14,
-                  padding: 16
-                }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+              <section className="ve-risk-workspace" aria-labelledby="risk-title">
+                <header className="ve-workspace-heading">
+                  <div>
+                    <h1 id="risk-title">Risk analysis</h1>
+                    <p>Use the current scenario as the nominal case.</p>
+                  </div>
+                  <button className="ve-run-button" onClick={runMonteCarloBatch} disabled={uqRunning}>
+                    {uqRunning ? `Running ${uqProgress}%` : 'Run uncertainty analysis'}
+                  </button>
+                </header>
+                <div className="ve-risk-layout">
+                  <aside className="ve-risk-config" aria-label="Uncertainty configuration">
+                  <div className="ve-uq-parameters" style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
                     <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Uncertainty Parameters</span>
                     <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', marginTop: -6 }}>
                       Select parameters, then pick an absolute range, a &plusmn;% band, or discrete values.
@@ -3111,7 +3106,7 @@ const SimulatorPage = () => {
                     </div>
                   </div>
                   
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div className="ve-uq-settings" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Simulation Settings</span>
                      
                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -3162,68 +3157,31 @@ const SimulatorPage = () => {
                      </div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 10 }}>
-                    <button
-                      onClick={runMonteCarloBatch}
-                      disabled={uqRunning}
-                      style={{
-                        background: uqRunning ? 'rgba(255,255,255,0.05)' : '#64ffda',
-                        border: 'none',
-                        color: uqRunning ? 'rgba(255,255,255,0.3)' : '#000',
-                        padding: '12px 20px',
-                        borderRadius: 10,
-                        fontSize: 12,
-                        fontWeight: 'bold',
-                        cursor: uqRunning ? 'default' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        boxShadow: uqRunning ? 'none' : '0 4px 15px rgba(100,255,218,0.25)',
-                        transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1)',
-                        width: '100%',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      {uqRunning ? (
-                        <React.Fragment>
-                          <i className="fas fa-spinner fa-spin" /> Simulating...
-                        </React.Fragment>
-                      ) : (
-                        <React.Fragment>
-                          <i className="fas fa-play" /> Run Uncertainty Analysis
-                        </React.Fragment>
-                      )}
-                    </button>
-                    
+                  </aside>
+                  <div className="ve-risk-results">
                     {uqRunning && (
-                      <div style={{ width: '100%', marginTop: 4 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: 'rgba(255,255,255,0.6)', marginBottom: 3 }}>
-                          <span>Running Batch</span>
-                          <span>{uqProgress}%</span>
-                        </div>
-                        <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
-                          <div style={{ width: `${uqProgress}%`, height: '100%', background: '#64ffda', transition: 'width 0.1s ease' }} />
-                        </div>
+                      <div className="ve-uq-progress">
+                        <span>Running batch</span>
+                        <span>{uqProgress}%</span>
+                        <div><span style={{ width: `${uqProgress}%` }} /></div>
                       </div>
                     )}
-                  </div>
-                </div>
 
                 {/* RESULTS VIEW */}
                 {uqData ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
+                   <div className="ve-uq-results-content" style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
                     
                     <div className="uq-results-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
                       
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>
+                        <span className="ve-chart-title" style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>
                           Uncertainty Distribution ({uqTargetMetric === 'leaked' ? 'CO\u2082 Leaked Mass' : 'Trapping Efficiency'})
                         </span>
                         {renderUQHistogram(uqData)}
                       </div>
                       
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>
+                        <span className="ve-chart-title" style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>
                           Parameter Correlation Coefficients (Pearson r)
                         </span>
                         {sensitivityData && sensitivityData.length > 0 ? renderUQSensitivity(sensitivityData) : (
@@ -3236,7 +3194,7 @@ const SimulatorPage = () => {
 
                     </div>
 
-                    <div style={{ 
+                    <div className="ve-uq-percentiles" style={{
                       background: 'rgba(255,255,255,0.02)', 
                       border: '1px solid rgba(255,255,255,0.05)',
                       borderRadius: 14,
@@ -3301,7 +3259,7 @@ const SimulatorPage = () => {
 
                    </div>
                  ) : (
-                   <div style={{ 
+                   <div className="ve-uq-empty" style={{
                      flex: 1, 
                      display: 'flex', 
                      flexDirection: 'column', 
@@ -3320,26 +3278,16 @@ const SimulatorPage = () => {
                       </p>
                    </div>
                  )}
-               </div>
+                  </div>
+                </div>
+              </section>
                );
              } else {
                return (
-                  <div
-                    id="tabpanel-guide"
-                    role="tabpanel"
-                    aria-labelledby="tab-guide"
-                    tabIndex={0}
-                    style={{
-                    flex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    background: '#1c1626',
-                    padding: '20px 25px',
-                    overflowY: 'auto',
-                    minHeight: 450
-                  }}>
+                  <section className="ve-methodology-workspace" aria-labelledby="methodology-title">
+                    <header className="ve-workspace-heading"><h1 id="methodology-title">Methodology</h1></header>
                     <GuidePage isEmbedded={true} />
-                 </div>
+                  </section>
                );
              }
             })()}

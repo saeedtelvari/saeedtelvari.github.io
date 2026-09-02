@@ -11,7 +11,7 @@ const loadRunStateHelpers = () => {
   const page = read('SimulatorPage.jsx');
   const prelude = page.slice(0, page.indexOf('const UQParamConfig'));
   const context = { React: {} };
-  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard\n  };`, context);
+  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard,\n    resolveWorkspaceTab: typeof resolveWorkspaceTab === 'undefined' ? undefined : resolveWorkspaceTab\n  };`, context);
   return context.helpers;
 };
 
@@ -186,6 +186,27 @@ test('map run status reports changed inputs after the last run', () => {
 
   assert.equal(deriveStatus(snapshot, 'new-inputs', 'last-run'), 'Inputs changed');
   assert.equal(deriveStatus({ ...snapshot, isRunning: true }, 'new-inputs', 'last-run'), 'Running');
+});
+
+test('workspace actions select the correct view and loaded realizations return to the simulator', () => {
+  const resolveTab = loadRunStateHelpers().resolveWorkspaceTab || (() => 'missing');
+
+  assert.equal(resolveTab('simulator'), 'profile');
+  assert.equal(resolveTab('risk'), 'uq');
+  assert.equal(resolveTab('methodology'), 'guide');
+  assert.equal(resolveTab('loaded-realization'), 'profile');
+});
+
+test('risk and methodology render as peer workspaces outside the visualization tabs', () => {
+  const page = read('SimulatorPage.jsx');
+
+  assert.match(page, /<nav className="ve-workspace-nav" aria-label="Simulator workspace">/);
+  assert.match(page, /aria-current=\{VISUALIZATION_TABS\.includes\(activeSubTab\) \? 'page'/);
+  assert.match(page, /<section className="ve-risk-workspace" aria-labelledby="risk-title">/);
+  assert.match(page, /onClick=\{runMonteCarloBatch\}/);
+  assert.match(page, /<section className="ve-methodology-workspace" aria-labelledby="methodology-title">[\s\S]*<GuidePage isEmbedded=\{true\} \/>/);
+  assert.doesNotMatch(page, /id="tab-uq"/);
+  assert.doesNotMatch(page, /id="tab-guide"/);
 });
 
 test('workbench landmarks and input groups follow visual focus order', () => {
