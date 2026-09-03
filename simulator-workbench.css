@@ -238,7 +238,9 @@
 .ve-workbench {
   display: grid;
   grid-template-columns: 280px minmax(480px, 1fr) 300px;
-  min-height: calc(100dvh - 106px);
+  height: calc(100dvh - 171px);
+  min-height: 0;
+  overflow: hidden;
   border-top: 1px solid var(--ve-border);
 }
 
@@ -247,6 +249,7 @@
   grid-template-columns: minmax(480px, 1fr);
   grid-template-rows: minmax(420px, 1fr) auto;
   min-width: 0;
+  min-height: 0;
   background: var(--ve-canvas);
 }
 
@@ -254,7 +257,7 @@
   grid-column: 1;
   grid-row: 1;
   min-width: 0;
-  min-height: 620px !important;
+  min-height: 0 !important;
   border: 0 !important;
   border-radius: 0 !important;
   box-shadow: none !important;
@@ -449,6 +452,13 @@
 
 .ve-visualization-workspace [role="tabpanel"] {
   flex-direction: column;
+  min-height: 0;
+}
+
+.ve-visualization-workspace [role="tabpanel"] > svg {
+  flex: 1 1 auto;
+  height: auto !important;
+  min-height: 0;
 }
 
 .ve-map-workspace {
@@ -575,7 +585,7 @@
 .ve-workbench[data-workspace="guide"] .sim-tab-header,
 .ve-workbench[data-workspace="uq"] .ve-visualization-workspace > p,
 .ve-workbench[data-workspace="guide"] .ve-visualization-workspace > p {
-  display: none;
+  display: none !important;
 }
 
 .ve-workbench[data-workspace="uq"] .sim-reservoir-card,
@@ -606,7 +616,7 @@
 .ve-workspace-heading h1 {
   margin: 0;
   color: var(--ve-ink);
-  font: 700 20px/1.2 var(--font-display);
+  font: 700 20px/1.2 var(--font-prose);
 }
 
 .ve-workspace-heading p {
@@ -710,6 +720,11 @@
   min-width: 0;
   padding: 18px;
   background: var(--ve-surface-subtle);
+}
+
+.ve-risk-results svg {
+  background: var(--ve-canvas) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 .ve-uq-progress {
@@ -1008,7 +1023,9 @@
 
   .ve-workbench {
     display: block;
+    height: auto;
     min-height: 0;
+    overflow: visible;
   }
 
   .ve-input-rail,

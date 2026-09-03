@@ -318,6 +318,7 @@ test('map run status reports changed inputs after the last run', () => {
 
 test('risk and methodology render as peer workspaces outside the visualization tabs', () => {
   const page = read('SimulatorPage.jsx');
+  const css = read('simulator-workbench.css');
 
   assert.match(page, /<nav className="ve-workspace-nav" aria-label="Simulator workspace">/);
   assert.match(page, /aria-current=\{VISUALIZATION_TABS\.includes\(activeSubTab\) \? 'page'/);
@@ -326,6 +327,7 @@ test('risk and methodology render as peer workspaces outside the visualization t
   assert.match(page, /<section className="ve-methodology-workspace" aria-labelledby="methodology-title">[\s\S]*<GuidePage isEmbedded=\{true\} \/>/);
   assert.doesNotMatch(page, /id="tab-uq"/);
   assert.doesNotMatch(page, /id="tab-guide"/);
+  assert.match(css, /\.ve-workbench\[data-workspace="uq"\] \.sim-tab-header,[\s\S]*?display:\s*none\s*!important/);
 });
 
 test('risk controls expose approved labels, selection, progress, and realization loading', () => {
@@ -351,10 +353,12 @@ test('risk and methodology accessibility remains visible in the restrained theme
 
   assert.doesNotMatch(page, /Load realization[\s\S]{0,250}outline: 'none'/);
   assert.doesNotMatch(riskSettings, /outline: 'none'/);
+  assert.match(css, /\.ve-workspace-heading h1\s*\{[\s\S]*?font:\s*700 20px\/1\.2 var\(--font-prose\)/);
   assert.match(css, /\.ve-uq-realization:focus-visible[\s\S]*outline:/);
   assert.doesNotMatch(css, /guide-page-wrapper > div:first-of-type\s*\{[^}]*display:\s*none/);
   assert.match(css, /guide-page-wrapper > div:first-of-type > p[\s\S]*color: var\(--ve-muted\)/);
   assert.match(css, /\.ve-methodology-workspace \.numerator[\s\S]*border-bottom:[^;]*var\(--ve-(?:ink|muted)\)/);
+  assert.match(css, /\.ve-risk-results svg\s*\{[\s\S]*?background:\s*var\(--ve-canvas\)\s*!important/);
   assert.match(css, /prefers-reduced-motion: reduce[\s\S]*\.ve-workspace-nav button:active[\s\S]*transform: none/);
 });
 
@@ -396,4 +400,14 @@ test('workbench motion is restrained and accessible', () => {
   assert.doesNotMatch(css, /ease-in(?:\s|;|,)/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.match(css, /:focus-visible/);
+});
+
+test('desktop workbench keeps the visualization and rails within the first viewport', () => {
+  const css = read('simulator-workbench.css');
+
+  assert.match(css, /\.ve-workbench\s*\{[\s\S]*?height:\s*calc\(100dvh - 171px\)/);
+  assert.match(css, /\.ve-visualization-workspace > \.sim-reservoir-card\s*\{[\s\S]*?min-height:\s*0\s*!important/);
+  assert.match(css, /\.ve-visualization-workspace \[role="tabpanel"\][\s\S]*?min-height:\s*0/);
+  assert.match(css, /\.ve-visualization-workspace \[role="tabpanel"\] > svg[\s\S]*?height:\s*auto\s*!important/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.ve-workbench\s*\{[\s\S]*?height:\s*auto/);
 });

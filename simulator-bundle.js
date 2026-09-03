@@ -947,10 +947,12 @@ Object.assign(window, {
 });
 
 // File: SimulatorPage.jsx
+function _extends() { _extends = Object.assign ? Object.assign.bind() : function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; }; return _extends.apply(this, arguments); }
 // SimulatorPage.jsx — Interactive VE Simulator Page
 // [destructured React]
 
 const SIM_TABS = ['profile', 'map', 'uq', 'guide'];
+const VISUALIZATION_TABS = ['profile', 'map'];
 
 // Declarative registry of every parameter the UQ batch can sample.
 // dec = display decimals; dec 0 params are sampled as integers.
@@ -1041,6 +1043,81 @@ const scenarioNumber = (query, key, min, max, fallback, integer = false) => {
   const clamped = Math.max(min, Math.min(max, value));
   return integer ? Math.round(clamped) : clamped;
 };
+const createScenarioSignature = parameters => JSON.stringify(parameters);
+const deriveRunStatus = ({
+  isPlaying,
+  isReversing,
+  scenarioSignature,
+  lastRunSignature,
+  simTime
+}) => isPlaying ? 'Running' : isReversing ? 'Running backward' : scenarioSignature !== lastRunSignature ? 'Inputs changed' : simTime > 0 ? 'Paused' : 'Ready';
+const executeFileAction = (action, onFailure) => {
+  try {
+    action();
+    return true;
+  } catch (_) {
+    onFailure();
+    return false;
+  }
+};
+const getPlaybackAction = ({
+  isPlaying,
+  simTime,
+  scenarioChanged
+}) => isPlaying ? 'pause' : simTime === 0 || scenarioChanged ? 'run-scenario' : 'resume';
+const selectActiveResults = (activeView, crossSection, map) => activeView === 'map' ? map : crossSection;
+const consumeMapCommand = (command, handledId) => command?.id === handledId ? null : command;
+const deriveMapRunStatus = (snapshot, scenarioSignature, lastRunSignature) => deriveRunStatus({
+  isPlaying: snapshot.isRunning,
+  isReversing: false,
+  scenarioSignature,
+  lastRunSignature,
+  simTime: snapshot.time
+});
+const formatMass = value => `${Number(value || 0).toLocaleString('en-GB', {
+  maximumFractionDigits: 1
+})} kt`;
+const copyTextToClipboard = async (text, clipboard, fallback) => {
+  if (clipboard && typeof clipboard.writeText === 'function') {
+    try {
+      await clipboard.writeText(text);
+      return true;
+    } catch (_) {/* Try the legacy copy path below. */}
+  }
+  try {
+    return Boolean(fallback(text));
+  } catch (_) {
+    return false;
+  }
+};
+const toggleMobilePanel = (currentPanel, requestedPanel) => currentPanel === requestedPanel ? null : requestedPanel;
+const focusMobilePanelTrigger = (panel, triggers) => {
+  const trigger = triggers[panel];
+  if (!trigger || trigger.isConnected === false) return;
+  const visible = typeof trigger.getClientRects !== 'function' || trigger.getClientRects().length > 0;
+  if (visible && typeof trigger.focus === 'function') trigger.focus();
+};
+const lockPageScroll = pageDocument => {
+  const previousOverflow = pageDocument.body.style.overflow;
+  pageDocument.body.style.overflow = 'hidden';
+  return () => {
+    pageDocument.body.style.overflow = previousOverflow;
+  };
+};
+const selectPresentedMobilePanel = (panel, viewport) => viewport.mobile ? panel : viewport.compact && panel === 'outcomes' ? panel : null;
+const getMobileFocusWrapTarget = (focusables, activeElement, backwards) => {
+  if (!focusables.length) return null;
+  const currentIndex = focusables.indexOf(activeElement);
+  if (currentIndex === -1) return backwards ? focusables[focusables.length - 1] : focusables[0];
+  if (backwards && currentIndex === 0) return focusables[focusables.length - 1];
+  if (!backwards && currentIndex === focusables.length - 1) return focusables[0];
+  return null;
+};
+const setMobilePanelBackgroundInert = (elements, inert) => {
+  elements.filter(Boolean).forEach(element => {
+    element.inert = inert;
+  });
+};
 
 // Draw one sample for a parameter given its config and nominal value.
 // Returns { value, sampled } — sampled=false means the nominal was used unchanged.
@@ -1104,6 +1181,7 @@ const UQParamConfig = ({
   const numChange = e => e.target.value === '' ? NaN : parseFloat(e.target.value);
   const stepVal = def.dec === 0 ? 1 : Math.pow(10, -def.dec);
   return /*#__PURE__*/React.createElement("div", {
+    className: "ve-uq-parameter",
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -1271,7 +1349,12 @@ const Ve2DMapPanel = ({
   faults,
   mapCols,
   wellY,
-  preset
+  preset,
+  command,
+  onCommandConsumed,
+  onRun,
+  onReset,
+  onSnapshot
 }) => {
   const mapRows = Math.max(12, Math.round(mapCols * 0.6));
   const canvasRef = useRef(null);
@@ -1281,6 +1364,10 @@ const Ve2DMapPanel = ({
   }));
   const timeRef = useRef(0);
   const paramsRef = useRef(null);
+  const historyRef = useRef([{
+    time: 0,
+    ...stateRef.current.masses
+  }]);
   const [mapState, setMapState] = useState(stateRef.current);
   const [mapTime, setMapTime] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -1311,6 +1398,10 @@ const Ve2DMapPanel = ({
     });
     stateRef.current = next;
     timeRef.current = 0;
+    historyRef.current = [{
+      time: 0,
+      ...next.masses
+    }];
     setMapState(next);
     setMapTime(0);
     setIsRunning(false);
@@ -1324,10 +1415,29 @@ const Ve2DMapPanel = ({
     const next = globalThis.VE2D.stepVe2d(stateRef.current, paramsRef.current, nextTime);
     stateRef.current = next;
     timeRef.current = nextTime;
+    historyRef.current = [...historyRef.current, {
+      time: nextTime,
+      ...next.masses
+    }];
     setMapState(next);
     setMapTime(nextTime);
   };
   useEffect(() => resetMap(), [resetMap, preset]);
+  useEffect(() => {
+    if (!command) return;
+    resetMap();
+    if (command.type === 'run') setIsRunning(true);
+    onCommandConsumed(command.id);
+  }, [command, onCommandConsumed, resetMap]);
+  useEffect(() => {
+    onSnapshot({
+      time: mapTime,
+      masses: mapState.masses,
+      history: historyRef.current,
+      isRunning,
+      speed: mapSpeed
+    });
+  }, [mapState, mapTime, isRunning, mapSpeed, onSnapshot]);
   useEffect(() => {
     if (!isRunning) return;
     const timer = setInterval(advanceMap, 70 / mapSpeed);
@@ -1524,7 +1634,7 @@ const Ve2DMapPanel = ({
       gap: 10
     }
   }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => setIsRunning(value => !value),
+    onClick: () => isRunning ? setIsRunning(false) : onRun(),
     "aria-label": isRunning ? 'Pause 2D map simulation' : 'Run 2D map simulation',
     style: {
       background: '#64ffda',
@@ -1551,7 +1661,7 @@ const Ve2DMapPanel = ({
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-step-forward"
   })), /*#__PURE__*/React.createElement("button", {
-    onClick: resetMap,
+    onClick: onReset,
     style: {
       background: 'rgba(255,255,255,0.08)',
       color: '#fff',
@@ -1689,9 +1799,100 @@ const SimulatorPage = () => {
   const [activeSubTab, setActiveSubTab] = useState('profile'); // 'profile' (2D reservoir) or 'uq' (Sensitivity & UQ Analysis)
   const [selectedPreset, setSelectedPreset] = useState('default');
   const [shareStatus, setShareStatus] = useState('');
+  const [mobilePanel, setMobilePanel] = useState(null);
+  const [responsivePanelViewport, setResponsivePanelViewport] = useState(() => ({
+    mobile: window.matchMedia('(max-width: 760px)').matches,
+    compact: window.matchMedia('(max-width: 1180px)').matches
+  }));
   const tabRefs = useRef({});
+  const mobileTriggerRefs = useRef({});
+  const mobileCloseRefs = useRef({});
+  const mobileTriggersRef = useRef(null);
   const reservoirSvgRef = useRef(null);
   const uqWorkerRef = useRef(null);
+  const presentedPanel = selectPresentedMobilePanel(mobilePanel, responsivePanelViewport);
+  const dismissMobilePanel = useCallback((returnFocus = true) => {
+    if (!mobilePanel) return;
+    const closingPanel = mobilePanel;
+    setMobilePanel(null);
+    if (returnFocus) requestAnimationFrame(() => focusMobilePanelTrigger(closingPanel, mobileTriggerRefs.current));
+  }, [mobilePanel]);
+  const handleMobilePanelToggle = panel => {
+    if (mobilePanel === panel) dismissMobilePanel();else setMobilePanel(toggleMobilePanel(mobilePanel, panel));
+  };
+  useEffect(() => {
+    const mobileQuery = window.matchMedia('(max-width: 760px)');
+    const compactQuery = window.matchMedia('(max-width: 1180px)');
+    const updateViewport = () => setResponsivePanelViewport({
+      mobile: mobileQuery.matches,
+      compact: compactQuery.matches
+    });
+    mobileQuery.addEventListener('change', updateViewport);
+    compactQuery.addEventListener('change', updateViewport);
+    return () => {
+      mobileQuery.removeEventListener('change', updateViewport);
+      compactQuery.removeEventListener('change', updateViewport);
+    };
+  }, []);
+  useEffect(() => {
+    if (mobilePanel && !presentedPanel) setMobilePanel(null);
+  }, [mobilePanel, presentedPanel]);
+  useEffect(() => {
+    if (!presentedPanel) return undefined;
+    const releaseScroll = lockPageScroll(document);
+    const activeRail = document.getElementById(`ve-${presentedPanel}-rail`);
+    const backgroundElements = [document.querySelector('.app-header--workbench'), document.querySelector('.ve-scenario-bar'), document.querySelector('.ve-workspace-nav'), document.querySelector('.ve-action-status'), document.querySelector('.ve-visualization-workspace'), document.querySelector('.ve-history-sheet'), document.querySelector(presentedPanel === 'inputs' ? '.ve-outcome-rail' : '.ve-input-rail')];
+    setMobilePanelBackgroundInert(backgroundElements, true);
+    const getFocusableElements = () => [...(mobileTriggersRef.current?.querySelectorAll('button:not([disabled])') || []), ...(activeRail?.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [contenteditable="true"], [tabindex]:not([tabindex="-1"])') || [])].filter(element => element.getClientRects().length > 0);
+    const handleSheetKeys = event => {
+      if (event.key === 'Escape') {
+        dismissMobilePanel();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const wrapTarget = getMobileFocusWrapTarget(getFocusableElements(), document.activeElement, event.shiftKey);
+      if (wrapTarget) {
+        event.preventDefault();
+        wrapTarget.focus();
+      }
+    };
+    window.addEventListener('keydown', handleSheetKeys);
+    requestAnimationFrame(() => {
+      const closeButton = mobileCloseRefs.current[presentedPanel];
+      if (closeButton) closeButton.focus();
+    });
+    return () => {
+      window.removeEventListener('keydown', handleSheetKeys);
+      setMobilePanelBackgroundInert(backgroundElements, false);
+      releaseScroll();
+    };
+  }, [presentedPanel, dismissMobilePanel]);
+  const handleWorkspaceChange = workspace => {
+    if (mobilePanel) dismissMobilePanel(false);
+    setActiveSubTab(workspace);
+  };
+  const scenarioSignature = useMemo(() => createScenarioSignature({
+    K,
+    porosity,
+    cellCount,
+    residualTrapFraction,
+    dipPercent,
+    amplitude,
+    frequency,
+    faultOffset,
+    Q,
+    injLocation,
+    wellY,
+    mapCols,
+    injDuration,
+    faultCount,
+    faults,
+    hasCapillaryFringe,
+    fringeScale,
+    entryPressure
+  }), [K, porosity, cellCount, residualTrapFraction, dipPercent, amplitude, frequency, faultOffset, Q, injLocation, wellY, mapCols, injDuration, faultCount, faults, hasCapillaryFringe, fringeScale, entryPressure]);
+  const lastRunSignatureRef = useRef(scenarioSignature);
+  const mapLastRunSignatureRef = useRef(scenarioSignature);
 
   // SA/UQ uncertainty bounds configuration states (default +/- percentages)
   // --- UQ / SA PARAMETER SELECTION CONFIG ---
@@ -1802,6 +2003,19 @@ const SimulatorPage = () => {
     mobile: 0,
     leaked: 0
   });
+  const [mapSnapshot, setMapSnapshot] = useState({
+    time: 0,
+    masses: {
+      injected: 0,
+      trapped: 0,
+      mobile: 0,
+      leaked: 0
+    },
+    history: [],
+    isRunning: false,
+    speed: 1
+  });
+  const [mapCommand, setMapCommand] = useState(null);
 
   // Reset flag / state synchronizer
   const stateRef = useRef({
@@ -1913,6 +2127,35 @@ const SimulatorPage = () => {
       params: snapshotParams()
     }];
   };
+  const handleRunScenario = () => {
+    resetSimulation();
+    lastRunSignatureRef.current = scenarioSignature;
+    setIsPlaying(true);
+  };
+  const sendMapCommand = type => setMapCommand(previous => ({
+    type,
+    id: (previous?.id || 0) + 1
+  }));
+  const consumeMapCommandOnce = useCallback(handledId => {
+    setMapCommand(current => consumeMapCommand(current, handledId));
+  }, []);
+  const resetActiveSimulation = () => activeSubTab === 'map' ? sendMapCommand('reset') : resetSimulation();
+  const runActiveSimulation = () => {
+    if (activeSubTab !== 'map') {
+      handleRunScenario();
+      return;
+    }
+    mapLastRunSignatureRef.current = scenarioSignature;
+    sendMapCommand('run');
+  };
+  const crossSectionRunStatus = deriveRunStatus({
+    isPlaying,
+    isReversing,
+    scenarioSignature,
+    lastRunSignature: lastRunSignatureRef.current,
+    simTime
+  });
+  const runStatus = activeSubTab === 'map' ? deriveMapRunStatus(mapSnapshot, scenarioSignature, mapLastRunSignatureRef.current) : crossSectionRunStatus;
 
   // Preset Scenario Handlers
   const applyPreset = presetName => {
@@ -2064,21 +2307,24 @@ const SimulatorPage = () => {
     Object.entries(values).forEach(([key, value]) => url.searchParams.set(key, String(value)));
     return url.toString();
   };
-  const copyScenarioLink = () => {
+  const copyScenarioLink = async () => {
     const url = scenarioUrl();
     window.history.replaceState({
       simulator: true
     }, '', url);
-    setShareStatus('Scenario link copied');
-    if (navigator.clipboard) navigator.clipboard.writeText(url).catch(() => {
+    const copied = await copyTextToClipboard(url, navigator.clipboard, text => {
       const field = document.createElement('textarea');
-      field.value = url;
+      field.value = text;
       document.body.appendChild(field);
       field.select();
-      document.execCommand('copy');
-      field.remove();
+      try {
+        return document.execCommand('copy');
+      } finally {
+        field.remove();
+      }
     });
-    setTimeout(() => setShareStatus(''), 2400);
+    setShareStatus(copied ? 'Scenario link copied' : 'Scenario link copy failed. Please retry.');
+    setTimeout(() => setShareStatus(''), copied ? 2400 : 3200);
   };
   const downloadBlob = (blob, filename) => {
     const link = document.createElement('a');
@@ -2096,12 +2342,16 @@ const SimulatorPage = () => {
     }), 've-simulator-mass-balance.csv');
   };
   const exportSvg = () => {
-    if (!reservoirSvgRef.current) return;
+    if (!reservoirSvgRef.current) throw new Error('Reservoir figure is unavailable');
     const markup = new XMLSerializer().serializeToString(reservoirSvgRef.current);
     downloadBlob(new Blob([markup], {
       type: 'image/svg+xml;charset=utf-8'
     }), 've-simulator-reservoir.svg');
   };
+  const runFileAction = (action, failureMessage) => executeFileAction(action, () => {
+    setShareStatus(failureMessage);
+    setTimeout(() => setShareStatus(''), 3200);
+  });
 
   // Geometry helpers accept an optional params object `p` so Monte Carlo
   // realizations can vary dip/amplitude/faultOffset/faults independently of
@@ -2372,26 +2622,31 @@ const SimulatorPage = () => {
   const handleTabKeys = e => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
-    const idx = SIM_TABS.indexOf(activeSubTab);
-    const dir = e.key === 'ArrowRight' ? 1 : SIM_TABS.length - 1;
-    const next = SIM_TABS[(idx + dir) % SIM_TABS.length];
+    const idx = VISUALIZATION_TABS.indexOf(activeSubTab);
+    const dir = e.key === 'ArrowRight' ? 1 : VISUALIZATION_TABS.length - 1;
+    const next = VISUALIZATION_TABS[(idx + dir) % VISUALIZATION_TABS.length];
     setActiveSubTab(next);
     requestAnimationFrame(() => tabRefs.current[next] && tabRefs.current[next].focus());
   };
 
   // Play controls toggles
   const handlePlayToggle = () => {
-    if (isReversing) {
-      setIsReversing(false);
-    }
-    if (!isPlaying) {
-      if (simTime < historyRef.current.length - 1) {
-        commitBranch();
-      }
-      setIsPlaying(true);
-    } else {
+    if (isReversing) setIsReversing(false);
+    const action = getPlaybackAction({
+      isPlaying,
+      simTime,
+      scenarioChanged: scenarioSignature !== lastRunSignatureRef.current
+    });
+    if (action === 'pause') {
       setIsPlaying(false);
+      return;
     }
+    if (action === 'run-scenario') {
+      handleRunScenario();
+      return;
+    }
+    if (simTime < historyRef.current.length - 1) commitBranch();
+    setIsPlaying(true);
   };
   const handlePlayReverseToggle = () => {
     if (isPlaying) {
@@ -3342,7 +3597,7 @@ const SimulatorPage = () => {
   }, [cellCount, dipPercent, amplitude, frequency, faultOffset, faultCount, faults]);
 
   // --- Dynamic SVG Chart Drawing ---
-  const renderSVGChart = () => {
+  const renderSVGChart = (chartMasses, chartHistory, chartTime) => {
     const width = 450;
     const height = 210;
     const padding = {
@@ -3351,7 +3606,7 @@ const SimulatorPage = () => {
       top: 15,
       bottom: 25
     };
-    const maxVal = Math.max(10, Math.max(currentMasses.injected, currentMasses.mobile + currentMasses.trapped + currentMasses.leaked) * 1.08);
+    const maxVal = Math.max(10, Math.max(chartMasses.injected, chartMasses.mobile + chartMasses.trapped + chartMasses.leaked) * 1.08);
 
     // Scale helper
     const getX = t => padding.left + t / 1000.0 * (width - padding.left - padding.right);
@@ -3360,13 +3615,13 @@ const SimulatorPage = () => {
       pathTrap = "",
       pathMob = "",
       pathLeak = "";
-    if (massHistory.length > 0) {
-      pathInj = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].injected)}`;
-      pathTrap = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].trapped)}`;
-      pathMob = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].mobile)}`;
-      pathLeak = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].leaked)}`;
-      for (let idx = 1; idx < massHistory.length; idx++) {
-        const pt = massHistory[idx];
+    if (chartHistory.length > 0) {
+      pathInj = `M ${getX(chartHistory[0].time)} ${getY(chartHistory[0].injected)}`;
+      pathTrap = `M ${getX(chartHistory[0].time)} ${getY(chartHistory[0].trapped)}`;
+      pathMob = `M ${getX(chartHistory[0].time)} ${getY(chartHistory[0].mobile)}`;
+      pathLeak = `M ${getX(chartHistory[0].time)} ${getY(chartHistory[0].leaked)}`;
+      for (let idx = 1; idx < chartHistory.length; idx++) {
+        const pt = chartHistory[idx];
         pathInj += ` L ${getX(pt.time)} ${getY(pt.injected)}`;
         pathTrap += ` L ${getX(pt.time)} ${getY(pt.trapped)}`;
         pathMob += ` L ${getX(pt.time)} ${getY(pt.mobile)}`;
@@ -3411,7 +3666,7 @@ const SimulatorPage = () => {
         color: '#fff',
         fontFamily: 'monospace'
       }
-    }, Math.round(currentMasses.injected), " kt")), /*#__PURE__*/React.createElement("span", {
+    }, formatMass(chartMasses.injected))), /*#__PURE__*/React.createElement("span", {
       style: {
         display: 'inline-flex',
         alignItems: 'center',
@@ -3432,7 +3687,7 @@ const SimulatorPage = () => {
         color: '#64ffda',
         fontFamily: 'monospace'
       }
-    }, Math.round(currentMasses.mobile), " kt")), /*#__PURE__*/React.createElement("span", {
+    }, formatMass(chartMasses.mobile))), /*#__PURE__*/React.createElement("span", {
       style: {
         display: 'inline-flex',
         alignItems: 'center',
@@ -3453,7 +3708,7 @@ const SimulatorPage = () => {
         color: '#3ca68e',
         fontFamily: 'monospace'
       }
-    }, Math.round(currentMasses.trapped), " kt")), /*#__PURE__*/React.createElement("span", {
+    }, formatMass(chartMasses.trapped))), /*#__PURE__*/React.createElement("span", {
       style: {
         display: 'inline-flex',
         alignItems: 'center',
@@ -3474,7 +3729,7 @@ const SimulatorPage = () => {
         color: '#ff6b6b',
         fontFamily: 'monospace'
       }
-    }, Math.round(currentMasses.leaked), " kt"))), /*#__PURE__*/React.createElement("svg", {
+    }, formatMass(chartMasses.leaked)))), /*#__PURE__*/React.createElement("svg", {
       role: "img",
       "aria-labelledby": "mass-chart-title mass-chart-desc",
       width: "100%",
@@ -3487,7 +3742,7 @@ const SimulatorPage = () => {
       }
     }, /*#__PURE__*/React.createElement("title", {
       id: "mass-chart-title"
-    }, "CO\u2082 mass balance through year ", simTime), /*#__PURE__*/React.createElement("desc", {
+    }, "CO\u2082 mass balance through year ", chartTime), /*#__PURE__*/React.createElement("desc", {
       id: "mass-chart-desc"
     }, "Line chart of injected, mobile, trapped, and leaked model mass over simulation time."), [0.25, 0.5, 0.75, 1.0].map((ratio, i) => {
       const val = maxVal * ratio;
@@ -3547,16 +3802,16 @@ const SimulatorPage = () => {
       stroke: "#ff6b6b",
       strokeWidth: "2"
     }), /*#__PURE__*/React.createElement("line", {
-      x1: getX(simTime),
+      x1: getX(chartTime),
       y1: padding.top,
-      x2: getX(simTime),
+      x2: getX(chartTime),
       y2: height - padding.bottom,
       stroke: "#64ffda",
       strokeWidth: "1.2",
       strokeDasharray: "2 2",
       opacity: "0.8"
     }), /*#__PURE__*/React.createElement("circle", {
-      cx: getX(simTime),
+      cx: getX(chartTime),
       cy: padding.top,
       r: "3",
       fill: "#64ffda"
@@ -3576,23 +3831,24 @@ const SimulatorPage = () => {
       strokeWidth: "1"
     })), /*#__PURE__*/React.createElement("table", {
       className: "sr-only"
-    }, /*#__PURE__*/React.createElement("caption", null, "Current CO\u2082 mass balance at year ", simTime), /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Injected"), /*#__PURE__*/React.createElement("th", null, "Mobile"), /*#__PURE__*/React.createElement("th", null, "Trapped"), /*#__PURE__*/React.createElement("th", null, "Leaked"))), /*#__PURE__*/React.createElement("tbody", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, currentMasses.injected), /*#__PURE__*/React.createElement("td", null, currentMasses.mobile), /*#__PURE__*/React.createElement("td", null, currentMasses.trapped), /*#__PURE__*/React.createElement("td", null, currentMasses.leaked)))));
+    }, /*#__PURE__*/React.createElement("caption", null, "Current CO\u2082 mass balance at year ", chartTime), /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Injected"), /*#__PURE__*/React.createElement("th", null, "Mobile"), /*#__PURE__*/React.createElement("th", null, "Trapped"), /*#__PURE__*/React.createElement("th", null, "Leaked"))), /*#__PURE__*/React.createElement("tbody", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, chartMasses.injected), /*#__PURE__*/React.createElement("td", null, chartMasses.mobile), /*#__PURE__*/React.createElement("td", null, chartMasses.trapped), /*#__PURE__*/React.createElement("td", null, chartMasses.leaked)))));
   };
+  const activeResults = selectActiveResults(activeSubTab, {
+    time: simTime,
+    masses: currentMasses,
+    history: massHistory
+  }, mapSnapshot);
+  const activeTime = activeResults.time;
+  const activeMasses = activeResults.masses;
+  const activeMassHistory = activeResults.history;
   return /*#__PURE__*/React.createElement("div", {
     className: "simulator-page-wrapper",
-    style: {
-      padding: '110px 4% 60px',
-      minHeight: '100vh',
-      background: '#130d1c',
-      color: '#fff',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 25,
-      transition: 'padding-left 0.3s ease-in-out',
-      paddingLeft: sidebarOpen && activeSubTab === 'profile' ? '360px' : '4%'
-    }
-  }, sidebarOpen && activeSubTab === 'profile' && /*#__PURE__*/React.createElement("div", {
-    className: "time-travel-sidebar open"
+    role: presentedPanel ? 'dialog' : undefined,
+    "aria-modal": presentedPanel ? 'true' : undefined,
+    "aria-label": presentedPanel ? `${presentedPanel === 'inputs' ? 'Inputs' : 'Outcomes'} panel` : undefined
+  }, sidebarOpen && activeSubTab === 'profile' && /*#__PURE__*/React.createElement("aside", {
+    className: "ve-history-sheet",
+    "aria-label": "Simulation timeline"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
@@ -3685,6 +3941,7 @@ const SimulatorPage = () => {
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => {
         commitBranch();
+        lastRunSignatureRef.current = scenarioSignature;
         handlePlayToggle();
       },
       style: {
@@ -3700,7 +3957,7 @@ const SimulatorPage = () => {
         alignItems: 'center',
         justifyContent: 'center',
         gap: 6,
-        transition: 'all 0.2s ease'
+        transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1)'
       }
     }, /*#__PURE__*/React.createElement("i", {
       className: "fas fa-code-branch"
@@ -3719,7 +3976,7 @@ const SimulatorPage = () => {
         alignItems: 'center',
         justifyContent: 'center',
         gap: 6,
-        transition: 'all 0.2s ease'
+        transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1)'
       }
     }, /*#__PURE__*/React.createElement("i", {
       className: "fas fa-fast-forward"
@@ -3972,7 +4229,7 @@ const SimulatorPage = () => {
           border: `2px solid ${isCurrent ? '#fff' : 'transparent'}`,
           boxShadow: isCurrent ? '0 0 6px #0dfca2' : 'none',
           zIndex: 2,
-          transition: 'all 0.2s ease',
+          transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center'
@@ -3987,296 +4244,312 @@ const SimulatorPage = () => {
       }, "Year ", m, " ", isCurrent && '\u2190'));
     }))));
   })()), /*#__PURE__*/React.createElement("style", null, `
-        .simulator-layout {
-          display: grid;
-          grid-template-columns: 1.40fr 1fr;
-          gap: 25px;
-          align-items: start;
-          min-width: 0;
-        }
-        .simulator-layout > *, .controls-subgrid > * { min-width: 0; }
         .sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-        .controls-subgrid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
-        }
-        .time-travel-sidebar {
-          position: fixed;
-          top: 0;
-          left: 0;
-          height: 100vh;
-          width: 330px;
-          background: linear-gradient(135deg, rgba(25, 18, 38, 0.96) 0%, rgba(16, 20, 38, 0.96) 100%);
-          border-right: 1px solid rgba(100, 255, 218, 0.18);
-          box-shadow: 8px 0 32px rgba(0,0,0,0.5);
-          backdrop-filter: blur(15px);
-          z-index: 1000;
-          transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          display: flex;
-          flex-direction: column;
-          padding: 100px 22px 30px;
-        }
-        .time-travel-sidebar.closed {
-          transform: translateX(-100%);
-        }
-        .time-travel-sidebar.open {
-          transform: translateX(0);
-        }
-        @media (max-width: 1100px) {
-          .simulator-layout {
-            grid-template-columns: 1fr;
-          }
-        }
         @media (max-width: 768px) {
-          .simulator-page-wrapper {
-            padding: 94px 12px 40px !important;
-            max-width: 100vw;
-            overflow: hidden;
-          }
-          .controls-subgrid {
-            grid-template-columns: 1fr;
-          }
-          .simulator-page-wrapper {
-            padding-left: 4% !important;
-          }
-          .time-travel-sidebar {
-            width: min(330px, 92vw);
-            padding-top: 90px;
-          }
-          .sim-title-row { align-items: stretch !important; }
-          .sim-title-row { order: 1; }
-          .simulator-layout { order: 2; }
-          .sim-evidence-grid { order: 3; }
           .sim-tab-header { overflow-x: auto; align-items: stretch !important; }
           .sim-tab-header [role="tablist"] { min-width: max-content; }
           .sim-tab-status { display: none; }
           .sim-hud-legend { max-width: calc(100% - 16px); overflow-x: auto; right: 8px !important; top: 8px !important; white-space: nowrap; }
           .sim-playback { left: 8px !important; right: 8px !important; gap: 7px !important; padding: 8px 10px !important; }
           .sim-playback input[type="range"] { min-width: 48px; }
-          .sim-evidence-grid, .uq-config-grid, .uq-results-grid, .uq-percentile-grid { grid-template-columns: 1fr !important; }
+          .uq-config-grid, .uq-results-grid, .uq-percentile-grid { grid-template-columns: 1fr !important; }
           .sim-stat-grid { grid-template-columns: repeat(2, 1fr) !important; }
           .control-panel > summary { cursor: pointer; }
         }
-      `), /*#__PURE__*/React.createElement("div", {
-    className: "sim-title-row",
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      flexWrap: 'wrap',
-      gap: 20
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      letterSpacing: '0.20em',
-      textTransform: 'uppercase',
-      color: '#64ffda',
-      fontWeight: 600,
-      marginBottom: 6
-    }
-  }, "Interactive Numerical Simulator"), /*#__PURE__*/React.createElement("h1", {
-    style: {
-      margin: 0,
-      fontSize: 'clamp(28px, 4vw, 38px)',
-      fontFamily: "'Montserrat', sans-serif",
-      fontWeight: 700,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 15,
-      flexWrap: 'wrap'
-    }
-  }, "VE Gravity Tongue Simulator", activeSubTab === 'profile' && /*#__PURE__*/React.createElement("button", {
-    onClick: () => setSidebarOpen(!sidebarOpen),
-    style: {
-      background: sidebarOpen ? 'rgba(100, 255, 218, 0.25)' : 'rgba(100, 255, 218, 0.1)',
-      border: `1px solid ${sidebarOpen ? '#64ffda' : 'rgba(100, 255, 218, 0.3)'}`,
-      color: '#64ffda',
-      padding: '6px 12px',
-      borderRadius: '8px',
-      fontSize: '11px',
-      cursor: 'pointer',
-      fontWeight: 600,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 6,
-      transition: 'all 0.2s ease'
-    },
-    title: "Toggle timeline sidebar"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-history"
-  }), " ", sidebarOpen ? 'Close Timeline' : 'Timeline')), /*#__PURE__*/React.createElement("p", {
-    style: {
-      margin: '8px 0 0',
-      color: 'rgba(255,255,255,0.65)',
-      fontSize: 13.5,
-      maxWidth: 680
-    }
-  }, "Explore an educational finite-volume Vertical Equilibrium model. Adjust caprock structure, rock properties, injection, and simplified fault behavior in real time."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: 9,
-      marginTop: 12
-    }
+      `), /*#__PURE__*/React.createElement("section", {
+    className: "ve-scenario-bar",
+    "aria-label": "Scenario controls"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "ve-presets",
+    "aria-label": "Reservoir presets"
+  }, [['default', 'Default'], ['dome', 'Anticline'], ['faulted', 'Faulted trap'], ['monocline', 'Dipping layer']].map(([id, label]) => /*#__PURE__*/React.createElement("button", {
+    key: id,
+    className: selectedPreset === id ? 'is-active' : '',
+    onClick: () => applyPreset(id)
+  }, label))), /*#__PURE__*/React.createElement("span", {
+    className: `ve-run-status ve-run-status--${runStatus.toLowerCase().replace(/\s+/g, '-')}`,
+    role: "status"
+  }, runStatus), /*#__PURE__*/React.createElement("button", {
+    onClick: resetActiveSimulation
+  }, "Reset"), /*#__PURE__*/React.createElement("button", {
+    onClick: copyScenarioLink
+  }, "Copy scenario link"), /*#__PURE__*/React.createElement("details", {
+    className: "ve-export-menu"
+  }, /*#__PURE__*/React.createElement("summary", null, "Export"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => runFileAction(exportCsv, 'Mass balance export failed. Please retry.')
+  }, "Mass balance CSV"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => runFileAction(exportSvg, 'Reservoir export failed. Please retry.')
+  }, "Reservoir SVG")), /*#__PURE__*/React.createElement("button", {
+    className: "ve-run-button",
+    onClick: runActiveSimulation
+  }, "Run scenario")), /*#__PURE__*/React.createElement("nav", {
+    className: "ve-workspace-nav",
+    "aria-label": "Simulator workspace"
   }, /*#__PURE__*/React.createElement("button", {
-    onClick: copyScenarioLink,
-    style: {
-      background: '#64ffda',
-      color: '#10251f',
-      border: 0,
-      borderRadius: 8,
-      padding: '8px 12px',
-      fontWeight: 700,
-      cursor: 'pointer'
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-link"
-  }), " Copy Scenario Link"), activeSubTab === 'profile' && /*#__PURE__*/React.createElement("button", {
-    onClick: exportCsv,
-    style: {
-      background: 'rgba(255,255,255,0.08)',
-      color: '#fff',
-      border: '1px solid rgba(255,255,255,0.18)',
-      borderRadius: 8,
-      padding: '8px 12px',
-      cursor: 'pointer'
-    }
-  }, "Export CSV"), activeSubTab === 'profile' && /*#__PURE__*/React.createElement("button", {
-    onClick: exportSvg,
-    style: {
-      background: 'rgba(255,255,255,0.08)',
-      color: '#fff',
-      border: '1px solid rgba(255,255,255,0.18)',
-      borderRadius: 8,
-      padding: '8px 12px',
-      cursor: 'pointer'
-    }
-  }, "Export SVG"), /*#__PURE__*/React.createElement("a", {
-    href: "mailto:st4014@hw.ac.uk?subject=VE%20simulator%20enquiry",
-    style: {
-      color: '#64ffda',
-      padding: '8px 4px'
-    }
-  }, "Contact the researcher"), /*#__PURE__*/React.createElement("span", {
+    "aria-current": VISUALIZATION_TABS.includes(activeSubTab) ? 'page' : undefined,
+    onClick: () => handleWorkspaceChange('profile')
+  }, "Simulator"), /*#__PURE__*/React.createElement("button", {
+    "aria-current": activeSubTab === 'uq' ? 'page' : undefined,
+    onClick: () => handleWorkspaceChange('uq')
+  }, "Risk analysis"), /*#__PURE__*/React.createElement("button", {
+    "aria-current": activeSubTab === 'guide' ? 'page' : undefined,
+    onClick: () => handleWorkspaceChange('guide')
+  }, "Methodology")), /*#__PURE__*/React.createElement("span", {
+    className: "ve-action-status",
     role: "status",
-    "aria-live": "polite",
-    style: {
-      color: '#64ffda',
-      fontSize: 12,
-      alignSelf: 'center'
-    }
-  }, shareStatus))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 6,
-      background: 'rgba(255,255,255,0.03)',
-      border: '1px solid rgba(255,255,255,0.06)',
-      padding: '10px 14px',
-      borderRadius: 14,
-      backdropFilter: 'blur(8px)'
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 9.5,
-      letterSpacing: '0.12em',
-      textTransform: 'uppercase',
-      color: 'rgba(255,255,255,0.5)',
-      fontWeight: 600
-    }
-  }, "Synthetic Reservoir Cases"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 8,
-      flexWrap: 'wrap'
-    }
-  }, [{
-    id: 'default',
-    label: 'Default Case',
-    icon: 'fa-project-diagram'
-  }, {
-    id: 'dome',
-    label: 'Anticline Dome',
-    icon: 'fa-mountain'
-  }, {
-    id: 'faulted',
-    label: 'Faulted Trap',
-    icon: 'fa-bolt'
-  }, {
-    id: 'monocline',
-    label: 'Dipping Layer',
-    icon: 'fa-sliders'
-  }].map(p => /*#__PURE__*/React.createElement("button", {
-    key: p.id,
-    onClick: () => applyPreset(p.id),
-    style: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 6,
-      background: 'rgba(255,255,255,0.06)',
-      border: '1px solid rgba(255,255,255,0.12)',
-      color: 'azure',
-      padding: '6px 12px',
-      borderRadius: 8,
-      fontSize: 11.5,
-      fontWeight: 500,
-      cursor: 'pointer',
-      transition: 'all 0.3s ease'
-    }
+    "aria-live": "polite"
+  }, shareStatus), VISUALIZATION_TABS.includes(activeSubTab) && /*#__PURE__*/React.createElement("div", {
+    ref: mobileTriggersRef,
+    className: "ve-mobile-panel-triggers",
+    role: "group",
+    "aria-label": "Workbench panels",
+    "data-panel-open": Boolean(presentedPanel)
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    ref: element => {
+      mobileTriggerRefs.current.inputs = element;
+    },
+    "aria-controls": "ve-input-rail",
+    "aria-expanded": presentedPanel === 'inputs',
+    onClick: () => handleMobilePanelToggle('inputs')
   }, /*#__PURE__*/React.createElement("i", {
-    className: `fas ${p.icon}`,
-    style: {
-      fontSize: 9.5,
-      color: '#64ffda'
-    }
-  }), " ", p.label))))), /*#__PURE__*/React.createElement("div", {
-    className: "sim-evidence-grid",
-    style: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(4, 1fr)',
-      gap: 10
-    }
-  }, [['Problem', 'Full-field CO₂ storage forecasts can be computationally expensive.'], ['Method', 'Vertical integration represents large-scale migration through plume height.'], ['Evidence', 'The research model is benchmarked against higher-resolution compositional cases.'], ['Impact', 'Fast screening supports uncertainty analysis and scenario comparison.']].map(([label, body]) => /*#__PURE__*/React.createElement("div", {
-    key: label,
-    style: {
-      padding: 12,
-      borderRadius: 12,
-      background: 'rgba(255,255,255,0.035)',
-      border: '1px solid rgba(255,255,255,0.07)',
-      fontSize: 11.5,
-      lineHeight: 1.45
-    }
-  }, /*#__PURE__*/React.createElement("strong", {
-    style: {
-      display: 'block',
-      color: '#64ffda',
-      marginBottom: 4
-    }
-  }, label), body)), /*#__PURE__*/React.createElement("a", {
-    href: "https://doi.org/10.31223/X5P49D",
-    target: "_blank",
-    rel: "noreferrer",
-    style: {
-      gridColumn: '1 / -1',
-      color: '#64ffda',
-      fontSize: 12
-    }
-  }, "Read the associated EarthArXiv preprint ", /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-external-link-alt"
-  }))), /*#__PURE__*/React.createElement("div", {
-    className: "simulator-layout",
-    style: activeSubTab === 'map' ? {
-      gridTemplateColumns: '1fr'
-    } : undefined
+    className: "fas fa-sliders-h",
+    "aria-hidden": "true"
+  }), " Inputs"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    ref: element => {
+      mobileTriggerRefs.current.outcomes = element;
+    },
+    "aria-controls": "ve-outcome-rail",
+    "aria-expanded": presentedPanel === 'outcomes',
+    onClick: () => handleMobilePanelToggle('outcomes')
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-chart-line",
+    "aria-hidden": "true"
+  }), " Outcomes")), presentedPanel && VISUALIZATION_TABS.includes(activeSubTab) && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "ve-mobile-panel-backdrop",
+    tabIndex: -1,
+    "aria-label": `Close ${presentedPanel} panel`,
+    onClick: () => dismissMobilePanel()
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "ve-workbench",
+    "data-workspace": activeSubTab
+  }, /*#__PURE__*/React.createElement(InputRail, {
+    "data-mobile-open": presentedPanel === 'inputs',
+    inert: presentedPanel === 'outcomes' ? '' : undefined,
+    closeRef: element => {
+      mobileCloseRefs.current.inputs = element;
+    },
+    onClose: dismissMobilePanel
   }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 20
-    }
+    className: "ve-rail-heading"
+  }, /*#__PURE__*/React.createElement("h2", null, "Scenario inputs")), /*#__PURE__*/React.createElement("section", {
+    className: "ve-input-group"
+  }, /*#__PURE__*/React.createElement("h3", null, "Injection"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Flow rate (Q)",
+    unit: "kt/yr",
+    min: 0,
+    max: 3.5,
+    step: 0.1,
+    value: Q,
+    onChange: setQ
+  }), /*#__PURE__*/React.createElement(ParameterField, {
+    label: activeSubTab === 'map' ? 'Well X location' : 'Well location',
+    unit: "%",
+    min: 10,
+    max: 90,
+    step: 5,
+    value: injLocation,
+    onChange: setInjLocation
+  }), /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Injection stop year",
+    unit: "y",
+    min: 50,
+    max: 400,
+    step: 10,
+    value: injDuration,
+    onChange: setInjDuration
+  }))), /*#__PURE__*/React.createElement("section", {
+    className: "ve-input-group"
+  }, /*#__PURE__*/React.createElement("h3", null, "Rock properties"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Permeability (K)",
+    unit: "\xD710\xB3 mD",
+    min: 0.1,
+    max: 3.5,
+    step: 0.1,
+    value: K,
+    onChange: setK
+  }), /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Porosity (\u03C6)",
+    unit: "fraction",
+    min: 0.1,
+    max: 0.4,
+    step: 0.05,
+    value: porosity,
+    onChange: setPorosity
+  }), /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Residual trap (Sgr)",
+    unit: "fraction",
+    min: 0,
+    max: 0.4,
+    step: 0.05,
+    value: residualTrapFraction,
+    onChange: setResidualTrapFraction
+  }))), /*#__PURE__*/React.createElement("section", {
+    className: "ve-input-group"
+  }, /*#__PURE__*/React.createElement("h3", null, "Structure"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Regional dip",
+    unit: "%",
+    min: -5,
+    max: 5,
+    step: 0.5,
+    value: dipPercent,
+    onChange: setDipPercent
+  }), /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Anticline height",
+    unit: "px",
+    min: 0,
+    max: 50,
+    step: 5,
+    value: amplitude,
+    onChange: setAmplitude
+  }), /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Anticline count",
+    unit: "",
+    min: 0.5,
+    max: 4,
+    step: 0.5,
+    value: frequency,
+    onChange: setFrequency
+  }), /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Fault slip",
+    unit: "\xD7",
+    min: 0,
+    max: 3,
+    step: 0.2,
+    value: faultOffset,
+    onChange: setFaultOffset
+  }))), /*#__PURE__*/React.createElement("section", {
+    className: "ve-fault-section"
+  }, /*#__PURE__*/React.createElement("h3", null, "Faults"), /*#__PURE__*/React.createElement("div", {
+    className: "ve-fault-count"
+  }, /*#__PURE__*/React.createElement("span", null, "Active faults"), /*#__PURE__*/React.createElement("div", null, [0, 1, 2, 3].map(count => /*#__PURE__*/React.createElement("button", {
+    key: count,
+    className: faultCount === count ? 'is-active' : '',
+    onClick: () => setFaultCount(count)
+  }, count)))), faults.slice(0, faultCount).map((fault, index) => /*#__PURE__*/React.createElement("div", {
+    className: "ve-fault-editor",
+    key: index
   }, /*#__PURE__*/React.createElement("div", {
+    className: "ve-fault-heading"
+  }, /*#__PURE__*/React.createElement("strong", null, "Fault ", String.fromCharCode(65 + index)), /*#__PURE__*/React.createElement("label", null, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: fault.isSealed,
+    onChange: event => {
+      const next = [...faults];
+      next[index].isSealed = event.target.checked;
+      setFaults(next);
+    }
+  }), "Sealed")), /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Position",
+    unit: "%",
+    min: 10,
+    max: 90,
+    step: 5,
+    value: fault.xPercent,
+    onChange: value => {
+      const next = [...faults];
+      next[index].xPercent = value;
+      setFaults(next);
+    }
+  }), /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Capillary threshold",
+    unit: "m",
+    min: 0,
+    max: 2,
+    step: 0.1,
+    value: fault.thresholdHeight,
+    onChange: value => {
+      const next = [...faults];
+      next[index].thresholdHeight = value;
+      setFaults(next);
+    }
+  }), /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Horizontal transmissibility",
+    unit: "fraction",
+    min: 0,
+    max: 1,
+    step: 0.05,
+    value: fault.transmissibility ?? 1,
+    onChange: value => {
+      const next = [...faults];
+      next[index].transmissibility = value;
+      setFaults(next);
+    }
+  }), !fault.isSealed && /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Leakage rate",
+    unit: "scaled",
+    min: 0.01,
+    max: 0.4,
+    step: 0.02,
+    value: fault.leakRate,
+    onChange: value => {
+      const next = [...faults];
+      next[index].leakRate = value;
+      setFaults(next);
+    }
+  })))), /*#__PURE__*/React.createElement("section", {
+    className: "ve-input-group"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "ve-toggle-heading"
+  }, /*#__PURE__*/React.createElement("h3", null, "Capillary behavior"), /*#__PURE__*/React.createElement("label", null, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: hasCapillaryFringe,
+    onChange: event => setHasCapillaryFringe(event.target.checked)
+  }), " Enable fringe")), hasCapillaryFringe && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Fringe height (h_c)",
+    unit: "m",
+    min: 0.1,
+    max: 3,
+    step: 0.1,
+    value: fringeScale,
+    onChange: setFringeScale
+  }), /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Entry-pressure scale",
+    unit: "kPa",
+    min: 5,
+    max: 40,
+    step: 1,
+    value: entryPressure,
+    onChange: setEntryPressure
+  }))), /*#__PURE__*/React.createElement("section", {
+    className: "ve-input-group"
+  }, /*#__PURE__*/React.createElement("h3", null, "Grid detail"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Grid cells (N)",
+    unit: "cells",
+    min: 50,
+    max: 300,
+    step: 10,
+    value: cellCount,
+    onChange: setCellCount
+  }), activeSubTab === 'map' && /*#__PURE__*/React.createElement(ParameterField, {
+    label: "Well Y location",
+    unit: "%",
+    min: 10,
+    max: 90,
+    step: 5,
+    value: wellY,
+    onChange: setWellY
+  }), activeSubTab === 'map' && /*#__PURE__*/React.createElement(ParameterField, {
+    label: "2D grid resolution",
+    unit: "columns",
+    min: 24,
+    max: 80,
+    step: 8,
+    value: mapCols,
+    onChange: setMapCols
+  })))), /*#__PURE__*/React.createElement(VisualizationWorkspace, null, /*#__PURE__*/React.createElement("div", {
     className: "sim-reservoir-card",
     style: {
       background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
@@ -4329,8 +4602,7 @@ const SimulatorPage = () => {
       letterSpacing: '0.05em',
       textTransform: 'uppercase',
       cursor: 'pointer',
-      transition: 'all 0.2s ease',
-      outline: 'none'
+      transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease'
     }
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-project-diagram",
@@ -4358,73 +4630,14 @@ const SimulatorPage = () => {
       letterSpacing: '0.05em',
       textTransform: 'uppercase',
       cursor: 'pointer',
-      transition: 'all 0.2s ease',
-      outline: 'none'
+      transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease'
     }
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-map",
     style: {
       marginRight: 6
     }
-  }), " 2D Map"), /*#__PURE__*/React.createElement("button", {
-    ref: el => {
-      tabRefs.current.uq = el;
-    },
-    onClick: () => setActiveSubTab('uq'),
-    role: "tab",
-    id: "tab-uq",
-    "aria-selected": activeSubTab === 'uq',
-    "aria-controls": "tabpanel-uq",
-    tabIndex: activeSubTab === 'uq' ? 0 : -1,
-    style: {
-      background: activeSubTab === 'uq' ? 'rgba(100, 255, 218, 0.08)' : 'none',
-      border: 'none',
-      borderBottom: activeSubTab === 'uq' ? '2px solid #64ffda' : '2px solid transparent',
-      color: activeSubTab === 'uq' ? '#64ffda' : 'rgba(255,255,255,0.6)',
-      padding: '12px 16px',
-      fontSize: '11px',
-      fontWeight: 600,
-      letterSpacing: '0.05em',
-      textTransform: 'uppercase',
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-      outline: 'none'
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-chart-bar",
-    style: {
-      marginRight: 6
-    }
-  }), " Sensitivity & UQ"), /*#__PURE__*/React.createElement("button", {
-    ref: el => {
-      tabRefs.current.guide = el;
-    },
-    onClick: () => setActiveSubTab('guide'),
-    role: "tab",
-    id: "tab-guide",
-    "aria-selected": activeSubTab === 'guide',
-    "aria-controls": "tabpanel-guide",
-    tabIndex: activeSubTab === 'guide' ? 0 : -1,
-    style: {
-      background: activeSubTab === 'guide' ? 'rgba(100, 255, 218, 0.08)' : 'none',
-      border: 'none',
-      borderBottom: activeSubTab === 'guide' ? '2px solid #64ffda' : '2px solid transparent',
-      color: activeSubTab === 'guide' ? '#64ffda' : 'rgba(255,255,255,0.6)',
-      padding: '12px 16px',
-      fontSize: '11px',
-      fontWeight: 600,
-      letterSpacing: '0.05em',
-      textTransform: 'uppercase',
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-      outline: 'none'
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-book",
-    style: {
-      marginRight: 6
-    }
-  }), " PDE Methodology Guide")), /*#__PURE__*/React.createElement("div", {
+  }), " 2D Map")), /*#__PURE__*/React.createElement("div", {
     className: "sim-tab-status",
     style: {
       paddingRight: 8
@@ -4875,23 +5088,8 @@ const SimulatorPage = () => {
         offset: "100%",
         stopColor: "#222"
       })))), /*#__PURE__*/React.createElement("div", {
-        className: "sim-playback",
-        style: {
-          position: 'absolute',
-          bottom: 15,
-          left: '5%',
-          right: '5%',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 14,
-          padding: '8px 18px',
-          background: 'rgba(255,255,255,0.08)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          borderRadius: '30px',
-          backdropFilter: 'blur(10px)',
-          boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
-          zIndex: 10
-        }
+        className: "ve-playback-bar",
+        "aria-label": "Simulation playback"
       }, /*#__PURE__*/React.createElement("button", {
         onClick: handlePlayReverseToggle,
         "aria-label": isReversing ? 'Pause reverse playback' : 'Play backward',
@@ -4899,8 +5097,7 @@ const SimulatorPage = () => {
           background: 'none',
           border: 'none',
           color: isReversing ? '#ff6b6b' : '#64ffda',
-          cursor: 'pointer',
-          outline: 'none'
+          cursor: 'pointer'
         },
         title: isReversing ? "Pause Reverse" : "Reverse Play"
       }, /*#__PURE__*/React.createElement("i", {
@@ -4915,8 +5112,7 @@ const SimulatorPage = () => {
           background: 'none',
           border: 'none',
           color: isPlaying ? '#0dfca2' : '#64ffda',
-          cursor: 'pointer',
-          outline: 'none'
+          cursor: 'pointer'
         },
         title: isPlaying ? "Pause" : "Play Forward"
       }, /*#__PURE__*/React.createElement("i", {
@@ -4931,8 +5127,7 @@ const SimulatorPage = () => {
           background: 'none',
           border: 'none',
           color: 'rgba(255,255,255,0.6)',
-          cursor: 'pointer',
-          outline: 'none'
+          cursor: 'pointer'
         },
         title: "Step 1 Year Backward"
       }, /*#__PURE__*/React.createElement("i", {
@@ -4947,8 +5142,7 @@ const SimulatorPage = () => {
           background: 'none',
           border: 'none',
           color: 'rgba(255,255,255,0.6)',
-          cursor: 'pointer',
-          outline: 'none'
+          cursor: 'pointer'
         },
         title: "Step 1 Year Forward"
       }, /*#__PURE__*/React.createElement("i", {
@@ -4963,8 +5157,7 @@ const SimulatorPage = () => {
           background: 'none',
           border: 'none',
           color: 'rgba(255,255,255,0.6)',
-          cursor: 'pointer',
-          outline: 'none'
+          cursor: 'pointer'
         },
         title: "Reset Simulation"
       }, /*#__PURE__*/React.createElement("i", {
@@ -4972,7 +5165,10 @@ const SimulatorPage = () => {
         style: {
           fontSize: 11
         }
-      })), /*#__PURE__*/React.createElement("div", {
+      })), /*#__PURE__*/React.createElement("button", {
+        onClick: () => setSidebarOpen(true),
+        "aria-label": "Open simulation timeline"
+      }, "Timeline"), /*#__PURE__*/React.createElement("div", {
         style: {
           width: 1,
           height: 14,
@@ -4994,10 +5190,8 @@ const SimulatorPage = () => {
         onChange: e => handleScrub(parseInt(e.target.value)),
         style: {
           flex: 1,
-          height: 3,
           background: 'rgba(255,255,255,0.15)',
           borderRadius: 2,
-          outline: 'none',
           cursor: 'pointer',
           accentColor: '#64ffda'
         },
@@ -5016,946 +5210,398 @@ const SimulatorPage = () => {
           color: '#64ffda',
           cursor: 'pointer',
           fontSize: 10,
-          fontWeight: 'bold',
-          outline: 'none'
+          fontWeight: 'bold'
         }
       }, speed, "x")));
     } else if (activeSubTab === 'map') {
-      return /*#__PURE__*/React.createElement(Ve2DMapPanel, {
-        K: K,
-        porosity: porosity,
-        residualTrapFraction: residualTrapFraction,
-        dipPercent: dipPercent,
-        amplitude: amplitude,
-        frequency: frequency,
-        faultOffset: faultOffset,
-        Q: Q,
-        injLocation: injLocation,
-        injDuration: injDuration,
-        faultCount: faultCount,
-        faults: faults,
-        mapCols: mapCols,
-        wellY: wellY,
-        preset: selectedPreset
-      });
+      return null;
     } else if (activeSubTab === 'uq') {
-      return (
-        /*#__PURE__*/
-        /* Sensitivity & UQ Dashboard UI panel */
-        React.createElement("div", {
-          id: "tabpanel-uq",
-          role: "tabpanel",
-          "aria-labelledby": "tab-uq",
-          tabIndex: 0,
-          style: {
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            background: '#1c1626',
-            padding: '20px 25px',
-            gap: 20,
-            overflowY: 'auto',
-            minHeight: 450
-          }
-        }, /*#__PURE__*/React.createElement("div", {
-          className: "uq-config-grid",
-          style: {
-            display: 'grid',
-            gridTemplateColumns: '1.2fr 1fr 1fr',
-            gap: 20,
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(255,255,255,0.05)',
-            borderRadius: 14,
-            padding: 16
-          }
-        }, /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 10,
-            minWidth: 0
-          }
-        }, /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: 10,
-            color: 'rgba(255,255,255,0.4)',
-            textTransform: 'uppercase',
-            fontWeight: 'bold'
-          }
-        }, "Uncertainty Parameters"), /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: 9,
-            color: 'rgba(255,255,255,0.3)',
-            marginTop: -6
-          }
-        }, "Select parameters, then pick an absolute range, a \xB1% band, or discrete values."), /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 8,
-            maxHeight: 340,
-            overflowY: 'auto',
-            paddingRight: 4
-          }
-        }, UQ_PARAM_DEFS.filter(def => !(def.group === 'fault' && faultCount === 0)).filter(def => !(def.key === 'faultLeakRate' && !faults.slice(0, faultCount).some(f => !f.isSealed))).map(def => /*#__PURE__*/React.createElement(UQParamConfig, {
-          key: def.key,
-          def: def,
-          cfg: uqParams[def.key],
-          onChange: patch => updateUqParam(def.key, patch)
-        })))), /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12
-          }
-        }, /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: 10,
-            color: 'rgba(255,255,255,0.4)',
-            textTransform: 'uppercase',
-            fontWeight: 'bold'
-          }
-        }, "Simulation Settings"), /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 4
-          }
-        }, /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: 10.5,
-            color: 'rgba(255,255,255,0.7)'
-          }
-        }, "Monte Carlo Realizations:"), /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: 'flex',
-            gap: 4,
-            marginTop: 2
-          }
-        }, [25, 50, 100].map(cnt => /*#__PURE__*/React.createElement("button", {
-          key: cnt,
-          onClick: () => setMcRunsCount(cnt),
-          style: {
-            background: mcRunsCount === cnt ? 'rgba(100,255,218,0.2)' : 'rgba(255,255,255,0.05)',
-            border: `1px solid ${mcRunsCount === cnt ? '#64ffda' : 'rgba(255,255,255,0.12)'}`,
-            color: mcRunsCount === cnt ? '#64ffda' : 'azure',
-            padding: '4px 10px',
-            borderRadius: 6,
-            fontSize: 10.5,
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            outline: 'none'
-          }
-        }, cnt, " runs")))), /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 4
-          }
-        }, /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: 10.5,
-            color: 'rgba(255,255,255,0.7)'
-          }
-        }, "Target Storage Metric:"), /*#__PURE__*/React.createElement("select", {
-          value: uqTargetMetric,
-          onChange: e => setUqTargetMetric(e.target.value),
-          "aria-label": "Target storage metric",
-          style: {
-            background: 'rgba(0,0,0,0.3)',
-            border: '1px solid rgba(255,255,255,0.15)',
-            color: '#fff',
-            padding: '6px 10px',
-            borderRadius: 8,
-            fontSize: 11,
-            cursor: 'pointer',
-            outline: 'none'
-          }
-        }, /*#__PURE__*/React.createElement("option", {
-          value: "leaked"
-        }, "CO\\u2082 Leakage Mass (ktonnes)"), /*#__PURE__*/React.createElement("option", {
-          value: "trapped"
-        }, "Residual Trapping Efficiency (%)")))), /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 10
-          }
-        }, /*#__PURE__*/React.createElement("button", {
-          onClick: runMonteCarloBatch,
-          disabled: uqRunning,
-          style: {
-            background: uqRunning ? 'rgba(255,255,255,0.05)' : '#64ffda',
-            border: 'none',
-            color: uqRunning ? 'rgba(255,255,255,0.3)' : '#000',
-            padding: '12px 20px',
-            borderRadius: 10,
-            fontSize: 12,
-            fontWeight: 'bold',
-            cursor: uqRunning ? 'default' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            boxShadow: uqRunning ? 'none' : '0 4px 15px rgba(100,255,218,0.25)',
-            transition: 'all 0.2s ease',
-            width: '100%',
-            justifyContent: 'center'
-          }
-        }, uqRunning ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("i", {
-          className: "fas fa-spinner fa-spin"
-        }), " Simulating...") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("i", {
-          className: "fas fa-play"
-        }), " Run Uncertainty Analysis")), uqRunning && /*#__PURE__*/React.createElement("div", {
-          style: {
-            width: '100%',
-            marginTop: 4
-          }
-        }, /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: 'flex',
-            justifyContent: 'space-between',
-            fontSize: 9.5,
-            color: 'rgba(255,255,255,0.6)',
-            marginBottom: 3
-          }
-        }, /*#__PURE__*/React.createElement("span", null, "Running Batch"), /*#__PURE__*/React.createElement("span", null, uqProgress, "%")), /*#__PURE__*/React.createElement("div", {
-          style: {
-            height: 4,
-            background: 'rgba(255,255,255,0.1)',
-            borderRadius: 2,
-            overflow: 'hidden'
-          }
-        }, /*#__PURE__*/React.createElement("div", {
-          style: {
-            width: `${uqProgress}%`,
-            height: '100%',
-            background: '#64ffda',
-            transition: 'width 0.1s ease'
-          }
-        }))))), uqData ? /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 15
-          }
-        }, /*#__PURE__*/React.createElement("div", {
-          className: "uq-results-grid",
-          style: {
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 15
-          }
-        }, /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8
-          }
-        }, /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: 10,
-            color: 'rgba(255,255,255,0.4)',
-            textTransform: 'uppercase',
-            fontWeight: 'bold'
-          }
-        }, "Uncertainty Distribution (", uqTargetMetric === 'leaked' ? 'CO\u2082 Leaked Mass' : 'Trapping Efficiency', ")"), renderUQHistogram(uqData)), /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8
-          }
-        }, /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: 10,
-            color: 'rgba(255,255,255,0.4)',
-            textTransform: 'uppercase',
-            fontWeight: 'bold'
-          }
-        }, "Parameter Correlation Coefficients (Pearson r)"), sensitivityData && sensitivityData.length > 0 ? renderUQSensitivity(sensitivityData) : /*#__PURE__*/React.createElement("div", {
-          style: {
-            height: 200,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,0.18)',
-            borderRadius: 12,
-            border: '1px solid rgba(255,255,255,0.06)',
-            fontSize: 10.5,
-            color: 'rgba(255,255,255,0.4)',
-            textAlign: 'center',
-            padding: 16
-          }
-        }, "No parameters were varied in this batch.", /*#__PURE__*/React.createElement("br", null), "Enable at least one uncertainty parameter and re-run."))), /*#__PURE__*/React.createElement("div", {
-          style: {
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(255,255,255,0.05)',
-            borderRadius: 14,
-            padding: 12,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8
-          }
-        }, /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: 10.5,
-            color: 'rgba(255,255,255,0.4)',
-            textTransform: 'uppercase',
-            fontWeight: 'bold'
-          }
-        }, "P10 / P50 / P90 Outcomes"), /*#__PURE__*/React.createElement("div", {
-          className: "uq-percentile-grid",
-          style: {
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr',
-            gap: 10
-          }
-        }, /*#__PURE__*/React.createElement("div", {
-          style: {
-            background: 'rgba(0,0,0,0.15)',
-            border: '1px solid rgba(255,255,255,0.04)',
-            borderRadius: 10,
-            padding: '10px 12px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }
-        }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 9.5,
-            color: '#64ffda',
-            fontWeight: 'bold'
-          }
-        }, "P10 \xB7 ", uqTargetMetric === 'leaked' ? 'optimistic' : 'conservative'), /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 13,
-            fontWeight: 'bold',
-            fontFamily: 'monospace',
-            marginTop: 2
-          }
-        }, uqData.p10Val.toFixed(1), uqTargetMetric === 'leaked' ? ' kt' : '%')), /*#__PURE__*/React.createElement("button", {
-          onClick: () => loadUQRealization(uqData.p10Realization),
-          style: {
-            background: 'rgba(100,255,218,0.1)',
-            border: '1px solid rgba(100,255,218,0.3)',
-            color: '#64ffda',
-            padding: '6px 10px',
-            borderRadius: 6,
-            fontSize: 10,
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            outline: 'none'
-          }
-        }, "Load Model")), /*#__PURE__*/React.createElement("div", {
-          style: {
-            background: 'rgba(0,0,0,0.15)',
-            border: '1px solid rgba(255,255,255,0.04)',
-            borderRadius: 10,
-            padding: '10px 12px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }
-        }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 9.5,
-            color: '#ffb300',
-            fontWeight: 'bold'
-          }
-        }, "P50 \xB7 median"), /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 13,
-            fontWeight: 'bold',
-            fontFamily: 'monospace',
-            marginTop: 2
-          }
-        }, uqData.p50Val.toFixed(1), uqTargetMetric === 'leaked' ? ' kt' : '%')), /*#__PURE__*/React.createElement("button", {
-          onClick: () => loadUQRealization(uqData.p50Realization),
-          style: {
-            background: 'rgba(255,179,0,0.1)',
-            border: '1px solid rgba(255,179,0,0.3)',
-            color: '#ffb300',
-            padding: '6px 10px',
-            borderRadius: 6,
-            fontSize: 10,
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            outline: 'none'
-          }
-        }, "Load Model")), /*#__PURE__*/React.createElement("div", {
-          style: {
-            background: 'rgba(0,0,0,0.15)',
-            border: '1px solid rgba(255,255,255,0.04)',
-            borderRadius: 10,
-            padding: '10px 12px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }
-        }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 9.5,
-            color: '#ff6b6b',
-            fontWeight: 'bold'
-          }
-        }, "P90 \xB7 ", uqTargetMetric === 'leaked' ? 'conservative' : 'optimistic'), /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 13,
-            fontWeight: 'bold',
-            fontFamily: 'monospace',
-            marginTop: 2
-          }
-        }, uqData.p90Val.toFixed(1), uqTargetMetric === 'leaked' ? ' kt' : '%')), /*#__PURE__*/React.createElement("button", {
-          onClick: () => loadUQRealization(uqData.p90Realization),
-          style: {
-            background: 'rgba(255,107,107,0.1)',
-            border: '1px solid rgba(255,107,107,0.3)',
-            color: '#ff6b6b',
-            padding: '6px 10px',
-            borderRadius: 6,
-            fontSize: 10,
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            outline: 'none'
-          }
-        }, "Load Model"))))) : /*#__PURE__*/React.createElement("div", {
-          style: {
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            background: 'rgba(0,0,0,0.1)',
-            border: '1px dashed rgba(255,255,255,0.08)',
-            borderRadius: 14,
-            padding: 40,
-            textAlign: 'center'
-          }
-        }, /*#__PURE__*/React.createElement("i", {
-          className: "fas fa-calculator",
-          style: {
-            fontSize: 36,
-            color: 'rgba(255,255,255,0.15)',
-            marginBottom: 15
-          }
-        }), /*#__PURE__*/React.createElement("h4", {
-          style: {
-            margin: 0,
-            fontSize: 13.5,
-            color: 'rgba(255,255,255,0.8)'
-          }
-        }, "No results yet"), /*#__PURE__*/React.createElement("p", {
-          style: {
-            margin: '6px 0 0',
-            fontSize: 11.5,
-            color: 'rgba(255,255,255,0.45)',
-            maxWidth: 380
-          }
-        }, "Select which parameters to vary, define each range or set of values, then run the batch simulator to generate risk distributions and sensitivity analyses.")))
-      );
-    } else {
-      return /*#__PURE__*/React.createElement("div", {
-        id: "tabpanel-guide",
-        role: "tabpanel",
-        "aria-labelledby": "tab-guide",
-        tabIndex: 0,
+      return /*#__PURE__*/React.createElement("section", {
+        className: "ve-risk-workspace",
+        "aria-labelledby": "risk-title"
+      }, /*#__PURE__*/React.createElement("header", {
+        className: "ve-workspace-heading"
+      }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", {
+        id: "risk-title"
+      }, "Risk analysis"), /*#__PURE__*/React.createElement("p", null, "Use the current scenario as the nominal case.")), /*#__PURE__*/React.createElement("button", {
+        className: "ve-run-button",
+        onClick: runMonteCarloBatch,
+        disabled: uqRunning
+      }, uqRunning ? `Running ${uqProgress}%` : 'Run uncertainty analysis')), /*#__PURE__*/React.createElement("div", {
+        className: "ve-risk-layout"
+      }, /*#__PURE__*/React.createElement("aside", {
+        className: "ve-risk-config",
+        "aria-label": "Uncertainty configuration"
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "ve-uq-parameters",
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          minWidth: 0
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          color: 'rgba(255,255,255,0.4)',
+          textTransform: 'uppercase',
+          fontWeight: 'bold'
+        }
+      }, "Uncertainty Parameters"), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 9,
+          color: 'rgba(255,255,255,0.3)',
+          marginTop: -6
+        }
+      }, "Select parameters, then pick an absolute range, a \xB1% band, or discrete values."), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 8,
+          maxHeight: 340,
+          overflowY: 'auto',
+          paddingRight: 4
+        }
+      }, UQ_PARAM_DEFS.filter(def => !(def.group === 'fault' && faultCount === 0)).filter(def => !(def.key === 'faultLeakRate' && !faults.slice(0, faultCount).some(f => !f.isSealed))).map(def => /*#__PURE__*/React.createElement(UQParamConfig, {
+        key: def.key,
+        def: def,
+        cfg: uqParams[def.key],
+        onChange: patch => updateUqParam(def.key, patch)
+      })))), /*#__PURE__*/React.createElement("div", {
+        className: "ve-uq-settings",
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          color: 'rgba(255,255,255,0.4)',
+          textTransform: 'uppercase',
+          fontWeight: 'bold'
+        }
+      }, "Simulation Settings"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10.5,
+          color: 'rgba(255,255,255,0.7)'
+        }
+      }, "Run count"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: 'flex',
+          gap: 4,
+          marginTop: 2
+        }
+      }, [25, 50, 100].map(cnt => /*#__PURE__*/React.createElement("button", {
+        key: cnt,
+        onClick: () => setMcRunsCount(cnt),
+        "aria-pressed": mcRunsCount === cnt,
+        style: {
+          background: mcRunsCount === cnt ? 'rgba(100,255,218,0.2)' : 'rgba(255,255,255,0.05)',
+          border: `1px solid ${mcRunsCount === cnt ? '#64ffda' : 'rgba(255,255,255,0.12)'}`,
+          color: mcRunsCount === cnt ? '#64ffda' : 'azure',
+          padding: '4px 10px',
+          borderRadius: 6,
+          fontSize: 10.5,
+          fontWeight: 'bold',
+          cursor: 'pointer'
+        }
+      }, cnt, " runs")))), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10.5,
+          color: 'rgba(255,255,255,0.7)'
+        }
+      }, "Target metric"), /*#__PURE__*/React.createElement("select", {
+        value: uqTargetMetric,
+        onChange: e => setUqTargetMetric(e.target.value),
+        "aria-label": "Target metric",
+        style: {
+          background: 'rgba(0,0,0,0.3)',
+          border: '1px solid rgba(255,255,255,0.15)',
+          color: '#fff',
+          padding: '6px 10px',
+          borderRadius: 8,
+          fontSize: 11,
+          cursor: 'pointer'
+        }
+      }, /*#__PURE__*/React.createElement("option", {
+        value: "leaked"
+      }, "Leaked mass (kt)"), /*#__PURE__*/React.createElement("option", {
+        value: "trapped"
+      }, "Trapping efficiency"))))), /*#__PURE__*/React.createElement("div", {
+        className: "ve-risk-results"
+      }, uqRunning && /*#__PURE__*/React.createElement("div", {
+        className: "ve-uq-progress"
+      }, /*#__PURE__*/React.createElement("span", null, "Running batch"), /*#__PURE__*/React.createElement("span", null, uqProgress, "%"), /*#__PURE__*/React.createElement("progress", {
+        className: "ve-uq-progress-meter",
+        value: uqProgress,
+        max: "100",
+        "aria-label": "Uncertainty analysis progress"
+      })), uqData ? /*#__PURE__*/React.createElement("div", {
+        className: "ve-uq-results-content",
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 15
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "uq-results-grid",
+        style: {
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 15
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "ve-chart-title",
+        style: {
+          fontSize: 10,
+          color: 'rgba(255,255,255,0.4)',
+          textTransform: 'uppercase',
+          fontWeight: 'bold'
+        }
+      }, "Uncertainty Distribution (", uqTargetMetric === 'leaked' ? 'CO\u2082 Leaked Mass' : 'Trapping Efficiency', ")"), renderUQHistogram(uqData)), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "ve-chart-title",
+        style: {
+          fontSize: 10,
+          color: 'rgba(255,255,255,0.4)',
+          textTransform: 'uppercase',
+          fontWeight: 'bold'
+        }
+      }, "Parameter Correlation Coefficients (Pearson r)"), sensitivityData && sensitivityData.length > 0 ? renderUQSensitivity(sensitivityData) : /*#__PURE__*/React.createElement("div", {
+        style: {
+          height: 200,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(0,0,0,0.18)',
+          borderRadius: 12,
+          border: '1px solid rgba(255,255,255,0.06)',
+          fontSize: 10.5,
+          color: 'rgba(255,255,255,0.4)',
+          textAlign: 'center',
+          padding: 16
+        }
+      }, "No parameters were varied in this batch.", /*#__PURE__*/React.createElement("br", null), "Enable at least one uncertainty parameter and re-run."))), /*#__PURE__*/React.createElement("div", {
+        className: "ve-uq-percentiles",
+        style: {
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid rgba(255,255,255,0.05)',
+          borderRadius: 14,
+          padding: 12,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10.5,
+          color: 'rgba(255,255,255,0.4)',
+          textTransform: 'uppercase',
+          fontWeight: 'bold'
+        }
+      }, "P10 / P50 / P90 Outcomes"), /*#__PURE__*/React.createElement("div", {
+        className: "uq-percentile-grid",
+        style: {
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: 10
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: 'rgba(0,0,0,0.15)',
+          border: '1px solid rgba(255,255,255,0.04)',
+          borderRadius: 10,
+          padding: '10px 12px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }
+      }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+        className: "ve-uq-percentile-label",
+        style: {
+          fontSize: 9.5,
+          fontWeight: 'bold'
+        }
+      }, "P10 \xB7 ", uqTargetMetric === 'leaked' ? 'optimistic' : 'conservative'), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 13,
+          fontWeight: 'bold',
+          fontFamily: 'monospace',
+          marginTop: 2
+        }
+      }, uqData.p10Val.toFixed(1), uqTargetMetric === 'leaked' ? ' kt' : '%')), /*#__PURE__*/React.createElement("button", {
+        className: "ve-uq-realization",
+        onClick: () => loadUQRealization(uqData.p10Realization)
+      }, "Load realization")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: 'rgba(0,0,0,0.15)',
+          border: '1px solid rgba(255,255,255,0.04)',
+          borderRadius: 10,
+          padding: '10px 12px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }
+      }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+        className: "ve-uq-percentile-label",
+        style: {
+          fontSize: 9.5,
+          fontWeight: 'bold'
+        }
+      }, "P50 \xB7 median"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 13,
+          fontWeight: 'bold',
+          fontFamily: 'monospace',
+          marginTop: 2
+        }
+      }, uqData.p50Val.toFixed(1), uqTargetMetric === 'leaked' ? ' kt' : '%')), /*#__PURE__*/React.createElement("button", {
+        className: "ve-uq-realization",
+        onClick: () => loadUQRealization(uqData.p50Realization)
+      }, "Load realization")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: 'rgba(0,0,0,0.15)',
+          border: '1px solid rgba(255,255,255,0.04)',
+          borderRadius: 10,
+          padding: '10px 12px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }
+      }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+        className: "ve-uq-percentile-label",
+        style: {
+          fontSize: 9.5,
+          fontWeight: 'bold'
+        }
+      }, "P90 \xB7 ", uqTargetMetric === 'leaked' ? 'conservative' : 'optimistic'), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 13,
+          fontWeight: 'bold',
+          fontFamily: 'monospace',
+          marginTop: 2
+        }
+      }, uqData.p90Val.toFixed(1), uqTargetMetric === 'leaked' ? ' kt' : '%')), /*#__PURE__*/React.createElement("button", {
+        className: "ve-uq-realization",
+        onClick: () => loadUQRealization(uqData.p90Realization)
+      }, "Load realization"))))) : /*#__PURE__*/React.createElement("div", {
+        className: "ve-uq-empty",
         style: {
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          background: '#1c1626',
-          padding: '20px 25px',
-          overflowY: 'auto',
-          minHeight: 450
+          justifyContent: 'center',
+          alignItems: 'center',
+          background: 'rgba(0,0,0,0.1)',
+          border: '1px dashed rgba(255,255,255,0.08)',
+          borderRadius: 14,
+          padding: 40,
+          textAlign: 'center'
         }
-      }, /*#__PURE__*/React.createElement(GuidePage, {
+      }, /*#__PURE__*/React.createElement("i", {
+        className: "fas fa-calculator",
+        style: {
+          fontSize: 36,
+          color: 'rgba(255,255,255,0.15)',
+          marginBottom: 15
+        }
+      }), /*#__PURE__*/React.createElement("h4", {
+        style: {
+          margin: 0,
+          fontSize: 13.5,
+          color: 'rgba(255,255,255,0.8)'
+        }
+      }, "No results yet"), /*#__PURE__*/React.createElement("p", {
+        style: {
+          margin: '6px 0 0',
+          fontSize: 11.5,
+          color: 'rgba(255,255,255,0.45)',
+          maxWidth: 380
+        }
+      }, "Select which parameters to vary, define each range or set of values, then run the batch simulator to generate risk distributions and sensitivity analyses.")))));
+    } else {
+      return /*#__PURE__*/React.createElement("section", {
+        className: "ve-methodology-workspace",
+        "aria-labelledby": "methodology-title"
+      }, /*#__PURE__*/React.createElement("header", {
+        className: "ve-workspace-heading"
+      }, /*#__PURE__*/React.createElement("h1", {
+        id: "methodology-title"
+      }, "Methodology")), /*#__PURE__*/React.createElement(GuidePage, {
         isEmbedded: true
       }));
     }
-  })()), /*#__PURE__*/React.createElement("p", {
+  })(), /*#__PURE__*/React.createElement("div", {
+    className: "ve-map-workspace",
+    hidden: activeSubTab !== 'map'
+  }, /*#__PURE__*/React.createElement(Ve2DMapPanel, {
+    K: K,
+    porosity: porosity,
+    residualTrapFraction: residualTrapFraction,
+    dipPercent: dipPercent,
+    amplitude: amplitude,
+    frequency: frequency,
+    faultOffset: faultOffset,
+    Q: Q,
+    injLocation: injLocation,
+    injDuration: injDuration,
+    faultCount: faultCount,
+    faults: faults,
+    mapCols: mapCols,
+    wellY: wellY,
+    preset: selectedPreset,
+    command: mapCommand,
+    onCommandConsumed: consumeMapCommandOnce,
+    onRun: runActiveSimulation,
+    onReset: resetActiveSimulation,
+    onSnapshot: setMapSnapshot
+  }))), /*#__PURE__*/React.createElement("p", {
     style: {
       margin: '-8px 6px 0',
       fontSize: 10.5,
       lineHeight: 1.5,
       color: 'rgba(255,255,255,0.45)'
     }
-  }, "Educational ", activeSubTab === 'map' ? 'x–y plan-view' : 'cross-section', " Vertical-Equilibrium model \xB7 scaled units (1 kt = one model mass unit) \xB7 buoyancy-driven, viscosity-free gravity tongue with simplified faults. The Methodology tab separates reference theory from the implemented scheme."), /*#__PURE__*/React.createElement("div", {
-    className: "controls-subgrid"
-  }, /*#__PURE__*/React.createElement("details", {
-    className: "control-panel",
-    open: window.innerWidth > 768,
-    style: {
-      background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      borderRadius: 20,
-      padding: '18px 20px',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
-      backdropFilter: 'blur(12px)'
-    }
-  }, /*#__PURE__*/React.createElement("summary", {
-    style: {
-      margin: '0 0 14px',
-      fontSize: 14,
-      textTransform: 'uppercase',
-      letterSpacing: '0.12em',
-      color: '#64ffda',
-      fontFamily: "'Montserrat', sans-serif",
-      fontWeight: 700
-    }
-  }, "Simulation Parameters"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 12
-    }
+  }, "Educational ", activeSubTab === 'map' ? 'x–y plan-view' : 'cross-section', " Vertical-Equilibrium model \xB7 scaled units (1 kt = one model mass unit) \xB7 buoyancy-driven, viscosity-free gravity tongue with simplified faults. The Methodology tab separates reference theory from the implemented scheme.")), (activeSubTab === 'profile' || activeSubTab === 'map') && /*#__PURE__*/React.createElement(OutcomeRail, {
+    "data-mobile-open": presentedPanel === 'outcomes',
+    inert: presentedPanel === 'inputs' ? '' : undefined,
+    closeRef: element => {
+      mobileCloseRefs.current.outcomes = element;
+    },
+    onClose: dismissMobilePanel
   }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      borderBottom: '1px solid rgba(255,255,255,0.06)',
-      paddingBottom: 10
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: 'rgba(255,255,255,0.4)',
-      textTransform: 'uppercase',
-      fontWeight: 'bold'
-    }
-  }, "Topography Spline (Caprock)"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: 10,
-      marginTop: 6
-    }
-  }, /*#__PURE__*/React.createElement(Slider, {
-    label: "Regional Dip",
-    val: `${dipPercent}%`,
-    min: "-5",
-    max: "5",
-    step: "0.5",
-    value: dipPercent,
-    onChange: v => setDipPercent(parseFloat(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Anticline Height",
-    val: `${amplitude}px`,
-    min: "0",
-    max: "50",
-    step: "5",
-    value: amplitude,
-    onChange: v => setAmplitude(parseInt(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Anticline Count",
-    val: frequency,
-    min: "0.5",
-    max: "4.0",
-    step: "0.5",
-    value: frequency,
-    onChange: v => setFrequency(parseFloat(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Fault Slip",
-    val: `${faultOffset}x`,
-    min: "0",
-    max: "3",
-    step: "0.2",
-    value: faultOffset,
-    onChange: v => setFaultOffset(parseFloat(v))
-  }))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      borderBottom: '1px solid rgba(255,255,255,0.06)',
-      paddingBottom: 10
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: 'rgba(255,255,255,0.4)',
-      textTransform: 'uppercase',
-      fontWeight: 'bold'
-    }
-  }, "Sandstone Properties"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: 10,
-      marginTop: 6
-    }
-  }, /*#__PURE__*/React.createElement(Slider, {
-    label: "Permeability (K)",
-    val: `${Math.round(K * 1000)} mD`,
-    min: "0.1",
-    max: "3.5",
-    step: "0.1",
-    value: K,
-    onChange: v => setK(parseFloat(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Porosity (phi)",
-    val: `${Math.round(porosity * 100)}%`,
-    min: "0.1",
-    max: "0.4",
-    step: "0.05",
-    value: porosity,
-    onChange: v => setPorosity(parseFloat(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Grid Cells (N)",
-    val: cellCount,
-    min: "50",
-    max: "300",
-    step: "10",
-    value: cellCount,
-    onChange: v => setCellCount(parseInt(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Residual Trap (Sgr)",
-    val: `${Math.round(residualTrapFraction * 100)}%`,
-    min: "0.0",
-    max: "0.4",
-    step: "0.05",
-    value: residualTrapFraction,
-    onChange: v => setResidualTrapFraction(parseFloat(v))
-  }))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      borderBottom: '1px solid rgba(255,255,255,0.06)',
-      paddingBottom: 10
-    }
+    className: "ve-outcome-content"
   }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 4
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: 'rgba(255,255,255,0.4)',
-      textTransform: 'uppercase',
-      fontWeight: 'bold'
-    }
-  }, "Capillary Fringe (P_c Transition)"), /*#__PURE__*/React.createElement("label", {
-    style: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 6,
-      fontSize: 10.5,
-      cursor: 'pointer',
-      color: hasCapillaryFringe ? '#64ffda' : 'rgba(255,255,255,0.5)'
-    }
-  }, /*#__PURE__*/React.createElement("input", {
-    type: "checkbox",
-    checked: hasCapillaryFringe,
-    onChange: e => setHasCapillaryFringe(e.target.checked),
-    style: {
-      accentColor: '#64ffda'
-    }
-  }), "Enable Fringe")), hasCapillaryFringe && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: 10,
-      marginTop: 6
-    }
-  }, /*#__PURE__*/React.createElement(Slider, {
-    label: "Fringe Height (h_c)",
-    val: `${fringeScale.toFixed(2)} m`,
-    min: "0.10",
-    max: "3.00",
-    step: "0.10",
-    value: fringeScale,
-    onChange: v => setFringeScale(parseFloat(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Visual Entry-pressure Scale",
-    val: `${entryPressure} kPa`,
-    min: "5",
-    max: "40",
-    step: "1",
-    value: entryPressure,
-    onChange: v => setEntryPressure(parseInt(v))
-  }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: 'rgba(255,255,255,0.4)',
-      textTransform: 'uppercase',
-      fontWeight: 'bold'
-    }
-  }, "Injection Settings"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: 10,
-      marginTop: 6
-    }
-  }, /*#__PURE__*/React.createElement(Slider, {
-    label: "Flow Rate (Q)",
-    val: `${Q.toFixed(1)} kt/yr`,
-    min: "0.0",
-    max: "3.5",
-    step: "0.1",
-    value: Q,
-    onChange: v => setQ(parseFloat(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: activeSubTab === 'map' ? 'Well X Location' : 'Well Location',
-    val: `${injLocation}%`,
-    min: "10",
-    max: "90",
-    step: "5",
-    value: injLocation,
-    onChange: v => setInjLocation(parseInt(v))
-  }), activeSubTab === 'map' && /*#__PURE__*/React.createElement(Slider, {
-    label: "Well Y Location",
-    val: `${wellY}%`,
-    min: "10",
-    max: "90",
-    step: "5",
-    value: wellY,
-    onChange: v => setWellY(parseInt(v))
-  }), activeSubTab === 'map' && /*#__PURE__*/React.createElement(Slider, {
-    label: "2D Grid Resolution",
-    val: `${mapCols} × ${Math.max(12, Math.round(mapCols * 0.6))}`,
-    min: "24",
-    max: "80",
-    step: "8",
-    value: mapCols,
-    onChange: v => setMapCols(parseInt(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Inj. Stop Year",
-    val: `${injDuration}y`,
-    min: "50",
-    max: "400",
-    step: "10",
-    value: injDuration,
-    onChange: v => setInjDuration(parseInt(v))
-  }))))), /*#__PURE__*/React.createElement("details", {
-    className: "control-panel",
-    open: window.innerWidth > 768,
-    style: {
-      background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      borderRadius: 20,
-      padding: '18px 20px',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
-      backdropFilter: 'blur(12px)'
-    }
-  }, /*#__PURE__*/React.createElement("summary", {
-    style: {
-      margin: '0 0 14px',
-      fontSize: 14,
-      textTransform: 'uppercase',
-      letterSpacing: '0.12em',
-      color: '#64ffda',
-      fontFamily: "'Montserrat', sans-serif",
-      fontWeight: 700
-    }
-  }, "Fault Management"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 12,
-      marginBottom: 15
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12,
-      color: 'rgba(255,255,255,0.7)'
-    }
-  }, "Active Faults:"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 4
-    }
-  }, [0, 1, 2, 3].map(cnt => /*#__PURE__*/React.createElement("button", {
-    key: cnt,
-    onClick: () => setFaultCount(cnt),
-    style: {
-      background: faultCount === cnt ? 'rgba(100,255,218,0.2)' : 'rgba(255,255,255,0.05)',
-      border: `1px solid ${faultCount === cnt ? '#64ffda' : 'rgba(255,255,255,0.12)'}`,
-      color: faultCount === cnt ? '#64ffda' : 'azure',
-      padding: '4px 10px',
-      borderRadius: 6,
-      fontSize: 11,
-      fontWeight: 'bold',
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-      outline: 'none'
-    }
-  }, cnt)))), faultCount > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 14
-    }
-  }, Array.from({
-    length: faultCount
-  }).map((_, idx) => {
-    const f = faults[idx];
-    const label = `Fault ${String.fromCharCode(65 + idx)}`;
-    return /*#__PURE__*/React.createElement("div", {
-      key: idx,
-      style: {
-        background: 'rgba(255,255,255,0.02)',
-        border: '1px solid rgba(255,255,255,0.04)',
-        borderRadius: 12,
-        padding: '10px 12px'
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11.5,
-        fontWeight: 'bold',
-        color: f.isSealed ? '#64ffda' : '#ff6b6b'
-      }
-    }, label), /*#__PURE__*/React.createElement("label", {
-      style: {
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        fontSize: 10.5,
-        cursor: 'pointer'
-      }
-    }, /*#__PURE__*/React.createElement("input", {
-      type: "checkbox",
-      checked: f.isSealed,
-      onChange: e => {
-        const newFaults = [...faults];
-        newFaults[idx].isSealed = e.target.checked;
-        setFaults(newFaults);
-      },
-      style: {
-        accentColor: '#64ffda'
-      }
-    }), "Sealed (Infinite Barrier)")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: 10
-      }
-    }, /*#__PURE__*/React.createElement(Slider, {
-      label: "Position",
-      val: `${f.xPercent}%`,
-      min: "10",
-      max: "90",
-      step: "5",
-      value: f.xPercent,
-      onChange: v => {
-        const newFaults = [...faults];
-        newFaults[idx].xPercent = parseInt(v);
-        setFaults(newFaults);
-      }
-    }), /*#__PURE__*/React.createElement(Slider, {
-      label: "Capillary Threshold",
-      val: `${f.thresholdHeight} m`,
-      min: "0.0",
-      max: "2.0",
-      step: "0.1",
-      value: f.thresholdHeight,
-      onChange: v => {
-        const newFaults = [...faults];
-        newFaults[idx].thresholdHeight = parseFloat(v);
-        setFaults(newFaults);
-      }
-    }), /*#__PURE__*/React.createElement(Slider, {
-      label: "Horiz. Transmissibility",
-      val: f.transmissibility !== undefined ? f.transmissibility.toFixed(2) : "1.00",
-      min: "0.0",
-      max: "1.0",
-      step: "0.05",
-      value: f.transmissibility !== undefined ? f.transmissibility : 1.0,
-      onChange: v => {
-        const newFaults = [...faults];
-        newFaults[idx].transmissibility = parseFloat(v);
-        setFaults(newFaults);
-      }
-    }), !f.isSealed ? /*#__PURE__*/React.createElement(Slider, {
-      label: "Leakage Rate",
-      val: f.leakRate,
-      min: "0.01",
-      max: "0.40",
-      step: "0.02",
-      value: f.leakRate,
-      onChange: v => {
-        const newFaults = [...faults];
-        newFaults[idx].leakRate = parseFloat(v);
-        setFaults(newFaults);
-      }
-    }) : /*#__PURE__*/React.createElement("div", null)));
-  }))))), activeSubTab !== 'map' && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 20,
-      position: 'sticky',
-      top: 110
-    }
-  }, /*#__PURE__*/React.createElement("details", {
-    className: "control-panel",
-    open: window.innerWidth > 768,
-    style: {
-      background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      borderRadius: 20,
-      padding: '18px 20px',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
-      backdropFilter: 'blur(12px)',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 12
-    }
-  }, /*#__PURE__*/React.createElement("summary", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      cursor: 'pointer'
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      margin: 0,
-      fontSize: 14,
-      textTransform: 'uppercase',
-      letterSpacing: '0.12em',
-      color: '#64ffda',
-      fontFamily: "'Montserrat', sans-serif",
-      fontWeight: 700
-    }
-  }, "CO\u2082 Mass Balance"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10.5,
-      fontFamily: 'monospace',
-      color: 'rgba(255,255,255,0.5)'
-    }
-  }, "Scaled units (ktonnes equiv.)")), renderSVGChart(), /*#__PURE__*/React.createElement("div", {
-    className: "sim-stat-grid",
-    style: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(4, 1fr)',
-      gap: 8,
-      marginTop: 4
-    }
-  }, /*#__PURE__*/React.createElement(StatBox, {
-    label: "Injected",
-    value: Math.round(currentMasses.injected),
-    color: "#ffffff",
-    opacity: "0.6"
-  }), /*#__PURE__*/React.createElement(StatBox, {
-    label: "Mobile Plume",
-    value: Math.round(currentMasses.mobile),
-    color: "#64ffda"
-  }), /*#__PURE__*/React.createElement(StatBox, {
-    label: "Trapped",
-    value: Math.round(currentMasses.trapped),
-    color: "#3ca68e"
-  }), /*#__PURE__*/React.createElement(StatBox, {
-    label: "Leaked",
-    value: Math.round(currentMasses.leaked),
-    color: "#ff6b6b"
-  })), /*#__PURE__*/React.createElement("div", {
+    className: "ve-rail-heading"
+  }, /*#__PURE__*/React.createElement("h2", null, "Live outcome"), /*#__PURE__*/React.createElement("span", null, "Year ", activeTime)), /*#__PURE__*/React.createElement("dl", {
+    className: "ve-metric-list"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("dt", null, "Injected"), /*#__PURE__*/React.createElement("dd", null, formatMass(activeMasses.injected))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("dt", null, "Mobile"), /*#__PURE__*/React.createElement("dd", null, formatMass(activeMasses.mobile))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("dt", null, "Residually trapped"), /*#__PURE__*/React.createElement("dd", null, formatMass(activeMasses.trapped))), /*#__PURE__*/React.createElement("div", {
+    className: activeMasses.leaked > 0 ? 'is-danger' : ''
+  }, /*#__PURE__*/React.createElement("dt", null, "Leaked"), /*#__PURE__*/React.createElement("dd", null, formatMass(activeMasses.leaked)))), renderSVGChart(activeMasses, activeMassHistory, activeTime), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 12,
       borderTop: '1px solid rgba(255,255,255,0.06)',
@@ -5977,66 +5623,101 @@ const SimulatorPage = () => {
     }
   }, /*#__PURE__*/React.createElement(ProgressBar, {
     label: "Structural Trapping (Mobile)",
-    pct: currentMasses.injected > 0 ? currentMasses.mobile / currentMasses.injected * 100 : 0,
+    pct: activeMasses.injected > 0 ? activeMasses.mobile / activeMasses.injected * 100 : 0,
     color: "#64ffda"
   }), /*#__PURE__*/React.createElement(ProgressBar, {
     label: "Residual Capillary Trapping",
-    pct: currentMasses.injected > 0 ? currentMasses.trapped / currentMasses.injected * 100 : 0,
+    pct: activeMasses.injected > 0 ? activeMasses.trapped / activeMasses.injected * 100 : 0,
     color: "#3ca68e"
   }), /*#__PURE__*/React.createElement(ProgressBar, {
     label: "Cumulative Leaked Fraction",
-    pct: currentMasses.injected > 0 ? currentMasses.leaked / currentMasses.injected * 100 : 0,
+    pct: activeMasses.injected > 0 ? activeMasses.leaked / activeMasses.injected * 100 : 0,
     color: "#ff6b6b"
   })))))));
 };
-
-// Slider Input helper component
-const Slider = ({
+const InputRail = ({
+  children,
+  closeRef,
+  onClose,
+  ...props
+}) => /*#__PURE__*/React.createElement("aside", _extends({}, props, {
+  id: "ve-input-rail",
+  className: "ve-input-rail",
+  "aria-label": "Scenario inputs"
+}), /*#__PURE__*/React.createElement("button", {
+  type: "button",
+  className: "ve-mobile-panel-close",
+  ref: closeRef,
+  onClick: onClose,
+  "aria-label": "Close inputs panel"
+}, /*#__PURE__*/React.createElement("i", {
+  className: "fas fa-times",
+  "aria-hidden": "true"
+})), children);
+const VisualizationWorkspace = ({
+  children
+}) => /*#__PURE__*/React.createElement("section", {
+  className: "ve-visualization-workspace",
+  "aria-label": "Reservoir visualization"
+}, children);
+const OutcomeRail = ({
+  children,
+  closeRef,
+  onClose,
+  ...props
+}) => /*#__PURE__*/React.createElement("aside", _extends({}, props, {
+  id: "ve-outcome-rail",
+  className: "ve-outcome-rail",
+  "aria-label": "Simulation outcomes"
+}), /*#__PURE__*/React.createElement("button", {
+  type: "button",
+  className: "ve-mobile-panel-close",
+  ref: closeRef,
+  onClick: onClose,
+  "aria-label": "Close outcomes panel"
+}, /*#__PURE__*/React.createElement("i", {
+  className: "fas fa-times",
+  "aria-hidden": "true"
+})), children);
+const ParameterField = ({
   label,
-  val,
+  value,
   min,
   max,
   step,
-  value,
+  unit,
+  format = v => v,
   onChange
 }) => {
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 3
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      fontSize: 10.5,
-      color: 'rgba(255,255,255,0.8)'
-    }
+  const setValue = raw => {
+    const number = Number(raw);
+    if (!Number.isFinite(number)) return;
+    onChange(Math.max(min, Math.min(max, number)));
+  };
+  return /*#__PURE__*/React.createElement("label", {
+    className: "ve-parameter-field"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "ve-parameter-heading"
   }, /*#__PURE__*/React.createElement("span", null, label), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontFamily: 'monospace',
-      color: '#64ffda'
-    }
-  }, val)), /*#__PURE__*/React.createElement("input", {
-    type: "range",
+    className: "ve-parameter-value"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    value: value,
     min: min,
     max: max,
     step: step,
-    value: value,
+    onChange: event => setValue(event.target.value)
+  }), /*#__PURE__*/React.createElement("span", null, unit))), /*#__PURE__*/React.createElement("input", {
+    type: "range",
     "aria-label": label,
-    "aria-valuetext": String(val),
-    onChange: e => onChange(e.target.value),
-    style: {
-      width: '100%',
-      height: 3,
-      background: 'rgba(255,255,255,0.15)',
-      borderRadius: 2,
-      outline: 'none',
-      cursor: 'pointer',
-      accentColor: '#64ffda'
-    }
-  }));
+    value: value,
+    min: min,
+    max: max,
+    step: step,
+    onChange: event => setValue(event.target.value)
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "sr-only"
+  }, "Displayed value ", format(value), " ", unit));
 };
 
 // Stat numeric display helper component
