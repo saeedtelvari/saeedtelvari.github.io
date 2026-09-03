@@ -11,7 +11,7 @@ const loadRunStateHelpers = () => {
   const page = read('SimulatorPage.jsx');
   const prelude = page.slice(0, page.indexOf('const UQParamConfig'));
   const context = { React: {} };
-  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard,\n    toggleMobilePanel: typeof toggleMobilePanel === 'undefined' ? undefined : toggleMobilePanel,\n    focusMobilePanelTrigger: typeof focusMobilePanelTrigger === 'undefined' ? undefined : focusMobilePanelTrigger,\n    lockPageScroll: typeof lockPageScroll === 'undefined' ? undefined : lockPageScroll\n  };`, context);
+  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard,\n    toggleMobilePanel: typeof toggleMobilePanel === 'undefined' ? undefined : toggleMobilePanel,\n    focusMobilePanelTrigger: typeof focusMobilePanelTrigger === 'undefined' ? undefined : focusMobilePanelTrigger,\n    lockPageScroll: typeof lockPageScroll === 'undefined' ? undefined : lockPageScroll,\n    selectPresentedMobilePanel: typeof selectPresentedMobilePanel === 'undefined' ? undefined : selectPresentedMobilePanel,\n    getMobileFocusWrapTarget: typeof getMobileFocusWrapTarget === 'undefined' ? undefined : getMobileFocusWrapTarget,\n    setMobilePanelBackgroundInert: typeof setMobilePanelBackgroundInert === 'undefined' ? undefined : setMobilePanelBackgroundInert\n  };`, context);
   return context.helpers;
 };
 
@@ -169,8 +169,11 @@ test('responsive rails expose accessible sheet controls and mobile layout contra
   assert.match(page, /aria-controls="ve-outcome-rail"/);
   assert.match(page, /aria-label="Close inputs panel"/);
   assert.match(page, /aria-label="Close outcomes panel"/);
-  assert.match(page, /data-mobile-open=\{mobilePanel === 'inputs'\}/);
-  assert.match(page, /data-mobile-open=\{mobilePanel === 'outcomes'\}/);
+  assert.match(page, /data-mobile-open=\{presentedPanel === 'inputs'\}/);
+  assert.match(page, /data-mobile-open=\{presentedPanel === 'outcomes'\}/);
+  assert.match(page, /role=\{presentedPanel \? 'dialog' : undefined\}/);
+  assert.match(page, /aria-modal=\{presentedPanel \? 'true' : undefined\}/);
+  assert.match(page, /onClick=\{\(\) => handleWorkspaceChange\('uq'\)\}/);
   assert.match(css, /@media \(max-width: 1180px\)[\s\S]*\.ve-outcome-rail\[data-mobile-open="true"\]/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.ve-input-rail[\s\S]*translateY\(100%\)/);
   assert.match(css, /\.ve-mobile-panel-triggers button[\s\S]*min-height: 44px/);
@@ -184,6 +187,72 @@ test('tablet keeps the docked input rail close control hidden', () => {
 
   assert.doesNotMatch(genericCloseRule, /display: inline-flex/);
   assert.match(tabletRules, /\.ve-outcome-rail \.ve-mobile-panel-close\s*\{[\s\S]*?display: inline-flex/);
+});
+
+test('responsive mode presents only panels that are currently sheets', () => {
+  const selectPanel = loadRunStateHelpers().selectPresentedMobilePanel;
+
+  assert.equal(typeof selectPanel, 'function');
+  assert.equal(selectPanel('inputs', { mobile: true, compact: true }), 'inputs');
+  assert.equal(selectPanel('outcomes', { mobile: false, compact: true }), 'outcomes');
+  assert.equal(selectPanel('inputs', { mobile: false, compact: true }), null);
+  assert.equal(selectPanel('outcomes', { mobile: false, compact: false }), null);
+});
+
+test('focus return ignores triggers that are detached or hidden by a breakpoint', () => {
+  const focusTrigger = loadRunStateHelpers().focusMobilePanelTrigger;
+  let focusCalls = 0;
+
+  focusTrigger('inputs', { inputs: { isConnected: false, focus: () => { focusCalls += 1; } } });
+  focusTrigger('inputs', { inputs: { isConnected: true, getClientRects: () => [], focus: () => { focusCalls += 1; } } });
+
+  assert.equal(focusCalls, 0);
+});
+
+test('mobile modal focus wraps across the sheet and its persistent switcher', () => {
+  const getWrapTarget = loadRunStateHelpers().getMobileFocusWrapTarget;
+  const first = { id: 'inputs' };
+  const middle = { id: 'close' };
+  const last = { id: 'field' };
+  const focusables = [first, middle, last];
+
+  assert.equal(typeof getWrapTarget, 'function');
+  assert.equal(getWrapTarget(focusables, last, false), first);
+  assert.equal(getWrapTarget(focusables, first, true), last);
+  assert.equal(getWrapTarget(focusables, {}, false), first);
+});
+
+test('mobile modal background inert state is reversible', () => {
+  const setInert = loadRunStateHelpers().setMobilePanelBackgroundInert;
+  const background = [{ inert: false }, { inert: false }];
+
+  assert.equal(typeof setInert, 'function');
+  setInert(background, true);
+  assert.deepEqual(background.map(element => element.inert), [true, true]);
+  setInert(background, false);
+  assert.deepEqual(background.map(element => element.inert), [false, false]);
+});
+
+test('open mobile sheet keeps its labelled switcher above the modal surface', () => {
+  const page = read('SimulatorPage.jsx');
+  const css = read('simulator-workbench.css');
+
+  assert.match(page, /data-panel-open=\{Boolean\(presentedPanel\)\}/);
+  assert.match(css, /\.ve-mobile-panel-triggers\[data-panel-open="true"\][\s\S]*z-index: 32/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.ve-mobile-panel-triggers\[data-panel-open="true"\][\s\S]*bottom: min\(72dvh, 620px\)/);
+});
+
+test('remaining essential mobile controls expose touch and keyboard focus targets', () => {
+  const page = read('SimulatorPage.jsx');
+  const css = read('simulator-workbench.css');
+  const canvasControls = page.slice(page.indexOf('<div className="sim-tab-header"'), page.indexOf("} else if (activeSubTab === 'uq')"));
+  const mobileRules = css.slice(css.indexOf('@media (max-width: 760px)'), css.indexOf('@media (max-width: 900px)'));
+
+  assert.doesNotMatch(canvasControls, /outline:\s*'none'/);
+  assert.match(mobileRules, /\.ve-presets button\s*\{[\s\S]*?min-height: 44px/);
+  assert.match(mobileRules, /\.sim-tab-header \[role="tab"\][\s\S]*?min-height: 44px/);
+  assert.match(mobileRules, /\.ve-playback-bar button\s*\{[\s\S]*?min-(?:width|height): 44px/);
+  assert.match(mobileRules, /input\[type="range"\][\s\S]*?height: 44px/);
 });
 
 test('export accessible names contain their visible labels', () => {

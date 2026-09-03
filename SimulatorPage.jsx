@@ -91,13 +91,31 @@ const toggleMobilePanel = (currentPanel, requestedPanel) =>
 
 const focusMobilePanelTrigger = (panel, triggers) => {
   const trigger = triggers[panel];
-  if (trigger && typeof trigger.focus === 'function') trigger.focus();
+  if (!trigger || trigger.isConnected === false) return;
+  const visible = typeof trigger.getClientRects !== 'function' || trigger.getClientRects().length > 0;
+  if (visible && typeof trigger.focus === 'function') trigger.focus();
 };
 
 const lockPageScroll = pageDocument => {
   const previousOverflow = pageDocument.body.style.overflow;
   pageDocument.body.style.overflow = 'hidden';
   return () => { pageDocument.body.style.overflow = previousOverflow; };
+};
+
+const selectPresentedMobilePanel = (panel, viewport) =>
+  viewport.mobile ? panel : viewport.compact && panel === 'outcomes' ? panel : null;
+
+const getMobileFocusWrapTarget = (focusables, activeElement, backwards) => {
+  if (!focusables.length) return null;
+  const currentIndex = focusables.indexOf(activeElement);
+  if (currentIndex === -1) return backwards ? focusables[focusables.length - 1] : focusables[0];
+  if (backwards && currentIndex === 0) return focusables[focusables.length - 1];
+  if (!backwards && currentIndex === focusables.length - 1) return focusables[0];
+  return null;
+};
+
+const setMobilePanelBackgroundInert = (elements, inert) => {
+  elements.filter(Boolean).forEach(element => { element.inert = inert; });
 };
 
 // Draw one sample for a parameter given its config and nominal value.
@@ -551,17 +569,23 @@ const SimulatorPage = () => {
   const [selectedPreset, setSelectedPreset] = useState('default');
   const [shareStatus, setShareStatus] = useState('');
   const [mobilePanel, setMobilePanel] = useState(null);
+  const [responsivePanelViewport, setResponsivePanelViewport] = useState(() => ({
+    mobile: window.matchMedia('(max-width: 760px)').matches,
+    compact: window.matchMedia('(max-width: 1180px)').matches
+  }));
   const tabRefs = useRef({});
   const mobileTriggerRefs = useRef({});
   const mobileCloseRefs = useRef({});
+  const mobileTriggersRef = useRef(null);
   const reservoirSvgRef = useRef(null);
   const uqWorkerRef = useRef(null);
+  const presentedPanel = selectPresentedMobilePanel(mobilePanel, responsivePanelViewport);
 
-  const dismissMobilePanel = useCallback(() => {
+  const dismissMobilePanel = useCallback((returnFocus = true) => {
     if (!mobilePanel) return;
     const closingPanel = mobilePanel;
     setMobilePanel(null);
-    requestAnimationFrame(() => focusMobilePanelTrigger(closingPanel, mobileTriggerRefs.current));
+    if (returnFocus) requestAnimationFrame(() => focusMobilePanelTrigger(closingPanel, mobileTriggerRefs.current));
   }, [mobilePanel]);
 
   const handleMobilePanelToggle = panel => {
@@ -570,21 +594,72 @@ const SimulatorPage = () => {
   };
 
   useEffect(() => {
-    if (!mobilePanel) return undefined;
-    const releaseScroll = lockPageScroll(document);
-    const closeOnEscape = event => {
-      if (event.key === 'Escape') dismissMobilePanel();
+    const mobileQuery = window.matchMedia('(max-width: 760px)');
+    const compactQuery = window.matchMedia('(max-width: 1180px)');
+    const updateViewport = () => setResponsivePanelViewport({
+      mobile: mobileQuery.matches,
+      compact: compactQuery.matches
+    });
+    mobileQuery.addEventListener('change', updateViewport);
+    compactQuery.addEventListener('change', updateViewport);
+    return () => {
+      mobileQuery.removeEventListener('change', updateViewport);
+      compactQuery.removeEventListener('change', updateViewport);
     };
-    window.addEventListener('keydown', closeOnEscape);
+  }, []);
+
+  useEffect(() => {
+    if (mobilePanel && !presentedPanel) setMobilePanel(null);
+  }, [mobilePanel, presentedPanel]);
+
+  useEffect(() => {
+    if (!presentedPanel) return undefined;
+    const releaseScroll = lockPageScroll(document);
+    const activeRail = document.getElementById(`ve-${presentedPanel}-rail`);
+    const backgroundElements = [
+      document.querySelector('.app-header--workbench'),
+      document.querySelector('.ve-scenario-bar'),
+      document.querySelector('.ve-workspace-nav'),
+      document.querySelector('.ve-action-status'),
+      document.querySelector('.ve-visualization-workspace'),
+      document.querySelector('.ve-history-sheet'),
+      document.querySelector(presentedPanel === 'inputs' ? '.ve-outcome-rail' : '.ve-input-rail')
+    ];
+    setMobilePanelBackgroundInert(backgroundElements, true);
+
+    const getFocusableElements = () => [
+      ...(mobileTriggersRef.current?.querySelectorAll('button:not([disabled])') || []),
+      ...(activeRail?.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [contenteditable="true"], [tabindex]:not([tabindex="-1"])') || [])
+    ].filter(element => element.getClientRects().length > 0);
+
+    const handleSheetKeys = event => {
+      if (event.key === 'Escape') {
+        dismissMobilePanel();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const wrapTarget = getMobileFocusWrapTarget(getFocusableElements(), document.activeElement, event.shiftKey);
+      if (wrapTarget) {
+        event.preventDefault();
+        wrapTarget.focus();
+      }
+    };
+    window.addEventListener('keydown', handleSheetKeys);
     requestAnimationFrame(() => {
-      const closeButton = mobileCloseRefs.current[mobilePanel];
+      const closeButton = mobileCloseRefs.current[presentedPanel];
       if (closeButton) closeButton.focus();
     });
     return () => {
-      window.removeEventListener('keydown', closeOnEscape);
+      window.removeEventListener('keydown', handleSheetKeys);
+      setMobilePanelBackgroundInert(backgroundElements, false);
       releaseScroll();
     };
-  }, [mobilePanel, dismissMobilePanel]);
+  }, [presentedPanel, dismissMobilePanel]);
+
+  const handleWorkspaceChange = workspace => {
+    if (mobilePanel) dismissMobilePanel(false);
+    setActiveSubTab(workspace);
+  };
 
   const scenarioSignature = useMemo(() => createScenarioSignature({
     K, porosity, cellCount, residualTrapFraction, dipPercent, amplitude,
@@ -2283,7 +2358,12 @@ const SimulatorPage = () => {
   const activeMassHistory = activeResults.history;
 
   return (
-    <div className="simulator-page-wrapper">
+    <div
+      className="simulator-page-wrapper"
+      role={presentedPanel ? 'dialog' : undefined}
+      aria-modal={presentedPanel ? 'true' : undefined}
+      aria-label={presentedPanel ? `${presentedPanel === 'inputs' ? 'Inputs' : 'Outcomes'} panel` : undefined}
+    >
       {/* --- COLLAPSIBLE TIME-TRAVEL SIDEBAR --- */}
       {sidebarOpen && activeSubTab === 'profile' && <aside className="ve-history-sheet" aria-label="Simulation timeline">
         {/* Header */}
@@ -2573,18 +2653,24 @@ const SimulatorPage = () => {
         <button className="ve-run-button" onClick={runActiveSimulation}>Run scenario</button>
       </section>
       <nav className="ve-workspace-nav" aria-label="Simulator workspace">
-        <button aria-current={VISUALIZATION_TABS.includes(activeSubTab) ? 'page' : undefined} onClick={() => setActiveSubTab('profile')}>Simulator</button>
-        <button aria-current={activeSubTab === 'uq' ? 'page' : undefined} onClick={() => setActiveSubTab('uq')}>Risk analysis</button>
-        <button aria-current={activeSubTab === 'guide' ? 'page' : undefined} onClick={() => setActiveSubTab('guide')}>Methodology</button>
+        <button aria-current={VISUALIZATION_TABS.includes(activeSubTab) ? 'page' : undefined} onClick={() => handleWorkspaceChange('profile')}>Simulator</button>
+        <button aria-current={activeSubTab === 'uq' ? 'page' : undefined} onClick={() => handleWorkspaceChange('uq')}>Risk analysis</button>
+        <button aria-current={activeSubTab === 'guide' ? 'page' : undefined} onClick={() => handleWorkspaceChange('guide')}>Methodology</button>
       </nav>
       <span className="ve-action-status" role="status" aria-live="polite">{shareStatus}</span>
 
-      {VISUALIZATION_TABS.includes(activeSubTab) && <div className="ve-mobile-panel-triggers" role="group" aria-label="Workbench panels">
+      {VISUALIZATION_TABS.includes(activeSubTab) && <div
+        ref={mobileTriggersRef}
+        className="ve-mobile-panel-triggers"
+        role="group"
+        aria-label="Workbench panels"
+        data-panel-open={Boolean(presentedPanel)}
+      >
         <button
           type="button"
           ref={element => { mobileTriggerRefs.current.inputs = element; }}
           aria-controls="ve-input-rail"
-          aria-expanded={mobilePanel === 'inputs'}
+          aria-expanded={presentedPanel === 'inputs'}
           onClick={() => handleMobilePanelToggle('inputs')}
         >
           <i className="fas fa-sliders-h" aria-hidden="true" /> Inputs
@@ -2593,24 +2679,26 @@ const SimulatorPage = () => {
           type="button"
           ref={element => { mobileTriggerRefs.current.outcomes = element; }}
           aria-controls="ve-outcome-rail"
-          aria-expanded={mobilePanel === 'outcomes'}
+          aria-expanded={presentedPanel === 'outcomes'}
           onClick={() => handleMobilePanelToggle('outcomes')}
         >
           <i className="fas fa-chart-line" aria-hidden="true" /> Outcomes
         </button>
       </div>}
 
-      {mobilePanel && VISUALIZATION_TABS.includes(activeSubTab) && <button
+      {presentedPanel && VISUALIZATION_TABS.includes(activeSubTab) && <button
         type="button"
         className="ve-mobile-panel-backdrop"
-        aria-label={`Close ${mobilePanel} panel`}
-        onClick={dismissMobilePanel}
+        tabIndex={-1}
+        aria-label={`Close ${presentedPanel} panel`}
+        onClick={() => dismissMobilePanel()}
       />}
 
       {/* --- MAIN LAYOUT GRID --- */}
       <div className="ve-workbench" data-workspace={activeSubTab}>
         <InputRail
-          data-mobile-open={mobilePanel === 'inputs'}
+          data-mobile-open={presentedPanel === 'inputs'}
+          inert={presentedPanel === 'outcomes' ? '' : undefined}
           closeRef={element => { mobileCloseRefs.current.inputs = element; }}
           onClose={dismissMobilePanel}
         >
@@ -2760,8 +2848,7 @@ const SimulatorPage = () => {
                     letterSpacing: '0.05em',
                     textTransform: 'uppercase',
                     cursor: 'pointer',
-                    transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease',
-                    outline: 'none'
+                    transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease'
                   }}
                 >
                   <i className="fas fa-project-diagram" style={{ marginRight: 6 }} /> Cross-section
@@ -2785,8 +2872,7 @@ const SimulatorPage = () => {
                     letterSpacing: '0.05em',
                     textTransform: 'uppercase',
                     cursor: 'pointer',
-                    transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease',
-                    outline: 'none'
+                    transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease'
                   }}
                 >
                   <i className="fas fa-map" style={{ marginRight: 6 }} /> 2D Map
@@ -3070,7 +3156,7 @@ const SimulatorPage = () => {
                 <button 
                   onClick={handlePlayReverseToggle} 
                   aria-label={isReversing ? 'Pause reverse playback' : 'Play backward'}
-                  style={{ background: 'none', border: 'none', color: isReversing ? '#ff6b6b' : '#64ffda', cursor: 'pointer', outline: 'none' }} 
+                  style={{ background: 'none', border: 'none', color: isReversing ? '#ff6b6b' : '#64ffda', cursor: 'pointer' }}
                   title={isReversing ? "Pause Reverse" : "Reverse Play"}
                 >
                   <i className={`fas ${isReversing ? 'fa-pause' : 'fa-play fa-flip-horizontal'}`} style={{ fontSize: 13 }}/>
@@ -3079,7 +3165,7 @@ const SimulatorPage = () => {
                 <button 
                   onClick={handlePlayToggle} 
                   aria-label={isPlaying ? 'Pause simulation' : 'Play simulation forward'}
-                  style={{ background: 'none', border: 'none', color: isPlaying ? '#0dfca2' : '#64ffda', cursor: 'pointer', outline: 'none' }} 
+                  style={{ background: 'none', border: 'none', color: isPlaying ? '#0dfca2' : '#64ffda', cursor: 'pointer' }}
                   title={isPlaying ? "Pause" : "Play Forward"}
                 >
                   <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`} style={{ fontSize: 13 }}/>
@@ -3088,7 +3174,7 @@ const SimulatorPage = () => {
                 <button 
                   onClick={stepBackward} 
                   aria-label="Step 1 year backward"
-                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', outline: 'none' }} 
+                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}
                   title="Step 1 Year Backward"
                 >
                   <i className="fas fa-step-backward" style={{ fontSize: 10 }}/>
@@ -3097,13 +3183,13 @@ const SimulatorPage = () => {
                 <button 
                   onClick={stepForward} 
                   aria-label="Step 1 year forward"
-                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', outline: 'none' }} 
+                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}
                   title="Step 1 Year Forward"
                 >
                   <i className="fas fa-step-forward" style={{ fontSize: 10 }}/>
                 </button>
                 {/* Reset */}
-                <button onClick={resetSimulation} aria-label="Reset simulation" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', outline: 'none' }} title="Reset Simulation">
+                <button onClick={resetSimulation} aria-label="Reset simulation" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }} title="Reset Simulation">
                   <i className="fas fa-redo" style={{ fontSize: 11 }}/>
                 </button>
                 <button onClick={() => setSidebarOpen(true)} aria-label="Open simulation timeline">Timeline</button>
@@ -3124,10 +3210,8 @@ const SimulatorPage = () => {
                   onChange={e => handleScrub(parseInt(e.target.value))}
                   style={{
                     flex: 1,
-                    height: 3,
                     background: 'rgba(255,255,255,0.15)',
                     borderRadius: 2,
-                    outline: 'none',
                     cursor: 'pointer',
                     accentColor: '#64ffda'
                   }}
@@ -3136,7 +3220,7 @@ const SimulatorPage = () => {
 
                 <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.2)' }}/>
                 {/* Speed toggle */}
-                <button onClick={() => setSpeed(s => s === 1 ? 2 : s === 2 ? 4 : 1)} style={{ background: 'none', border: 'none', color: '#64ffda', cursor: 'pointer', fontSize: 10, fontWeight: 'bold', outline: 'none' }}>
+                <button onClick={() => setSpeed(s => s === 1 ? 2 : s === 2 ? 4 : 1)} style={{ background: 'none', border: 'none', color: '#64ffda', cursor: 'pointer', fontSize: 10, fontWeight: 'bold' }}>
                   {speed}x
                 </button>
               </div>
@@ -3395,7 +3479,8 @@ const SimulatorPage = () => {
 
         {/* RIGHT COLUMN: Mass Balance Analytics & Charting Window */}
         {(activeSubTab === 'profile' || activeSubTab === 'map') && <OutcomeRail
-          data-mobile-open={mobilePanel === 'outcomes'}
+          data-mobile-open={presentedPanel === 'outcomes'}
+          inert={presentedPanel === 'inputs' ? '' : undefined}
           closeRef={element => { mobileCloseRefs.current.outcomes = element; }}
           onClose={dismissMobilePanel}
         >
@@ -3432,8 +3517,6 @@ const InputRail = ({ children, closeRef, onClose, ...props }) => <aside
   id="ve-input-rail"
   className="ve-input-rail"
   aria-label="Scenario inputs"
-  role={props['data-mobile-open'] ? 'dialog' : undefined}
-  aria-modal={props['data-mobile-open'] ? 'true' : undefined}
 >
   <button type="button" className="ve-mobile-panel-close" ref={closeRef} onClick={onClose} aria-label="Close inputs panel"><i className="fas fa-times" aria-hidden="true" /></button>
   {children}
@@ -3444,8 +3527,6 @@ const OutcomeRail = ({ children, closeRef, onClose, ...props }) => <aside
   id="ve-outcome-rail"
   className="ve-outcome-rail"
   aria-label="Simulation outcomes"
-  role={props['data-mobile-open'] ? 'dialog' : undefined}
-  aria-modal={props['data-mobile-open'] ? 'true' : undefined}
 >
   <button type="button" className="ve-mobile-panel-close" ref={closeRef} onClick={onClose} aria-label="Close outcomes panel"><i className="fas fa-times" aria-hidden="true" /></button>
   {children}

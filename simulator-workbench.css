@@ -893,6 +893,11 @@
     box-shadow: 0 8px 24px rgba(23, 33, 43, 0.18);
   }
 
+  .ve-mobile-panel-triggers[data-panel-open="true"] {
+    right: calc(min(340px, 92vw) + 16px);
+    z-index: 32;
+  }
+
   .ve-mobile-panel-triggers button {
     border-radius: 6px;
   }
@@ -958,6 +963,22 @@
 
   .ve-presets button {
     flex: 0 0 auto;
+    min-height: 44px;
+  }
+
+  .sim-tab-header [role="tab"] {
+    min-height: 44px;
+  }
+
+  .ve-playback-bar button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .ve-parameter-field > input[type="range"],
+  .ve-playback-bar input[type="range"] {
+    height: 44px;
+    margin-block: 0;
   }
 
   .ve-scenario-bar > button:not(.ve-run-button),
@@ -1056,6 +1077,13 @@
     border-top: 1px solid var(--ve-border);
     border-radius: 0;
     box-shadow: 0 -6px 18px rgba(23, 33, 43, 0.1);
+  }
+
+  .ve-mobile-panel-triggers[data-panel-open="true"] {
+    right: 0;
+    bottom: min(72dvh, 620px);
+    left: 0;
+    z-index: 32;
   }
 
   .ve-mobile-panel-triggers button,
