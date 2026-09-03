@@ -4249,7 +4249,8 @@ const SimulatorPage = () => {
           .sim-tab-header { overflow-x: auto; align-items: stretch !important; }
           .sim-tab-header [role="tablist"] { min-width: max-content; }
           .sim-tab-status { display: none; }
-          .sim-hud-legend { max-width: calc(100% - 16px); overflow-x: auto; right: 8px !important; top: 8px !important; white-space: nowrap; }
+          .sim-hud-legend { position: static !important; flex: 0 0 auto; width: 100%; max-width: 100%; overflow-x: auto; right: auto !important; top: auto !important; border-radius: 0 !important; pointer-events: auto !important; white-space: nowrap; scrollbar-width: thin; }
+          .sim-hud-legend > span { flex: 0 0 auto; }
           .sim-playback { left: 8px !important; right: 8px !important; gap: 7px !important; padding: 8px 10px !important; }
           .sim-playback input[type="range"] { min-width: 48px; }
           .uq-config-grid, .uq-results-grid, .uq-percentile-grid { grid-template-columns: 1fr !important; }

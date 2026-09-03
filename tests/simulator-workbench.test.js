@@ -174,6 +174,8 @@ test('responsive rails expose accessible sheet controls and mobile layout contra
   assert.match(page, /role=\{presentedPanel \? 'dialog' : undefined\}/);
   assert.match(page, /aria-modal=\{presentedPanel \? 'true' : undefined\}/);
   assert.match(page, /onClick=\{\(\) => handleWorkspaceChange\('uq'\)\}/);
+  assert.match(page, /@media \(max-width: 768px\)[\s\S]*?\.sim-hud-legend \{[\s\S]*?position: static !important;[\s\S]*?overflow-x: auto;[\s\S]*?pointer-events: auto !important;/);
+  assert.match(page, /\.sim-hud-legend > span \{ flex: 0 0 auto; \}/);
   assert.match(css, /@media \(max-width: 1180px\)[\s\S]*\.ve-outcome-rail\[data-mobile-open="true"\]/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.ve-input-rail[\s\S]*translateY\(100%\)/);
   assert.match(css, /\.ve-mobile-panel-triggers button[\s\S]*min-height: 44px/);
@@ -353,7 +355,7 @@ test('risk and methodology accessibility remains visible in the restrained theme
 
   assert.doesNotMatch(page, /Load realization[\s\S]{0,250}outline: 'none'/);
   assert.doesNotMatch(riskSettings, /outline: 'none'/);
-  assert.match(css, /\.ve-workspace-heading h1\s*\{[\s\S]*?font:\s*700 20px\/1\.2 var\(--font-prose\)/);
+  assert.match(css, /\.ve-workspace-heading h1\s*\{[\s\S]*?background:\s*none;[\s\S]*?-webkit-background-clip:\s*border-box;[\s\S]*?background-clip:\s*border-box;[\s\S]*?-webkit-text-fill-color:\s*var\(--ve-ink\);[\s\S]*?font:\s*700 20px\/1\.2 var\(--font-prose\)/);
   assert.match(css, /\.ve-uq-realization:focus-visible[\s\S]*outline:/);
   assert.doesNotMatch(css, /guide-page-wrapper > div:first-of-type\s*\{[^}]*display:\s*none/);
   assert.match(css, /guide-page-wrapper > div:first-of-type > p[\s\S]*color: var\(--ve-muted\)/);

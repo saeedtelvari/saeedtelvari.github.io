@@ -616,6 +616,10 @@
 .ve-workspace-heading h1 {
   margin: 0;
   color: var(--ve-ink);
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: var(--ve-ink);
   font: 700 20px/1.2 var(--font-prose);
 }
 
