@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const ve2d = require('../ve2d-model.js');
 
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
@@ -38,7 +39,7 @@ const loadMapLifecycleHelpers = () => {
   const page = read('SimulatorPage.jsx');
   const prelude = page.slice(0, page.indexOf('const UQParamConfig'));
   const context = { React: {} };
-  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    consumeMapCommand: typeof consumeMapCommand === 'undefined' ? undefined : consumeMapCommand,\n    deriveMapRunStatus: typeof deriveMapRunStatus === 'undefined' ? undefined : deriveMapRunStatus,\n    createMapSnapshot: typeof createMapSnapshot === 'undefined' ? undefined : createMapSnapshot\n  };`, context);
+  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    consumeMapCommand: typeof consumeMapCommand === 'undefined' ? undefined : consumeMapCommand,\n    deriveMapRunStatus: typeof deriveMapRunStatus === 'undefined' ? undefined : deriveMapRunStatus,\n    createMapSnapshot: typeof createMapSnapshot === 'undefined' ? undefined : createMapSnapshot,\n    getMapPlaybackTransition: typeof getMapPlaybackTransition === 'undefined' ? undefined : getMapPlaybackTransition\n  };`, context);
   return context.helpers;
 };
 
@@ -318,6 +319,7 @@ test('map snapshots publish grid heights for the 3D topography consumer', () => 
   const { createMapSnapshot } = loadMapLifecycleHelpers();
   const h = [0.1, 0.3];
   const hMax = [0.2, 0.4];
+  const params = { width: 1000, height: 600, structureAmplitude: 30, faults: [] };
 
   assert.equal(typeof createMapSnapshot, 'function');
   const snapshot = createMapSnapshot({
@@ -325,12 +327,22 @@ test('map snapshots publish grid heights for the 3D topography consumer', () => 
     mapState: { h, hMax, masses: { injected: 6 } },
     history: [{ time: 12 }],
     isRunning: true,
-    speed: 2
+    speed: 2,
+    params
   });
 
   assert.deepEqual(JSON.parse(JSON.stringify(snapshot.h)), h);
   assert.deepEqual(JSON.parse(JSON.stringify(snapshot.hMax)), hMax);
+  assert.deepEqual(JSON.parse(JSON.stringify(snapshot.params)), params);
   assert.match(read('SimulatorPage.jsx'), /const h = Array\.isArray\(mapSnapshot\.h\) \? mapSnapshot\.h : \[\]/);
+});
+
+test('shared map playback pauses, steps once, and retains one speed state', () => {
+  const { getMapPlaybackTransition } = loadMapLifecycleHelpers();
+
+  assert.deepEqual(JSON.parse(JSON.stringify(getMapPlaybackTransition({ isRunning: true, speed: 2 }, 'pause'))), { isRunning: false });
+  assert.deepEqual(JSON.parse(JSON.stringify(getMapPlaybackTransition({ isRunning: false, speed: 2 }, 'step'))), { isRunning: false, advance: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(getMapPlaybackTransition({ isRunning: false, speed: 2 }, 'speed'))), { speed: 4 });
 });
 
 test('map lifecycle stays mounted while workspace tabs change', () => {
@@ -386,16 +398,49 @@ test('topography camera clamps to its literal orbit bounds and resets to the app
   });
 });
 
-test('topography projection is deterministic and bounded to its canvas', () => {
+test('topography projection is deterministic and preserves raw geometry for canvas clipping', () => {
   const { projectTopographyPoint } = loadRunStateHelpers();
   const camera = { azimuth: -0.72, elevation: 0.62, zoom: 1 };
 
   assert.equal(typeof projectTopographyPoint, 'function');
   const point = JSON.parse(JSON.stringify(projectTopographyPoint({ x: 0.5, y: 0.5, height: 0.5 }, camera, 1000, 600)));
   assert.deepEqual(point, { x: 500, y: 300 });
-  const bounded = projectTopographyPoint({ x: -5, y: 9, height: 4 }, { azimuth: 99, elevation: 9, zoom: 9 }, 1000, 600);
-  assert.ok(bounded.x >= 0 && bounded.x <= 1000);
-  assert.ok(bounded.y >= 0 && bounded.y <= 600);
+  const raw = projectTopographyPoint({ x: -5, y: 9, height: 4 }, { azimuth: 99, elevation: 9, zoom: 9 }, 1000, 600);
+  assert.ok(raw.x < 0 || raw.x > 1000 || raw.y < 0 || raw.y > 600);
+  const low = projectTopographyPoint({ x: 0.5, y: 0.5, height: 1 }, camera, 1000, 600);
+  const high = projectTopographyPoint({ x: 0.5, y: 0.5, height: 2 }, camera, 1000, 600);
+  assert.notEqual(low.y, high.y);
+});
+
+test('3D topography reuses the map structure, surface overlays, and shared playback path', () => {
+  const page = read('SimulatorPage.jsx');
+  const panel = page.slice(page.indexOf('const Ve3DTopographyPanel'), page.indexOf('// Main Simulator component'));
+
+  assert.match(panel, /globalThis\.VE2D\.topDepth/);
+  assert.match(panel, /slope \* 0\.3/);
+  assert.match(panel, /surfaceAt\(/);
+  assert.match(panel, /onMapCommand\(mapSnapshot\.isRunning \? 'pause' : 'resume'\)/);
+  assert.match(panel, /onMapCommand\('step'\)/);
+  assert.match(panel, /onMapCommand\('speed'\)/);
+  assert.match(page, /getMapPlaybackTransition\(\{ isRunning, speed: mapSpeed \}, command\.type\)/);
+  assert.match(page, /onMapCommand=\{sendMapCommand\}/);
+});
+
+test('year-zero dome structure has non-flat authoritative topography', () => {
+  const params = {
+    width: 1000,
+    height: 600,
+    dipX: 0,
+    dipY: 0,
+    structureAmplitude: 45,
+    structureFrequency: 1,
+    faultOffset: 0,
+    faults: []
+  };
+  const depths = [0, 500, 1000].map(x => ve2d.topDepth(x, 300, params));
+
+  assert.notEqual(depths[0], depths[1]);
+  assert.equal(depths[0], depths[2]);
 });
 
 test('3D topography panel exposes orbit controls without a new renderer dependency', () => {
