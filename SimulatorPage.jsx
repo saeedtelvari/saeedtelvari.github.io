@@ -118,6 +118,21 @@ const setMobilePanelBackgroundInert = (elements, inert) => {
   elements.filter(Boolean).forEach(element => { element.inert = inert; });
 };
 
+const normalizeParameterInput = (raw, min, max) => {
+  if (String(raw).trim() === '') {
+    return { value: null, message: `Enter a number from ${min} to ${max}.` };
+  }
+  const number = Number(raw);
+  if (!Number.isFinite(number)) {
+    return { value: null, message: `Enter a number from ${min} to ${max}.` };
+  }
+  const value = Math.max(min, Math.min(max, number));
+  return {
+    value,
+    message: value === number ? '' : `Corrected to ${value} (allowed range ${min}–${max}).`
+  };
+};
+
 // Draw one sample for a parameter given its config and nominal value.
 // Returns { value, sampled } — sampled=false means the nominal was used unchanged.
 const sampleUqParam = (def, cfg, nominal) => {
@@ -152,8 +167,7 @@ const UQParamConfig = ({ def, cfg, onChange }) => {
     borderRadius: 6,
     fontSize: 10.5,
     fontFamily: 'monospace',
-    width: 58,
-    outline: 'none'
+    width: 58
   };
   const numVal = (v) => isFinite(v) ? v : '';
   const numChange = (e) => e.target.value === '' ? NaN : parseFloat(e.target.value);
@@ -3534,14 +3548,18 @@ const OutcomeRail = ({ children, closeRef, onClose, ...props }) => <aside
 </aside>;
 
 const ParameterField = ({ label, value, min, max, step, unit, format = v => v, onChange }) => {
+  const [feedback, setFeedback] = useState('');
+  const feedbackId = React.useId();
   const setValue = raw => {
-    const number = Number(raw);
-    if (!Number.isFinite(number)) return;
-    onChange(Math.max(min, Math.min(max, number)));
+    const result = normalizeParameterInput(raw, min, max);
+    setFeedback(result.message);
+    if (result.value === null) return;
+    onChange(result.value);
   };
   return (
     <label className="ve-parameter-field">
-      <span className="ve-parameter-heading"><span>{label}</span><span className="ve-parameter-value"><input type="number" value={value} min={min} max={max} step={step} onChange={event => setValue(event.target.value)} /><span>{unit}</span></span></span>
+      <span className="ve-parameter-heading"><span>{label}</span><span className="ve-parameter-value"><input type="number" value={value} min={min} max={max} step={step} aria-describedby={feedback ? feedbackId : undefined} aria-invalid={feedback ? 'true' : undefined} onChange={event => setValue(event.target.value)} /><span>{unit}</span></span></span>
+      {feedback && <span id={feedbackId} className="ve-parameter-feedback" role="status">{feedback}</span>}
       <input type="range" aria-label={label} value={value} min={min} max={max} step={step} onChange={event => setValue(event.target.value)} />
       <span className="sr-only">Displayed value {format(value)} {unit}</span>
     </label>
@@ -3577,7 +3595,7 @@ const ProgressBar = ({ label, pct, color }) => {
         <span style={{ color: color, fontWeight: 'bold' }}>{Math.round(clampedPct)}%</span>
       </div>
       <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
-        <div style={{ width: `${clampedPct}%`, height: '100%', background: color, borderRadius: 2, transition: 'width 0.3s ease' }}/>
+        <div style={{ width: `${clampedPct}%`, height: '100%', background: color, borderRadius: 2 }}/>
       </div>
     </div>
   );

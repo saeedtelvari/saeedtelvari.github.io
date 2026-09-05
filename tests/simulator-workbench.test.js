@@ -11,7 +11,15 @@ const loadRunStateHelpers = () => {
   const page = read('SimulatorPage.jsx');
   const prelude = page.slice(0, page.indexOf('const UQParamConfig'));
   const context = { React: {} };
-  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard,\n    toggleMobilePanel: typeof toggleMobilePanel === 'undefined' ? undefined : toggleMobilePanel,\n    focusMobilePanelTrigger: typeof focusMobilePanelTrigger === 'undefined' ? undefined : focusMobilePanelTrigger,\n    lockPageScroll: typeof lockPageScroll === 'undefined' ? undefined : lockPageScroll,\n    selectPresentedMobilePanel: typeof selectPresentedMobilePanel === 'undefined' ? undefined : selectPresentedMobilePanel,\n    getMobileFocusWrapTarget: typeof getMobileFocusWrapTarget === 'undefined' ? undefined : getMobileFocusWrapTarget,\n    setMobilePanelBackgroundInert: typeof setMobilePanelBackgroundInert === 'undefined' ? undefined : setMobilePanelBackgroundInert\n  };`, context);
+  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard,\n    toggleMobilePanel: typeof toggleMobilePanel === 'undefined' ? undefined : toggleMobilePanel,\n    focusMobilePanelTrigger: typeof focusMobilePanelTrigger === 'undefined' ? undefined : focusMobilePanelTrigger,\n    lockPageScroll: typeof lockPageScroll === 'undefined' ? undefined : lockPageScroll,\n    selectPresentedMobilePanel: typeof selectPresentedMobilePanel === 'undefined' ? undefined : selectPresentedMobilePanel,\n    getMobileFocusWrapTarget: typeof getMobileFocusWrapTarget === 'undefined' ? undefined : getMobileFocusWrapTarget,\n    setMobilePanelBackgroundInert: typeof setMobilePanelBackgroundInert === 'undefined' ? undefined : setMobilePanelBackgroundInert,\n    normalizeParameterInput: typeof normalizeParameterInput === 'undefined' ? undefined : normalizeParameterInput\n  };`, context);
+  return context.helpers;
+};
+
+const loadHeaderModalHelpers = () => {
+  const header = read('Header.jsx');
+  const prelude = header.slice(0, header.indexOf('const Header ='));
+  const context = { React: { useEffect() {}, useState() {}, useRef() {} } };
+  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    getHeaderFocusWrapTarget: typeof getHeaderFocusWrapTarget === 'undefined' ? undefined : getHeaderFocusWrapTarget,\n    setHeaderBackgroundInert: typeof setHeaderBackgroundInert === 'undefined' ? undefined : setHeaderBackgroundInert\n  };`, context);
   return context.helpers;
 };
 
@@ -412,4 +420,65 @@ test('desktop workbench keeps the visualization and rails within the first viewp
   assert.match(css, /\.ve-visualization-workspace \[role="tabpanel"\][\s\S]*?min-height:\s*0/);
   assert.match(css, /\.ve-visualization-workspace \[role="tabpanel"\] > svg[\s\S]*?height:\s*auto\s*!important/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.ve-workbench\s*\{[\s\S]*?height:\s*auto/);
+});
+
+test('workbench navigation drawer contains focus and reversibly inerts its workspace', () => {
+  const { getHeaderFocusWrapTarget, setHeaderBackgroundInert } = loadHeaderModalHelpers();
+  const first = { id: 'close' };
+  const last = { id: 'email' };
+  const focusables = [first, last];
+  const workspace = { inert: false };
+
+  assert.equal(typeof getHeaderFocusWrapTarget, 'function');
+  assert.equal(getHeaderFocusWrapTarget(focusables, last, false), first);
+  assert.equal(getHeaderFocusWrapTarget(focusables, first, true), last);
+  assert.equal(typeof setHeaderBackgroundInert, 'function');
+  setHeaderBackgroundInert(workspace, true);
+  assert.equal(workspace.inert, true);
+  setHeaderBackgroundInert(workspace, false);
+  assert.equal(workspace.inert, false);
+});
+
+test('workbench navigation drawer is a flat restrained modal without changing the site variant', () => {
+  const header = read('Header.jsx');
+  const workbenchRules = header.slice(header.indexOf('.mobile-drawer-backdrop.workbench'), header.indexOf('@media (max-width: 768px)'));
+
+  assert.match(header, /ref=\{mobileDrawerRef\}/);
+  assert.match(header, /document\.getElementById\('main-content'\)/);
+  assert.match(header, /getHeaderFocusWrapTarget\(focusables, document\.activeElement, event\.shiftKey\)/);
+  assert.match(workbenchRules, /\.mobile-drawer-backdrop\.workbench\s*\{[\s\S]*?background:\s*rgba\([^;]+;[\s\S]*?backdrop-filter:\s*none;[\s\S]*?transition:\s*opacity 180ms cubic-bezier\(0\.23, 1, 0\.32, 1\)/);
+  assert.match(workbenchRules, /\.mobile-drawer-panel\.workbench\s*\{[\s\S]*?background:\s*#fff;[\s\S]*?border-left:\s*1px solid var\(--ve-border\);[\s\S]*?box-shadow:\s*none;[\s\S]*?transition:\s*transform 180ms cubic-bezier\(0\.23, 1, 0\.32, 1\)/);
+  assert.doesNotMatch(workbenchRules, /linear-gradient|blur\(|transition:\s*all|0\.3s|0\.4s/);
+  assert.match(header, /className=\{`mobile-drawer-panel open\$\{isWorkbench \? ' workbench' : ''\}`\}/);
+});
+
+test('all enabled uncertainty parameter inputs retain a visible keyboard focus indicator', () => {
+  const page = read('SimulatorPage.jsx');
+  const uqParameter = page.slice(page.indexOf('const UQParamConfig'), page.indexOf('const Ve2DMapPanel'));
+
+  assert.doesNotMatch(uqParameter, /outline:\s*'none'/);
+  assert.match(read('simulator-workbench.css'), /\.ve-standalone :focus-visible\s*\{[\s\S]*?outline:/);
+});
+
+test('typed main parameter values report rejection or correction beside the field', () => {
+  const normalize = loadRunStateHelpers().normalizeParameterInput;
+  const page = read('SimulatorPage.jsx');
+  const field = page.slice(page.indexOf('const ParameterField'), page.indexOf('// Stat numeric display'));
+  const plainResult = raw => JSON.parse(JSON.stringify(normalize(raw, 0.1, 3.5)));
+
+  assert.equal(typeof normalize, 'function');
+  assert.deepEqual(plainResult(''), { value: null, message: 'Enter a number from 0.1 to 3.5.' });
+  assert.deepEqual(plainResult('9'), { value: 3.5, message: 'Corrected to 3.5 (allowed range 0.1–3.5).' });
+  assert.deepEqual(plainResult('1.7'), { value: 1.7, message: '' });
+  assert.match(field, /aria-describedby=\{feedback \? feedbackId : undefined\}/);
+  assert.match(field, /aria-invalid=\{feedback \? 'true' : undefined\}/);
+  assert.match(field, /id=\{feedbackId\}[\s\S]*?className="ve-parameter-feedback"[\s\S]*?role="status"/);
+});
+
+test('storage efficiency updates without a trailing layout animation', () => {
+  const page = read('SimulatorPage.jsx');
+  const progress = page.slice(page.indexOf('const ProgressBar'), page.indexOf('// Bind to window object'));
+
+  assert.match(progress, /width:\s*`\$\{clampedPct\}%`/);
+  assert.doesNotMatch(progress, /transition|transform/);
 });

@@ -2,12 +2,28 @@
 
 const { useEffect, useState, useRef } = React;
 
+const HEADER_FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+const getHeaderFocusWrapTarget = (focusables, activeElement, backwards) => {
+  if (!focusables.length) return null;
+  const currentIndex = focusables.indexOf(activeElement);
+  if (currentIndex === -1) return backwards ? focusables[focusables.length - 1] : focusables[0];
+  if (backwards && currentIndex === 0) return focusables[focusables.length - 1];
+  if (!backwards && currentIndex === focusables.length - 1) return focusables[0];
+  return null;
+};
+
+const setHeaderBackgroundInert = (element, inert) => {
+  if (element) element.inert = inert;
+};
+
 const Header = ({ active, onNavigate, variant = 'site' }) => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [currentSection, setCurrentSection] = useState(active);
   const menuButtonRef = useRef(null);
   const closeButtonRef = useRef(null);
+  const mobileDrawerRef = useRef(null);
 
   // Shrink-on-scroll
   useEffect(() => {
@@ -46,6 +62,7 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
 
   // Close drawer on escape key
   useEffect(() => {
+    if (variant === 'workbench') return undefined;
     const onKeyDown = (e) => {
       if (e.key === 'Escape' && mobileOpen) {
         setMobileOpen(false);
@@ -54,11 +71,41 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [mobileOpen]);
+  }, [mobileOpen, variant]);
 
   useEffect(() => {
-    if (mobileOpen && closeButtonRef.current) closeButtonRef.current.focus();
-  }, [mobileOpen]);
+    if (variant !== 'workbench' && mobileOpen && closeButtonRef.current) closeButtonRef.current.focus();
+  }, [mobileOpen, variant]);
+
+  useEffect(() => {
+    if (variant !== 'workbench' || !mobileOpen) return undefined;
+    const mainContent = document.getElementById('main-content');
+    const drawer = mobileDrawerRef.current;
+    setHeaderBackgroundInert(mainContent, true);
+    if (closeButtonRef.current) closeButtonRef.current.focus();
+
+    const onModalKeyDown = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMobileOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab' || !drawer) return;
+      const focusables = Array.from(drawer.querySelectorAll(HEADER_FOCUSABLE_SELECTOR));
+      const target = getHeaderFocusWrapTarget(focusables, document.activeElement, event.shiftKey);
+      if (target) {
+        event.preventDefault();
+        target.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onModalKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onModalKeyDown);
+      setHeaderBackgroundInert(mainContent, false);
+      if (menuButtonRef.current) menuButtonRef.current.focus();
+    };
+  }, [mobileOpen, variant]);
 
   const items = [
     { id: 'home',         label: 'Home', href: './index.html' },
@@ -76,6 +123,25 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
   };
 
   const isWorkbench = variant === 'workbench';
+  const drawerPalette = isWorkbench ? {
+    divider: 'var(--ve-border)',
+    ink: 'var(--ve-ink)',
+    link: 'var(--ve-ink)',
+    muted: 'var(--ve-muted)',
+    subtle: 'var(--ve-muted)',
+    accent: 'var(--ve-accent)',
+    activeBackground: 'var(--ve-accent-soft)',
+    activeBorder: 'var(--ve-accent)',
+  } : {
+    divider: 'rgba(255,255,255,0.08)',
+    ink: '#fff',
+    link: 'rgba(255,255,255,0.85)',
+    muted: 'rgba(255,255,255,0.6)',
+    subtle: 'rgba(255,255,255,0.5)',
+    accent: '#64ffda',
+    activeBackground: 'rgba(100,255,218,0.15)',
+    activeBorder: 'rgba(100,255,218,0.35)',
+  };
   const siteScrolledBackground = 'linear-gradient(180deg, rgba(19, 13, 28, 0.92) 0%, rgba(19, 13, 28, 0.75) 100%)';
   const siteTopBackground = 'linear-gradient(180deg, rgba(19, 13, 28, 0.60) 0%, rgba(19, 13, 28, 0.20) 60%, transparent 100%)';
   const siteBorderBottom = scrolled ? '1px solid rgba(255,255,255,0.12)' : '1px solid transparent';
@@ -118,6 +184,17 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
           background: rgba(100,255,218,0.18);
           border-color: #64ffda;
         }
+        .hamburger-btn.workbench {
+          background: #fff;
+          border-color: var(--ve-border);
+          color: var(--ve-ink);
+          backdrop-filter: none;
+          transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        .hamburger-btn.workbench:hover {
+          background: #f3f6f8;
+          border-color: var(--ve-border);
+        }
         .mobile-drawer-backdrop {
           position: fixed;
           inset: 0;
@@ -153,6 +230,18 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
         }
         .mobile-drawer-panel.open {
           transform: translateX(0);
+        }
+        .mobile-drawer-backdrop.workbench {
+          background: rgba(15, 30, 42, 0.38);
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+          transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        .mobile-drawer-panel.workbench {
+          background: #fff;
+          border-left: 1px solid var(--ve-border);
+          box-shadow: none;
+          transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
         }
         @media (max-width: 768px) {
           .desktop-nav-list {
@@ -219,7 +308,7 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
         <button
           type="button"
           ref={menuButtonRef}
-          className="hamburger-btn"
+          className={`hamburger-btn${isWorkbench ? ' workbench' : ''}`}
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-expanded={mobileOpen}
           aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
@@ -230,12 +319,12 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
 
       {/* Mobile Navigation Drawer Backdrop */}
       {mobileOpen && <React.Fragment>
-      <div className="mobile-drawer-backdrop open" onClick={() => setMobileOpen(false)} aria-hidden="true" />
-      <div className="mobile-drawer-panel open" role="dialog" aria-modal="true" aria-label="Mobile Navigation">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 16 }}>
+      <div className={`mobile-drawer-backdrop open${isWorkbench ? ' workbench' : ''}`} onClick={() => setMobileOpen(false)} aria-hidden="true" />
+      <div ref={mobileDrawerRef} className={`mobile-drawer-panel open${isWorkbench ? ' workbench' : ''}`} role="dialog" aria-modal="true" aria-label="Mobile Navigation">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${drawerPalette.divider}`, paddingBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <img src="./assets/logo-minimalist.webp" alt="" style={{ width: 32, height: 32, objectFit: 'contain' }} />
-            <span style={{ fontSize: 15, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>Sa&rsquo;eed Telvari</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: drawerPalette.ink, letterSpacing: '-0.01em' }}>Sa&rsquo;eed Telvari</span>
           </div>
           <button
             type="button"
@@ -243,7 +332,7 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
             onClick={() => setMobileOpen(false)}
             aria-label="Close menu"
             style={{
-              background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)',
+              background: 'none', border: 'none', color: drawerPalette.muted,
               fontSize: 18, cursor: 'pointer', padding: 4,
             }}
           >
@@ -264,38 +353,40 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
                     textAlign: 'left',
                     padding: '12px 16px',
                     borderRadius: 12,
-                    background: isActive ? 'rgba(100,255,218,0.15)' : 'transparent',
-                    border: isActive ? '1px solid rgba(100,255,218,0.35)' : '1px solid transparent',
-                    color: isActive ? '#64ffda' : 'rgba(255,255,255,0.85)',
+                    background: isActive ? drawerPalette.activeBackground : 'transparent',
+                    border: isActive ? `1px solid ${drawerPalette.activeBorder}` : '1px solid transparent',
+                    color: isActive ? drawerPalette.accent : drawerPalette.link,
                     fontSize: 15,
                     fontWeight: isActive ? 600 : 400,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    transition: 'all 0.2s ease',
+                    transition: isWorkbench
+                      ? 'color 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1)'
+                      : 'all 0.2s ease',
                   }}
                 >
                   <span>{it.label}</span>
-                  {isActive && <i className="fas fa-chevron-right" style={{ fontSize: 11, color: '#64ffda' }} />}
+                  {isActive && <i className="fas fa-chevron-right" style={{ fontSize: 11, color: drawerPalette.accent }} />}
                 </a>
               </li>
             );
           })}
         </ul>
 
-        <div style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>
+        <div style={{ marginTop: 'auto', borderTop: `1px solid ${drawerPalette.divider}`, paddingTop: 16 }}>
+          <div style={{ fontSize: 11, color: drawerPalette.subtle, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>
             Connect
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
-            <a href="https://www.linkedin.com/in/stelvari/" target="_blank" rel="noreferrer" aria-label="LinkedIn" style={{ color: '#64ffda', fontSize: 16 }}>
+            <a href="https://www.linkedin.com/in/stelvari/" target="_blank" rel="noreferrer" aria-label="LinkedIn" style={{ color: drawerPalette.accent, fontSize: 16 }}>
               <i className="fab fa-linkedin" />
             </a>
-            <a href="https://github.com/saeedtelvari" target="_blank" rel="noreferrer" aria-label="GitHub" style={{ color: '#64ffda', fontSize: 16 }}>
+            <a href="https://github.com/saeedtelvari" target="_blank" rel="noreferrer" aria-label="GitHub" style={{ color: drawerPalette.accent, fontSize: 16 }}>
               <i className="fab fa-github" />
             </a>
-            <a href="mailto:st4014@hw.ac.uk" aria-label="Email" style={{ color: '#64ffda', fontSize: 16 }}>
+            <a href="mailto:st4014@hw.ac.uk" aria-label="Email" style={{ color: drawerPalette.accent, fontSize: 16 }}>
               <i className="fas fa-envelope" />
             </a>
           </div>

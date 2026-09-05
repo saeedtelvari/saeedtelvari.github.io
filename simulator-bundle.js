@@ -1118,6 +1118,26 @@ const setMobilePanelBackgroundInert = (elements, inert) => {
     element.inert = inert;
   });
 };
+const normalizeParameterInput = (raw, min, max) => {
+  if (String(raw).trim() === '') {
+    return {
+      value: null,
+      message: `Enter a number from ${min} to ${max}.`
+    };
+  }
+  const number = Number(raw);
+  if (!Number.isFinite(number)) {
+    return {
+      value: null,
+      message: `Enter a number from ${min} to ${max}.`
+    };
+  }
+  const value = Math.max(min, Math.min(max, number));
+  return {
+    value,
+    message: value === number ? '' : `Corrected to ${value} (allowed range ${min}–${max}).`
+  };
+};
 
 // Draw one sample for a parameter given its config and nominal value.
 // Returns { value, sampled } — sampled=false means the nominal was used unchanged.
@@ -1174,8 +1194,7 @@ const UQParamConfig = ({
     borderRadius: 6,
     fontSize: 10.5,
     fontFamily: 'monospace',
-    width: 58,
-    outline: 'none'
+    width: 58
   };
   const numVal = v => isFinite(v) ? v : '';
   const numChange = e => e.target.value === '' ? NaN : parseFloat(e.target.value);
@@ -5690,10 +5709,13 @@ const ParameterField = ({
   format = v => v,
   onChange
 }) => {
+  const [feedback, setFeedback] = useState('');
+  const feedbackId = React.useId();
   const setValue = raw => {
-    const number = Number(raw);
-    if (!Number.isFinite(number)) return;
-    onChange(Math.max(min, Math.min(max, number)));
+    const result = normalizeParameterInput(raw, min, max);
+    setFeedback(result.message);
+    if (result.value === null) return;
+    onChange(result.value);
   };
   return /*#__PURE__*/React.createElement("label", {
     className: "ve-parameter-field"
@@ -5707,8 +5729,14 @@ const ParameterField = ({
     min: min,
     max: max,
     step: step,
+    "aria-describedby": feedback ? feedbackId : undefined,
+    "aria-invalid": feedback ? 'true' : undefined,
     onChange: event => setValue(event.target.value)
-  }), /*#__PURE__*/React.createElement("span", null, unit))), /*#__PURE__*/React.createElement("input", {
+  }), /*#__PURE__*/React.createElement("span", null, unit))), feedback && /*#__PURE__*/React.createElement("span", {
+    id: feedbackId,
+    className: "ve-parameter-feedback",
+    role: "status"
+  }, feedback), /*#__PURE__*/React.createElement("input", {
     type: "range",
     "aria-label": label,
     value: value,
@@ -5793,8 +5821,7 @@ const ProgressBar = ({
       width: `${clampedPct}%`,
       height: '100%',
       background: color,
-      borderRadius: 2,
-      transition: 'width 0.3s ease'
+      borderRadius: 2
     }
   })));
 };
