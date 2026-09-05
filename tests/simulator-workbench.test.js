@@ -417,7 +417,9 @@ test('3D topography reuses the map structure, surface overlays, and shared playb
   const panel = page.slice(page.indexOf('const Ve3DTopographyPanel'), page.indexOf('// Main Simulator component'));
 
   assert.match(panel, /globalThis\.VE2D\.topDepth/);
-  assert.match(panel, /slope \* 0\.3/);
+  assert.match(panel, /const faultPoints = \[\]/);
+  assert.match(panel, /slope \* \(y \* 0\.6 - 0\.3\)/);
+  assert.match(panel, /faultPoints\.forEach\(\(point, index\)/);
   assert.match(panel, /surfaceAt\(/);
   assert.match(panel, /onMapCommand\(mapSnapshot\.isRunning \? 'pause' : 'resume'\)/);
   assert.match(panel, /onMapCommand\('step'\)/);

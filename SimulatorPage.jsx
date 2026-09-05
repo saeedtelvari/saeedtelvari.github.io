@@ -674,13 +674,14 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
     faults.slice(0, faultCount).forEach(fault => {
       const x = (Number(fault.xPercent) || 0) / 100;
       const slope = Number(fault.dipSlope) || 0;
-      const startX = x - slope * 0.3;
-      const endX = x + slope * 0.3;
-      const start = projectTopographyPoint({ x: startX, y: 0, height: surfaceAt(startX, 0, 0.025) }, camera, width, height);
-      const end = projectTopographyPoint({ x: endX, y: 1, height: surfaceAt(endX, 1, 0.025) }, camera, width, height);
+      const faultPoints = [];
+      for (let row = 0; row < gridRows; row++) {
+        const y = row / Math.max(1, gridRows - 1);
+        const faultX = x + slope * (y * 0.6 - 0.3);
+        faultPoints.push(projectTopographyPoint({ x: faultX, y, height: surfaceAt(faultX, y, 0.025) }, camera, width, height));
+      }
       ctx.beginPath();
-      ctx.moveTo(start.x, start.y);
-      ctx.lineTo(end.x, end.y);
+      faultPoints.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
       ctx.strokeStyle = fault.isSealed ? '#d6a65a' : '#d97a63';
       ctx.lineWidth = 2;
       ctx.setLineDash(fault.isSealed ? [] : [7, 5]);
