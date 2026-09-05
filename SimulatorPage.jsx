@@ -70,6 +70,40 @@ const deriveMapRunStatus = (snapshot, scenarioSignature, lastRunSignature) => de
   simTime: snapshot.time
 });
 
+const DEFAULT_TOPOGRAPHY_CAMERA = { azimuth: -0.72, elevation: 0.62, zoom: 1 };
+
+const clampTopographyCamera = (camera = {}) => {
+  const clamp = (value, min, max, fallback) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+  };
+  return {
+    azimuth: clamp(camera.azimuth, -Math.PI * 2, Math.PI * 2, DEFAULT_TOPOGRAPHY_CAMERA.azimuth),
+    elevation: clamp(camera.elevation, 0.22, 1.12, DEFAULT_TOPOGRAPHY_CAMERA.elevation),
+    zoom: clamp(camera.zoom, 0.65, 2.2, DEFAULT_TOPOGRAPHY_CAMERA.zoom)
+  };
+};
+
+const resetTopographyCamera = () => ({ ...DEFAULT_TOPOGRAPHY_CAMERA });
+
+const projectTopographyPoint = ({ x = 0.5, y = 0.5, height = 0.5 } = {}, camera, canvasWidth, canvasHeight) => {
+  const clampUnit = value => Math.max(0, Math.min(1, Number(value) || 0));
+  const width = Math.max(0, Number(canvasWidth) || 0);
+  const heightPx = Math.max(0, Number(canvasHeight) || 0);
+  const { azimuth, elevation, zoom } = clampTopographyCamera(camera);
+  const dx = clampUnit(x) - 0.5;
+  const dy = clampUnit(y) - 0.5;
+  const dz = clampUnit(height) - 0.5;
+  const rotatedX = dx * Math.cos(azimuth) - dy * Math.sin(azimuth);
+  const depth = dx * Math.sin(azimuth) + dy * Math.cos(azimuth);
+  const projectedX = 0.5 + rotatedX * zoom;
+  const projectedY = 0.5 + (depth * Math.cos(elevation) - dz * Math.sin(elevation)) * zoom;
+  return {
+    x: Math.max(0, Math.min(width, projectedX * width)),
+    y: Math.max(0, Math.min(heightPx, projectedY * heightPx))
+  };
+};
+
 const formatMass = value => `${Number(value || 0).toLocaleString('en-GB', { maximumFractionDigits: 1 })} kt`;
 
 const copyTextToClipboard = async (text, clipboard, fallback) => {

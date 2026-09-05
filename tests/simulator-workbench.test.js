@@ -12,6 +12,9 @@ const loadRunStateHelpers = () => {
   const prelude = page.slice(0, page.indexOf('const UQParamConfig'));
   const context = { React: {} };
   vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard,\n    toggleMobilePanel: typeof toggleMobilePanel === 'undefined' ? undefined : toggleMobilePanel,\n    focusMobilePanelTrigger: typeof focusMobilePanelTrigger === 'undefined' ? undefined : focusMobilePanelTrigger,\n    lockPageScroll: typeof lockPageScroll === 'undefined' ? undefined : lockPageScroll,\n    selectPresentedMobilePanel: typeof selectPresentedMobilePanel === 'undefined' ? undefined : selectPresentedMobilePanel,\n    getMobileFocusWrapTarget: typeof getMobileFocusWrapTarget === 'undefined' ? undefined : getMobileFocusWrapTarget,\n    setMobilePanelBackgroundInert: typeof setMobilePanelBackgroundInert === 'undefined' ? undefined : setMobilePanelBackgroundInert,\n    normalizeParameterInput: typeof normalizeParameterInput === 'undefined' ? undefined : normalizeParameterInput\n  };`, context);
+  vm.runInNewContext(`this.helpers.clampTopographyCamera = typeof clampTopographyCamera === 'undefined' ? undefined : clampTopographyCamera;
+this.helpers.resetTopographyCamera = typeof resetTopographyCamera === 'undefined' ? undefined : resetTopographyCamera;
+this.helpers.projectTopographyPoint = typeof projectTopographyPoint === 'undefined' ? undefined : projectTopographyPoint;`, context);
   return context.helpers;
 };
 
@@ -324,6 +327,40 @@ test('map run status reports changed inputs after the last run', () => {
 
   assert.equal(deriveStatus(snapshot, 'new-inputs', 'last-run'), 'Inputs changed');
   assert.equal(deriveStatus({ ...snapshot, isRunning: true }, 'new-inputs', 'last-run'), 'Running');
+});
+
+test('topography camera clamps to its literal orbit bounds and resets to the approved view', () => {
+  const { clampTopographyCamera, resetTopographyCamera } = loadRunStateHelpers();
+
+  assert.equal(typeof clampTopographyCamera, 'function');
+  assert.equal(typeof resetTopographyCamera, 'function');
+  assert.deepEqual(JSON.parse(JSON.stringify(clampTopographyCamera({ azimuth: 99, elevation: -4, zoom: 8 }))), {
+    azimuth: Math.PI * 2,
+    elevation: 0.22,
+    zoom: 2.2
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(clampTopographyCamera({ azimuth: -99, elevation: 8, zoom: 0 }))), {
+    azimuth: -Math.PI * 2,
+    elevation: 1.12,
+    zoom: 0.65
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(resetTopographyCamera())), {
+    azimuth: -0.72,
+    elevation: 0.62,
+    zoom: 1
+  });
+});
+
+test('topography projection is deterministic and bounded to its canvas', () => {
+  const { projectTopographyPoint } = loadRunStateHelpers();
+  const camera = { azimuth: -0.72, elevation: 0.62, zoom: 1 };
+
+  assert.equal(typeof projectTopographyPoint, 'function');
+  const point = JSON.parse(JSON.stringify(projectTopographyPoint({ x: 0.5, y: 0.5, height: 0.5 }, camera, 1000, 600)));
+  assert.deepEqual(point, { x: 500, y: 300 });
+  const bounded = projectTopographyPoint({ x: -5, y: 9, height: 4 }, { azimuth: 99, elevation: 9, zoom: 9 }, 1000, 600);
+  assert.ok(bounded.x >= 0 && bounded.x <= 1000);
+  assert.ok(bounded.y >= 0 && bounded.y <= 600);
 });
 
 test('risk and methodology render as peer workspaces outside the visualization tabs', () => {
