@@ -951,8 +951,8 @@ function _extends() { _extends = Object.assign ? Object.assign.bind() : function
 // SimulatorPage.jsx — Interactive VE Simulator Page
 // [destructured React]
 
-const SIM_TABS = ['profile', 'map', 'uq', 'guide'];
-const VISUALIZATION_TABS = ['profile', 'map'];
+const SIM_TABS = ['profile', 'map', 'topography', 'uq', 'guide'];
+const VISUALIZATION_TABS = ['profile', 'map', 'topography'];
 
 // Declarative registry of every parameter the UQ batch can sample.
 // dec = display decimals; dec 0 params are sampled as integers.
@@ -1065,8 +1065,23 @@ const getPlaybackAction = ({
   simTime,
   scenarioChanged
 }) => isPlaying ? 'pause' : simTime === 0 || scenarioChanged ? 'run-scenario' : 'resume';
-const selectActiveResults = (activeView, crossSection, map) => activeView === 'map' ? map : crossSection;
+const selectActiveResults = (activeView, crossSection, map) => activeView === 'map' || activeView === 'topography' ? map : crossSection;
 const consumeMapCommand = (command, handledId) => command?.id === handledId ? null : command;
+const createMapSnapshot = ({
+  time,
+  mapState,
+  history,
+  isRunning,
+  speed
+}) => ({
+  time,
+  h: mapState.h,
+  hMax: mapState.hMax,
+  masses: mapState.masses,
+  history,
+  isRunning,
+  speed
+});
 const deriveMapRunStatus = (snapshot, scenarioSignature, lastRunSignature) => deriveRunStatus({
   isPlaying: snapshot.isRunning,
   isReversing: false,
@@ -1074,6 +1089,50 @@ const deriveMapRunStatus = (snapshot, scenarioSignature, lastRunSignature) => de
   lastRunSignature,
   simTime: snapshot.time
 });
+const DEFAULT_TOPOGRAPHY_CAMERA = {
+  azimuth: -0.72,
+  elevation: 0.62,
+  zoom: 1
+};
+const clampTopographyCamera = (camera = {}) => {
+  const clamp = (value, min, max, fallback) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+  };
+  return {
+    azimuth: clamp(camera.azimuth, -Math.PI * 2, Math.PI * 2, DEFAULT_TOPOGRAPHY_CAMERA.azimuth),
+    elevation: clamp(camera.elevation, 0.22, 1.12, DEFAULT_TOPOGRAPHY_CAMERA.elevation),
+    zoom: clamp(camera.zoom, 0.65, 2.2, DEFAULT_TOPOGRAPHY_CAMERA.zoom)
+  };
+};
+const resetTopographyCamera = () => ({
+  ...DEFAULT_TOPOGRAPHY_CAMERA
+});
+const projectTopographyPoint = ({
+  x = 0.5,
+  y = 0.5,
+  height = 0.5
+} = {}, camera, canvasWidth, canvasHeight) => {
+  const clampUnit = value => Math.max(0, Math.min(1, Number(value) || 0));
+  const width = Math.max(0, Number(canvasWidth) || 0);
+  const heightPx = Math.max(0, Number(canvasHeight) || 0);
+  const {
+    azimuth,
+    elevation,
+    zoom
+  } = clampTopographyCamera(camera);
+  const dx = clampUnit(x) - 0.5;
+  const dy = clampUnit(y) - 0.5;
+  const dz = clampUnit(height) - 0.5;
+  const rotatedX = dx * Math.cos(azimuth) - dy * Math.sin(azimuth);
+  const depth = dx * Math.sin(azimuth) + dy * Math.cos(azimuth);
+  const projectedX = 0.5 + rotatedX * zoom;
+  const projectedY = 0.5 + (depth * Math.cos(elevation) - dz * Math.sin(elevation)) * zoom;
+  return {
+    x: Math.max(0, Math.min(width, projectedX * width)),
+    y: Math.max(0, Math.min(heightPx, projectedY * heightPx))
+  };
+};
 const formatMass = value => `${Number(value || 0).toLocaleString('en-GB', {
   maximumFractionDigits: 1
 })} kt`;
@@ -1449,13 +1508,13 @@ const Ve2DMapPanel = ({
     onCommandConsumed(command.id);
   }, [command, onCommandConsumed, resetMap]);
   useEffect(() => {
-    onSnapshot({
+    onSnapshot(createMapSnapshot({
       time: mapTime,
-      masses: mapState.masses,
+      mapState,
       history: historyRef.current,
       isRunning,
       speed: mapSpeed
-    });
+    }));
   }, [mapState, mapTime, isRunning, mapSpeed, onSnapshot]);
   useEffect(() => {
     if (!isRunning) return;
@@ -1758,6 +1817,220 @@ const Ve2DMapPanel = ({
     color: "#ff6b6b"
   })));
 };
+const Ve3DTopographyPanel = ({
+  mapSnapshot = {},
+  mapCols,
+  mapRows,
+  faultCount,
+  faults = [],
+  injLocation,
+  wellY
+}) => {
+  const canvasRef = useRef(null);
+  const pointersRef = useRef(new Map());
+  const dragRef = useRef(null);
+  const pinchRef = useRef(null);
+  const [camera, setCamera] = useState(resetTopographyCamera);
+  const [elevationScale, setElevationScale] = useState(1.25);
+  const gridRows = mapRows || Math.max(12, Math.round(mapCols * 0.6));
+  const time = Number(mapSnapshot.time) || 0;
+  const zoomLabel = `${camera.zoom.toFixed(2)}×`;
+  const elevationLabel = `${elevationScale.toFixed(2)}×`;
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const width = 1000;
+    const height = 600;
+    const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = width * pixelRatio;
+    canvas.height = height * pixelRatio;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#10202d';
+    ctx.fillRect(0, 0, width, height);
+    const h = Array.isArray(mapSnapshot.h) ? mapSnapshot.h : [];
+    const hMax = Array.isArray(mapSnapshot.hMax) ? mapSnapshot.hMax : h;
+    const peak = Math.max(0.0001, ...hMax.map(value => Number(value) || 0));
+    const pointAt = (col, row) => {
+      const index = Math.min(hMax.length - 1, Math.max(0, row * mapCols + col));
+      const plume = Math.max(Number(h[index]) || 0, Number(hMax[index]) || 0) / peak;
+      return projectTopographyPoint({
+        x: col / Math.max(1, mapCols - 1),
+        y: row / Math.max(1, gridRows - 1),
+        height: 0.5 + (plume - 0.5) * elevationScale
+      }, camera, width, height);
+    };
+    const cells = [];
+    for (let row = 0; row < gridRows - 1; row++) {
+      for (let col = 0; col < mapCols - 1; col++) {
+        const index = row * mapCols + col;
+        const heightRatio = Math.max(Number(h[index]) || 0, Number(hMax[index]) || 0) / peak;
+        cells.push({
+          col,
+          row,
+          heightRatio,
+          depth: row * Math.cos(camera.azimuth) + col * Math.sin(camera.azimuth)
+        });
+      }
+    }
+    cells.sort((a, b) => a.depth - b.depth).forEach(cell => {
+      const points = [pointAt(cell.col, cell.row), pointAt(cell.col + 1, cell.row), pointAt(cell.col + 1, cell.row + 1), pointAt(cell.col, cell.row + 1)];
+      const shade = Math.round(41 + cell.heightRatio * 72);
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      points.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
+      ctx.closePath();
+      ctx.fillStyle = `rgb(${Math.round(15 + cell.heightRatio * 24)}, ${shade + 30}, ${shade + 24})`;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(194, 221, 220, 0.22)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    });
+    faults.slice(0, faultCount).forEach(fault => {
+      const x = (Number(fault.xPercent) || 0) / 100;
+      const slope = Number(fault.dipSlope) || 0;
+      const start = projectTopographyPoint({
+        x: x - slope * 0.15,
+        y: 0,
+        height: 0.72
+      }, camera, width, height);
+      const end = projectTopographyPoint({
+        x: x + slope * 0.15,
+        y: 1,
+        height: 0.72
+      }, camera, width, height);
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.strokeStyle = fault.isSealed ? '#d6a65a' : '#d97a63';
+      ctx.lineWidth = 2;
+      ctx.setLineDash(fault.isSealed ? [] : [7, 5]);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    const injector = projectTopographyPoint({
+      x: (Number(injLocation) || 0) / 100,
+      y: (Number(wellY) || 0) / 100,
+      height: 0.86
+    }, camera, width, height);
+    ctx.beginPath();
+    ctx.arc(injector.x, injector.y, 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#e5b15e';
+    ctx.fill();
+    ctx.strokeStyle = '#fff3d6';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }, [camera, elevationScale, faultCount, faults, gridRows, injLocation, mapCols, mapSnapshot, wellY]);
+  const updateZoom = delta => setCamera(current => clampTopographyCamera({
+    ...current,
+    zoom: current.zoom + delta
+  }));
+  const resetView = () => setCamera(resetTopographyCamera());
+  const pointerDistance = points => Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+  const onPointerDown = event => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointersRef.current.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY
+    });
+    const points = [...pointersRef.current.values()];
+    if (points.length === 1) dragRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      camera
+    };
+    if (points.length === 2) pinchRef.current = {
+      distance: pointerDistance(points),
+      zoom: camera.zoom
+    };
+  };
+  const onPointerMove = event => {
+    if (!pointersRef.current.has(event.pointerId)) return;
+    pointersRef.current.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY
+    });
+    const points = [...pointersRef.current.values()];
+    if (points.length === 2 && pinchRef.current) {
+      const distance = pointerDistance(points);
+      const nextZoom = pinchRef.current.zoom * (distance / Math.max(1, pinchRef.current.distance));
+      setCamera(current => clampTopographyCamera({
+        ...current,
+        zoom: nextZoom
+      }));
+      return;
+    }
+    if (points.length !== 1 || !dragRef.current) return;
+    const dx = event.clientX - dragRef.current.x;
+    const dy = event.clientY - dragRef.current.y;
+    setCamera(clampTopographyCamera({
+      ...dragRef.current.camera,
+      azimuth: dragRef.current.camera.azimuth + dx * 0.012,
+      elevation: dragRef.current.camera.elevation - dy * 0.01
+    }));
+  };
+  const onPointerEnd = event => {
+    pointersRef.current.delete(event.pointerId);
+    dragRef.current = null;
+    const points = [...pointersRef.current.values()];
+    if (points.length === 1) dragRef.current = {
+      ...points[0],
+      camera
+    };
+    pinchRef.current = points.length === 2 ? {
+      distance: pointerDistance(points),
+      zoom: camera.zoom
+    } : null;
+  };
+  return /*#__PURE__*/React.createElement("section", {
+    className: "ve-topography-panel",
+    "aria-label": "3D topography viewer"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "ve-topography-toolbar"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("strong", null, "3D topography"), /*#__PURE__*/React.createElement("span", null, "Drag to orbit \xB7 scroll or pinch to zoom")), /*#__PURE__*/React.createElement("div", {
+    className: "ve-topography-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => updateZoom(-0.12),
+    "aria-label": "Zoom out"
+  }, "\u2212"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => updateZoom(0.12),
+    "aria-label": "Zoom in"
+  }, "+"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: resetView
+  }, "Reset view"))), /*#__PURE__*/React.createElement("canvas", {
+    ref: canvasRef,
+    className: "ve-topography-canvas",
+    role: "img",
+    tabIndex: 0,
+    "aria-label": `3D topography grid at year ${time}; ${mapCols} by ${gridRows} cells; azimuth ${camera.azimuth.toFixed(2)} radians; elevation ${camera.elevation.toFixed(2)} radians; zoom ${zoomLabel}; elevation scale ${elevationLabel}.`,
+    onPointerDown: onPointerDown,
+    onPointerMove: onPointerMove,
+    onPointerUp: onPointerEnd,
+    onPointerCancel: onPointerEnd,
+    onWheel: event => {
+      event.preventDefault();
+      updateZoom(event.deltaY > 0 ? -0.08 : 0.08);
+    },
+    onKeyDown: event => {
+      if (event.key === 'r' || event.key === 'R') resetView();
+      if (event.key === '+' || event.key === '=') updateZoom(0.12);
+      if (event.key === '-') updateZoom(-0.12);
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "ve-topography-status"
+  }, /*#__PURE__*/React.createElement("span", null, "Year ", time, " \xB7 ", mapCols, "\xD7", gridRows, " grid"), /*#__PURE__*/React.createElement("span", null, "Zoom ", zoomLabel), /*#__PURE__*/React.createElement("label", null, "Elevation exaggeration ", elevationLabel, /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    min: "0.65",
+    max: "2.2",
+    step: "0.05",
+    value: elevationScale,
+    onChange: event => setElevationScale(Number(event.target.value))
+  }))));
+};
 
 // Main Simulator component
 const SimulatorPage = () => {
@@ -2024,6 +2297,8 @@ const SimulatorPage = () => {
   });
   const [mapSnapshot, setMapSnapshot] = useState({
     time: 0,
+    h: [],
+    hMax: [],
     masses: {
       injected: 0,
       trapped: 0,
@@ -2158,9 +2433,10 @@ const SimulatorPage = () => {
   const consumeMapCommandOnce = useCallback(handledId => {
     setMapCommand(current => consumeMapCommand(current, handledId));
   }, []);
-  const resetActiveSimulation = () => activeSubTab === 'map' ? sendMapCommand('reset') : resetSimulation();
+  const isMapView = activeSubTab === 'map' || activeSubTab === 'topography';
+  const resetActiveSimulation = () => isMapView ? sendMapCommand('reset') : resetSimulation();
   const runActiveSimulation = () => {
-    if (activeSubTab !== 'map') {
+    if (!isMapView) {
       handleRunScenario();
       return;
     }
@@ -2174,7 +2450,7 @@ const SimulatorPage = () => {
     lastRunSignature: lastRunSignatureRef.current,
     simTime
   });
-  const runStatus = activeSubTab === 'map' ? deriveMapRunStatus(mapSnapshot, scenarioSignature, mapLastRunSignatureRef.current) : crossSectionRunStatus;
+  const runStatus = isMapView ? deriveMapRunStatus(mapSnapshot, scenarioSignature, mapLastRunSignatureRef.current) : crossSectionRunStatus;
 
   // Preset Scenario Handlers
   const applyPreset = presetName => {
@@ -4375,7 +4651,7 @@ const SimulatorPage = () => {
     value: Q,
     onChange: setQ
   }), /*#__PURE__*/React.createElement(ParameterField, {
-    label: activeSubTab === 'map' ? 'Well X location' : 'Well location',
+    label: isMapView ? 'Well X location' : 'Well location',
     unit: "%",
     min: 10,
     max: 90,
@@ -4553,7 +4829,7 @@ const SimulatorPage = () => {
     step: 10,
     value: cellCount,
     onChange: setCellCount
-  }), activeSubTab === 'map' && /*#__PURE__*/React.createElement(ParameterField, {
+  }), isMapView && /*#__PURE__*/React.createElement(ParameterField, {
     label: "Well Y location",
     unit: "%",
     min: 10,
@@ -4561,7 +4837,7 @@ const SimulatorPage = () => {
     step: 5,
     value: wellY,
     onChange: setWellY
-  }), activeSubTab === 'map' && /*#__PURE__*/React.createElement(ParameterField, {
+  }), isMapView && /*#__PURE__*/React.createElement(ParameterField, {
     label: "2D grid resolution",
     unit: "columns",
     min: 24,
@@ -4657,7 +4933,35 @@ const SimulatorPage = () => {
     style: {
       marginRight: 6
     }
-  }), " 2D Map")), /*#__PURE__*/React.createElement("div", {
+  }), " 2D Map"), /*#__PURE__*/React.createElement("button", {
+    ref: el => {
+      tabRefs.current.topography = el;
+    },
+    onClick: () => setActiveSubTab('topography'),
+    role: "tab",
+    id: "tab-topography",
+    "aria-selected": activeSubTab === 'topography',
+    "aria-controls": "tabpanel-topography",
+    tabIndex: activeSubTab === 'topography' ? 0 : -1,
+    style: {
+      background: activeSubTab === 'topography' ? 'rgba(100, 255, 218, 0.08)' : 'none',
+      border: 'none',
+      borderBottom: activeSubTab === 'topography' ? '2px solid #64ffda' : '2px solid transparent',
+      color: activeSubTab === 'topography' ? '#64ffda' : 'rgba(255,255,255,0.6)',
+      padding: '12px 16px',
+      fontSize: '11px',
+      fontWeight: 600,
+      letterSpacing: '0.05em',
+      textTransform: 'uppercase',
+      cursor: 'pointer',
+      transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-cube",
+    style: {
+      marginRight: 6
+    }
+  }), " 3D Topography")), /*#__PURE__*/React.createElement("div", {
     className: "sim-tab-status",
     style: {
       paddingRight: 8
@@ -4672,7 +4976,12 @@ const SimulatorPage = () => {
       fontSize: 10.5,
       color: 'rgba(255,255,255,0.5)'
     }
-  }, "x\u2013y plume-height model") : activeSubTab === 'uq' ? /*#__PURE__*/React.createElement("span", {
+  }, "x\u2013y plume-height model") : activeSubTab === 'topography' ? /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10.5,
+      color: 'rgba(255,255,255,0.5)'
+    }
+  }, "interactive grid topography") : activeSubTab === 'uq' ? /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10.5,
       color: 'rgba(255,255,255,0.5)'
@@ -5233,7 +5542,7 @@ const SimulatorPage = () => {
           fontWeight: 'bold'
         }
       }, speed, "x")));
-    } else if (activeSubTab === 'map') {
+    } else if (activeSubTab === 'map' || activeSubTab === 'topography') {
       return null;
     } else if (activeSubTab === 'uq') {
       return /*#__PURE__*/React.createElement("section", {
@@ -5577,6 +5886,8 @@ const SimulatorPage = () => {
     }
   })(), /*#__PURE__*/React.createElement("div", {
     className: "ve-map-workspace",
+    hidden: activeSubTab !== 'map' && activeSubTab !== 'topography'
+  }, /*#__PURE__*/React.createElement("div", {
     hidden: activeSubTab !== 'map'
   }, /*#__PURE__*/React.createElement(Ve2DMapPanel, {
     K: K,
@@ -5599,6 +5910,19 @@ const SimulatorPage = () => {
     onRun: runActiveSimulation,
     onReset: resetActiveSimulation,
     onSnapshot: setMapSnapshot
+  }))), /*#__PURE__*/React.createElement("div", {
+    id: "tabpanel-topography",
+    role: "tabpanel",
+    "aria-labelledby": "tab-topography",
+    hidden: activeSubTab !== 'topography'
+  }, /*#__PURE__*/React.createElement(Ve3DTopographyPanel, {
+    mapSnapshot: mapSnapshot,
+    mapCols: mapCols,
+    mapRows: Math.max(12, Math.round(mapCols * 0.6)),
+    faultCount: faultCount,
+    faults: faults,
+    injLocation: injLocation,
+    wellY: wellY
   }))), /*#__PURE__*/React.createElement("p", {
     style: {
       margin: '-8px 6px 0',
@@ -5606,7 +5930,7 @@ const SimulatorPage = () => {
       lineHeight: 1.5,
       color: 'rgba(255,255,255,0.45)'
     }
-  }, "Educational ", activeSubTab === 'map' ? 'x–y plan-view' : 'cross-section', " Vertical-Equilibrium model \xB7 scaled units (1 kt = one model mass unit) \xB7 buoyancy-driven, viscosity-free gravity tongue with simplified faults. The Methodology tab separates reference theory from the implemented scheme.")), (activeSubTab === 'profile' || activeSubTab === 'map') && /*#__PURE__*/React.createElement(OutcomeRail, {
+  }, "Educational ", isMapView ? 'x–y plan-view' : 'cross-section', " Vertical-Equilibrium model \xB7 scaled units (1 kt = one model mass unit) \xB7 buoyancy-driven, viscosity-free gravity tongue with simplified faults. The Methodology tab separates reference theory from the implemented scheme.")), (activeSubTab === 'profile' || isMapView) && /*#__PURE__*/React.createElement(OutcomeRail, {
     "data-mobile-open": presentedPanel === 'outcomes',
     inert: presentedPanel === 'inputs' ? '' : undefined,
     closeRef: element => {
