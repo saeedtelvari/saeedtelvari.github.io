@@ -1,8 +1,8 @@
 // SimulatorPage.jsx — Interactive VE Simulator Page
 const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
-const SIM_TABS = ['profile', 'map', 'uq', 'guide'];
-const VISUALIZATION_TABS = ['profile', 'map'];
+const SIM_TABS = ['profile', 'map', 'topography', 'uq', 'guide'];
+const VISUALIZATION_TABS = ['profile', 'map', 'topography'];
 
 // Declarative registry of every parameter the UQ batch can sample.
 // dec = display decimals; dec 0 params are sampled as integers.
@@ -60,8 +60,18 @@ const executeFileAction = (action, onFailure) => {
 const getPlaybackAction = ({ isPlaying, simTime, scenarioChanged }) =>
   isPlaying ? 'pause' : simTime === 0 || scenarioChanged ? 'run-scenario' : 'resume';
 
-const selectActiveResults = (activeView, crossSection, map) => activeView === 'map' ? map : crossSection;
+const selectActiveResults = (activeView, crossSection, map) =>
+  activeView === 'map' || activeView === 'topography' ? map : crossSection;
 const consumeMapCommand = (command, handledId) => command?.id === handledId ? null : command;
+const createMapSnapshot = ({ time, mapState, history, isRunning, speed }) => ({
+  time,
+  h: mapState.h,
+  hMax: mapState.hMax,
+  masses: mapState.masses,
+  history,
+  isRunning,
+  speed
+});
 const deriveMapRunStatus = (snapshot, scenarioSignature, lastRunSignature) => deriveRunStatus({
   isPlaying: snapshot.isRunning,
   isReversing: false,
@@ -387,7 +397,7 @@ const Ve2DMapPanel = ({
   }, [command, onCommandConsumed, resetMap]);
 
   useEffect(() => {
-    onSnapshot({ time: mapTime, masses: mapState.masses, history: historyRef.current, isRunning, speed: mapSpeed });
+    onSnapshot(createMapSnapshot({ time: mapTime, mapState, history: historyRef.current, isRunning, speed: mapSpeed }));
   }, [mapState, mapTime, isRunning, mapSpeed, onSnapshot]);
 
   useEffect(() => {
@@ -976,6 +986,8 @@ const SimulatorPage = () => {
   const [currentMasses, setCurrentMasses] = useState({ injected: 0, trapped: 0, mobile: 0, leaked: 0 });
   const [mapSnapshot, setMapSnapshot] = useState({
     time: 0,
+    h: [],
+    hMax: [],
     masses: { injected: 0, trapped: 0, mobile: 0, leaked: 0 },
     history: [],
     isRunning: false,
@@ -1070,9 +1082,10 @@ const SimulatorPage = () => {
   const consumeMapCommandOnce = useCallback(handledId => {
     setMapCommand(current => consumeMapCommand(current, handledId));
   }, []);
-  const resetActiveSimulation = () => activeSubTab === 'map' ? sendMapCommand('reset') : resetSimulation();
+  const isMapView = activeSubTab === 'map' || activeSubTab === 'topography';
+  const resetActiveSimulation = () => isMapView ? sendMapCommand('reset') : resetSimulation();
   const runActiveSimulation = () => {
-    if (activeSubTab !== 'map') {
+    if (!isMapView) {
       handleRunScenario();
       return;
     }
@@ -1087,7 +1100,7 @@ const SimulatorPage = () => {
     lastRunSignature: lastRunSignatureRef.current,
     simTime
   });
-  const runStatus = activeSubTab === 'map'
+  const runStatus = isMapView
     ? deriveMapRunStatus(mapSnapshot, scenarioSignature, mapLastRunSignatureRef.current)
     : crossSectionRunStatus;
 
@@ -2923,7 +2936,7 @@ const SimulatorPage = () => {
             <h3>Injection</h3>
             <div>
               <ParameterField label="Flow rate (Q)" unit="kt/yr" min={0} max={3.5} step={0.1} value={Q} onChange={setQ} />
-              <ParameterField label={activeSubTab === 'map' ? 'Well X location' : 'Well location'} unit="%" min={10} max={90} step={5} value={injLocation} onChange={setInjLocation} />
+              <ParameterField label={isMapView ? 'Well X location' : 'Well location'} unit="%" min={10} max={90} step={5} value={injLocation} onChange={setInjLocation} />
               <ParameterField label="Injection stop year" unit="y" min={50} max={400} step={10} value={injDuration} onChange={setInjDuration} />
             </div>
           </section>
@@ -3013,8 +3026,8 @@ const SimulatorPage = () => {
             <h3>Grid detail</h3>
             <div>
               <ParameterField label="Grid cells (N)" unit="cells" min={50} max={300} step={10} value={cellCount} onChange={setCellCount} />
-              {activeSubTab === 'map' && <ParameterField label="Well Y location" unit="%" min={10} max={90} step={5} value={wellY} onChange={setWellY} />}
-              {activeSubTab === 'map' && <ParameterField label="2D grid resolution" unit="columns" min={24} max={80} step={8} value={mapCols} onChange={setMapCols} />}
+              {isMapView && <ParameterField label="Well Y location" unit="%" min={10} max={90} step={5} value={wellY} onChange={setWellY} />}
+              {isMapView && <ParameterField label="2D grid resolution" unit="columns" min={24} max={80} step={8} value={mapCols} onChange={setMapCols} />}
             </div>
           </section>
         </InputRail>
@@ -3092,12 +3105,38 @@ const SimulatorPage = () => {
                 >
                   <i className="fas fa-map" style={{ marginRight: 6 }} /> 2D Map
                 </button>
+                <button
+                  ref={el => { tabRefs.current.topography = el; }}
+                  onClick={() => setActiveSubTab('topography')}
+                  role="tab"
+                  id="tab-topography"
+                  aria-selected={activeSubTab === 'topography'}
+                  aria-controls="tabpanel-topography"
+                  tabIndex={activeSubTab === 'topography' ? 0 : -1}
+                  style={{
+                    background: activeSubTab === 'topography' ? 'rgba(100, 255, 218, 0.08)' : 'none',
+                    border: 'none',
+                    borderBottom: activeSubTab === 'topography' ? '2px solid #64ffda' : '2px solid transparent',
+                    color: activeSubTab === 'topography' ? '#64ffda' : 'rgba(255,255,255,0.6)',
+                    padding: '12px 16px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    letterSpacing: '0.05em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease'
+                  }}
+                >
+                  <i className="fas fa-cube" style={{ marginRight: 6 }} /> 3D Topography
+                </button>
               </div>
               <div className="sim-tab-status" style={{ paddingRight: 8 }}>
                 {activeSubTab === 'profile' ? (
                   <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Year {simTime} / 1000</span>
                 ) : activeSubTab === 'map' ? (
                   <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>x–y plume-height model</span>
+                ) : activeSubTab === 'topography' ? (
+                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>interactive grid topography</span>
                 ) : activeSubTab === 'uq' ? (
                   <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Monte Carlo Analysis</span>
                 ) : (
@@ -3441,7 +3480,7 @@ const SimulatorPage = () => {
               </div>
             </div>
           );
-                } else if (activeSubTab === 'map') {
+                } else if (activeSubTab === 'map' || activeSubTab === 'topography') {
                   return null;
                 } else if (activeSubTab === 'uq') {
           return (
@@ -3658,42 +3697,55 @@ const SimulatorPage = () => {
                );
              }
             })()}
-            <div className="ve-map-workspace" hidden={activeSubTab !== 'map'}>
-              <Ve2DMapPanel
-                K={K}
-                porosity={porosity}
-                residualTrapFraction={residualTrapFraction}
-                dipPercent={dipPercent}
-                amplitude={amplitude}
-                frequency={frequency}
-                faultOffset={faultOffset}
-                Q={Q}
-                injLocation={injLocation}
-                injDuration={injDuration}
+            <div className="ve-map-workspace" hidden={activeSubTab !== 'map' && activeSubTab !== 'topography'}>
+              <div hidden={activeSubTab !== 'map'}>
+                <Ve2DMapPanel
+                  K={K}
+                  porosity={porosity}
+                  residualTrapFraction={residualTrapFraction}
+                  dipPercent={dipPercent}
+                  amplitude={amplitude}
+                  frequency={frequency}
+                  faultOffset={faultOffset}
+                  Q={Q}
+                  injLocation={injLocation}
+                  injDuration={injDuration}
+                  faultCount={faultCount}
+                  faults={faults}
+                  mapCols={mapCols}
+                  wellY={wellY}
+                  preset={selectedPreset}
+                  command={mapCommand}
+                  onCommandConsumed={consumeMapCommandOnce}
+                  onRun={runActiveSimulation}
+                  onReset={resetActiveSimulation}
+                  onSnapshot={setMapSnapshot}
+                />
+              </div>
+            </div>
+            <div id="tabpanel-topography" role="tabpanel" aria-labelledby="tab-topography" hidden={activeSubTab !== 'topography'}>
+              <Ve3DTopographyPanel
+                mapSnapshot={mapSnapshot}
+                mapCols={mapCols}
+                mapRows={Math.max(12, Math.round(mapCols * 0.6))}
                 faultCount={faultCount}
                 faults={faults}
-                mapCols={mapCols}
+                injLocation={injLocation}
                 wellY={wellY}
-                preset={selectedPreset}
-                command={mapCommand}
-                onCommandConsumed={consumeMapCommandOnce}
-                onRun={runActiveSimulation}
-                onReset={resetActiveSimulation}
-                onSnapshot={setMapSnapshot}
               />
             </div>
             </div>
 
           {/* Model honesty footnote — scaled toy model disclosure */}
           <p style={{ margin: '-8px 6px 0', fontSize: 10.5, lineHeight: 1.5, color: 'rgba(255,255,255,0.45)' }}>
-            Educational {activeSubTab === 'map' ? 'x–y plan-view' : 'cross-section'} Vertical-Equilibrium model &middot; scaled units (1 kt = one model mass unit) &middot; buoyancy-driven, viscosity-free gravity tongue with simplified faults. The Methodology tab separates reference theory from the implemented scheme.
+            Educational {isMapView ? 'x–y plan-view' : 'cross-section'} Vertical-Equilibrium model &middot; scaled units (1 kt = one model mass unit) &middot; buoyancy-driven, viscosity-free gravity tongue with simplified faults. The Methodology tab separates reference theory from the implemented scheme.
           </p>
 
           {/* Sub-grid containing Parameters (Left) and Faults (Right) directly below Reservoir Grid */}
         </VisualizationWorkspace>
 
         {/* RIGHT COLUMN: Mass Balance Analytics & Charting Window */}
-        {(activeSubTab === 'profile' || activeSubTab === 'map') && <OutcomeRail
+        {(activeSubTab === 'profile' || isMapView) && <OutcomeRail
           data-mobile-open={presentedPanel === 'outcomes'}
           inert={presentedPanel === 'inputs' ? '' : undefined}
           closeRef={element => { mobileCloseRefs.current.outcomes = element; }}

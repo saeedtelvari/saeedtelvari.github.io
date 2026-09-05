@@ -38,7 +38,7 @@ const loadMapLifecycleHelpers = () => {
   const page = read('SimulatorPage.jsx');
   const prelude = page.slice(0, page.indexOf('const UQParamConfig'));
   const context = { React: {} };
-  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    consumeMapCommand: typeof consumeMapCommand === 'undefined' ? undefined : consumeMapCommand,\n    deriveMapRunStatus: typeof deriveMapRunStatus === 'undefined' ? undefined : deriveMapRunStatus\n  };`, context);
+  vm.runInNewContext(`${prelude}\nthis.helpers = {\n    consumeMapCommand: typeof consumeMapCommand === 'undefined' ? undefined : consumeMapCommand,\n    deriveMapRunStatus: typeof deriveMapRunStatus === 'undefined' ? undefined : deriveMapRunStatus,\n    createMapSnapshot: typeof createMapSnapshot === 'undefined' ? undefined : createMapSnapshot\n  };`, context);
   return context.helpers;
 };
 
@@ -314,11 +314,46 @@ test('map commands are consumed once without clearing a newer command', () => {
   assert.deepEqual(consume(newer, 2), newer);
 });
 
+test('map snapshots publish grid heights for the 3D topography consumer', () => {
+  const { createMapSnapshot } = loadMapLifecycleHelpers();
+  const h = [0.1, 0.3];
+  const hMax = [0.2, 0.4];
+
+  assert.equal(typeof createMapSnapshot, 'function');
+  const snapshot = createMapSnapshot({
+    time: 12,
+    mapState: { h, hMax, masses: { injected: 6 } },
+    history: [{ time: 12 }],
+    isRunning: true,
+    speed: 2
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(snapshot.h)), h);
+  assert.deepEqual(JSON.parse(JSON.stringify(snapshot.hMax)), hMax);
+  assert.match(read('SimulatorPage.jsx'), /const h = Array\.isArray\(mapSnapshot\.h\) \? mapSnapshot\.h : \[\]/);
+});
+
 test('map lifecycle stays mounted while workspace tabs change', () => {
   const page = read('SimulatorPage.jsx');
 
-  assert.match(page, /hidden=\{activeSubTab !== 'map'\}[\s\S]*<Ve2DMapPanel/);
+  assert.match(page, /hidden=\{activeSubTab !== 'map' && activeSubTab !== 'topography'\}[\s\S]*<Ve2DMapPanel/);
   assert.equal((page.match(/<Ve2DMapPanel/g) || []).length, 1);
+});
+
+test('3D topography is a visualization peer and keeps the 2D map mounted', () => {
+  const page = read('SimulatorPage.jsx');
+
+  assert.match(page, /SIM_TABS = \['profile', 'map', 'topography', 'uq', 'guide'\]/);
+  assert.match(page, /VISUALIZATION_TABS = \['profile', 'map', 'topography'\]/);
+  assert.match(page, /id="tab-topography"/);
+  assert.match(page, /aria-controls="tabpanel-topography"/);
+  assert.match(page, /id="tabpanel-topography" role="tabpanel" aria-labelledby="tab-topography"/);
+  assert.match(page, /<Ve3DTopographyPanel[\s\S]*mapSnapshot=\{mapSnapshot\}/);
+  assert.match(page, /hidden=\{activeSubTab !== 'map' && activeSubTab !== 'topography'\}/);
+  assert.match(page, /activeSubTab === 'map' \|\| activeSubTab === 'topography'/);
+  assert.match(page, /const resetActiveSimulation = \(\) => isMapView \? sendMapCommand\('reset'\) : resetSimulation\(\)/);
+  assert.match(page, /if \(!isMapView\) \{/);
+  assert.match(page, /const runStatus = isMapView/);
 });
 
 test('map run status reports changed inputs after the last run', () => {
