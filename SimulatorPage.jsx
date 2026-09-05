@@ -568,6 +568,172 @@ const Ve2DMapPanel = ({
   );
 };
 
+const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, faults = [], injLocation, wellY }) => {
+  const canvasRef = useRef(null);
+  const pointersRef = useRef(new Map());
+  const dragRef = useRef(null);
+  const pinchRef = useRef(null);
+  const [camera, setCamera] = useState(resetTopographyCamera);
+  const [elevationScale, setElevationScale] = useState(1.25);
+  const gridRows = mapRows || Math.max(12, Math.round(mapCols * 0.6));
+  const time = Number(mapSnapshot.time) || 0;
+  const zoomLabel = `${camera.zoom.toFixed(2)}×`;
+  const elevationLabel = `${elevationScale.toFixed(2)}×`;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const width = 1000;
+    const height = 600;
+    const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = width * pixelRatio;
+    canvas.height = height * pixelRatio;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#10202d';
+    ctx.fillRect(0, 0, width, height);
+
+    const h = Array.isArray(mapSnapshot.h) ? mapSnapshot.h : [];
+    const hMax = Array.isArray(mapSnapshot.hMax) ? mapSnapshot.hMax : h;
+    const peak = Math.max(0.0001, ...hMax.map(value => Number(value) || 0));
+    const pointAt = (col, row) => {
+      const index = Math.min(hMax.length - 1, Math.max(0, row * mapCols + col));
+      const plume = Math.max(Number(h[index]) || 0, Number(hMax[index]) || 0) / peak;
+      return projectTopographyPoint({
+        x: col / Math.max(1, mapCols - 1),
+        y: row / Math.max(1, gridRows - 1),
+        height: 0.5 + (plume - 0.5) * elevationScale
+      }, camera, width, height);
+    };
+    const cells = [];
+    for (let row = 0; row < gridRows - 1; row++) {
+      for (let col = 0; col < mapCols - 1; col++) {
+        const index = row * mapCols + col;
+        const heightRatio = Math.max(Number(h[index]) || 0, Number(hMax[index]) || 0) / peak;
+        cells.push({ col, row, heightRatio, depth: row * Math.cos(camera.azimuth) + col * Math.sin(camera.azimuth) });
+      }
+    }
+    cells.sort((a, b) => a.depth - b.depth).forEach(cell => {
+      const points = [pointAt(cell.col, cell.row), pointAt(cell.col + 1, cell.row), pointAt(cell.col + 1, cell.row + 1), pointAt(cell.col, cell.row + 1)];
+      const shade = Math.round(41 + cell.heightRatio * 72);
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      points.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
+      ctx.closePath();
+      ctx.fillStyle = `rgb(${Math.round(15 + cell.heightRatio * 24)}, ${shade + 30}, ${shade + 24})`;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(194, 221, 220, 0.22)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    });
+
+    faults.slice(0, faultCount).forEach(fault => {
+      const x = (Number(fault.xPercent) || 0) / 100;
+      const slope = Number(fault.dipSlope) || 0;
+      const start = projectTopographyPoint({ x: x - slope * 0.15, y: 0, height: 0.72 }, camera, width, height);
+      const end = projectTopographyPoint({ x: x + slope * 0.15, y: 1, height: 0.72 }, camera, width, height);
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.strokeStyle = fault.isSealed ? '#d6a65a' : '#d97a63';
+      ctx.lineWidth = 2;
+      ctx.setLineDash(fault.isSealed ? [] : [7, 5]);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    const injector = projectTopographyPoint({ x: (Number(injLocation) || 0) / 100, y: (Number(wellY) || 0) / 100, height: 0.86 }, camera, width, height);
+    ctx.beginPath();
+    ctx.arc(injector.x, injector.y, 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#e5b15e';
+    ctx.fill();
+    ctx.strokeStyle = '#fff3d6';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }, [camera, elevationScale, faultCount, faults, gridRows, injLocation, mapCols, mapSnapshot, wellY]);
+
+  const updateZoom = delta => setCamera(current => clampTopographyCamera({ ...current, zoom: current.zoom + delta }));
+  const resetView = () => setCamera(resetTopographyCamera());
+  const pointerDistance = points => Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+
+  const onPointerDown = event => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const points = [...pointersRef.current.values()];
+    if (points.length === 1) dragRef.current = { x: event.clientX, y: event.clientY, camera };
+    if (points.length === 2) pinchRef.current = { distance: pointerDistance(points), zoom: camera.zoom };
+  };
+
+  const onPointerMove = event => {
+    if (!pointersRef.current.has(event.pointerId)) return;
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const points = [...pointersRef.current.values()];
+    if (points.length === 2 && pinchRef.current) {
+      const distance = pointerDistance(points);
+      const nextZoom = pinchRef.current.zoom * (distance / Math.max(1, pinchRef.current.distance));
+      setCamera(current => clampTopographyCamera({ ...current, zoom: nextZoom }));
+      return;
+    }
+    if (points.length !== 1 || !dragRef.current) return;
+    const dx = event.clientX - dragRef.current.x;
+    const dy = event.clientY - dragRef.current.y;
+    setCamera(clampTopographyCamera({
+      ...dragRef.current.camera,
+      azimuth: dragRef.current.camera.azimuth + dx * 0.012,
+      elevation: dragRef.current.camera.elevation - dy * 0.01
+    }));
+  };
+
+  const onPointerEnd = event => {
+    pointersRef.current.delete(event.pointerId);
+    dragRef.current = null;
+    const points = [...pointersRef.current.values()];
+    if (points.length === 1) dragRef.current = { ...points[0], camera };
+    pinchRef.current = points.length === 2 ? { distance: pointerDistance(points), zoom: camera.zoom } : null;
+  };
+
+  return (
+    <section className="ve-topography-panel" aria-label="3D topography viewer">
+      <div className="ve-topography-toolbar">
+        <div>
+          <strong>3D topography</strong>
+          <span>Drag to orbit · scroll or pinch to zoom</span>
+        </div>
+        <div className="ve-topography-actions">
+          <button type="button" onClick={() => updateZoom(-0.12)} aria-label="Zoom out">−</button>
+          <button type="button" onClick={() => updateZoom(0.12)} aria-label="Zoom in">+</button>
+          <button type="button" onClick={resetView}>Reset view</button>
+        </div>
+      </div>
+      <canvas
+        ref={canvasRef}
+        className="ve-topography-canvas"
+        role="img"
+        tabIndex={0}
+        aria-label={`3D topography grid at year ${time}; ${mapCols} by ${gridRows} cells; azimuth ${camera.azimuth.toFixed(2)} radians; elevation ${camera.elevation.toFixed(2)} radians; zoom ${zoomLabel}; elevation scale ${elevationLabel}.`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+        onWheel={event => { event.preventDefault(); updateZoom(event.deltaY > 0 ? -0.08 : 0.08); }}
+        onKeyDown={event => {
+          if (event.key === 'r' || event.key === 'R') resetView();
+          if (event.key === '+' || event.key === '=') updateZoom(0.12);
+          if (event.key === '-') updateZoom(-0.12);
+        }}
+      />
+      <div className="ve-topography-status">
+        <span>Year {time} · {mapCols}×{gridRows} grid</span>
+        <span>Zoom {zoomLabel}</span>
+        <label>
+          Elevation exaggeration {elevationLabel}
+          <input type="range" min="0.65" max="2.2" step="0.05" value={elevationScale} onChange={event => setElevationScale(Number(event.target.value))} />
+        </label>
+      </div>
+    </section>
+  );
+};
+
 // Main Simulator component
 const SimulatorPage = () => {
   // --- STATE PARAMETERS ---

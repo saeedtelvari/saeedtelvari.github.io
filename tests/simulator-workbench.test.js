@@ -363,6 +363,24 @@ test('topography projection is deterministic and bounded to its canvas', () => {
   assert.ok(bounded.y >= 0 && bounded.y <= 600);
 });
 
+test('3D topography panel exposes orbit controls without a new renderer dependency', () => {
+  const page = read('SimulatorPage.jsx');
+  const panel = page.slice(page.indexOf('const Ve3DTopographyPanel'), page.indexOf('// Main Simulator component'));
+  const css = read('simulator-workbench.css');
+
+  assert.match(panel, /const Ve3DTopographyPanel/);
+  assert.match(panel, /aria-label=\{`3D topography grid at year/);
+  assert.match(panel, /azimuth \$\{camera\.azimuth\.toFixed\(2\)\} radians; elevation \$\{camera\.elevation\.toFixed\(2\)\} radians/);
+  assert.match(panel, />Reset view</);
+  assert.match(panel, /onPointerDown=/);
+  assert.match(panel, /onPointerMove=/);
+  assert.match(panel, /onWheel=/);
+  assert.match(panel, /Elevation exaggeration/);
+  assert.doesNotMatch(panel, /three|THREE|requestAnimationFrame/);
+  assert.match(css, /\.ve-topography-canvas\s*\{[\s\S]*?touch-action:\s*none/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.ve-topography-actions button/);
+});
+
 test('risk and methodology render as peer workspaces outside the visualization tabs', () => {
   const page = read('SimulatorPage.jsx');
   const css = read('simulator-workbench.css');
