@@ -1072,7 +1072,8 @@ const createMapSnapshot = ({
   mapState,
   history,
   isRunning,
-  speed
+  speed,
+  params
 }) => ({
   time,
   h: mapState.h,
@@ -1080,8 +1081,36 @@ const createMapSnapshot = ({
   masses: mapState.masses,
   history,
   isRunning,
-  speed
+  speed,
+  params
 });
+const getMapPlaybackTransition = ({
+  isRunning,
+  speed
+}, type) => {
+  if (type === 'run') return {
+    reset: true,
+    isRunning: true
+  };
+  if (type === 'reset') return {
+    reset: true,
+    isRunning: false
+  };
+  if (type === 'pause') return {
+    isRunning: false
+  };
+  if (type === 'resume') return {
+    isRunning: true
+  };
+  if (type === 'step') return {
+    isRunning: false,
+    advance: true
+  };
+  if (type === 'speed') return {
+    speed: speed === 1 ? 2 : speed === 2 ? 4 : 1
+  };
+  return null;
+};
 const deriveMapRunStatus = (snapshot, scenarioSignature, lastRunSignature) => deriveRunStatus({
   isPlaying: snapshot.isRunning,
   isReversing: false,
@@ -1113,7 +1142,7 @@ const projectTopographyPoint = ({
   y = 0.5,
   height = 0.5
 } = {}, camera, canvasWidth, canvasHeight) => {
-  const clampUnit = value => Math.max(0, Math.min(1, Number(value) || 0));
+  const numeric = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
   const width = Math.max(0, Number(canvasWidth) || 0);
   const heightPx = Math.max(0, Number(canvasHeight) || 0);
   const {
@@ -1121,16 +1150,16 @@ const projectTopographyPoint = ({
     elevation,
     zoom
   } = clampTopographyCamera(camera);
-  const dx = clampUnit(x) - 0.5;
-  const dy = clampUnit(y) - 0.5;
-  const dz = clampUnit(height) - 0.5;
+  const dx = numeric(x, 0.5) - 0.5;
+  const dy = numeric(y, 0.5) - 0.5;
+  const dz = numeric(height, 0.5) - 0.5;
   const rotatedX = dx * Math.cos(azimuth) - dy * Math.sin(azimuth);
   const depth = dx * Math.sin(azimuth) + dy * Math.cos(azimuth);
-  const projectedX = 0.5 + rotatedX * zoom;
-  const projectedY = 0.5 + (depth * Math.cos(elevation) - dz * Math.sin(elevation)) * zoom;
+  const projectedX = 0.5 + rotatedX * zoom * 0.62;
+  const projectedY = 0.5 + (depth * Math.cos(elevation) - dz * Math.sin(elevation)) * zoom * 0.62;
   return {
-    x: Math.max(0, Math.min(width, projectedX * width)),
-    y: Math.max(0, Math.min(heightPx, projectedY * heightPx))
+    x: projectedX * width,
+    y: projectedY * heightPx
   };
 };
 const formatMass = value => `${Number(value || 0).toLocaleString('en-GB', {
@@ -1503,8 +1532,14 @@ const Ve2DMapPanel = ({
   useEffect(() => resetMap(), [resetMap, preset]);
   useEffect(() => {
     if (!command) return;
-    resetMap();
-    if (command.type === 'run') setIsRunning(true);
+    const transition = getMapPlaybackTransition({
+      isRunning,
+      speed: mapSpeed
+    }, command.type);
+    if (transition?.reset) resetMap();
+    if (transition?.advance) advanceMap();
+    if (typeof transition?.isRunning === 'boolean') setIsRunning(transition.isRunning);
+    if (transition?.speed) setMapSpeed(transition.speed);
     onCommandConsumed(command.id);
   }, [command, onCommandConsumed, resetMap]);
   useEffect(() => {
@@ -1513,9 +1548,10 @@ const Ve2DMapPanel = ({
       mapState,
       history: historyRef.current,
       isRunning,
-      speed: mapSpeed
+      speed: mapSpeed,
+      params: paramsRef.current
     }));
-  }, [mapState, mapTime, isRunning, mapSpeed, onSnapshot]);
+  }, [mapState, mapTime, isRunning, mapSpeed, onSnapshot, K, porosity, residualTrapFraction, dipPercent, amplitude, frequency, faultOffset, Q, injLocation, injDuration, faultCount, faults, wellY]);
   useEffect(() => {
     if (!isRunning) return;
     const timer = setInterval(advanceMap, 70 / mapSpeed);
@@ -1824,7 +1860,8 @@ const Ve3DTopographyPanel = ({
   faultCount,
   faults = [],
   injLocation,
-  wellY
+  wellY,
+  onMapCommand
 }) => {
   const canvasRef = useRef(null);
   const pointersRef = useRef(new Map());
@@ -1852,36 +1889,60 @@ const Ve3DTopographyPanel = ({
     const h = Array.isArray(mapSnapshot.h) ? mapSnapshot.h : [];
     const hMax = Array.isArray(mapSnapshot.hMax) ? mapSnapshot.hMax : h;
     const peak = Math.max(0.0001, ...hMax.map(value => Number(value) || 0));
+    const structure = {
+      width,
+      height,
+      faults: [],
+      ...(mapSnapshot.params || {})
+    };
+    const depths = new Map();
+    const surfaceDepth = (x, y) => {
+      const key = `${x.toFixed(4)}:${y.toFixed(4)}`;
+      if (!depths.has(key)) depths.set(key, globalThis.VE2D.topDepth(x * width, y * height, structure));
+      return depths.get(key);
+    };
+    for (let row = 0; row < gridRows; row++) {
+      for (let col = 0; col < mapCols; col++) surfaceDepth(col / Math.max(1, mapCols - 1), row / Math.max(1, gridRows - 1));
+    }
+    const depthValues = [...depths.values()];
+    const minDepth = Math.min(...depthValues);
+    const maxDepth = Math.max(...depthValues);
+    const depthSpan = Math.max(0.001, maxDepth - minDepth);
+    const surfaceAt = (x, y, plume = 0) => 0.5 + ((maxDepth - surfaceDepth(x, y)) / depthSpan - 0.5) * elevationScale + plume * 0.08;
     const pointAt = (col, row) => {
       const index = Math.min(hMax.length - 1, Math.max(0, row * mapCols + col));
-      const plume = Math.max(Number(h[index]) || 0, Number(hMax[index]) || 0) / peak;
+      const plume = (Number(h[index]) || 0) / peak;
       return projectTopographyPoint({
         x: col / Math.max(1, mapCols - 1),
         y: row / Math.max(1, gridRows - 1),
-        height: 0.5 + (plume - 0.5) * elevationScale
+        height: surfaceAt(col / Math.max(1, mapCols - 1), row / Math.max(1, gridRows - 1), plume)
       }, camera, width, height);
     };
     const cells = [];
     for (let row = 0; row < gridRows - 1; row++) {
       for (let col = 0; col < mapCols - 1; col++) {
         const index = row * mapCols + col;
-        const heightRatio = Math.max(Number(h[index]) || 0, Number(hMax[index]) || 0) / peak;
+        const plumeRatio = (Number(h[index]) || 0) / peak;
+        const historicRatio = (Number(hMax[index]) || 0) / peak;
+        const surfaceRatio = (maxDepth - surfaceDepth(col / Math.max(1, mapCols - 1), row / Math.max(1, gridRows - 1))) / depthSpan;
         cells.push({
           col,
           row,
-          heightRatio,
+          plumeRatio,
+          historicRatio,
+          surfaceRatio,
           depth: row * Math.cos(camera.azimuth) + col * Math.sin(camera.azimuth)
         });
       }
     }
     cells.sort((a, b) => a.depth - b.depth).forEach(cell => {
       const points = [pointAt(cell.col, cell.row), pointAt(cell.col + 1, cell.row), pointAt(cell.col + 1, cell.row + 1), pointAt(cell.col, cell.row + 1)];
-      const shade = Math.round(41 + cell.heightRatio * 72);
+      const shade = Math.round(41 + cell.surfaceRatio * 54);
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
       points.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
       ctx.closePath();
-      ctx.fillStyle = `rgb(${Math.round(15 + cell.heightRatio * 24)}, ${shade + 30}, ${shade + 24})`;
+      ctx.fillStyle = cell.plumeRatio > 0.0001 ? `rgb(${Math.round(18 + cell.historicRatio * 22)}, ${Math.round(104 + cell.plumeRatio * 116)}, ${Math.round(104 + cell.plumeRatio * 74)})` : `rgb(${Math.round(15 + cell.surfaceRatio * 24)}, ${shade + 30}, ${shade + 24})`;
       ctx.fill();
       ctx.strokeStyle = 'rgba(194, 221, 220, 0.22)';
       ctx.lineWidth = 0.8;
@@ -1890,29 +1951,30 @@ const Ve3DTopographyPanel = ({
     faults.slice(0, faultCount).forEach(fault => {
       const x = (Number(fault.xPercent) || 0) / 100;
       const slope = Number(fault.dipSlope) || 0;
-      const start = projectTopographyPoint({
-        x: x - slope * 0.15,
-        y: 0,
-        height: 0.72
-      }, camera, width, height);
-      const end = projectTopographyPoint({
-        x: x + slope * 0.15,
-        y: 1,
-        height: 0.72
-      }, camera, width, height);
+      const faultPoints = [];
+      for (let row = 0; row < gridRows; row++) {
+        const y = row / Math.max(1, gridRows - 1);
+        const faultX = x + slope * (y * 0.6 - 0.3);
+        faultPoints.push(projectTopographyPoint({
+          x: faultX,
+          y,
+          height: surfaceAt(faultX, y, 0.025)
+        }, camera, width, height));
+      }
       ctx.beginPath();
-      ctx.moveTo(start.x, start.y);
-      ctx.lineTo(end.x, end.y);
+      faultPoints.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
       ctx.strokeStyle = fault.isSealed ? '#d6a65a' : '#d97a63';
       ctx.lineWidth = 2;
       ctx.setLineDash(fault.isSealed ? [] : [7, 5]);
       ctx.stroke();
     });
     ctx.setLineDash([]);
+    const injectorX = (Number(injLocation) || 0) / 100;
+    const injectorY = (Number(wellY) || 0) / 100;
     const injector = projectTopographyPoint({
-      x: (Number(injLocation) || 0) / 100,
-      y: (Number(wellY) || 0) / 100,
-      height: 0.86
+      x: injectorX,
+      y: injectorY,
+      height: surfaceAt(injectorX, injectorY, 0.035)
     }, camera, width, height);
     ctx.beginPath();
     ctx.arc(injector.x, injector.y, 7, 0, Math.PI * 2);
@@ -1991,6 +2053,18 @@ const Ve3DTopographyPanel = ({
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("strong", null, "3D topography"), /*#__PURE__*/React.createElement("span", null, "Drag to orbit \xB7 scroll or pinch to zoom")), /*#__PURE__*/React.createElement("div", {
     className: "ve-topography-actions"
   }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => onMapCommand(mapSnapshot.isRunning ? 'pause' : 'resume'),
+    "aria-label": mapSnapshot.isRunning ? 'Pause map simulation' : 'Resume map simulation'
+  }, mapSnapshot.isRunning ? 'Pause' : 'Resume'), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => onMapCommand('step'),
+    "aria-label": "Advance map one year"
+  }, "Step"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => onMapCommand('speed'),
+    "aria-label": "Change map simulation speed"
+  }, mapSnapshot.speed || 1, "\xD7"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: () => updateZoom(-0.12),
     "aria-label": "Zoom out"
@@ -5922,7 +5996,8 @@ const SimulatorPage = () => {
     faultCount: faultCount,
     faults: faults,
     injLocation: injLocation,
-    wellY: wellY
+    wellY: wellY,
+    onMapCommand: sendMapCommand
   }))), /*#__PURE__*/React.createElement("p", {
     style: {
       margin: '-8px 6px 0',
