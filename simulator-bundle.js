@@ -510,13 +510,13 @@ const GuidePage = ({
     className: "math-text"
   }, "Saline aquifer CO\u2082 storage formations are typically thin, lateral sandstone layers with high aspect ratios where the reservoir length is far greater than the vertical thickness (", /*#__PURE__*/React.createElement("span", {
     className: "variable"
-  }, "H"), " &ll; ", /*#__PURE__*/React.createElement("span", {
+  }, "H"), " \u226A ", /*#__PURE__*/React.createElement("span", {
     className: "variable"
   }, "L"), "). In such geometries, buoyancy forces drive rapid vertical segregation on a timescale much faster than regional horizontal migration (", /*#__PURE__*/React.createElement("span", {
     className: "variable"
   }, "t"), /*#__PURE__*/React.createElement("span", {
     className: "subscript"
-  }, "vert"), " &ll; ", /*#__PURE__*/React.createElement("span", {
+  }, "vert"), " \u226A ", /*#__PURE__*/React.createElement("span", {
     className: "variable"
   }, "t"), /*#__PURE__*/React.createElement("span", {
     className: "subscript"
@@ -2959,7 +2959,8 @@ const SimulatorPage = () => {
   const runStatus = isMapView ? deriveMapRunStatus(mapSnapshot, scenarioSignature, mapLastRunSignatureRef.current) : crossSectionRunStatus;
 
   // Preset Scenario Handlers
-  const applyPreset = presetName => {
+  const applyPreset = rawName => {
+    const presetName = rawName === 'anticline' ? 'dome' : rawName === 'fault' ? 'faulted' : rawName === 'dipping' ? 'monocline' : rawName;
     setSelectedPreset(presetName);
     setWellY(50);
     resetSimulation();
@@ -3343,7 +3344,36 @@ const SimulatorPage = () => {
   const handleScrub = targetTime => {
     setIsPlaying(false);
     setIsReversing(false);
-    const t = Math.max(0, Math.min(historyRef.current.length - 1, targetTime));
+    const t = Math.max(0, Math.min(1000, targetTime));
+
+    // If user seeks beyond currently simulated history, dynamically advance forward to t
+    if (historyRef.current.length <= t) {
+      const p = solverParamsRef.current;
+      const newMassItems = [];
+      while (historyRef.current.length <= t) {
+        const nextYr = historyRef.current.length;
+        const lastState = historyRef.current[nextYr - 1];
+        const res = runSolverStep(lastState.h, lastState.hMax, lastState.masses, nextYr, p);
+        historyRef.current.push({
+          time: nextYr,
+          h: [...res.h],
+          hMax: [...res.hMax],
+          masses: {
+            ...res.masses
+          },
+          params: snapshotParams()
+        });
+        if (nextYr % 5 === 0 || nextYr === 1 || nextYr === t) {
+          newMassItems.push({
+            time: nextYr,
+            ...res.masses
+          });
+        }
+      }
+      if (newMassItems.length > 0) {
+        setMassHistory(prev => [...prev, ...newMassItems]);
+      }
+    }
     const histState = historyRef.current[t];
     if (histState) {
       setH(histState.h);
@@ -4705,6 +4735,30 @@ const SimulatorPage = () => {
   const activeTime = activeResults.time;
   const activeMasses = activeResults.masses;
   const activeMassHistory = activeResults.history;
+  const presetButton = (id, label, icon) => /*#__PURE__*/React.createElement("button", {
+    key: id,
+    onClick: () => applyPreset(id),
+    style: {
+      background: selectedPreset === id ? 'rgba(100, 255, 218, 0.16)' : 'rgba(255, 255, 255, 0.05)',
+      border: `1px solid ${selectedPreset === id ? '#64ffda' : 'rgba(255, 255, 255, 0.12)'}`,
+      color: selectedPreset === id ? '#64ffda' : 'rgba(255, 255, 255, 0.75)',
+      padding: '5px 10px',
+      borderRadius: '7px',
+      fontSize: '11px',
+      cursor: 'pointer',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '5px',
+      fontWeight: selectedPreset === id ? 600 : 400,
+      outline: 'none',
+      transition: 'all 0.15s ease'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: icon,
+    style: {
+      fontSize: '10px'
+    }
+  }), label);
   return /*#__PURE__*/React.createElement("div", {
     className: "simulator-page-wrapper",
     role: presentedPanel ? 'dialog' : undefined,
@@ -5063,12 +5117,11 @@ const SimulatorPage = () => {
       }
     }), [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000].map((m, idx) => {
       const maxSimulated = historyRef.current.length - 1;
-      const isAvailable = m <= maxSimulated;
+      const isSimulated = m <= maxSimulated;
       const isCurrent = m === simTime;
       return /*#__PURE__*/React.createElement("button", {
         key: idx,
-        onClick: () => isAvailable && handleScrub(m),
-        disabled: !isAvailable,
+        onClick: () => handleScrub(m),
         "aria-label": `Jump to year ${m}${isCurrent ? ' (current)' : ''}`,
         style: {
           display: 'flex',
@@ -5081,16 +5134,16 @@ const SimulatorPage = () => {
           font: 'inherit',
           textAlign: 'left',
           width: '100%',
-          cursor: isAvailable ? 'pointer' : 'default',
-          opacity: isAvailable ? 1 : 0.35
+          cursor: 'pointer',
+          opacity: isCurrent ? 1 : isSimulated ? 0.9 : 0.6
         }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           width: 12,
           height: 12,
           borderRadius: '50%',
-          background: isCurrent ? '#0dfca2' : isAvailable ? '#3ca68e' : 'rgba(255,255,255,0.1)',
-          border: `2px solid ${isCurrent ? '#fff' : 'transparent'}`,
+          background: isCurrent ? '#0dfca2' : isSimulated ? '#3ca68e' : 'rgba(100,255,218,0.2)',
+          border: isCurrent ? '2px solid #fff' : isSimulated ? '2px solid transparent' : '1px dashed rgba(100,255,218,0.6)',
           boxShadow: isCurrent ? '0 0 6px #0dfca2' : 'none',
           zIndex: 2,
           transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease',
@@ -5102,7 +5155,7 @@ const SimulatorPage = () => {
         style: {
           fontSize: 11.5,
           fontFamily: 'monospace',
-          color: isCurrent ? '#0dfca2' : 'rgba(255,255,255,0.7)',
+          color: isCurrent ? '#0dfca2' : isSimulated ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)',
           fontWeight: isCurrent ? 'bold' : 'normal'
         }
       }, "Year ", m, " ", isCurrent && '\u2190'));
@@ -5113,8 +5166,23 @@ const SimulatorPage = () => {
           .sim-tab-header { overflow-x: auto; align-items: stretch !important; }
           .sim-tab-header [role="tablist"] { min-width: max-content; }
           .sim-tab-status { display: none; }
-          .sim-hud-legend { position: static !important; flex: 0 0 auto; width: 100%; max-width: 100%; overflow-x: auto; right: auto !important; top: auto !important; border-radius: 0 !important; pointer-events: auto !important; white-space: nowrap; scrollbar-width: thin; }
+          .sim-hud-legend { position: static !important; flex: 0 0 auto; width: 100%; max-width: 100%; overflow-x: auto; right: auto !important; top: auto !important; border-radius: 0 !important; pointer-events: auto !important; white-space: nowrap; scrollbar-width: none !important; }
           .sim-hud-legend > span { flex: 0 0 auto; }
+          .sim-tab-header, .sim-hud-legend {
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
+          }
+          .sim-tab-header::-webkit-scrollbar, .sim-hud-legend::-webkit-scrollbar {
+            width: 0 !important;
+            height: 0 !important;
+            display: none !important;
+            background: transparent !important;
+          }
+          .sim-tab-header::-webkit-scrollbar-thumb, .sim-hud-legend::-webkit-scrollbar-thumb,
+          .sim-tab-header::-webkit-scrollbar-track, .sim-hud-legend::-webkit-scrollbar-track {
+            background: transparent !important;
+            display: none !important;
+          }
           .sim-playback { left: 8px !important; right: 8px !important; gap: 7px !important; padding: 8px 10px !important; }
           .sim-playback input[type="range"] { min-width: 48px; }
           .uq-config-grid, .uq-results-grid, .uq-percentile-grid { grid-template-columns: 1fr !important; }
@@ -5864,6 +5932,53 @@ const SimulatorPage = () => {
         offset: "100%",
         stopColor: "#051426",
         stopOpacity: "0.95"
+      })), /*#__PURE__*/React.createElement("linearGradient", {
+        id: "well-gradient",
+        x1: "0",
+        y1: "0",
+        x2: "1",
+        y2: "0"
+      }, /*#__PURE__*/React.createElement("stop", {
+        offset: "0%",
+        stopColor: "#475569"
+      }), /*#__PURE__*/React.createElement("stop", {
+        offset: "30%",
+        stopColor: "#cbd5e1"
+      }), /*#__PURE__*/React.createElement("stop", {
+        offset: "70%",
+        stopColor: "#94a3b8"
+      }), /*#__PURE__*/React.createElement("stop", {
+        offset: "100%",
+        stopColor: "#334155"
+      })), /*#__PURE__*/React.createElement("linearGradient", {
+        id: "wellhead-grad",
+        x1: "0",
+        y1: "0",
+        x2: "0",
+        y2: "1"
+      }, /*#__PURE__*/React.createElement("stop", {
+        offset: "0%",
+        stopColor: "#64ffda"
+      }), /*#__PURE__*/React.createElement("stop", {
+        offset: "100%",
+        stopColor: "#05e67c"
+      })), /*#__PURE__*/React.createElement("radialGradient", {
+        id: "inj-flare-glow",
+        cx: "50%",
+        cy: "50%",
+        r: "50%"
+      }, /*#__PURE__*/React.createElement("stop", {
+        offset: "0%",
+        stopColor: "#0dfca2",
+        stopOpacity: "0.9"
+      }), /*#__PURE__*/React.createElement("stop", {
+        offset: "45%",
+        stopColor: "#05e67c",
+        stopOpacity: "0.5"
+      }), /*#__PURE__*/React.createElement("stop", {
+        offset: "100%",
+        stopColor: "#0dfca2",
+        stopOpacity: "0"
       }))), /*#__PURE__*/React.createElement("path", {
         d: `M 0 0 L 1000 0 L 1000 ${capRockY(1000, cellCount - 1)} ` + Array.from({
           length: cellCount + 1
@@ -5932,23 +6047,86 @@ const SimulatorPage = () => {
         const cellInjIdx = Math.floor(injLocation / 100.0 * cellCount);
         const xWell = cellInjIdx * dx + dx / 2.0;
         const yCap = capRockY(xWell);
-        return /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("line", {
+        const yBase = stratumY(xWell, cellInjIdx, 175);
+        const perfTop = yCap + 20;
+        const perfBottom = Math.min(yBase - 15, yCap + 95);
+        const isInjecting = Q > 0 && isPlaying && simTime <= injDuration;
+        return /*#__PURE__*/React.createElement("g", {
+          className: "sim-wellbore",
+          role: "group",
+          "aria-label": `Injection well at ${injLocation}%`
+        }, /*#__PURE__*/React.createElement("rect", {
+          x: xWell - 7,
+          y: "0",
+          width: "14",
+          height: "12",
+          rx: "2",
+          fill: "url(#wellhead-grad)",
+          stroke: "#fff",
+          strokeWidth: "0.8"
+        }), /*#__PURE__*/React.createElement("line", {
+          x1: xWell - 11,
+          y1: "6",
+          x2: xWell + 11,
+          y2: "6",
+          stroke: "#64ffda",
+          strokeWidth: "2.5",
+          strokeLinecap: "round"
+        }), /*#__PURE__*/React.createElement("circle", {
+          cx: xWell,
+          cy: "6",
+          r: "2.5",
+          fill: "#fff"
+        }), /*#__PURE__*/React.createElement("line", {
           x1: xWell,
-          y1: "0",
+          y1: "12",
           x2: xWell,
-          y2: yCap + 120,
+          y2: perfBottom,
+          stroke: "rgba(0,0,0,0.4)",
+          strokeWidth: "6"
+        }), /*#__PURE__*/React.createElement("line", {
+          x1: xWell,
+          y1: "12",
+          x2: xWell,
+          y2: perfBottom,
           stroke: "url(#well-gradient)",
-          strokeWidth: "4"
-        }), Q > 0 && isPlaying && simTime <= injDuration && [0, 0.3, 0.6, 0.9].map((delay, idx) => /*#__PURE__*/React.createElement("circle", {
+          strokeWidth: "3.5",
+          strokeLinecap: "round"
+        }), Array.from({
+          length: 6
+        }).map((_, pIdx) => {
+          const py = perfTop + pIdx * ((perfBottom - perfTop) / 5);
+          return /*#__PURE__*/React.createElement("line", {
+            key: `perf-${pIdx}`,
+            x1: xWell - 6,
+            y1: py,
+            x2: xWell + 6,
+            y2: py,
+            stroke: isInjecting ? '#0dfca2' : 'rgba(255,255,255,0.7)',
+            strokeWidth: "1.6",
+            strokeLinecap: "round"
+          });
+        }), isInjecting && /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("circle", {
+          cx: xWell,
+          cy: (perfTop + perfBottom) / 2,
+          r: "22",
+          fill: "url(#inj-flare-glow)"
+        }), /*#__PURE__*/React.createElement("circle", {
+          cx: xWell,
+          cy: (perfTop + perfBottom) / 2,
+          r: "5",
+          fill: "#fff",
+          opacity: "0.95"
+        }), [0, 0.3, 0.6, 0.9].map((delay, idx) => /*#__PURE__*/React.createElement("circle", {
           key: idx,
           cx: xWell,
-          cy: yCap * (idx / 4.0),
+          cy: 12 + (yCap - 12) * (idx / 3.0),
           r: "2",
           fill: "#0dfca2",
           style: {
             animation: `streakRise 1.5s linear ${delay}s infinite`
           }
-        })));
+        }))));
       })(), Array.from({
         length: faultCount
       }).map((_, idx) => {
@@ -6143,7 +6321,8 @@ const SimulatorPage = () => {
       }, "Yr ", simTime), /*#__PURE__*/React.createElement("input", {
         type: "range",
         min: "0",
-        max: Math.max(1, historyRef.current.length - 1),
+        max: "1000",
+        step: "1",
         value: simTime,
         "aria-label": "Seek simulation year",
         onChange: e => handleScrub(parseInt(e.target.value)),
@@ -6233,9 +6412,9 @@ const SimulatorPage = () => {
       }, "Select parameters, then pick an absolute range, a \xB1% band, or discrete values."), /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 8,
-          maxHeight: 340,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: 10,
+          maxHeight: 380,
           overflowY: 'auto',
           paddingRight: 4
         }
@@ -6283,9 +6462,9 @@ const SimulatorPage = () => {
           background: mcRunsCount === cnt ? 'rgba(100,255,218,0.2)' : 'rgba(255,255,255,0.05)',
           border: `1px solid ${mcRunsCount === cnt ? '#64ffda' : 'rgba(255,255,255,0.12)'}`,
           color: mcRunsCount === cnt ? '#64ffda' : 'azure',
-          padding: '4px 10px',
+          padding: '5px 12px',
           borderRadius: 6,
-          fontSize: 10.5,
+          fontSize: 11,
           fontWeight: 'bold',
           cursor: 'pointer'
         }
@@ -6308,7 +6487,7 @@ const SimulatorPage = () => {
           background: 'rgba(0,0,0,0.3)',
           border: '1px solid rgba(255,255,255,0.15)',
           color: '#fff',
-          padding: '6px 10px',
+          padding: '7px 10px',
           borderRadius: 8,
           fontSize: 11,
           cursor: 'pointer'
@@ -6354,7 +6533,7 @@ const SimulatorPage = () => {
           textTransform: 'uppercase',
           fontWeight: 'bold'
         }
-      }, "Uncertainty Distribution (", uqTargetMetric === 'leaked' ? 'CO\u2082 Leaked Mass' : 'Trapping Efficiency', ")"), renderUQHistogram(uqData)), /*#__PURE__*/React.createElement("div", {
+      }, "Uncertainty Distribution (", uqTargetMetric === 'leaked' ? 'CO₂ Leaked Mass' : 'Trapping Efficiency', ")"), renderUQHistogram(uqData)), /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'flex',
           flexDirection: 'column',

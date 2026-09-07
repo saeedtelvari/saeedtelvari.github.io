@@ -1328,7 +1328,8 @@ const SimulatorPage = () => {
     : crossSectionRunStatus;
 
   // Preset Scenario Handlers
-  const applyPreset = (presetName) => {
+  const applyPreset = (rawName) => {
+    const presetName = rawName === 'anticline' ? 'dome' : (rawName === 'fault' ? 'faulted' : (rawName === 'dipping' ? 'monocline' : rawName));
     setSelectedPreset(presetName);
     setWellY(50);
     resetSimulation();
@@ -1660,7 +1661,32 @@ const SimulatorPage = () => {
     setIsPlaying(false);
     setIsReversing(false);
     
-    const t = Math.max(0, Math.min(historyRef.current.length - 1, targetTime));
+    const t = Math.max(0, Math.min(1000, targetTime));
+
+    // If user seeks beyond currently simulated history, dynamically advance forward to t
+    if (historyRef.current.length <= t) {
+      const p = solverParamsRef.current;
+      const newMassItems = [];
+      while (historyRef.current.length <= t) {
+        const nextYr = historyRef.current.length;
+        const lastState = historyRef.current[nextYr - 1];
+        const res = runSolverStep(lastState.h, lastState.hMax, lastState.masses, nextYr, p);
+        historyRef.current.push({
+          time: nextYr,
+          h: [...res.h],
+          hMax: [...res.hMax],
+          masses: { ...res.masses },
+          params: snapshotParams()
+        });
+        if (nextYr % 5 === 0 || nextYr === 1 || nextYr === t) {
+          newMassItems.push({ time: nextYr, ...res.masses });
+        }
+      }
+      if (newMassItems.length > 0) {
+        setMassHistory(prev => [...prev, ...newMassItems]);
+      }
+    }
+
     const histState = historyRef.current[t];
     if (histState) {
       setH(histState.h);
@@ -2872,6 +2898,31 @@ const SimulatorPage = () => {
   const activeMasses = activeResults.masses;
   const activeMassHistory = activeResults.history;
 
+  const presetButton = (id, label, icon) => (
+    <button
+      key={id}
+      onClick={() => applyPreset(id)}
+      style={{
+        background: selectedPreset === id ? 'rgba(100, 255, 218, 0.16)' : 'rgba(255, 255, 255, 0.05)',
+        border: `1px solid ${selectedPreset === id ? '#64ffda' : 'rgba(255, 255, 255, 0.12)'}`,
+        color: selectedPreset === id ? '#64ffda' : 'rgba(255, 255, 255, 0.75)',
+        padding: '5px 10px',
+        borderRadius: '7px',
+        fontSize: '11px',
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '5px',
+        fontWeight: selectedPreset === id ? 600 : 400,
+        outline: 'none',
+        transition: 'all 0.15s ease'
+      }}
+    >
+      <i className={icon} style={{ fontSize: '10px' }} />
+      {label}
+    </button>
+  );
+
   return (
     <div
       className="simulator-page-wrapper"
@@ -3073,14 +3124,13 @@ const SimulatorPage = () => {
 
                   {[0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000].map((m, idx) => {
                     const maxSimulated = historyRef.current.length - 1;
-                    const isAvailable = m <= maxSimulated;
+                    const isSimulated = m <= maxSimulated;
                     const isCurrent = m === simTime;
                     
                     return (
                       <button
                         key={idx}
-                        onClick={() => isAvailable && handleScrub(m)}
-                        disabled={!isAvailable}
+                        onClick={() => handleScrub(m)}
                         aria-label={`Jump to year ${m}${isCurrent ? ' (current)' : ''}`}
                         style={{
                           display: 'flex',
@@ -3093,15 +3143,15 @@ const SimulatorPage = () => {
                           font: 'inherit',
                           textAlign: 'left',
                           width: '100%',
-                          cursor: isAvailable ? 'pointer' : 'default',
-                          opacity: isAvailable ? 1 : 0.35
+                          cursor: 'pointer',
+                          opacity: isCurrent ? 1 : isSimulated ? 0.9 : 0.6
                         }}
                       >
                         {/* Circle node */}
                         <div style={{ 
                           width: 12, height: 12, borderRadius: '50%',
-                          background: isCurrent ? '#0dfca2' : isAvailable ? '#3ca68e' : 'rgba(255,255,255,0.1)',
-                          border: `2px solid ${isCurrent ? '#fff' : 'transparent'}`,
+                          background: isCurrent ? '#0dfca2' : isSimulated ? '#3ca68e' : 'rgba(100,255,218,0.2)',
+                          border: isCurrent ? '2px solid #fff' : isSimulated ? '2px solid transparent' : '1px dashed rgba(100,255,218,0.6)',
                           boxShadow: isCurrent ? '0 0 6px #0dfca2' : 'none',
                           zIndex: 2,
                           transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease',
@@ -3114,7 +3164,7 @@ const SimulatorPage = () => {
                         <span style={{ 
                           fontSize: 11.5, 
                           fontFamily: 'monospace',
-                          color: isCurrent ? '#0dfca2' : 'rgba(255,255,255,0.7)',
+                          color: isCurrent ? '#0dfca2' : isSimulated ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)',
                           fontWeight: isCurrent ? 'bold' : 'normal'
                         }}>
                           Year {m} {isCurrent && '\u2190'}
@@ -3137,8 +3187,23 @@ const SimulatorPage = () => {
           .sim-tab-header { overflow-x: auto; align-items: stretch !important; }
           .sim-tab-header [role="tablist"] { min-width: max-content; }
           .sim-tab-status { display: none; }
-          .sim-hud-legend { position: static !important; flex: 0 0 auto; width: 100%; max-width: 100%; overflow-x: auto; right: auto !important; top: auto !important; border-radius: 0 !important; pointer-events: auto !important; white-space: nowrap; scrollbar-width: thin; }
+          .sim-hud-legend { position: static !important; flex: 0 0 auto; width: 100%; max-width: 100%; overflow-x: auto; right: auto !important; top: auto !important; border-radius: 0 !important; pointer-events: auto !important; white-space: nowrap; scrollbar-width: none !important; }
           .sim-hud-legend > span { flex: 0 0 auto; }
+          .sim-tab-header, .sim-hud-legend {
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
+          }
+          .sim-tab-header::-webkit-scrollbar, .sim-hud-legend::-webkit-scrollbar {
+            width: 0 !important;
+            height: 0 !important;
+            display: none !important;
+            background: transparent !important;
+          }
+          .sim-tab-header::-webkit-scrollbar-thumb, .sim-hud-legend::-webkit-scrollbar-thumb,
+          .sim-tab-header::-webkit-scrollbar-track, .sim-hud-legend::-webkit-scrollbar-track {
+            background: transparent !important;
+            display: none !important;
+          }
           .sim-playback { left: 8px !important; right: 8px !important; gap: 7px !important; padding: 8px 10px !important; }
           .sim-playback input[type="range"] { min-width: 48px; }
           .uq-config-grid, .uq-results-grid, .uq-percentile-grid { grid-template-columns: 1fr !important; }
@@ -3557,6 +3622,27 @@ const SimulatorPage = () => {
                     <stop offset="0%" stopColor="#0a2a4d" stopOpacity="0.85"/>
                     <stop offset="100%" stopColor="#051426" stopOpacity="0.95"/>
                   </linearGradient>
+
+                  {/* Steel Well Casing Gradient */}
+                  <linearGradient id="well-gradient" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#475569"/>
+                    <stop offset="30%" stopColor="#cbd5e1"/>
+                    <stop offset="70%" stopColor="#94a3b8"/>
+                    <stop offset="100%" stopColor="#334155"/>
+                  </linearGradient>
+
+                  {/* Wellhead Christmas Tree Gradient */}
+                  <linearGradient id="wellhead-grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#64ffda"/>
+                    <stop offset="100%" stopColor="#05e67c"/>
+                  </linearGradient>
+
+                  {/* Injection Source Flare Glow */}
+                  <radialGradient id="inj-flare-glow" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#0dfca2" stopOpacity="0.9"/>
+                    <stop offset="45%" stopColor="#05e67c" stopOpacity="0.5"/>
+                    <stop offset="100%" stopColor="#0dfca2" stopOpacity="0"/>
+                  </radialGradient>
                 </defs>
 
                 {/* Conforming caprock layer (solid brown) */}
@@ -3626,20 +3712,66 @@ const SimulatorPage = () => {
                   return `L ${x} ${stratumY(x, Math.min(cellCount - 1, idx), 175)}`;
                 }).join(" ")} stroke="rgba(0,0,0,0.3)" strokeWidth="1" fill="none"/>
 
-                {/* Injection Well Riser and flare */}
+                {/* Injection Well Riser, Perforations, and Source Flare */}
                 {(() => {
                   const cellInjIdx = Math.floor((injLocation / 100.0) * cellCount);
                   const xWell = cellInjIdx * dx + dx / 2.0;
                   const yCap = capRockY(xWell);
+                  const yBase = stratumY(xWell, cellInjIdx, 175);
+                  const perfTop = yCap + 20;
+                  const perfBottom = Math.min(yBase - 15, yCap + 95);
+                  const isInjecting = Q > 0 && isPlaying && simTime <= injDuration;
                   
                   return (
-                    <g>
+                    <g className="sim-wellbore" role="group" aria-label={`Injection well at ${injLocation}%`}>
+                      {/* Surface wellhead Christmas tree valve assembly */}
+                      <rect x={xWell - 7} y="0" width="14" height="12" rx="2" fill="url(#wellhead-grad)" stroke="#fff" strokeWidth="0.8" />
+                      <line x1={xWell - 11} y1="6" x2={xWell + 11} y2="6" stroke="#64ffda" strokeWidth="2.5" strokeLinecap="round" />
+                      <circle cx={xWell} cy="6" r="2.5" fill="#fff" />
+
+                      {/* Borehole outer casing shadow */}
+                      <line x1={xWell} y1="12" x2={xWell} y2={perfBottom} stroke="rgba(0,0,0,0.4)" strokeWidth="6" />
+
                       {/* Vertical steel casing tubing */}
-                      <line x1={xWell} y1="0" x2={xWell} y2={yCap + 120} stroke="url(#well-gradient)" strokeWidth="4"/>
-                      {/* Flow bubbles in tubing */}
-                      {Q > 0 && isPlaying && simTime <= injDuration && [0, 0.3, 0.6, 0.9].map((delay, idx) => (
-                        <circle key={idx} cx={xWell} cy={yCap * (idx/4.0)} r="2" fill="#0dfca2" style={{ animation: `streakRise 1.5s linear ${delay}s infinite` }}/>
-                      ))}
+                      <line x1={xWell} y1="12" x2={xWell} y2={perfBottom} stroke="url(#well-gradient)" strokeWidth="3.5" strokeLinecap="round" />
+
+                      {/* Injection Perforations (Interval slots) */}
+                      {Array.from({ length: 6 }).map((_, pIdx) => {
+                        const py = perfTop + pIdx * ((perfBottom - perfTop) / 5);
+                        return (
+                          <line 
+                            key={`perf-${pIdx}`} 
+                            x1={xWell - 6} 
+                            y1={py} 
+                            x2={xWell + 6} 
+                            y2={py} 
+                            stroke={isInjecting ? '#0dfca2' : 'rgba(255,255,255,0.7)'} 
+                            strokeWidth="1.6" 
+                            strokeLinecap="round" 
+                          />
+                        );
+                      })}
+
+                      {/* Active Injection Source Flare / Supercritical bubbles */}
+                      {isInjecting && (
+                        <g>
+                          {/* Radial flare glow at perforation interval */}
+                          <circle cx={xWell} cy={(perfTop + perfBottom) / 2} r="22" fill="url(#inj-flare-glow)" />
+                          <circle cx={xWell} cy={(perfTop + perfBottom) / 2} r="5" fill="#fff" opacity="0.95" />
+
+                          {/* Flow bubbles in tubing */}
+                          {[0, 0.3, 0.6, 0.9].map((delay, idx) => (
+                            <circle 
+                              key={idx} 
+                              cx={xWell} 
+                              cy={12 + (yCap - 12) * (idx / 3.0)} 
+                              r="2" 
+                              fill="#0dfca2" 
+                              style={{ animation: `streakRise 1.5s linear ${delay}s infinite` }}
+                            />
+                          ))}
+                        </g>
+                      )}
                     </g>
                   );
                 })()}
@@ -3779,7 +3911,8 @@ const SimulatorPage = () => {
                 <input 
                   type="range" 
                   min="0" 
-                  max={Math.max(1, historyRef.current.length - 1)}
+                  max="1000"
+                  step="1"
                   value={simTime}
                   aria-label="Seek simulation year"
                   onChange={e => handleScrub(parseInt(e.target.value))}
@@ -3827,7 +3960,7 @@ const SimulatorPage = () => {
                     <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', marginTop: -6 }}>
                       Select parameters, then pick an absolute range, a &plusmn;% band, or discrete values.
                     </span>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxHeight: 340, overflowY: 'auto', paddingRight: 4 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, maxHeight: 380, overflowY: 'auto', paddingRight: 4 }}>
                       {UQ_PARAM_DEFS
                         .filter(def => !(def.group === 'fault' && faultCount === 0))
                         .filter(def => !(def.key === 'faultLeakRate' && !faults.slice(0, faultCount).some(f => !f.isSealed)))
@@ -3857,9 +3990,9 @@ const SimulatorPage = () => {
                                background: mcRunsCount === cnt ? 'rgba(100,255,218,0.2)' : 'rgba(255,255,255,0.05)',
                                border: `1px solid ${mcRunsCount === cnt ? '#64ffda' : 'rgba(255,255,255,0.12)'}`,
                                color: mcRunsCount === cnt ? '#64ffda' : 'azure',
-                               padding: '4px 10px',
+                               padding: '5px 12px',
                                borderRadius: 6,
-                               fontSize: 10.5,
+                               fontSize: 11,
                                fontWeight: 'bold',
                                cursor: 'pointer'
                              }}
@@ -3880,7 +4013,7 @@ const SimulatorPage = () => {
                            background: 'rgba(0,0,0,0.3)',
                            border: '1px solid rgba(255,255,255,0.15)',
                            color: '#fff',
-                           padding: '6px 10px',
+                           padding: '7px 10px',
                            borderRadius: 8,
                            fontSize: 11,
                            cursor: 'pointer'
@@ -3891,7 +4024,6 @@ const SimulatorPage = () => {
                        </select>
                      </div>
                   </div>
-
                   </aside>
                   <div className="ve-risk-results">
                     {uqRunning && (
@@ -3910,7 +4042,7 @@ const SimulatorPage = () => {
                       
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <span className="ve-chart-title" style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>
-                          Uncertainty Distribution ({uqTargetMetric === 'leaked' ? 'CO\u2082 Leaked Mass' : 'Trapping Efficiency'})
+                          Uncertainty Distribution ({uqTargetMetric === 'leaked' ? 'CO₂ Leaked Mass' : 'Trapping Efficiency'})
                         </span>
                         {renderUQHistogram(uqData)}
                       </div>
