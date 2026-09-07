@@ -524,7 +524,7 @@ test('risk and methodology render as peer workspaces outside the visualization t
   const css = read('simulator-workbench.css');
 
   assert.match(page, /<nav className="ve-workspace-nav" aria-label="Simulator workspace">/);
-  assert.match(page, /aria-current=\{VISUALIZATION_TABS\.includes\(activeSubTab\) \? 'page'/);
+  assert.match(page, /aria-current=\{isMapView \? 'page' : undefined\}/);
   assert.match(page, /<section className="ve-risk-workspace" aria-labelledby="risk-title">/);
   assert.match(page, /onClick=\{runMonteCarloBatch\}/);
   assert.match(page, /<section className="ve-methodology-workspace" aria-labelledby="methodology-title">[\s\S]*<GuidePage isEmbedded=\{true\} \/>/);
@@ -547,6 +547,21 @@ test('risk controls expose approved labels, selection, progress, and realization
 
   const loadPath = page.slice(page.indexOf('const loadUQRealization'), page.indexOf('// SVG Histogram Renderer'));
   assert.match(loadPath, /setActiveSubTab\('profile'\)/);
+});
+
+test('simulator paths and risk targets stay model-specific', () => {
+  const page = read('SimulatorPage.jsx');
+  const worker = read('uq-worker.js');
+
+  assert.match(page, />2D \/ 3D simulator<\/button>/);
+  assert.match(page, />1D cross-section simulator<\/button>/);
+  assert.match(page, /aria-label="Risk analysis model"/);
+  assert.match(page, /riskModel === 'map'/);
+  assert.match(page, /Map simulator inputs/);
+  assert.match(page, /1D cross-section inputs/);
+  assert.match(worker, /data\.base\.modelType === 'map'/);
+  assert.match(worker, /VE2D\.stepVe2d/);
+  assert.match(worker, /runMapRealization/);
 });
 
 test('risk and methodology accessibility remains visible in the restrained theme', () => {

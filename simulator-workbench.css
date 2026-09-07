@@ -784,6 +784,43 @@
   border-right: 1px solid var(--ve-border);
 }
 
+.ve-risk-model-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ve-border);
+}
+
+.ve-risk-model-picker > span {
+  flex: 0 0 100%;
+  color: var(--ve-muted);
+  font: 700 10px/1.2 var(--font-prose);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ve-risk-model-picker button {
+  flex: 1;
+  min-height: 32px;
+  padding: 5px 8px;
+  color: var(--ve-muted);
+  background: var(--ve-surface-subtle);
+  border: 1px solid var(--ve-border);
+  border-radius: 4px;
+  font: 650 10px/1.2 var(--font-prose);
+  cursor: pointer;
+  transition: background-color 140ms var(--ve-ease-out), border-color 140ms var(--ve-ease-out), color 140ms var(--ve-ease-out), transform 140ms var(--ve-ease-out);
+}
+
+.ve-risk-model-picker button[aria-pressed="true"] {
+  color: var(--ve-accent);
+  background: var(--ve-accent-soft);
+  border-color: #9fc7c2;
+}
+
 .ve-uq-settings {
   margin-top: 20px;
   padding-top: 16px;

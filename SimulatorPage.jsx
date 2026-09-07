@@ -3,6 +3,7 @@ const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
 const SIM_TABS = ['profile', 'map', 'topography', 'uq', 'guide'];
 const VISUALIZATION_TABS = ['profile', 'map', 'topography'];
+const MAP_TABS = ['map', 'topography'];
 
 // Declarative registry of every parameter the UQ batch can sample.
 // dec = display decimals; dec 0 params are sampled as integers.
@@ -896,6 +897,7 @@ const SimulatorPage = () => {
 
   // Tab Navigation state
   const [activeSubTab, setActiveSubTab] = useState('topography');
+  const [riskModel, setRiskModel] = useState('map');
   const [theme, setTheme] = useState(() => getStoredTheme(window.localStorage));
   const [selectedPreset, setSelectedPreset] = useState('default');
   const [shareStatus, setShareStatus] = useState('');
@@ -1312,6 +1314,7 @@ const SimulatorPage = () => {
     if (['default', 'dome', 'faulted', 'monocline'].includes(preset)) applyPreset(preset);
     if (preset === 'random') setSelectedPreset('random');
     if (SIM_TABS.includes(tab)) setActiveSubTab(tab);
+    if (query.get('risk') === 'profile' || query.get('risk') === 'map') setRiskModel(query.get('risk'));
     setK(scenarioNumber(query, 'k', 0.1, 3.5, K));
     setPorosity(scenarioNumber(query, 'phi', 0.1, 0.4, porosity));
     setCellCount(scenarioNumber(query, 'cells', 50, 300, cellCount, true));
@@ -1355,7 +1358,8 @@ const SimulatorPage = () => {
       slip: faultOffset, q: Q, well: injLocation, wellY, mapCells: mapCols, stop: injDuration, faults: faultCount,
       faultData: JSON.stringify(faults.slice(0, faultCount)),
       terrain: terrainSeed,
-      hetero: heterogeneity
+      hetero: heterogeneity,
+      risk: riskModel
     };
     Object.entries(values).forEach(([key, value]) => url.searchParams.set(key, String(value)));
     return url.toString();
@@ -1691,9 +1695,10 @@ const SimulatorPage = () => {
   const handleTabKeys = (e) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
-    const idx = VISUALIZATION_TABS.indexOf(activeSubTab);
-    const dir = e.key === 'ArrowRight' ? 1 : VISUALIZATION_TABS.length - 1;
-    const next = VISUALIZATION_TABS[(idx + dir) % VISUALIZATION_TABS.length];
+    const tabs = activeSubTab === 'profile' ? ['profile'] : MAP_TABS;
+    const idx = tabs.indexOf(activeSubTab);
+    const dir = e.key === 'ArrowRight' ? 1 : tabs.length - 1;
+    const next = tabs[(idx + dir) % tabs.length];
     setActiveSubTab(next);
     requestAnimationFrame(() => tabRefs.current[next] && tabRefs.current[next].focus());
   };
@@ -1867,6 +1872,8 @@ const SimulatorPage = () => {
         injLocation: s.injLocation,
         dipPercent: s.dipPercent,
         amplitude: s.amplitude,
+        terrainSeed,
+        heterogeneity,
         faults: randFaults
       });
     }
@@ -1895,7 +1902,20 @@ const SimulatorPage = () => {
     };
     worker.postMessage({
       realizations,
-      base: { cellCount, frequency, faultOffset, injDuration, faultCount, parentDX: dx }
+      base: {
+        modelType: riskModel,
+        cellCount,
+        frequency,
+        faultOffset,
+        injDuration,
+        faultCount,
+        parentDX: dx,
+        mapCols,
+        mapRows: Math.max(12, Math.round(mapCols * 0.6)),
+        wellY,
+        terrainSeed,
+        heterogeneity
+      }
     });
   };
 
@@ -2056,6 +2076,10 @@ const SimulatorPage = () => {
     setInjLocation(loadedInjLoc);
     setDipPercent(loadedDip);
     setAmplitude(loadedAmp);
+    if (riskModel === 'map') {
+      if (Number.isFinite(realization.params.terrainSeed)) setTerrainSeed(realization.params.terrainSeed);
+      if (Number.isFinite(realization.params.heterogeneity)) setHeterogeneity(realization.params.heterogeneity);
+    }
 
     const newFaults = faults.map((f, i) => {
       const rf = realization.params.faults[i];
@@ -2070,6 +2094,13 @@ const SimulatorPage = () => {
       return f;
     });
     setFaults(newFaults);
+
+    if (riskModel === 'map') {
+      setActiveSubTab('topography');
+      // Let the parameter setters commit before asking the mounted map panel to replay.
+      setTimeout(() => sendMapCommand('run'), 0);
+      return;
+    }
 
     // 2. Snapshot the realization's EXACT solver params (the ref still holds
     //    the pre-load values until the next render, so build it explicitly).
@@ -2128,7 +2159,8 @@ const SimulatorPage = () => {
 
     historyRef.current = replayHistory;
 
-    setActiveSubTab('profile');
+    if (riskModel === 'map') setActiveSubTab('topography');
+    else setActiveSubTab('profile');
   };
 
   // SVG Histogram Renderer
@@ -3046,7 +3078,8 @@ const SimulatorPage = () => {
         <button className="ve-run-button" onClick={runActiveSimulation}>Run scenario</button>
       </section>
       <nav className="ve-workspace-nav" aria-label="Simulator workspace">
-        <button aria-current={VISUALIZATION_TABS.includes(activeSubTab) ? 'page' : undefined} onClick={() => handleWorkspaceChange('profile')}>Simulator</button>
+        <button aria-current={isMapView ? 'page' : undefined} onClick={() => handleWorkspaceChange('topography')}>2D / 3D simulator</button>
+        <button aria-current={activeSubTab === 'profile' ? 'page' : undefined} onClick={() => handleWorkspaceChange('profile')}>1D cross-section simulator</button>
         <button aria-current={activeSubTab === 'uq' ? 'page' : undefined} onClick={() => handleWorkspaceChange('uq')}>Risk analysis</button>
         <button aria-current={activeSubTab === 'guide' ? 'page' : undefined} onClick={() => handleWorkspaceChange('guide')}>Methodology</button>
       </nav>
@@ -3095,7 +3128,10 @@ const SimulatorPage = () => {
           closeRef={element => { mobileCloseRefs.current.inputs = element; }}
           onClose={dismissMobilePanel}
         >
-          <div className="ve-rail-heading"><h2>Scenario inputs</h2></div>
+          <div className="ve-rail-heading">
+            <h2>{isMapView ? 'Map simulator inputs' : '1D cross-section inputs'}</h2>
+            <span className="ve-rail-mode">{isMapView ? '2D / 3D' : '1D'}</span>
+          </div>
 
           <section className="ve-input-group">
             <h3>Injection</h3>
@@ -3122,7 +3158,7 @@ const SimulatorPage = () => {
               <ParameterField label="Anticline height" unit="px" min={0} max={50} step={5} value={amplitude} onChange={setAmplitude} />
               <ParameterField label="Anticline count" unit="" min={0.5} max={4} step={0.5} value={frequency} onChange={setFrequency} />
               <ParameterField label="Fault slip" unit="×" min={0} max={3} step={0.2} value={faultOffset} onChange={setFaultOffset} />
-              <ParameterField label="Terrain heterogeneity" unit="fraction" min={0} max={1} step={0.05} value={heterogeneity} onChange={setHeterogeneity} />
+              {isMapView && <ParameterField label="Terrain heterogeneity" unit="fraction" min={0} max={1} step={0.05} value={heterogeneity} onChange={setHeterogeneity} />}
             </div>
           </section>
 
@@ -3158,16 +3194,16 @@ const SimulatorPage = () => {
                   next[index].xPercent = value;
                   setFaults(next);
                 }} />
-                <ParameterField label="Y start" unit="%" min={0} max={100} step={5} value={fault.yStartPercent ?? 0} onChange={value => {
+                {isMapView && <ParameterField label="Y start" unit="%" min={0} max={100} step={5} value={fault.yStartPercent ?? 0} onChange={value => {
                   const next = [...faults];
                   next[index].yStartPercent = value;
                   setFaults(next);
-                }} />
-                <ParameterField label="Y end" unit="%" min={0} max={100} step={5} value={fault.yEndPercent ?? 100} onChange={value => {
+                }} />}
+                {isMapView && <ParameterField label="Y end" unit="%" min={0} max={100} step={5} value={fault.yEndPercent ?? 100} onChange={value => {
                   const next = [...faults];
                   next[index].yEndPercent = value;
                   setFaults(next);
-                }} />
+                }} />}
                 <ParameterField label="Capillary threshold" unit="m" min={0} max={2} step={0.1} value={fault.thresholdHeight} onChange={value => {
                   const next = [...faults];
                   next[index].thresholdHeight = value;
@@ -3187,7 +3223,7 @@ const SimulatorPage = () => {
             ))}
           </section>
 
-          <section className="ve-input-group">
+          {!isMapView && <section className="ve-input-group">
             <div className="ve-toggle-heading">
               <h3>Capillary behavior</h3>
               <label><input type="checkbox" checked={hasCapillaryFringe} onChange={event => setHasCapillaryFringe(event.target.checked)} /> Enable fringe</label>
@@ -3196,7 +3232,7 @@ const SimulatorPage = () => {
               <ParameterField label="Fringe height (h_c)" unit="m" min={0.1} max={3} step={0.1} value={fringeScale} onChange={setFringeScale} />
               <ParameterField label="Entry-pressure scale" unit="kPa" min={5} max={40} step={1} value={entryPressure} onChange={setEntryPressure} />
             </div>}
-          </section>
+          </section>}
 
           <section className="ve-input-group">
             <h3>Grid detail</h3>
@@ -3234,7 +3270,7 @@ const SimulatorPage = () => {
               minHeight: '48px'
             }}>
               <div style={{ display: 'flex', gap: 4 }} role="tablist" aria-label="Simulator views" onKeyDown={handleTabKeys}>
-                <button 
+                {activeSubTab === 'profile' ? <button
                   ref={el => { tabRefs.current.profile = el; }}
                   onClick={() => setActiveSubTab('profile')}
                   role="tab"
@@ -3243,10 +3279,10 @@ const SimulatorPage = () => {
                   aria-controls="tabpanel-profile"
                   tabIndex={activeSubTab === 'profile' ? 0 : -1}
                   style={{
-                    background: activeSubTab === 'profile' ? 'rgba(100, 255, 218, 0.08)' : 'none',
+                    background: 'rgba(100, 255, 218, 0.08)',
                     border: 'none',
-                    borderBottom: activeSubTab === 'profile' ? '2px solid #64ffda' : '2px solid transparent',
-                    color: activeSubTab === 'profile' ? '#64ffda' : 'rgba(255,255,255,0.6)',
+                    borderBottom: '2px solid #64ffda',
+                    color: '#64ffda',
                     padding: '12px 16px',
                     fontSize: '11px',
                     fontWeight: 600,
@@ -3256,8 +3292,8 @@ const SimulatorPage = () => {
                     transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease'
                   }}
                 >
-                  <i className="fas fa-project-diagram" style={{ marginRight: 6 }} /> Cross-section
-                </button>
+                  <i className="fas fa-project-diagram" style={{ marginRight: 6 }} /> 1D Cross-section
+                </button> : <>
                 <button
                   ref={el => { tabRefs.current.map = el; }}
                   onClick={() => setActiveSubTab('map')}
@@ -3306,6 +3342,7 @@ const SimulatorPage = () => {
                 >
                   <i className="fas fa-cube" style={{ marginRight: 6 }} /> 3D Topography
                 </button>
+                </>}
               </div>
               <div className="sim-tab-status" style={{ paddingRight: 8 }}>
                 {activeSubTab === 'profile' ? (
@@ -3664,8 +3701,8 @@ const SimulatorPage = () => {
               <section className="ve-risk-workspace" aria-labelledby="risk-title">
                 <header className="ve-workspace-heading">
                   <div>
-                    <h1 id="risk-title">Risk analysis</h1>
-                    <p>Use the current scenario as the nominal case.</p>
+                    <h1 id="risk-title">Risk analysis · {riskModel === 'map' ? '2D / 3D map' : '1D cross-section'}</h1>
+                    <p>Use the selected simulator path as the nominal case.</p>
                   </div>
                   <button className="ve-run-button" onClick={runMonteCarloBatch} disabled={uqRunning}>
                     {uqRunning ? `Running ${uqProgress}%` : 'Run uncertainty analysis'}
@@ -3673,6 +3710,11 @@ const SimulatorPage = () => {
                 </header>
                 <div className="ve-risk-layout">
                   <aside className="ve-risk-config" aria-label="Uncertainty configuration">
+                  <div className="ve-risk-model-picker" role="group" aria-label="Risk analysis model">
+                    <span>Run risk on</span>
+                    <button type="button" aria-pressed={riskModel === 'map'} onClick={() => { setRiskModel('map'); setMcResults(null); }}>2D / 3D map</button>
+                    <button type="button" aria-pressed={riskModel === 'profile'} onClick={() => { setRiskModel('profile'); setMcResults(null); }}>1D cross-section</button>
+                  </div>
                   <div className="ve-uq-parameters" style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
                     <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Uncertainty Parameters</span>
                     <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', marginTop: -6 }}>

@@ -1010,6 +1010,7 @@ function _extends() { _extends = Object.assign ? Object.assign.bind() : function
 
 const SIM_TABS = ['profile', 'map', 'topography', 'uq', 'guide'];
 const VISUALIZATION_TABS = ['profile', 'map', 'topography'];
+const MAP_TABS = ['map', 'topography'];
 
 // Declarative registry of every parameter the UQ batch can sample.
 // dec = display decimals; dec 0 params are sampled as integers.
@@ -2289,6 +2290,7 @@ const SimulatorPage = () => {
 
   // Tab Navigation state
   const [activeSubTab, setActiveSubTab] = useState('topography');
+  const [riskModel, setRiskModel] = useState('map');
   const [theme, setTheme] = useState(() => getStoredTheme(window.localStorage));
   const [selectedPreset, setSelectedPreset] = useState('default');
   const [shareStatus, setShareStatus] = useState('');
@@ -2790,6 +2792,7 @@ const SimulatorPage = () => {
     if (['default', 'dome', 'faulted', 'monocline'].includes(preset)) applyPreset(preset);
     if (preset === 'random') setSelectedPreset('random');
     if (SIM_TABS.includes(tab)) setActiveSubTab(tab);
+    if (query.get('risk') === 'profile' || query.get('risk') === 'map') setRiskModel(query.get('risk'));
     setK(scenarioNumber(query, 'k', 0.1, 3.5, K));
     setPorosity(scenarioNumber(query, 'phi', 0.1, 0.4, porosity));
     setCellCount(scenarioNumber(query, 'cells', 50, 300, cellCount, true));
@@ -2846,7 +2849,8 @@ const SimulatorPage = () => {
       faults: faultCount,
       faultData: JSON.stringify(faults.slice(0, faultCount)),
       terrain: terrainSeed,
-      hetero: heterogeneity
+      hetero: heterogeneity,
+      risk: riskModel
     };
     Object.entries(values).forEach(([key, value]) => url.searchParams.set(key, String(value)));
     return url.toString();
@@ -3168,9 +3172,10 @@ const SimulatorPage = () => {
   const handleTabKeys = e => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
-    const idx = VISUALIZATION_TABS.indexOf(activeSubTab);
-    const dir = e.key === 'ArrowRight' ? 1 : VISUALIZATION_TABS.length - 1;
-    const next = VISUALIZATION_TABS[(idx + dir) % VISUALIZATION_TABS.length];
+    const tabs = activeSubTab === 'profile' ? ['profile'] : MAP_TABS;
+    const idx = tabs.indexOf(activeSubTab);
+    const dir = e.key === 'ArrowRight' ? 1 : tabs.length - 1;
+    const next = tabs[(idx + dir) % tabs.length];
     setActiveSubTab(next);
     requestAnimationFrame(() => tabRefs.current[next] && tabRefs.current[next].focus());
   };
@@ -3326,6 +3331,8 @@ const SimulatorPage = () => {
         injLocation: s.injLocation,
         dipPercent: s.dipPercent,
         amplitude: s.amplitude,
+        terrainSeed,
+        heterogeneity,
         faults: randFaults
       });
     }
@@ -3359,12 +3366,18 @@ const SimulatorPage = () => {
     worker.postMessage({
       realizations,
       base: {
+        modelType: riskModel,
         cellCount,
         frequency,
         faultOffset,
         injDuration,
         faultCount,
-        parentDX: dx
+        parentDX: dx,
+        mapCols,
+        mapRows: Math.max(12, Math.round(mapCols * 0.6)),
+        wellY,
+        terrainSeed,
+        heterogeneity
       }
     });
   };
@@ -3514,6 +3527,10 @@ const SimulatorPage = () => {
     setInjLocation(loadedInjLoc);
     setDipPercent(loadedDip);
     setAmplitude(loadedAmp);
+    if (riskModel === 'map') {
+      if (Number.isFinite(realization.params.terrainSeed)) setTerrainSeed(realization.params.terrainSeed);
+      if (Number.isFinite(realization.params.heterogeneity)) setHeterogeneity(realization.params.heterogeneity);
+    }
     const newFaults = faults.map((f, i) => {
       const rf = realization.params.faults[i];
       if (rf) {
@@ -3527,6 +3544,12 @@ const SimulatorPage = () => {
       return f;
     });
     setFaults(newFaults);
+    if (riskModel === 'map') {
+      setActiveSubTab('topography');
+      // Let the parameter setters commit before asking the mounted map panel to replay.
+      setTimeout(() => sendMapCommand('run'), 0);
+      return;
+    }
 
     // 2. Snapshot the realization's EXACT solver params (the ref still holds
     //    the pre-load values until the next render, so build it explicitly).
@@ -3608,7 +3631,7 @@ const SimulatorPage = () => {
       }
     };
     historyRef.current = replayHistory;
-    setActiveSubTab('profile');
+    if (riskModel === 'map') setActiveSubTab('topography');else setActiveSubTab('profile');
   };
 
   // SVG Histogram Renderer
@@ -4849,9 +4872,12 @@ const SimulatorPage = () => {
     className: "ve-workspace-nav",
     "aria-label": "Simulator workspace"
   }, /*#__PURE__*/React.createElement("button", {
-    "aria-current": VISUALIZATION_TABS.includes(activeSubTab) ? 'page' : undefined,
+    "aria-current": isMapView ? 'page' : undefined,
+    onClick: () => handleWorkspaceChange('topography')
+  }, "2D / 3D simulator"), /*#__PURE__*/React.createElement("button", {
+    "aria-current": activeSubTab === 'profile' ? 'page' : undefined,
     onClick: () => handleWorkspaceChange('profile')
-  }, "Simulator"), /*#__PURE__*/React.createElement("button", {
+  }, "1D cross-section simulator"), /*#__PURE__*/React.createElement("button", {
     "aria-current": activeSubTab === 'uq' ? 'page' : undefined,
     onClick: () => handleWorkspaceChange('uq')
   }, "Risk analysis"), /*#__PURE__*/React.createElement("button", {
@@ -4907,7 +4933,9 @@ const SimulatorPage = () => {
     onClose: dismissMobilePanel
   }, /*#__PURE__*/React.createElement("div", {
     className: "ve-rail-heading"
-  }, /*#__PURE__*/React.createElement("h2", null, "Scenario inputs")), /*#__PURE__*/React.createElement("section", {
+  }, /*#__PURE__*/React.createElement("h2", null, isMapView ? 'Map simulator inputs' : '1D cross-section inputs'), /*#__PURE__*/React.createElement("span", {
+    className: "ve-rail-mode"
+  }, isMapView ? '2D / 3D' : '1D')), /*#__PURE__*/React.createElement("section", {
     className: "ve-input-group"
   }, /*#__PURE__*/React.createElement("h3", null, "Injection"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(ParameterField, {
     label: "Flow rate (Q)",
@@ -4993,7 +5021,7 @@ const SimulatorPage = () => {
     step: 0.2,
     value: faultOffset,
     onChange: setFaultOffset
-  }), /*#__PURE__*/React.createElement(ParameterField, {
+  }), isMapView && /*#__PURE__*/React.createElement(ParameterField, {
     label: "Terrain heterogeneity",
     unit: "fraction",
     min: 0,
@@ -5034,7 +5062,7 @@ const SimulatorPage = () => {
       next[index].xPercent = value;
       setFaults(next);
     }
-  }), /*#__PURE__*/React.createElement(ParameterField, {
+  }), isMapView && /*#__PURE__*/React.createElement(ParameterField, {
     label: "Y start",
     unit: "%",
     min: 0,
@@ -5046,7 +5074,7 @@ const SimulatorPage = () => {
       next[index].yStartPercent = value;
       setFaults(next);
     }
-  }), /*#__PURE__*/React.createElement(ParameterField, {
+  }), isMapView && /*#__PURE__*/React.createElement(ParameterField, {
     label: "Y end",
     unit: "%",
     min: 0,
@@ -5094,7 +5122,7 @@ const SimulatorPage = () => {
       next[index].leakRate = value;
       setFaults(next);
     }
-  })))), /*#__PURE__*/React.createElement("section", {
+  })))), !isMapView && /*#__PURE__*/React.createElement("section", {
     className: "ve-input-group"
   }, /*#__PURE__*/React.createElement("div", {
     className: "ve-toggle-heading"
@@ -5184,7 +5212,7 @@ const SimulatorPage = () => {
     role: "tablist",
     "aria-label": "Simulator views",
     onKeyDown: handleTabKeys
-  }, /*#__PURE__*/React.createElement("button", {
+  }, activeSubTab === 'profile' ? /*#__PURE__*/React.createElement("button", {
     ref: el => {
       tabRefs.current.profile = el;
     },
@@ -5195,10 +5223,10 @@ const SimulatorPage = () => {
     "aria-controls": "tabpanel-profile",
     tabIndex: activeSubTab === 'profile' ? 0 : -1,
     style: {
-      background: activeSubTab === 'profile' ? 'rgba(100, 255, 218, 0.08)' : 'none',
+      background: 'rgba(100, 255, 218, 0.08)',
       border: 'none',
-      borderBottom: activeSubTab === 'profile' ? '2px solid #64ffda' : '2px solid transparent',
-      color: activeSubTab === 'profile' ? '#64ffda' : 'rgba(255,255,255,0.6)',
+      borderBottom: '2px solid #64ffda',
+      color: '#64ffda',
       padding: '12px 16px',
       fontSize: '11px',
       fontWeight: 600,
@@ -5212,7 +5240,7 @@ const SimulatorPage = () => {
     style: {
       marginRight: 6
     }
-  }), " Cross-section"), /*#__PURE__*/React.createElement("button", {
+  }), " 1D Cross-section") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     ref: el => {
       tabRefs.current.map = el;
     },
@@ -5268,7 +5296,7 @@ const SimulatorPage = () => {
     style: {
       marginRight: 6
     }
-  }), " 3D Topography")), /*#__PURE__*/React.createElement("div", {
+  }), " 3D Topography"))), /*#__PURE__*/React.createElement("div", {
     className: "sim-tab-status",
     style: {
       paddingRight: 8
@@ -5859,7 +5887,7 @@ const SimulatorPage = () => {
         className: "ve-workspace-heading"
       }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", {
         id: "risk-title"
-      }, "Risk analysis"), /*#__PURE__*/React.createElement("p", null, "Use the current scenario as the nominal case.")), /*#__PURE__*/React.createElement("button", {
+      }, "Risk analysis \xB7 ", riskModel === 'map' ? '2D / 3D map' : '1D cross-section'), /*#__PURE__*/React.createElement("p", null, "Use the selected simulator path as the nominal case.")), /*#__PURE__*/React.createElement("button", {
         className: "ve-run-button",
         onClick: runMonteCarloBatch,
         disabled: uqRunning
@@ -5869,6 +5897,24 @@ const SimulatorPage = () => {
         className: "ve-risk-config",
         "aria-label": "Uncertainty configuration"
       }, /*#__PURE__*/React.createElement("div", {
+        className: "ve-risk-model-picker",
+        role: "group",
+        "aria-label": "Risk analysis model"
+      }, /*#__PURE__*/React.createElement("span", null, "Run risk on"), /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        "aria-pressed": riskModel === 'map',
+        onClick: () => {
+          setRiskModel('map');
+          setMcResults(null);
+        }
+      }, "2D / 3D map"), /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        "aria-pressed": riskModel === 'profile',
+        onClick: () => {
+          setRiskModel('profile');
+          setMcResults(null);
+        }
+      }, "1D cross-section")), /*#__PURE__*/React.createElement("div", {
         className: "ve-uq-parameters",
         style: {
           display: 'flex',

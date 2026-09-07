@@ -1,3 +1,5 @@
+if (typeof importScripts === 'function') importScripts('./ve2d-model.js');
+
 const capRockBaseProfile = (x, p) => 150 + x * (p.dipPercent / 100) * 8 - p.amplitude * Math.sin((x * Math.PI / 1000) * p.frequency * 2);
 
 const faultIntersection = (fault, index, p) => {
@@ -71,9 +73,53 @@ const step = (currentH, currentHMax, masses, year, p) => {
   return { h, hMax, masses: { injected: +injected.toFixed(2), trapped: +trapped.toFixed(2), mobile: +mobile.toFixed(2), leaked: +leaked.toFixed(2) } };
 };
 
+const runMapRealization = (realization, base) => {
+  const cols = Math.min(base.mapCols || 48, 64);
+  const rows = Math.max(12, Math.round(base.mapRows || cols * 0.6));
+  const params = {
+    width: 1000,
+    height: 600,
+    permeability: realization.K,
+    porosity: realization.porosity,
+    residualTrapFraction: realization.residualTrapFraction,
+    injectionRate: realization.Q,
+    injectionDuration: base.injDuration,
+    wellX: realization.injLocation,
+    wellY: base.wellY,
+    dipX: realization.dipPercent,
+    dipY: realization.dipPercent * 0.35,
+    structureAmplitude: realization.amplitude,
+    structureFrequency: base.frequency,
+    faultOffset: base.faultOffset,
+    terrainSeed: realization.terrainSeed,
+    heterogeneity: realization.heterogeneity,
+    faults: realization.faults.slice(0, base.faultCount)
+  };
+  let state = VE2D.createVe2dState({ cols, rows });
+  const years = Math.min(600, Math.max(180, base.injDuration + 180));
+  for (let year = 1; year <= years; year++) state = VE2D.stepVe2d(state, params, year);
+  const masses = state.masses;
+  return {
+    h: state.h,
+    hMax: state.hMax,
+    finalLeaked: masses.leaked,
+    finalTrapped: masses.trapped,
+    finalMobile: masses.mobile,
+    finalInjected: masses.injected,
+    trappingEfficiency: masses.injected ? masses.trapped / masses.injected * 100 : 0,
+    leakedFraction: masses.injected ? masses.leaked / masses.injected * 100 : 0
+  };
+};
+
 self.onmessage = ({ data }) => {
   const results = [];
   data.realizations.forEach((r, index) => {
+    if (data.base.modelType === 'map') {
+      const mapResult = runMapRealization(r, data.base);
+      results.push({ id: r.id, params: r, ...mapResult });
+      self.postMessage({ type: 'progress', value: Math.round((index + 1) / data.realizations.length * 100) });
+      return;
+    }
     const p = { ...data.base, ...r, faults: r.faults };
     let h = new Array(p.cellCount).fill(0), hMax = new Array(p.cellCount).fill(0);
     let masses = { injected: 0, trapped: 0, mobile: 0, leaked: 0 };
