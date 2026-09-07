@@ -358,13 +358,13 @@ const GuidePage = ({
     className: "math-text"
   }, "Saline aquifer CO\u2082 storage formations are typically thin, lateral sandstone layers with high aspect ratios where the reservoir length is far greater than the vertical thickness (", /*#__PURE__*/React.createElement("span", {
     className: "variable"
-  }, "H"), " &ll; ", /*#__PURE__*/React.createElement("span", {
+  }, "H"), " \u226A ", /*#__PURE__*/React.createElement("span", {
     className: "variable"
   }, "L"), "). In such geometries, buoyancy forces drive rapid vertical segregation on a timescale much faster than regional horizontal migration (", /*#__PURE__*/React.createElement("span", {
     className: "variable"
   }, "t"), /*#__PURE__*/React.createElement("span", {
     className: "subscript"
-  }, "vert"), " &ll; ", /*#__PURE__*/React.createElement("span", {
+  }, "vert"), " \u226A ", /*#__PURE__*/React.createElement("span", {
     className: "variable"
   }, "t"), /*#__PURE__*/React.createElement("span", {
     className: "subscript"
@@ -1915,7 +1915,8 @@ const SimulatorPage = () => {
   };
 
   // Preset Scenario Handlers
-  const applyPreset = presetName => {
+  const applyPreset = rawName => {
+    const presetName = rawName === 'anticline' ? 'dome' : rawName === 'fault' ? 'faulted' : rawName === 'dipping' ? 'monocline' : rawName;
     setSelectedPreset(presetName);
     setWellY(50);
     resetSimulation();
@@ -2250,7 +2251,36 @@ const SimulatorPage = () => {
   const handleScrub = targetTime => {
     setIsPlaying(false);
     setIsReversing(false);
-    const t = Math.max(0, Math.min(historyRef.current.length - 1, targetTime));
+    const t = Math.max(0, Math.min(1000, targetTime));
+
+    // If user seeks beyond currently simulated history, dynamically advance forward to t
+    if (historyRef.current.length <= t) {
+      const p = solverParamsRef.current;
+      const newMassItems = [];
+      while (historyRef.current.length <= t) {
+        const nextYr = historyRef.current.length;
+        const lastState = historyRef.current[nextYr - 1];
+        const res = runSolverStep(lastState.h, lastState.hMax, lastState.masses, nextYr, p);
+        historyRef.current.push({
+          time: nextYr,
+          h: [...res.h],
+          hMax: [...res.hMax],
+          masses: {
+            ...res.masses
+          },
+          params: snapshotParams()
+        });
+        if (nextYr % 5 === 0 || nextYr === 1 || nextYr === t) {
+          newMassItems.push({
+            time: nextYr,
+            ...res.masses
+          });
+        }
+      }
+      if (newMassItems.length > 0) {
+        setMassHistory(prev => [...prev, ...newMassItems]);
+      }
+    }
     const histState = historyRef.current[t];
     if (histState) {
       setH(histState.h);
@@ -3578,6 +3608,30 @@ const SimulatorPage = () => {
       className: "sr-only"
     }, /*#__PURE__*/React.createElement("caption", null, "Current CO\u2082 mass balance at year ", simTime), /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Injected"), /*#__PURE__*/React.createElement("th", null, "Mobile"), /*#__PURE__*/React.createElement("th", null, "Trapped"), /*#__PURE__*/React.createElement("th", null, "Leaked"))), /*#__PURE__*/React.createElement("tbody", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, currentMasses.injected), /*#__PURE__*/React.createElement("td", null, currentMasses.mobile), /*#__PURE__*/React.createElement("td", null, currentMasses.trapped), /*#__PURE__*/React.createElement("td", null, currentMasses.leaked)))));
   };
+  const presetButton = (id, label, icon) => /*#__PURE__*/React.createElement("button", {
+    key: id,
+    onClick: () => applyPreset(id),
+    style: {
+      background: selectedPreset === id ? 'rgba(100, 255, 218, 0.16)' : 'rgba(255, 255, 255, 0.05)',
+      border: `1px solid ${selectedPreset === id ? '#64ffda' : 'rgba(255, 255, 255, 0.12)'}`,
+      color: selectedPreset === id ? '#64ffda' : 'rgba(255, 255, 255, 0.75)',
+      padding: '5px 10px',
+      borderRadius: '7px',
+      fontSize: '11px',
+      cursor: 'pointer',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '5px',
+      fontWeight: selectedPreset === id ? 600 : 400,
+      outline: 'none',
+      transition: 'all 0.15s ease'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: icon,
+    style: {
+      fontSize: '10px'
+    }
+  }), label);
   return /*#__PURE__*/React.createElement("div", {
     className: "simulator-page-wrapper",
     style: {
@@ -3942,12 +3996,11 @@ const SimulatorPage = () => {
       }
     }), [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000].map((m, idx) => {
       const maxSimulated = historyRef.current.length - 1;
-      const isAvailable = m <= maxSimulated;
+      const isSimulated = m <= maxSimulated;
       const isCurrent = m === simTime;
       return /*#__PURE__*/React.createElement("button", {
         key: idx,
-        onClick: () => isAvailable && handleScrub(m),
-        disabled: !isAvailable,
+        onClick: () => handleScrub(m),
         "aria-label": `Jump to year ${m}${isCurrent ? ' (current)' : ''}`,
         style: {
           display: 'flex',
@@ -3960,16 +4013,16 @@ const SimulatorPage = () => {
           font: 'inherit',
           textAlign: 'left',
           width: '100%',
-          cursor: isAvailable ? 'pointer' : 'default',
-          opacity: isAvailable ? 1 : 0.35
+          cursor: 'pointer',
+          opacity: isCurrent ? 1 : isSimulated ? 0.9 : 0.6
         }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           width: 12,
           height: 12,
           borderRadius: '50%',
-          background: isCurrent ? '#0dfca2' : isAvailable ? '#3ca68e' : 'rgba(255,255,255,0.1)',
-          border: `2px solid ${isCurrent ? '#fff' : 'transparent'}`,
+          background: isCurrent ? '#0dfca2' : isSimulated ? '#3ca68e' : 'rgba(100,255,218,0.2)',
+          border: isCurrent ? '2px solid #fff' : isSimulated ? '2px solid transparent' : '1px dashed rgba(100,255,218,0.6)',
           boxShadow: isCurrent ? '0 0 6px #0dfca2' : 'none',
           zIndex: 2,
           transition: 'all 0.2s ease',
@@ -3981,7 +4034,7 @@ const SimulatorPage = () => {
         style: {
           fontSize: 11.5,
           fontFamily: 'monospace',
-          color: isCurrent ? '#0dfca2' : 'rgba(255,255,255,0.7)',
+          color: isCurrent ? '#0dfca2' : isSimulated ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)',
           fontWeight: isCurrent ? 'bold' : 'normal'
         }
       }, "Year ", m, " ", isCurrent && '\u2190'));
@@ -4048,10 +4101,35 @@ const SimulatorPage = () => {
           .sim-title-row { order: 1; }
           .simulator-layout { order: 2; }
           .sim-evidence-grid { order: 3; }
+          .sim-tab-header, .sim-hud-legend {
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
+          }
+          .sim-tab-header::-webkit-scrollbar, .sim-hud-legend::-webkit-scrollbar {
+            width: 0 !important;
+            height: 0 !important;
+            display: none !important;
+            background: transparent !important;
+          }
+          .sim-tab-header::-webkit-scrollbar-thumb, .sim-hud-legend::-webkit-scrollbar-thumb,
+          .sim-tab-header::-webkit-scrollbar-track, .sim-hud-legend::-webkit-scrollbar-track {
+            background: transparent !important;
+            display: none !important;
+          }
           .sim-tab-header { overflow-x: auto; align-items: stretch !important; }
           .sim-tab-header [role="tablist"] { min-width: max-content; }
           .sim-tab-status { display: none; }
-          .sim-hud-legend { max-width: calc(100% - 16px); overflow-x: auto; right: 8px !important; top: 8px !important; white-space: nowrap; }
+          .sim-hud-legend { 
+            max-width: calc(100% - 16px); 
+            overflow-x: auto; 
+            right: 8px !important; 
+            top: 8px !important; 
+            white-space: nowrap; 
+            font-size: 8.5px !important;
+            padding: 3px 8px !important;
+            gap: 8px !important;
+            border-radius: 12px !important;
+          }
           .sim-playback { left: 8px !important; right: 8px !important; gap: 7px !important; padding: 8px 10px !important; }
           .sim-playback input[type="range"] { min-width: 48px; }
           .sim-evidence-grid, .uq-config-grid, .uq-results-grid, .uq-percentile-grid { grid-template-columns: 1fr !important; }
@@ -4101,142 +4179,118 @@ const SimulatorPage = () => {
       display: 'flex',
       alignItems: 'center',
       gap: 6,
-      transition: 'all 0.2s ease'
+      outline: 'none'
     },
-    title: "Toggle timeline sidebar"
+    title: "Toggle time scrubbing sidebar"
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-history"
-  }), " ", sidebarOpen ? 'Close Timeline' : 'Timeline')), /*#__PURE__*/React.createElement("p", {
+  }), " Timeline")), /*#__PURE__*/React.createElement("p", {
     style: {
       margin: '8px 0 0',
-      color: 'rgba(255,255,255,0.65)',
-      fontSize: 13.5,
-      maxWidth: 680
+      fontSize: '13px',
+      color: 'rgba(255,255,255,0.7)',
+      maxWidth: '620px',
+      lineHeight: 1.5
     }
   }, "Explore an educational finite-volume Vertical Equilibrium model. Adjust caprock structure, rock properties, injection, and simplified fault behavior in real time."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
-      flexWrap: 'wrap',
-      gap: 9,
-      marginTop: 12
+      gap: 10,
+      marginTop: 12,
+      flexWrap: 'wrap'
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: copyScenarioLink,
     style: {
       background: '#64ffda',
-      color: '#10251f',
-      border: 0,
+      border: 'none',
+      color: '#000',
+      padding: '8px 16px',
       borderRadius: 8,
-      padding: '8px 12px',
-      fontWeight: 700,
-      cursor: 'pointer'
+      fontSize: 12,
+      fontWeight: 'bold',
+      cursor: 'pointer',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 6,
+      outline: 'none'
     }
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-link"
-  }), " Copy Scenario Link"), activeSubTab === 'profile' && /*#__PURE__*/React.createElement("button", {
+  }), " Copy Scenario Link"), /*#__PURE__*/React.createElement("button", {
     onClick: exportCsv,
     style: {
-      background: 'rgba(255,255,255,0.08)',
+      background: 'rgba(255,255,255,0.06)',
+      border: '1px solid rgba(255,255,255,0.2)',
       color: '#fff',
-      border: '1px solid rgba(255,255,255,0.18)',
+      padding: '8px 14px',
       borderRadius: 8,
-      padding: '8px 12px',
-      cursor: 'pointer'
+      fontSize: 12,
+      cursor: 'pointer',
+      outline: 'none'
     }
-  }, "Export CSV"), activeSubTab === 'profile' && /*#__PURE__*/React.createElement("button", {
+  }, "Export CSV"), /*#__PURE__*/React.createElement("button", {
     onClick: exportSvg,
     style: {
-      background: 'rgba(255,255,255,0.08)',
+      background: 'rgba(255,255,255,0.06)',
+      border: '1px solid rgba(255,255,255,0.2)',
       color: '#fff',
-      border: '1px solid rgba(255,255,255,0.18)',
+      padding: '8px 14px',
       borderRadius: 8,
-      padding: '8px 12px',
-      cursor: 'pointer'
+      fontSize: 12,
+      cursor: 'pointer',
+      outline: 'none'
     }
   }, "Export SVG"), /*#__PURE__*/React.createElement("a", {
-    href: "mailto:st4014@hw.ac.uk?subject=VE%20simulator%20enquiry",
+    href: "mailto:st4014@hw.ac.uk",
     style: {
+      display: 'inline-flex',
+      alignItems: 'center',
       color: '#64ffda',
+      fontSize: 13,
+      fontWeight: 600,
+      textDecoration: 'none',
       padding: '8px 4px'
     }
-  }, "Contact the researcher"), /*#__PURE__*/React.createElement("span", {
-    role: "status",
-    "aria-live": "polite",
+  }, "Contact the researcher"), shareStatus && /*#__PURE__*/React.createElement("span", {
     style: {
+      fontSize: 11.5,
       color: '#64ffda',
-      fontSize: 12,
-      alignSelf: 'center'
+      display: 'inline-flex',
+      alignItems: 'center',
+      marginLeft: 6
     }
   }, shareStatus))), /*#__PURE__*/React.createElement("div", {
     style: {
+      background: 'rgba(0,0,0,0.2)',
+      border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: 14,
+      padding: '12px 14px',
       display: 'flex',
       flexDirection: 'column',
-      gap: 6,
-      background: 'rgba(255,255,255,0.03)',
-      border: '1px solid rgba(255,255,255,0.06)',
-      padding: '10px 14px',
-      borderRadius: 14,
-      backdropFilter: 'blur(8px)'
+      gap: 8
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 9.5,
-      letterSpacing: '0.12em',
       textTransform: 'uppercase',
+      letterSpacing: '0.12em',
       color: 'rgba(255,255,255,0.5)',
-      fontWeight: 600
+      fontWeight: 'bold'
     }
   }, "Synthetic Reservoir Cases"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
-      gap: 8,
+      gap: 6,
       flexWrap: 'wrap'
     }
-  }, [{
-    id: 'default',
-    label: 'Default Case',
-    icon: 'fa-project-diagram'
-  }, {
-    id: 'dome',
-    label: 'Anticline Dome',
-    icon: 'fa-mountain'
-  }, {
-    id: 'faulted',
-    label: 'Faulted Trap',
-    icon: 'fa-bolt'
-  }, {
-    id: 'monocline',
-    label: 'Dipping Layer',
-    icon: 'fa-sliders'
-  }].map(p => /*#__PURE__*/React.createElement("button", {
-    key: p.id,
-    onClick: () => applyPreset(p.id),
-    style: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 6,
-      background: 'rgba(255,255,255,0.06)',
-      border: '1px solid rgba(255,255,255,0.12)',
-      color: 'azure',
-      padding: '6px 12px',
-      borderRadius: 8,
-      fontSize: 11.5,
-      fontWeight: 500,
-      cursor: 'pointer',
-      transition: 'all 0.3s ease'
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: `fas ${p.icon}`,
-    style: {
-      fontSize: 9.5,
-      color: '#64ffda'
-    }
-  }), " ", p.label))))), /*#__PURE__*/React.createElement("div", {
+  }, presetButton('default', 'Default Case', 'fas fa-code-branch'), presetButton('anticline', 'Anticline Dome', 'fas fa-mountain'), presetButton('fault', 'Faulted Trap', 'fas fa-bolt'), presetButton('dipping', 'Dipping Layer', 'fas fa-water')))), /*#__PURE__*/React.createElement("div", {
     className: "sim-evidence-grid",
     style: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(4, 1fr)',
-      gap: 10
+      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+      gap: 12,
+      margin: '18px 0 20px'
     }
   }, [['Problem', 'Full-field CO₂ storage forecasts can be computationally expensive.'], ['Method', 'Vertical integration represents large-scale migration through plume height.'], ['Evidence', 'The research model is benchmarked against higher-resolution compositional cases.'], ['Impact', 'Fast screening supports uncertainty analysis and scenario comparison.']].map(([label, body]) => /*#__PURE__*/React.createElement("div", {
     key: label,
@@ -4267,7 +4321,7 @@ const SimulatorPage = () => {
     className: "fas fa-external-link-alt"
   }))), /*#__PURE__*/React.createElement("div", {
     className: "simulator-layout",
-    style: activeSubTab === 'map' ? {
+    style: activeSubTab !== 'profile' ? {
       gridTemplateColumns: '1fr'
     } : undefined
   }, /*#__PURE__*/React.createElement("div", {
@@ -4692,6 +4746,53 @@ const SimulatorPage = () => {
         offset: "100%",
         stopColor: "#051426",
         stopOpacity: "0.95"
+      })), /*#__PURE__*/React.createElement("linearGradient", {
+        id: "well-gradient",
+        x1: "0",
+        y1: "0",
+        x2: "1",
+        y2: "0"
+      }, /*#__PURE__*/React.createElement("stop", {
+        offset: "0%",
+        stopColor: "#475569"
+      }), /*#__PURE__*/React.createElement("stop", {
+        offset: "30%",
+        stopColor: "#cbd5e1"
+      }), /*#__PURE__*/React.createElement("stop", {
+        offset: "70%",
+        stopColor: "#94a3b8"
+      }), /*#__PURE__*/React.createElement("stop", {
+        offset: "100%",
+        stopColor: "#334155"
+      })), /*#__PURE__*/React.createElement("linearGradient", {
+        id: "wellhead-grad",
+        x1: "0",
+        y1: "0",
+        x2: "0",
+        y2: "1"
+      }, /*#__PURE__*/React.createElement("stop", {
+        offset: "0%",
+        stopColor: "#64ffda"
+      }), /*#__PURE__*/React.createElement("stop", {
+        offset: "100%",
+        stopColor: "#05e67c"
+      })), /*#__PURE__*/React.createElement("radialGradient", {
+        id: "inj-flare-glow",
+        cx: "50%",
+        cy: "50%",
+        r: "50%"
+      }, /*#__PURE__*/React.createElement("stop", {
+        offset: "0%",
+        stopColor: "#0dfca2",
+        stopOpacity: "0.9"
+      }), /*#__PURE__*/React.createElement("stop", {
+        offset: "45%",
+        stopColor: "#05e67c",
+        stopOpacity: "0.5"
+      }), /*#__PURE__*/React.createElement("stop", {
+        offset: "100%",
+        stopColor: "#0dfca2",
+        stopOpacity: "0"
       }))), /*#__PURE__*/React.createElement("path", {
         d: `M 0 0 L 1000 0 L 1000 ${capRockY(1000, cellCount - 1)} ` + Array.from({
           length: cellCount + 1
@@ -4760,23 +4861,86 @@ const SimulatorPage = () => {
         const cellInjIdx = Math.floor(injLocation / 100.0 * cellCount);
         const xWell = cellInjIdx * dx + dx / 2.0;
         const yCap = capRockY(xWell);
-        return /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("line", {
+        const yBase = stratumY(xWell, cellInjIdx, 175);
+        const perfTop = yCap + 20;
+        const perfBottom = Math.min(yBase - 15, yCap + 95);
+        const isInjecting = Q > 0 && isPlaying && simTime <= injDuration;
+        return /*#__PURE__*/React.createElement("g", {
+          className: "sim-wellbore",
+          role: "group",
+          "aria-label": `Injection well at ${injLocation}%`
+        }, /*#__PURE__*/React.createElement("rect", {
+          x: xWell - 7,
+          y: "0",
+          width: "14",
+          height: "12",
+          rx: "2",
+          fill: "url(#wellhead-grad)",
+          stroke: "#fff",
+          strokeWidth: "0.8"
+        }), /*#__PURE__*/React.createElement("line", {
+          x1: xWell - 11,
+          y1: "6",
+          x2: xWell + 11,
+          y2: "6",
+          stroke: "#64ffda",
+          strokeWidth: "2.5",
+          strokeLinecap: "round"
+        }), /*#__PURE__*/React.createElement("circle", {
+          cx: xWell,
+          cy: "6",
+          r: "2.5",
+          fill: "#fff"
+        }), /*#__PURE__*/React.createElement("line", {
           x1: xWell,
-          y1: "0",
+          y1: "12",
           x2: xWell,
-          y2: yCap + 120,
+          y2: perfBottom,
+          stroke: "rgba(0,0,0,0.4)",
+          strokeWidth: "6"
+        }), /*#__PURE__*/React.createElement("line", {
+          x1: xWell,
+          y1: "12",
+          x2: xWell,
+          y2: perfBottom,
           stroke: "url(#well-gradient)",
-          strokeWidth: "4"
-        }), Q > 0 && isPlaying && simTime <= injDuration && [0, 0.3, 0.6, 0.9].map((delay, idx) => /*#__PURE__*/React.createElement("circle", {
+          strokeWidth: "3.5",
+          strokeLinecap: "round"
+        }), Array.from({
+          length: 6
+        }).map((_, pIdx) => {
+          const py = perfTop + pIdx * ((perfBottom - perfTop) / 5);
+          return /*#__PURE__*/React.createElement("line", {
+            key: `perf-${pIdx}`,
+            x1: xWell - 6,
+            y1: py,
+            x2: xWell + 6,
+            y2: py,
+            stroke: isInjecting ? '#0dfca2' : 'rgba(255,255,255,0.7)',
+            strokeWidth: "1.6",
+            strokeLinecap: "round"
+          });
+        }), isInjecting && /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("circle", {
+          cx: xWell,
+          cy: (perfTop + perfBottom) / 2,
+          r: "22",
+          fill: "url(#inj-flare-glow)"
+        }), /*#__PURE__*/React.createElement("circle", {
+          cx: xWell,
+          cy: (perfTop + perfBottom) / 2,
+          r: "5",
+          fill: "#fff",
+          opacity: "0.95"
+        }), [0, 0.3, 0.6, 0.9].map((delay, idx) => /*#__PURE__*/React.createElement("circle", {
           key: idx,
           cx: xWell,
-          cy: yCap * (idx / 4.0),
+          cy: 12 + (yCap - 12) * (idx / 3.0),
           r: "2",
           fill: "#0dfca2",
           style: {
             animation: `streakRise 1.5s linear ${delay}s infinite`
           }
-        })));
+        }))));
       })(), Array.from({
         length: faultCount
       }).map((_, idx) => {
@@ -4988,7 +5152,8 @@ const SimulatorPage = () => {
       }, "Yr ", simTime), /*#__PURE__*/React.createElement("input", {
         type: "range",
         min: "0",
-        max: Math.max(1, historyRef.current.length - 1),
+        max: "1000",
+        step: "1",
         value: simTime,
         "aria-label": "Seek simulation year",
         onChange: e => handleScrub(parseInt(e.target.value)),
@@ -5061,7 +5226,7 @@ const SimulatorPage = () => {
           className: "uq-config-grid",
           style: {
             display: 'grid',
-            gridTemplateColumns: '1.2fr 1fr 1fr',
+            gridTemplateColumns: 'minmax(380px, 2fr) minmax(260px, 1fr)',
             gap: 20,
             background: 'rgba(255,255,255,0.02)',
             border: '1px solid rgba(255,255,255,0.05)',
@@ -5091,9 +5256,9 @@ const SimulatorPage = () => {
         }, "Select parameters, then pick an absolute range, a \xB1% band, or discrete values."), /*#__PURE__*/React.createElement("div", {
           style: {
             display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 8,
-            maxHeight: 340,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 10,
+            maxHeight: 380,
             overflowY: 'auto',
             paddingRight: 4
           }
@@ -5106,7 +5271,11 @@ const SimulatorPage = () => {
           style: {
             display: 'flex',
             flexDirection: 'column',
-            gap: 12
+            gap: 16,
+            background: 'rgba(0,0,0,0.2)',
+            padding: 14,
+            borderRadius: 12,
+            border: '1px solid rgba(255,255,255,0.05)'
           }
         }, /*#__PURE__*/React.createElement("span", {
           style: {
@@ -5129,7 +5298,7 @@ const SimulatorPage = () => {
         }, "Monte Carlo Realizations:"), /*#__PURE__*/React.createElement("div", {
           style: {
             display: 'flex',
-            gap: 4,
+            gap: 6,
             marginTop: 2
           }
         }, [25, 50, 100].map(cnt => /*#__PURE__*/React.createElement("button", {
@@ -5139,9 +5308,9 @@ const SimulatorPage = () => {
             background: mcRunsCount === cnt ? 'rgba(100,255,218,0.2)' : 'rgba(255,255,255,0.05)',
             border: `1px solid ${mcRunsCount === cnt ? '#64ffda' : 'rgba(255,255,255,0.12)'}`,
             color: mcRunsCount === cnt ? '#64ffda' : 'azure',
-            padding: '4px 10px',
+            padding: '5px 12px',
             borderRadius: 6,
-            fontSize: 10.5,
+            fontSize: 11,
             fontWeight: 'bold',
             cursor: 'pointer',
             outline: 'none'
@@ -5165,7 +5334,7 @@ const SimulatorPage = () => {
             background: 'rgba(0,0,0,0.3)',
             border: '1px solid rgba(255,255,255,0.15)',
             color: '#fff',
-            padding: '6px 10px',
+            padding: '7px 10px',
             borderRadius: 8,
             fontSize: 11,
             cursor: 'pointer',
@@ -5173,15 +5342,16 @@ const SimulatorPage = () => {
           }
         }, /*#__PURE__*/React.createElement("option", {
           value: "leaked"
-        }, "CO\\u2082 Leakage Mass (ktonnes)"), /*#__PURE__*/React.createElement("option", {
+        }, "CO\u2082 Leakage Mass (ktonnes)"), /*#__PURE__*/React.createElement("option", {
           value: "trapped"
-        }, "Residual Trapping Efficiency (%)")))), /*#__PURE__*/React.createElement("div", {
+        }, "Residual Trapping Efficiency (%)"))), /*#__PURE__*/React.createElement("div", {
           style: {
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'center',
             alignItems: 'center',
-            gap: 10
+            gap: 10,
+            marginTop: 'auto'
           }
         }, /*#__PURE__*/React.createElement("button", {
           onClick: runMonteCarloBatch,
@@ -5234,7 +5404,7 @@ const SimulatorPage = () => {
             background: '#64ffda',
             transition: 'width 0.1s ease'
           }
-        }))))), uqData ? /*#__PURE__*/React.createElement("div", {
+        })))))), uqData ? /*#__PURE__*/React.createElement("div", {
           style: {
             display: 'flex',
             flexDirection: 'column',
@@ -5260,7 +5430,7 @@ const SimulatorPage = () => {
             textTransform: 'uppercase',
             fontWeight: 'bold'
           }
-        }, "Uncertainty Distribution (", uqTargetMetric === 'leaked' ? 'CO\u2082 Leaked Mass' : 'Trapping Efficiency', ")"), renderUQHistogram(uqData)), /*#__PURE__*/React.createElement("div", {
+        }, "Uncertainty Distribution (", uqTargetMetric === 'leaked' ? 'CO₂ Leaked Mass' : 'Trapping Efficiency', ")"), renderUQHistogram(uqData)), /*#__PURE__*/React.createElement("div", {
           style: {
             display: 'flex',
             flexDirection: 'column',
@@ -5885,7 +6055,7 @@ const SimulatorPage = () => {
         setFaults(newFaults);
       }
     }) : /*#__PURE__*/React.createElement("div", null)));
-  }))))), activeSubTab !== 'map' && /*#__PURE__*/React.createElement("div", {
+  }))))), activeSubTab === 'profile' && /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',

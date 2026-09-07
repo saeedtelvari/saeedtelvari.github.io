@@ -638,7 +638,8 @@ const SimulatorPage = () => {
   };
 
   // Preset Scenario Handlers
-  const applyPreset = (presetName) => {
+  const applyPreset = (rawName) => {
+    const presetName = rawName === 'anticline' ? 'dome' : (rawName === 'fault' ? 'faulted' : (rawName === 'dipping' ? 'monocline' : rawName));
     setSelectedPreset(presetName);
     setWellY(50);
     resetSimulation();
@@ -929,7 +930,32 @@ const SimulatorPage = () => {
     setIsPlaying(false);
     setIsReversing(false);
     
-    const t = Math.max(0, Math.min(historyRef.current.length - 1, targetTime));
+    const t = Math.max(0, Math.min(1000, targetTime));
+
+    // If user seeks beyond currently simulated history, dynamically advance forward to t
+    if (historyRef.current.length <= t) {
+      const p = solverParamsRef.current;
+      const newMassItems = [];
+      while (historyRef.current.length <= t) {
+        const nextYr = historyRef.current.length;
+        const lastState = historyRef.current[nextYr - 1];
+        const res = runSolverStep(lastState.h, lastState.hMax, lastState.masses, nextYr, p);
+        historyRef.current.push({
+          time: nextYr,
+          h: [...res.h],
+          hMax: [...res.hMax],
+          masses: { ...res.masses },
+          params: snapshotParams()
+        });
+        if (nextYr % 5 === 0 || nextYr === 1 || nextYr === t) {
+          newMassItems.push({ time: nextYr, ...res.masses });
+        }
+      }
+      if (newMassItems.length > 0) {
+        setMassHistory(prev => [...prev, ...newMassItems]);
+      }
+    }
+
     const histState = historyRef.current[t];
     if (histState) {
       setH(histState.h);
@@ -2095,6 +2121,31 @@ const SimulatorPage = () => {
     );
   };
 
+  const presetButton = (id, label, icon) => (
+    <button
+      key={id}
+      onClick={() => applyPreset(id)}
+      style={{
+        background: selectedPreset === id ? 'rgba(100, 255, 218, 0.16)' : 'rgba(255, 255, 255, 0.05)',
+        border: `1px solid ${selectedPreset === id ? '#64ffda' : 'rgba(255, 255, 255, 0.12)'}`,
+        color: selectedPreset === id ? '#64ffda' : 'rgba(255, 255, 255, 0.75)',
+        padding: '5px 10px',
+        borderRadius: '7px',
+        fontSize: '11px',
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '5px',
+        fontWeight: selectedPreset === id ? 600 : 400,
+        outline: 'none',
+        transition: 'all 0.15s ease'
+      }}
+    >
+      <i className={icon} style={{ fontSize: '10px' }} />
+      {label}
+    </button>
+  );
+
   return (
     <div 
       className="simulator-page-wrapper"
@@ -2304,14 +2355,13 @@ const SimulatorPage = () => {
 
                   {[0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000].map((m, idx) => {
                     const maxSimulated = historyRef.current.length - 1;
-                    const isAvailable = m <= maxSimulated;
+                    const isSimulated = m <= maxSimulated;
                     const isCurrent = m === simTime;
                     
                     return (
                       <button
                         key={idx}
-                        onClick={() => isAvailable && handleScrub(m)}
-                        disabled={!isAvailable}
+                        onClick={() => handleScrub(m)}
                         aria-label={`Jump to year ${m}${isCurrent ? ' (current)' : ''}`}
                         style={{
                           display: 'flex',
@@ -2324,15 +2374,15 @@ const SimulatorPage = () => {
                           font: 'inherit',
                           textAlign: 'left',
                           width: '100%',
-                          cursor: isAvailable ? 'pointer' : 'default',
-                          opacity: isAvailable ? 1 : 0.35
+                          cursor: 'pointer',
+                          opacity: isCurrent ? 1 : isSimulated ? 0.9 : 0.6
                         }}
                       >
                         {/* Circle node */}
                         <div style={{ 
                           width: 12, height: 12, borderRadius: '50%',
-                          background: isCurrent ? '#0dfca2' : isAvailable ? '#3ca68e' : 'rgba(255,255,255,0.1)',
-                          border: `2px solid ${isCurrent ? '#fff' : 'transparent'}`,
+                          background: isCurrent ? '#0dfca2' : isSimulated ? '#3ca68e' : 'rgba(100,255,218,0.2)',
+                          border: isCurrent ? '2px solid #fff' : isSimulated ? '2px solid transparent' : '1px dashed rgba(100,255,218,0.6)',
                           boxShadow: isCurrent ? '0 0 6px #0dfca2' : 'none',
                           zIndex: 2,
                           transition: 'all 0.2s ease',
@@ -2345,7 +2395,7 @@ const SimulatorPage = () => {
                         <span style={{ 
                           fontSize: 11.5, 
                           fontFamily: 'monospace',
-                          color: isCurrent ? '#0dfca2' : 'rgba(255,255,255,0.7)',
+                          color: isCurrent ? '#0dfca2' : isSimulated ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)',
                           fontWeight: isCurrent ? 'bold' : 'normal'
                         }}>
                           Year {m} {isCurrent && '\u2190'}
@@ -2424,10 +2474,35 @@ const SimulatorPage = () => {
           .sim-title-row { order: 1; }
           .simulator-layout { order: 2; }
           .sim-evidence-grid { order: 3; }
+          .sim-tab-header, .sim-hud-legend {
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
+          }
+          .sim-tab-header::-webkit-scrollbar, .sim-hud-legend::-webkit-scrollbar {
+            width: 0 !important;
+            height: 0 !important;
+            display: none !important;
+            background: transparent !important;
+          }
+          .sim-tab-header::-webkit-scrollbar-thumb, .sim-hud-legend::-webkit-scrollbar-thumb,
+          .sim-tab-header::-webkit-scrollbar-track, .sim-hud-legend::-webkit-scrollbar-track {
+            background: transparent !important;
+            display: none !important;
+          }
           .sim-tab-header { overflow-x: auto; align-items: stretch !important; }
           .sim-tab-header [role="tablist"] { min-width: max-content; }
           .sim-tab-status { display: none; }
-          .sim-hud-legend { max-width: calc(100% - 16px); overflow-x: auto; right: 8px !important; top: 8px !important; white-space: nowrap; }
+          .sim-hud-legend { 
+            max-width: calc(100% - 16px); 
+            overflow-x: auto; 
+            right: 8px !important; 
+            top: 8px !important; 
+            white-space: nowrap; 
+            font-size: 8.5px !important;
+            padding: 3px 8px !important;
+            gap: 8px !important;
+            border-radius: 12px !important;
+          }
           .sim-playback { left: 8px !important; right: 8px !important; gap: 7px !important; padding: 8px 10px !important; }
           .sim-playback input[type="range"] { min-width: 48px; }
           .sim-evidence-grid, .uq-config-grid, .uq-results-grid, .uq-percentile-grid { grid-template-columns: 1fr !important; }
@@ -2458,44 +2533,111 @@ const SimulatorPage = () => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
-                transition: 'all 0.2s ease',
+                outline: 'none'
               }}
-              title="Toggle timeline sidebar"
+              title="Toggle time scrubbing sidebar"
             >
-              <i className="fas fa-history" /> {sidebarOpen ? 'Close Timeline' : 'Timeline'}
+              <i className="fas fa-history" /> Timeline
             </button>}
           </h1>
-          <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.65)', fontSize: 13.5, maxWidth: 680 }}>
+          <p style={{ margin: '8px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.7)', maxWidth: '620px', lineHeight: 1.5 }}>
             Explore an educational finite-volume Vertical Equilibrium model. Adjust caprock structure, rock properties, injection, and simplified fault behavior in real time.
           </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginTop: 12 }}>
-            <button onClick={copyScenarioLink} style={{ background: '#64ffda', color: '#10251f', border: 0, borderRadius: 8, padding: '8px 12px', fontWeight: 700, cursor: 'pointer' }}><i className="fas fa-link" /> Copy Scenario Link</button>
-            {activeSubTab === 'profile' && <button onClick={exportCsv} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Export CSV</button>}
-            {activeSubTab === 'profile' && <button onClick={exportSvg} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>Export SVG</button>}
-            <a href="mailto:st4014@hw.ac.uk?subject=VE%20simulator%20enquiry" style={{ color: '#64ffda', padding: '8px 4px' }}>Contact the researcher</a>
-            <span role="status" aria-live="polite" style={{ color: '#64ffda', fontSize: 12, alignSelf: 'center' }}>{shareStatus}</span>
+          <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+            <button
+              onClick={copyScenarioLink}
+              style={{
+                background: '#64ffda',
+                border: 'none',
+                color: '#000',
+                padding: '8px 16px',
+                borderRadius: 8,
+                fontSize: 12,
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                outline: 'none'
+              }}
+            >
+              <i className="fas fa-link" /> Copy Scenario Link
+            </button>
+            <button
+              onClick={exportCsv}
+              style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                color: '#fff',
+                padding: '8px 14px',
+                borderRadius: 8,
+                fontSize: 12,
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              Export CSV
+            </button>
+            <button
+              onClick={exportSvg}
+              style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                color: '#fff',
+                padding: '8px 14px',
+                borderRadius: 8,
+                fontSize: 12,
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              Export SVG
+            </button>
+            <a
+              href="mailto:st4014@hw.ac.uk"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                color: '#64ffda',
+                fontSize: 13,
+                fontWeight: 600,
+                textDecoration: 'none',
+                padding: '8px 4px'
+              }}
+            >
+              Contact the researcher
+            </a>
+            {shareStatus && (
+              <span style={{ fontSize: 11.5, color: '#64ffda', display: 'inline-flex', alignItems: 'center', marginLeft: 6 }}>
+                {shareStatus}
+              </span>
+            )}
           </div>
         </div>
         
-        {/* Preset Button Bar */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', padding: '10px 14px', borderRadius: 14, backdropFilter: 'blur(8px)' }}>
-          <span style={{ fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>Synthetic Reservoir Cases</span>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {[
-              { id: 'default', label: 'Default Case', icon: 'fa-project-diagram' },
-              { id: 'dome', label: 'Anticline Dome', icon: 'fa-mountain' },
-              { id: 'faulted', label: 'Faulted Trap', icon: 'fa-bolt' },
-              { id: 'monocline', label: 'Dipping Layer', icon: 'fa-sliders' },
-            ].map(p => (
-              <button key={p.id} onClick={() => applyPreset(p.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'azure', padding: '6px 12px', borderRadius: 8, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', transition: 'all 0.3s ease' }}>
-                <i className={`fas ${p.icon}`} style={{ fontSize: 9.5, color: '#64ffda' }}/> {p.label}
-              </button>
-            ))}
+        {/* Preset scenario selection cards */}
+        <div style={{
+          background: 'rgba(0,0,0,0.2)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 14,
+          padding: '12px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8
+        }}>
+          <span style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.5)', fontWeight: 'bold' }}>
+            Synthetic Reservoir Cases
+          </span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {presetButton('default', 'Default Case', 'fas fa-code-branch')}
+            {presetButton('anticline', 'Anticline Dome', 'fas fa-mountain')}
+            {presetButton('fault', 'Faulted Trap', 'fas fa-bolt')}
+            {presetButton('dipping', 'Dipping Layer', 'fas fa-water')}
           </div>
         </div>
       </div>
 
-      <div className="sim-evidence-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+      <div className="sim-evidence-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, margin: '18px 0 20px' }}>
         {[
           ['Problem', 'Full-field CO₂ storage forecasts can be computationally expensive.'],
           ['Method', 'Vertical integration represents large-scale migration through plume height.'],
@@ -2506,7 +2648,7 @@ const SimulatorPage = () => {
       </div>
 
       {/* --- MAIN LAYOUT GRID --- */}
-      <div className="simulator-layout" style={activeSubTab === 'map' ? { gridTemplateColumns: '1fr' } : undefined}>
+      <div className="simulator-layout" style={activeSubTab !== 'profile' ? { gridTemplateColumns: '1fr' } : undefined}>
         {/* LEFT COLUMN: Reservoir SVG Visualizer + Parameter & Fault Sliders (below it) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           
@@ -2738,6 +2880,27 @@ const SimulatorPage = () => {
                     <stop offset="0%" stopColor="#0a2a4d" stopOpacity="0.85"/>
                     <stop offset="100%" stopColor="#051426" stopOpacity="0.95"/>
                   </linearGradient>
+
+                  {/* Steel Well Casing Gradient */}
+                  <linearGradient id="well-gradient" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#475569"/>
+                    <stop offset="30%" stopColor="#cbd5e1"/>
+                    <stop offset="70%" stopColor="#94a3b8"/>
+                    <stop offset="100%" stopColor="#334155"/>
+                  </linearGradient>
+
+                  {/* Wellhead Christmas Tree Gradient */}
+                  <linearGradient id="wellhead-grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#64ffda"/>
+                    <stop offset="100%" stopColor="#05e67c"/>
+                  </linearGradient>
+
+                  {/* Injection Source Flare Glow */}
+                  <radialGradient id="inj-flare-glow" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#0dfca2" stopOpacity="0.9"/>
+                    <stop offset="45%" stopColor="#05e67c" stopOpacity="0.5"/>
+                    <stop offset="100%" stopColor="#0dfca2" stopOpacity="0"/>
+                  </radialGradient>
                 </defs>
 
                 {/* Conforming caprock layer (solid brown) */}
@@ -2807,20 +2970,66 @@ const SimulatorPage = () => {
                   return `L ${x} ${stratumY(x, Math.min(cellCount - 1, idx), 175)}`;
                 }).join(" ")} stroke="rgba(0,0,0,0.3)" strokeWidth="1" fill="none"/>
 
-                {/* Injection Well Riser and flare */}
+                {/* Injection Well Riser, Perforations, and Source Flare */}
                 {(() => {
                   const cellInjIdx = Math.floor((injLocation / 100.0) * cellCount);
                   const xWell = cellInjIdx * dx + dx / 2.0;
                   const yCap = capRockY(xWell);
+                  const yBase = stratumY(xWell, cellInjIdx, 175);
+                  const perfTop = yCap + 20;
+                  const perfBottom = Math.min(yBase - 15, yCap + 95);
+                  const isInjecting = Q > 0 && isPlaying && simTime <= injDuration;
                   
                   return (
-                    <g>
+                    <g className="sim-wellbore" role="group" aria-label={`Injection well at ${injLocation}%`}>
+                      {/* Surface wellhead Christmas tree valve assembly */}
+                      <rect x={xWell - 7} y="0" width="14" height="12" rx="2" fill="url(#wellhead-grad)" stroke="#fff" strokeWidth="0.8" />
+                      <line x1={xWell - 11} y1="6" x2={xWell + 11} y2="6" stroke="#64ffda" strokeWidth="2.5" strokeLinecap="round" />
+                      <circle cx={xWell} cy="6" r="2.5" fill="#fff" />
+
+                      {/* Borehole outer casing shadow */}
+                      <line x1={xWell} y1="12" x2={xWell} y2={perfBottom} stroke="rgba(0,0,0,0.4)" strokeWidth="6" />
+
                       {/* Vertical steel casing tubing */}
-                      <line x1={xWell} y1="0" x2={xWell} y2={yCap + 120} stroke="url(#well-gradient)" strokeWidth="4"/>
-                      {/* Flow bubbles in tubing */}
-                      {Q > 0 && isPlaying && simTime <= injDuration && [0, 0.3, 0.6, 0.9].map((delay, idx) => (
-                        <circle key={idx} cx={xWell} cy={yCap * (idx/4.0)} r="2" fill="#0dfca2" style={{ animation: `streakRise 1.5s linear ${delay}s infinite` }}/>
-                      ))}
+                      <line x1={xWell} y1="12" x2={xWell} y2={perfBottom} stroke="url(#well-gradient)" strokeWidth="3.5" strokeLinecap="round" />
+
+                      {/* Injection Perforations (Interval slots) */}
+                      {Array.from({ length: 6 }).map((_, pIdx) => {
+                        const py = perfTop + pIdx * ((perfBottom - perfTop) / 5);
+                        return (
+                          <line 
+                            key={`perf-${pIdx}`} 
+                            x1={xWell - 6} 
+                            y1={py} 
+                            x2={xWell + 6} 
+                            y2={py} 
+                            stroke={isInjecting ? '#0dfca2' : 'rgba(255,255,255,0.7)'} 
+                            strokeWidth="1.6" 
+                            strokeLinecap="round" 
+                          />
+                        );
+                      })}
+
+                      {/* Active Injection Source Flare / Supercritical bubbles */}
+                      {isInjecting && (
+                        <g>
+                          {/* Radial flare glow at perforation interval */}
+                          <circle cx={xWell} cy={(perfTop + perfBottom) / 2} r="22" fill="url(#inj-flare-glow)" />
+                          <circle cx={xWell} cy={(perfTop + perfBottom) / 2} r="5" fill="#fff" opacity="0.95" />
+
+                          {/* Flow bubbles in tubing */}
+                          {[0, 0.3, 0.6, 0.9].map((delay, idx) => (
+                            <circle 
+                              key={idx} 
+                              cx={xWell} 
+                              cy={12 + (yCap - 12) * (idx / 3.0)} 
+                              r="2" 
+                              fill="#0dfca2" 
+                              style={{ animation: `streakRise 1.5s linear ${delay}s infinite` }}
+                            />
+                          ))}
+                        </g>
+                      )}
                     </g>
                   );
                 })()}
@@ -2967,7 +3176,8 @@ const SimulatorPage = () => {
                 <input 
                   type="range" 
                   min="0" 
-                  max={Math.max(1, historyRef.current.length - 1)}
+                  max="1000"
+                  step="1"
                   value={simTime}
                   aria-label="Seek simulation year"
                   onChange={e => handleScrub(parseInt(e.target.value))}
@@ -3032,7 +3242,7 @@ const SimulatorPage = () => {
                 {/* CONFIGURATION ROW */}
                 <div className="uq-config-grid" style={{
                   display: 'grid', 
-                  gridTemplateColumns: '1.2fr 1fr 1fr', 
+                  gridTemplateColumns: 'minmax(380px, 2fr) minmax(260px, 1fr)', 
                   gap: 20,
                   background: 'rgba(255,255,255,0.02)',
                   border: '1px solid rgba(255,255,255,0.05)',
@@ -3044,7 +3254,7 @@ const SimulatorPage = () => {
                     <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', marginTop: -6 }}>
                       Select parameters, then pick an absolute range, a &plusmn;% band, or discrete values.
                     </span>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxHeight: 340, overflowY: 'auto', paddingRight: 4 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, maxHeight: 380, overflowY: 'auto', paddingRight: 4 }}>
                       {UQ_PARAM_DEFS
                         .filter(def => !(def.group === 'fault' && faultCount === 0))
                         .filter(def => !(def.key === 'faultLeakRate' && !faults.slice(0, faultCount).some(f => !f.isSealed)))
@@ -3059,12 +3269,12 @@ const SimulatorPage = () => {
                     </div>
                   </div>
                   
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16, background: 'rgba(0,0,0,0.2)', padding: 14, borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Simulation Settings</span>
                      
                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                        <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)' }}>Monte Carlo Realizations:</span>
-                       <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
+                       <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
                          {[25, 50, 100].map(cnt => (
                            <button
                              key={cnt}
@@ -3073,9 +3283,9 @@ const SimulatorPage = () => {
                                background: mcRunsCount === cnt ? 'rgba(100,255,218,0.2)' : 'rgba(255,255,255,0.05)',
                                border: `1px solid ${mcRunsCount === cnt ? '#64ffda' : 'rgba(255,255,255,0.12)'}`,
                                color: mcRunsCount === cnt ? '#64ffda' : 'azure',
-                               padding: '4px 10px',
+                               padding: '5px 12px',
                                borderRadius: 6,
-                               fontSize: 10.5,
+                               fontSize: 11,
                                fontWeight: 'bold',
                                cursor: 'pointer',
                                outline: 'none'
@@ -3097,63 +3307,63 @@ const SimulatorPage = () => {
                            background: 'rgba(0,0,0,0.3)',
                            border: '1px solid rgba(255,255,255,0.15)',
                            color: '#fff',
-                           padding: '6px 10px',
+                           padding: '7px 10px',
                            borderRadius: 8,
                            fontSize: 11,
                            cursor: 'pointer',
                            outline: 'none'
                          }}
                        >
-                         <option value="leaked">CO\u2082 Leakage Mass (ktonnes)</option>
+                         <option value="leaked">CO₂ Leakage Mass (ktonnes)</option>
                          <option value="trapped">Residual Trapping Efficiency (%)</option>
                        </select>
                      </div>
-                  </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 10 }}>
-                    <button
-                      onClick={runMonteCarloBatch}
-                      disabled={uqRunning}
-                      style={{
-                        background: uqRunning ? 'rgba(255,255,255,0.05)' : '#64ffda',
-                        border: 'none',
-                        color: uqRunning ? 'rgba(255,255,255,0.3)' : '#000',
-                        padding: '12px 20px',
-                        borderRadius: 10,
-                        fontSize: 12,
-                        fontWeight: 'bold',
-                        cursor: uqRunning ? 'default' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        boxShadow: uqRunning ? 'none' : '0 4px 15px rgba(100,255,218,0.25)',
-                        transition: 'all 0.2s ease',
-                        width: '100%',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      {uqRunning ? (
-                        <React.Fragment>
-                          <i className="fas fa-spinner fa-spin" /> Simulating...
-                        </React.Fragment>
-                      ) : (
-                        <React.Fragment>
-                          <i className="fas fa-play" /> Run Uncertainty Analysis
-                        </React.Fragment>
-                      )}
-                    </button>
-                    
-                    {uqRunning && (
-                      <div style={{ width: '100%', marginTop: 4 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: 'rgba(255,255,255,0.6)', marginBottom: 3 }}>
-                          <span>Running Batch</span>
-                          <span>{uqProgress}%</span>
-                        </div>
-                        <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
-                          <div style={{ width: `${uqProgress}%`, height: '100%', background: '#64ffda', transition: 'width 0.1s ease' }} />
-                        </div>
-                      </div>
-                    )}
+                     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 10, marginTop: 'auto' }}>
+                       <button
+                         onClick={runMonteCarloBatch}
+                         disabled={uqRunning}
+                         style={{
+                           background: uqRunning ? 'rgba(255,255,255,0.05)' : '#64ffda',
+                           border: 'none',
+                           color: uqRunning ? 'rgba(255,255,255,0.3)' : '#000',
+                           padding: '12px 20px',
+                           borderRadius: 10,
+                           fontSize: 12,
+                           fontWeight: 'bold',
+                           cursor: uqRunning ? 'default' : 'pointer',
+                           display: 'flex',
+                           alignItems: 'center',
+                           gap: 8,
+                           boxShadow: uqRunning ? 'none' : '0 4px 15px rgba(100,255,218,0.25)',
+                           transition: 'all 0.2s ease',
+                           width: '100%',
+                           justifyContent: 'center'
+                         }}
+                       >
+                         {uqRunning ? (
+                           <React.Fragment>
+                             <i className="fas fa-spinner fa-spin" /> Simulating...
+                           </React.Fragment>
+                         ) : (
+                           <React.Fragment>
+                             <i className="fas fa-play" /> Run Uncertainty Analysis
+                           </React.Fragment>
+                         )}
+                       </button>
+                       
+                       {uqRunning && (
+                         <div style={{ width: '100%', marginTop: 4 }}>
+                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: 'rgba(255,255,255,0.6)', marginBottom: 3 }}>
+                             <span>Running Batch</span>
+                             <span>{uqProgress}%</span>
+                           </div>
+                           <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+                             <div style={{ width: `${uqProgress}%`, height: '100%', background: '#64ffda', transition: 'width 0.1s ease' }} />
+                           </div>
+                         </div>
+                       )}
+                     </div>
                   </div>
                 </div>
 
@@ -3165,7 +3375,7 @@ const SimulatorPage = () => {
                       
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>
-                          Uncertainty Distribution ({uqTargetMetric === 'leaked' ? 'CO\u2082 Leaked Mass' : 'Trapping Efficiency'})
+                          Uncertainty Distribution ({uqTargetMetric === 'leaked' ? 'CO₂ Leaked Mass' : 'Trapping Efficiency'})
                         </span>
                         {renderUQHistogram(uqData)}
                       </div>
@@ -3505,7 +3715,7 @@ const SimulatorPage = () => {
         </div>
 
         {/* RIGHT COLUMN: Mass Balance Analytics & Charting Window */}
-        {activeSubTab !== 'map' && <div style={{
+        {activeSubTab === 'profile' && <div style={{
           display: 'flex',
           flexDirection: 'column',
           gap: 20,
