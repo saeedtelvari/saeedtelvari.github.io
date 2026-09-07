@@ -109,6 +109,15 @@
   border-color: #9fc7c2;
 }
 
+.ve-presets .ve-random-grid-button {
+  color: var(--ve-accent);
+  border-color: var(--ve-accent);
+}
+
+.ve-random-grid-button i {
+  margin-right: 4px;
+}
+
 .ve-run-status {
   display: inline-flex;
   align-items: center;

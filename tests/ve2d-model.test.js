@@ -86,3 +86,31 @@ test('a sealed fault blocks transfer across its line', () => {
   assert.ok(open.h[1 * 6 + 3] > 0, 'open fault must permit cross-fault flow');
   assert.equal(sealed.h[1 * 6 + 3], 0);
 });
+
+test('finite fault segments only affect cells inside their y extent', () => {
+  const seed = () => {
+    const state = createVe2dState({ cols: 6, rows: 3 });
+    state.h[1 * 6 + 2] = 1;
+    state.hMax[1 * 6 + 2] = 1;
+    return state;
+  };
+  const sealedSegment = stepVe2d(seed(), {
+    ...baseParams,
+    faults: [{ xPercent: 50, yStartPercent: 0, yEndPercent: 30, isSealed: true, transmissibility: 1 }]
+  }, 1);
+
+  assert.ok(sealedSegment.h[1 * 6 + 3] > 0, 'a fault segment away from the plume must not block transfer');
+  assert.equal(model.faultCoversY({ yStartPercent: 20, yEndPercent: 60 }, 300, 600), true);
+  assert.equal(model.faultCoversY({ yStartPercent: 20, yEndPercent: 60 }, 500, 600), false);
+});
+
+test('seeded terrain noise is deterministic and adds relief when enabled', () => {
+  const params = { ...baseParams, width: 1000, height: 600, terrainSeed: 42, heterogeneity: 0.9 };
+  const a = model.topDepth(250, 180, params);
+  const b = model.topDepth(250, 180, params);
+  const flat = model.topDepth(250, 180, { ...params, heterogeneity: 0 });
+
+  assert.equal(a, b);
+  assert.notEqual(a, flat);
+  assert.notEqual(model.terrainNoise(0.25, 0.3, 42), model.terrainNoise(0.75, 0.3, 42));
+});

@@ -15,6 +15,7 @@ const loadRunStateHelpers = () => {
   vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard,\n    toggleMobilePanel: typeof toggleMobilePanel === 'undefined' ? undefined : toggleMobilePanel,\n    focusMobilePanelTrigger: typeof focusMobilePanelTrigger === 'undefined' ? undefined : focusMobilePanelTrigger,\n    lockPageScroll: typeof lockPageScroll === 'undefined' ? undefined : lockPageScroll,\n    selectPresentedMobilePanel: typeof selectPresentedMobilePanel === 'undefined' ? undefined : selectPresentedMobilePanel,\n    getMobileFocusWrapTarget: typeof getMobileFocusWrapTarget === 'undefined' ? undefined : getMobileFocusWrapTarget,\n    setMobilePanelBackgroundInert: typeof setMobilePanelBackgroundInert === 'undefined' ? undefined : setMobilePanelBackgroundInert,\n    normalizeParameterInput: typeof normalizeParameterInput === 'undefined' ? undefined : normalizeParameterInput\n  };`, context);
   vm.runInNewContext(`this.helpers.getStoredTheme = typeof getStoredTheme === 'undefined' ? undefined : getStoredTheme;
 this.helpers.persistTheme = typeof persistTheme === 'undefined' ? undefined : persistTheme;`, context);
+  vm.runInNewContext(`this.helpers.createRandomGridConfig = typeof createRandomGridConfig === 'undefined' ? undefined : createRandomGridConfig;`, context);
   vm.runInNewContext(`this.helpers.clampTopographyCamera = typeof clampTopographyCamera === 'undefined' ? undefined : clampTopographyCamera;
 this.helpers.resetTopographyCamera = typeof resetTopographyCamera === 'undefined' ? undefined : resetTopographyCamera;
 this.helpers.projectTopographyPoint = typeof projectTopographyPoint === 'undefined' ? undefined : projectTopographyPoint;`, context);
@@ -338,6 +339,27 @@ test('theme choice is persisted and the GUI exposes an accessible dark-mode togg
   assert.match(page, /aria-label=\{`Dark mode \$\{theme === 'dark' \? 'on' : 'off'\}`\}/);
   assert.match(page, /aria-pressed=\{theme === 'dark'\}/);
   assert.match(css, /\.ve-standalone\[data-theme="dark"\]\s*\{/);
+});
+
+test('random grid generation exposes reproducible heterogeneous maps and finite faults', () => {
+  const { createRandomGridConfig } = loadRunStateHelpers();
+  const page = read('SimulatorPage.jsx');
+  const values = Array.from({ length: 64 }, () => 0.5);
+  const config = createRandomGridConfig(() => values.shift() ?? 0.5);
+
+  assert.equal(typeof createRandomGridConfig, 'function');
+  assert.ok(config.terrainSeed > 0);
+  assert.ok(config.heterogeneity > 0.5);
+  assert.ok(config.mapCols >= 80 && config.mapCols <= 128);
+  assert.ok(config.faultCount >= 1 && config.faultCount <= 3);
+  assert.equal(config.faults.length, 3);
+  assert.ok(config.faults.every(fault => fault.yEndPercent > fault.yStartPercent));
+  assert.match(page, /Generate random 2D grid with faults/);
+  assert.match(page, /Terrain heterogeneity/);
+  assert.match(page, /Terrain seed/);
+  assert.match(page, /label="Y start"/);
+  assert.match(page, /label="Y end"/);
+  assert.match(page, /mapCells', 24, 128/);
 });
 
 test('map commands are consumed once without clearing a newer command', () => {

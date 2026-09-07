@@ -92,6 +92,37 @@ const deriveMapRunStatus = (snapshot, scenarioSignature, lastRunSignature) => de
 
 const DEFAULT_TOPOGRAPHY_CAMERA = { azimuth: -0.72, elevation: 0.62, zoom: 1 };
 
+const createRandomGridConfig = (random = Math.random) => {
+  const randomInt = (min, max) => Math.floor(min + random() * (max - min + 1));
+  const randomValue = (min, max, decimals = 2) => roundDec(min + random() * (max - min), decimals);
+  const randomFault = index => {
+    const yStartPercent = randomInt(1, 10) * 5;
+    const yEndPercent = yStartPercent + randomInt(5, Math.floor((95 - yStartPercent) / 5)) * 5;
+    return {
+      xPercent: randomInt(3, 17) * 5,
+      yStartPercent,
+      yEndPercent,
+      isSealed: random() < 0.3,
+      thresholdHeight: 0.2 + randomInt(0, 3) * 0.1,
+      leakRate: 0.06 + randomInt(0, 8) * 0.02,
+      transmissibility: 0.35 + randomInt(0, 12) * 0.05,
+      dipSlope: randomValue(index % 2 ? -0.28 : -0.38, index % 2 ? 0.38 : 0.28, 2)
+    };
+  };
+  const faultCount = randomInt(1, 3);
+  return {
+    terrainSeed: randomInt(1, 999999),
+    heterogeneity: 0.6 + randomInt(0, 7) * 0.05,
+    mapCols: 80 + randomInt(0, 6) * 8,
+    dipPercent: -2.5 + randomInt(0, 10) * 0.5,
+    amplitude: randomInt(2, 9) * 5,
+    frequency: 0.5 + randomInt(0, 7) * 0.5,
+    faultOffset: 0.4 + randomInt(0, 11) * 0.2,
+    faultCount,
+    faults: Array.from({ length: 3 }, (_, index) => randomFault(index))
+  };
+};
+
 const clampTopographyCamera = (camera = {}) => {
   const clamp = (value, min, max, fallback) => {
     const number = Number(value);
@@ -358,7 +389,7 @@ const UQParamConfig = ({ def, cfg, onChange }) => {
 
 const Ve2DMapPanel = ({
   K, porosity, residualTrapFraction, dipPercent, amplitude, frequency, faultOffset,
-  Q, injLocation, injDuration, faultCount, faults, mapCols, wellY, preset,
+  terrainSeed, heterogeneity, Q, injLocation, injDuration, faultCount, faults, mapCols, wellY, preset,
   command, onCommandConsumed, onRun, onReset, onSnapshot
 }) => {
   const mapRows = Math.max(12, Math.round(mapCols * 0.6));
@@ -387,6 +418,8 @@ const Ve2DMapPanel = ({
     structureAmplitude: amplitude,
     structureFrequency: frequency,
     faultOffset,
+    terrainSeed,
+    heterogeneity,
     faults: faults.slice(0, faultCount).map(fault => ({ ...fault }))
   };
 
@@ -428,7 +461,7 @@ const Ve2DMapPanel = ({
 
   useEffect(() => {
     onSnapshot(createMapSnapshot({ time: mapTime, mapState, history: historyRef.current, isRunning, speed: mapSpeed, params: paramsRef.current }));
-  }, [mapState, mapTime, isRunning, mapSpeed, onSnapshot, K, porosity, residualTrapFraction, dipPercent, amplitude, frequency, faultOffset, Q, injLocation, injDuration, faultCount, faults, wellY]);
+  }, [mapState, mapTime, isRunning, mapSpeed, onSnapshot, K, porosity, residualTrapFraction, dipPercent, amplitude, frequency, faultOffset, terrainSeed, heterogeneity, Q, injLocation, injDuration, faultCount, faults, wellY]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -496,9 +529,14 @@ const Ve2DMapPanel = ({
     }
 
     paramsRef.current.faults.forEach(fault => {
+      const yStart = Math.max(0, Math.min(100, Number(fault.yStartPercent ?? 0))) / 100 * height;
+      const yEnd = Math.max(0, Math.min(100, Number(fault.yEndPercent ?? 100))) / 100 * height;
+      const y0 = Math.min(yStart, yEnd);
+      const y1 = Math.max(yStart, yEnd);
+      const lineX = y => (fault.xPercent / 100) * width + (fault.dipSlope || 0) * (y - height / 2);
       ctx.beginPath();
-      ctx.moveTo((fault.xPercent / 100) * width - (fault.dipSlope || 0) * height / 2, 0);
-      ctx.lineTo((fault.xPercent / 100) * width + (fault.dipSlope || 0) * height / 2, height);
+      ctx.moveTo(lineX(y0), y0);
+      ctx.lineTo(lineX(y1), y1);
       ctx.strokeStyle = fault.isSealed ? '#64ffda' : '#ff6b6b';
       ctx.lineWidth = fault.isSealed ? 3 : 2;
       ctx.setLineDash(fault.isSealed ? [] : [9, 7]);
@@ -543,7 +581,7 @@ const Ve2DMapPanel = ({
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
     ctx.stroke();
-  }, [mapState, residualTrapFraction, injLocation, wellY, K, porosity, dipPercent, amplitude, frequency, faultOffset, faultCount, faults]);
+  }, [mapState, residualTrapFraction, injLocation, wellY, K, porosity, dipPercent, amplitude, frequency, faultOffset, terrainSeed, heterogeneity, faultCount, faults]);
 
   const downloadMap = (type) => {
     const link = document.createElement('a');
@@ -593,7 +631,7 @@ const Ve2DMapPanel = ({
         <button onClick={advanceMap} aria-label="Advance 2D map one year" style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}><i className="fas fa-step-forward" /></button>
         <button onClick={onReset} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}><i className="fas fa-redo" /> Reset</button>
         <button onClick={() => setMapSpeed(value => value === 1 ? 2 : value === 2 ? 4 : 1)} style={{ background: 'none', color: '#64ffda', border: 0, cursor: 'pointer', fontWeight: 700 }}>{mapSpeed}×</button>
-        <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.72)' }}>Year {mapTime} · {mapCols}×{mapRows} cells</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.72)' }}>Year {mapTime} · {mapCols}×{mapRows} cells · seed {terrainSeed} · heterogeneity {heterogeneity.toFixed(2)}</span>
         <div style={{ flex: 1 }} />
         <button onClick={() => downloadMap('csv')} style={{ background: 'none', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '6px 9px', cursor: 'pointer' }}>Grid CSV</button>
         <button onClick={() => downloadMap('png')} style={{ background: 'none', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '6px 9px', cursor: 'pointer' }}>Map PNG</button>
@@ -619,6 +657,8 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
   const time = Number(mapSnapshot.time) || 0;
   const zoomLabel = `${camera.zoom.toFixed(2)}×`;
   const elevationLabel = `${elevationScale.toFixed(2)}×`;
+  const terrainSeed = Number(mapSnapshot.params?.terrainSeed) || 0;
+  const heterogeneity = Number(mapSnapshot.params?.heterogeneity) || 0;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -691,12 +731,18 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
     faults.slice(0, faultCount).forEach(fault => {
       const x = (Number(fault.xPercent) || 0) / 100;
       const slope = Number(fault.dipSlope) || 0;
+      const start = Math.max(0, Math.min(100, Number(fault.yStartPercent ?? 0))) / 100;
+      const end = Math.max(0, Math.min(100, Number(fault.yEndPercent ?? 100))) / 100;
+      const yStart = Math.min(start, end);
+      const yEnd = Math.max(start, end);
       const faultPoints = [];
       for (let row = 0; row < gridRows; row++) {
         const y = row / Math.max(1, gridRows - 1);
+        if (y < yStart || y > yEnd) continue;
         const faultX = x + slope * (y * 0.6 - 0.3);
         faultPoints.push(projectTopographyPoint({ x: faultX, y, height: surfaceAt(faultX, y, 0.025) }, camera, width, height));
       }
+      if (faultPoints.length < 2) return;
       ctx.beginPath();
       faultPoints.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
       ctx.strokeStyle = fault.isSealed ? '#d6a65a' : '#d97a63';
@@ -791,7 +837,7 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
         }}
       />
       <div className="ve-topography-status">
-        <span>Year {time} · {mapCols}×{gridRows} grid</span>
+        <span>Year {time} · {mapCols}×{gridRows} grid · seed {terrainSeed} · heterogeneity {heterogeneity.toFixed(2)}</span>
         <span>Zoom {zoomLabel}</span>
         <label>
           Elevation exaggeration {elevationLabel}
@@ -824,14 +870,16 @@ const SimulatorPage = () => {
   const [Q, setQ] = useState(2.30); // Constant injection rate (0.0 to 3.5)
   const [injLocation, setInjLocation] = useState(70); // Injection cell index % (10% to 90%)
   const [wellY, setWellY] = useState(50); // Plan-view injector y-coordinate %
-  const [mapCols, setMapCols] = useState(48); // Plan-view x resolution; y follows domain aspect ratio
+  const [mapCols, setMapCols] = useState(72); // Plan-view x resolution; y follows domain aspect ratio
   const [injDuration, setInjDuration] = useState(240); // Frame count of active injection (50 to 400)
+  const [terrainSeed, setTerrainSeed] = useState(2107);
+  const [heterogeneity, setHeterogeneity] = useState(0.28);
   
   // Fault parameters
   const [faultCount, setFaultCount] = useState(2); // Number of faults (0 to 3)
   const [faults, setFaults] = useState(() => [
-    { xPercent: 28, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 1.0, dipSlope: -0.22 },
-    { xPercent: 48, isSealed: false, thresholdHeight: 0.30, leakRate: 0.12, transmissibility: 1.0, dipSlope: 0.25 }
+    { xPercent: 28, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 1.0, dipSlope: -0.22 },
+    { xPercent: 48, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.30, leakRate: 0.12, transmissibility: 1.0, dipSlope: 0.25 }
   ]);
 
   // Capillary fringe state
@@ -951,11 +999,11 @@ const SimulatorPage = () => {
 
   const scenarioSignature = useMemo(() => createScenarioSignature({
     K, porosity, cellCount, residualTrapFraction, dipPercent, amplitude,
-    frequency, faultOffset, Q, injLocation, wellY, mapCols, injDuration,
+    frequency, faultOffset, terrainSeed, heterogeneity, Q, injLocation, wellY, mapCols, injDuration,
     faultCount, faults, hasCapillaryFringe, fringeScale, entryPressure
   }), [
     K, porosity, cellCount, residualTrapFraction, dipPercent, amplitude,
-    frequency, faultOffset, Q, injLocation, wellY, mapCols, injDuration,
+    frequency, faultOffset, terrainSeed, heterogeneity, Q, injLocation, wellY, mapCols, injDuration,
     faultCount, faults, hasCapillaryFringe, fringeScale, entryPressure
   ]);
   const lastRunSignatureRef = useRef(scenarioSignature);
@@ -1082,6 +1130,8 @@ const SimulatorPage = () => {
     amplitude,
     frequency,
     faultOffset,
+    terrainSeed,
+    heterogeneity,
     Q,
     injLocation,
     injDuration,
@@ -1178,6 +1228,8 @@ const SimulatorPage = () => {
       setAmplitude(45);
       setFrequency(1.5);
       setFaultOffset(0);
+      setTerrainSeed(2201);
+      setHeterogeneity(0.22);
       setK(1.60);
       setPorosity(0.25);
       setQ(2.20);
@@ -1189,14 +1241,16 @@ const SimulatorPage = () => {
       setAmplitude(15);
       setFrequency(2);
       setFaultOffset(1.8);
+      setTerrainSeed(7314);
+      setHeterogeneity(0.34);
       setK(1.80);
       setPorosity(0.22);
       setQ(2.00);
       setInjDuration(200);
       setFaultCount(2);
       setFaults([
-        { xPercent: 26, isSealed: false, thresholdHeight: 0.30, leakRate: 0.16, transmissibility: 0.8, dipSlope: -0.22 },
-        { xPercent: 50, isSealed: false, thresholdHeight: 0.45, leakRate: 0.12, transmissibility: 0.5, dipSlope: 0.25 }
+        { xPercent: 26, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.30, leakRate: 0.16, transmissibility: 0.8, dipSlope: -0.22 },
+        { xPercent: 50, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.45, leakRate: 0.12, transmissibility: 0.5, dipSlope: 0.25 }
       ]);
       setResidualTrapFraction(0.20);
     } else if (presetName === 'monocline') {
@@ -1204,13 +1258,15 @@ const SimulatorPage = () => {
       setAmplitude(6);
       setFrequency(0.5);
       setFaultOffset(0);
+      setTerrainSeed(4903);
+      setHeterogeneity(0.2);
       setK(1.50);
       setPorosity(0.28);
       setQ(1.80);
       setInjDuration(220);
       setFaultCount(1);
       setFaults([
-        { xPercent: 32, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 0.9, dipSlope: -0.20 }
+        { xPercent: 32, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 0.9, dipSlope: -0.20 }
       ]);
       setResidualTrapFraction(0.25);
     } else if (presetName === 'default') {
@@ -1218,17 +1274,35 @@ const SimulatorPage = () => {
       setAmplitude(25);
       setFrequency(2);
       setFaultOffset(1.2);
+      setTerrainSeed(2107);
+      setHeterogeneity(0.28);
       setK(1.70);
       setPorosity(0.25);
       setQ(2.30);
       setInjDuration(240);
       setFaultCount(2);
       setFaults([
-        { xPercent: 28, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 1.0, dipSlope: -0.22 },
-        { xPercent: 48, isSealed: false, thresholdHeight: 0.30, leakRate: 0.12, transmissibility: 1.0, dipSlope: 0.25 }
+        { xPercent: 28, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 1.0, dipSlope: -0.22 },
+        { xPercent: 48, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.30, leakRate: 0.12, transmissibility: 1.0, dipSlope: 0.25 }
       ]);
       setResidualTrapFraction(0.25);
     }
+  };
+
+  const generateRandomGrid = () => {
+    const config = createRandomGridConfig();
+    setSelectedPreset('random');
+    setTerrainSeed(config.terrainSeed);
+    setHeterogeneity(config.heterogeneity);
+    setMapCols(config.mapCols);
+    setDipPercent(config.dipPercent);
+    setAmplitude(config.amplitude);
+    setFrequency(config.frequency);
+    setFaultOffset(config.faultOffset);
+    setFaultCount(config.faultCount);
+    setFaults(config.faults);
+    resetSimulation();
+    setShareStatus(`Generated random grid · seed ${config.terrainSeed} · ${config.mapCols} columns · ${config.faultCount} faults`);
   };
 
   useEffect(() => {
@@ -1236,6 +1310,7 @@ const SimulatorPage = () => {
     const tab = query.get('tab');
     const preset = query.get('preset');
     if (['default', 'dome', 'faulted', 'monocline'].includes(preset)) applyPreset(preset);
+    if (preset === 'random') setSelectedPreset('random');
     if (SIM_TABS.includes(tab)) setActiveSubTab(tab);
     setK(scenarioNumber(query, 'k', 0.1, 3.5, K));
     setPorosity(scenarioNumber(query, 'phi', 0.1, 0.4, porosity));
@@ -1248,7 +1323,9 @@ const SimulatorPage = () => {
     setQ(scenarioNumber(query, 'q', 0, 3.5, Q));
     setInjLocation(scenarioNumber(query, 'well', 10, 90, injLocation, true));
     setWellY(scenarioNumber(query, 'wellY', 10, 90, wellY, true));
-    setMapCols(scenarioNumber(query, 'mapCells', 24, 80, mapCols, true));
+    setMapCols(scenarioNumber(query, 'mapCells', 24, 128, mapCols, true));
+    setTerrainSeed(scenarioNumber(query, 'terrain', 0, 999999, terrainSeed, true));
+    setHeterogeneity(scenarioNumber(query, 'hetero', 0, 1, heterogeneity));
     setInjDuration(scenarioNumber(query, 'stop', 50, 400, injDuration, true));
     setFaultCount(scenarioNumber(query, 'faults', 0, 3, faultCount, true));
     try {
@@ -1256,6 +1333,8 @@ const SimulatorPage = () => {
       if (Array.isArray(decoded) && decoded.length <= 3) {
         setFaults(decoded.map((f, i) => ({
           xPercent: Math.max(10, Math.min(90, Number(f.xPercent) || 30 + i * 20)),
+          yStartPercent: Math.max(0, Math.min(100, Number(f.yStartPercent) || 0)),
+          yEndPercent: Math.max(0, Math.min(100, Number(f.yEndPercent) || 100)),
           isSealed: Boolean(f.isSealed),
           thresholdHeight: Math.max(0, Math.min(2, Number(f.thresholdHeight) || 0)),
           leakRate: Math.max(0.01, Math.min(0.4, Number(f.leakRate) || 0.01)),
@@ -1274,7 +1353,9 @@ const SimulatorPage = () => {
       preset: selectedPreset, tab: activeSubTab, k: K, phi: porosity, cells: cellCount,
       sgr: residualTrapFraction, dip: dipPercent, amp: amplitude, freq: frequency,
       slip: faultOffset, q: Q, well: injLocation, wellY, mapCells: mapCols, stop: injDuration, faults: faultCount,
-      faultData: JSON.stringify(faults.slice(0, faultCount))
+      faultData: JSON.stringify(faults.slice(0, faultCount)),
+      terrain: terrainSeed,
+      hetero: heterogeneity
     };
     Object.entries(values).forEach(([key, value]) => url.searchParams.set(key, String(value)));
     return url.toString();
@@ -1534,6 +1615,8 @@ const SimulatorPage = () => {
       else if (key === 'amplitude') vCurr = amplitude;
       else if (key === 'frequency') vCurr = frequency;
       else if (key === 'faultOffset') vCurr = faultOffset;
+      else if (key === 'terrainSeed') vCurr = terrainSeed;
+      else if (key === 'heterogeneity') vCurr = heterogeneity;
       else if (key === 'Q') vCurr = Q;
       else if (key === 'injLocation') vCurr = injLocation;
       else if (key === 'injDuration') vCurr = injDuration;
@@ -1556,6 +1639,8 @@ const SimulatorPage = () => {
     checkDiff('amplitude', 'Anticline Height', v => `${v}px`, v => `${v}px`);
     checkDiff('frequency', 'Anticline Count', v => v, v => v);
     checkDiff('faultOffset', 'Fault Slip', v => `${v}x`, v => `${v}x`);
+    checkDiff('terrainSeed', 'Terrain Seed', v => v, v => v);
+    checkDiff('heterogeneity', 'Terrain Heterogeneity', v => `${Math.round(v * 100)}%`, v => `${Math.round(v * 100)}%`);
     checkDiff('Q', 'Flow Rate (Q)', v => v, v => v);
     checkDiff('injLocation', 'Well Location', v => `${v}%`, v => `${v}%`);
     checkDiff('injDuration', 'Inj. Stop Year', v => `${v}y`, v => `${v}y`);
@@ -2933,6 +3018,14 @@ const SimulatorPage = () => {
           ].map(([id, label]) => (
             <button key={id} className={selectedPreset === id ? 'is-active' : ''} onClick={() => applyPreset(id)}>{label}</button>
           ))}
+          <button
+            className={`ve-random-grid-button${selectedPreset === 'random' ? ' is-active' : ''}`}
+            onClick={generateRandomGrid}
+            aria-label="Generate random 2D grid with faults"
+            title="Generate a reproducible heterogeneous grid with finite faults"
+          >
+            <i className="fas fa-dice" aria-hidden="true" /> Random grid
+          </button>
         </div>
         <span className={`ve-run-status ve-run-status--${runStatus.toLowerCase().replace(/\s+/g, '-')}`} role="status">{runStatus}</span>
         <button onClick={resetActiveSimulation}>Reset</button>
@@ -3029,6 +3122,7 @@ const SimulatorPage = () => {
               <ParameterField label="Anticline height" unit="px" min={0} max={50} step={5} value={amplitude} onChange={setAmplitude} />
               <ParameterField label="Anticline count" unit="" min={0.5} max={4} step={0.5} value={frequency} onChange={setFrequency} />
               <ParameterField label="Fault slip" unit="×" min={0} max={3} step={0.2} value={faultOffset} onChange={setFaultOffset} />
+              <ParameterField label="Terrain heterogeneity" unit="fraction" min={0} max={1} step={0.05} value={heterogeneity} onChange={setHeterogeneity} />
             </div>
           </section>
 
@@ -3062,6 +3156,16 @@ const SimulatorPage = () => {
                 <ParameterField label="Position" unit="%" min={10} max={90} step={5} value={fault.xPercent} onChange={value => {
                   const next = [...faults];
                   next[index].xPercent = value;
+                  setFaults(next);
+                }} />
+                <ParameterField label="Y start" unit="%" min={0} max={100} step={5} value={fault.yStartPercent ?? 0} onChange={value => {
+                  const next = [...faults];
+                  next[index].yStartPercent = value;
+                  setFaults(next);
+                }} />
+                <ParameterField label="Y end" unit="%" min={0} max={100} step={5} value={fault.yEndPercent ?? 100} onChange={value => {
+                  const next = [...faults];
+                  next[index].yEndPercent = value;
                   setFaults(next);
                 }} />
                 <ParameterField label="Capillary threshold" unit="m" min={0} max={2} step={0.1} value={fault.thresholdHeight} onChange={value => {
@@ -3099,7 +3203,8 @@ const SimulatorPage = () => {
             <div>
               <ParameterField label="Grid cells (N)" unit="cells" min={50} max={300} step={10} value={cellCount} onChange={setCellCount} />
               {isMapView && <ParameterField label="Well Y location" unit="%" min={10} max={90} step={5} value={wellY} onChange={setWellY} />}
-              {isMapView && <ParameterField label="2D grid resolution" unit="columns" min={24} max={80} step={8} value={mapCols} onChange={setMapCols} />}
+              {isMapView && <ParameterField label="2D grid resolution" unit="columns" min={24} max={128} step={8} value={mapCols} onChange={setMapCols} />}
+              {isMapView && <ParameterField label="Terrain seed" unit="" min={0} max={999999} step={1} value={terrainSeed} onChange={setTerrainSeed} />}
             </div>
           </section>
         </InputRail>
@@ -3779,6 +3884,8 @@ const SimulatorPage = () => {
                   amplitude={amplitude}
                   frequency={frequency}
                   faultOffset={faultOffset}
+                  terrainSeed={terrainSeed}
+                  heterogeneity={heterogeneity}
                   Q={Q}
                   injLocation={injLocation}
                   injDuration={injDuration}

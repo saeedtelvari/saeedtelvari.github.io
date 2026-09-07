@@ -5,9 +5,55 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
+  const faultYBounds = (fault, height) => {
+    const start = clamp(Number(fault?.yStartPercent ?? 0), 0, 100) / 100 * height;
+    const end = clamp(Number(fault?.yEndPercent ?? 100), 0, 100) / 100 * height;
+    return [Math.min(start, end), Math.max(start, end)];
+  };
+
+  const faultCoversY = (fault, y, height) => {
+    const [minY, maxY] = faultYBounds(fault, height);
+    return y >= minY - 1e-9 && y <= maxY + 1e-9;
+  };
+
+  const hashNoise = (x, y, seed) => {
+    const value = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453;
+    return value - Math.floor(value);
+  };
+
+  const smoothNoise = (x, y, seed) => {
+    const x0 = Math.floor(x);
+    const y0 = Math.floor(y);
+    const tx = x - x0;
+    const ty = y - y0;
+    const smooth = value => value * value * (3 - 2 * value);
+    const sx = smooth(tx);
+    const sy = smooth(ty);
+    const n00 = hashNoise(x0, y0, seed);
+    const n10 = hashNoise(x0 + 1, y0, seed);
+    const n01 = hashNoise(x0, y0 + 1, seed);
+    const n11 = hashNoise(x0 + 1, y0 + 1, seed);
+    const top = n00 + (n10 - n00) * sx;
+    const bottom = n01 + (n11 - n01) * sx;
+    return top + (bottom - top) * sy;
+  };
+
+  const terrainNoise = (x, y, seed) => {
+    let value = 0;
+    let weight = 0;
+    let amplitude = 1;
+    for (let octave = 0; octave < 3; octave++) {
+      const scale = 3 * (2 ** octave);
+      value += smoothNoise(x * scale, y * scale, seed + octave * 101) * amplitude;
+      weight += amplitude;
+      amplitude *= 0.5;
+    }
+    return value / weight;
+  };
+
   const createVe2dState = ({ cols = 48, rows = 30 } = {}) => {
-    cols = clamp(Math.round(cols), 6, 120);
-    rows = clamp(Math.round(rows), 6, 80);
+    cols = clamp(Math.round(cols), 6, 160);
+    rows = clamp(Math.round(rows), 6, 100);
     const size = cols * rows;
     return {
       cols,
@@ -26,7 +72,13 @@
   const faceTransmissibility = (x1, y1, x2, y2, faults, width, height) => {
     let multiplier = 1;
     for (const fault of faults) {
-      if (faultSide(x1, y1, fault, width, height) * faultSide(x2, y2, fault, width, height) <= 0) {
+      const sideA = faultSide(x1, y1, fault, width, height);
+      const sideB = faultSide(x2, y2, fault, width, height);
+      if (sideA * sideB <= 0) {
+        const denominator = Math.abs(sideA) + Math.abs(sideB);
+        const crossRatio = denominator > 1e-12 ? Math.abs(sideA) / denominator : 0.5;
+        const crossY = y1 + (y2 - y1) * crossRatio;
+        if (!faultCoversY(fault, crossY, height)) continue;
         multiplier = Math.min(multiplier, fault.isSealed ? 0 : clamp(fault.transmissibility ?? 1, 0, 1));
       }
     }
@@ -41,9 +93,14 @@
     const amplitude = (params.structureAmplitude || 0) / 15;
     const frequency = params.structureFrequency || 1;
     let depth = dip - amplitude * Math.cos(xn * Math.PI * 2 * frequency) * Math.cos(yn * Math.PI);
+    const heterogeneity = clamp(Number(params.heterogeneity ?? 0), 0, 1);
+    if (heterogeneity > 0) {
+      const seed = Number.isFinite(Number(params.terrainSeed)) ? Number(params.terrainSeed) : 0;
+      depth += (terrainNoise(x / width, y / height, seed) - 0.5) * heterogeneity * 1.1;
+    }
     for (let i = 0; i < params.faults.length; i++) {
       const fault = params.faults[i];
-      if (faultSide(x, y, fault, width, height) > 0) {
+      if (faultCoversY(fault, y, height) && faultSide(x, y, fault, width, height) > 0) {
         depth += (i % 2 === 0 ? 1 : -1) * (params.faultOffset || 0) * 0.8;
       }
     }
@@ -76,6 +133,8 @@
       structureAmplitude: 0,
       structureFrequency: 1,
       faultOffset: 0,
+      terrainSeed: 0,
+      heterogeneity: 0,
       faults: [],
       ...inputParams
     };
@@ -158,6 +217,7 @@
         const point = coordinates(index);
         for (const fault of params.faults) {
           if (fault.isSealed || !fault.leakRate) continue;
+          if (!faultCoversY(fault, point.y, params.height)) continue;
           const distance = Math.abs(faultSide(point.x, point.y, fault, params.width, params.height));
           if (distance > Math.max(dx, dy) * 0.55 || h[index] <= (fault.thresholdHeight || 0)) continue;
           const lostHeight = Math.min(h[index] - (fault.thresholdHeight || 0), fault.leakRate * dt * 0.12);
@@ -194,5 +254,5 @@
     };
   };
 
-  return { createVe2dState, stepVe2d, topDepth, faceTransmissibility };
+  return { createVe2dState, stepVe2d, topDepth, faceTransmissibility, faultCoversY, terrainNoise };
 });
