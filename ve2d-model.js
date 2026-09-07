@@ -51,20 +51,52 @@
     return value / weight;
   };
 
-  // Seeded multi-scale terrain field. It deliberately uses value noise only:
-  // sinusoids made the random grids read as evenly spaced waves.
+  // Seeded, anisotropic domes and basins give the surface a structural character
+  // without the repeating bands produced by a sinusoidal field.
+  const terrainFeatureField = (x, y, seed) => {
+    let value = 0;
+    for (let index = 0; index < 11; index++) {
+      const centerX = 0.08 + hashNoise(index * 1.7, 0.3, seed + 17) * 0.84;
+      const centerY = 0.08 + hashNoise(index * 2.3, 0.7, seed + 41) * 0.84;
+      const angle = hashNoise(index * 3.1, 1.1, seed + 73) * Math.PI * 2;
+      const major = 0.1 + hashNoise(index * 4.1, 1.5, seed + 101) * 0.18;
+      const minor = 0.05 + hashNoise(index * 5.3, 1.9, seed + 131) * 0.12;
+      const dx = x - centerX;
+      const dy = y - centerY;
+      const along = dx * Math.cos(angle) + dy * Math.sin(angle);
+      const across = -dx * Math.sin(angle) + dy * Math.cos(angle);
+      const amplitude = (index % 2 ? -1 : 1) * (0.45 + hashNoise(index * 6.7, 2.2, seed + 163) * 0.55);
+      value += amplitude * Math.exp(-0.5 * ((along / major) ** 2 + (across / minor) ** 2));
+    }
+    return clamp(value * 0.62, -1, 1);
+  };
+
+  // Seeded multi-scale terrain field. It deliberately avoids periodic waves.
   const terrainWaveField = (x, y, seed) => {
-    const warpX = (smoothNoise(x * 1.1 + 4.1, y * 1.1 + 8.7, seed + 19) - 0.5) * 0.32;
-    const warpY = (smoothNoise(x * 1.1 + 13.3, y * 1.1 + 2.6, seed + 43) - 0.5) * 0.32;
+    const warpX = (smoothNoise(x * 1.1 + 4.1, y * 1.1 + 8.7, seed + 19) - 0.5) * 0.18;
+    const warpY = (smoothNoise(x * 1.1 + 13.3, y * 1.1 + 2.6, seed + 43) - 0.5) * 0.18;
     const warpedX = x + warpX;
     const warpedY = y + warpY;
     const rotation = hashNoise(0.7, 0.2, seed + 59) * Math.PI * 2;
     const rotatedX = warpedX * Math.cos(rotation) - warpedY * Math.sin(rotation);
     const rotatedY = warpedX * Math.sin(rotation) + warpedY * Math.cos(rotation);
-    const broad = (smoothNoise(warpedX * 1.6, warpedY * 1.6, seed + 211) - 0.5) * 2;
-    const regional = (terrainNoise(rotatedX * 0.8, rotatedY * 0.8, seed + 307) - 0.5) * 2;
-    const detail = (terrainNoise(warpedX * 2.1, warpedY * 2.1, seed + 401) - 0.5) * 2;
-    return clamp(broad * 0.5 + regional * 0.38 + detail * 0.12, -1, 1);
+    const broad = terrainFeatureField(warpedX, warpedY, seed + 211);
+    const regional = terrainFeatureField(rotatedX * 0.78 + 0.2, rotatedY * 0.78 + 0.2, seed + 307);
+    const detail = (terrainNoise(warpedX * 2.4, warpedY * 2.4, seed + 401) - 0.5) * 2;
+    return clamp(broad * 0.68 + regional * 0.22 + detail * 0.1, -1, 1);
+  };
+
+  const structuralDomeField = (x, y, count, seed) => {
+    let value = 0;
+    for (let index = 0; index < count; index++) {
+      const centerX = count === 1 ? 0.5 : 0.18 + hashNoise(index * 2.1, 0.4, seed + 503) * 0.64;
+      const centerY = count === 1 ? 0.5 : 0.18 + hashNoise(index * 2.9, 0.8, seed + 547) * 0.64;
+      const angle = hashNoise(index * 3.7, 1.2, seed + 571) * Math.PI;
+      const along = (x - centerX) * Math.cos(angle) + (y - centerY) * Math.sin(angle);
+      const across = -(x - centerX) * Math.sin(angle) + (y - centerY) * Math.cos(angle);
+      value += Math.exp(-0.5 * ((along / 0.25) ** 2 + (across / 0.15) ** 2));
+    }
+    return value / count;
   };
 
   const createVe2dState = ({ cols = 48, rows = 30 } = {}) => {
@@ -117,10 +149,12 @@
     const { width, height } = params;
     const xn = x / width - 0.5;
     const yn = y / height - 0.5;
-    const dip = xn * (params.dipX || 0) * 4 + yn * (params.dipY || 0) * 4;
+    // UI inputs are percentages; use their fractional value in the depth field.
+    const dip = xn * (params.dipX || 0) * 0.04 + yn * (params.dipY || 0) * 0.04;
     const amplitude = (params.structureAmplitude || 0) / 15;
-    const frequency = params.structureFrequency || 1;
-    let depth = dip - amplitude * Math.cos(xn * Math.PI * 2 * frequency) * Math.cos(yn * Math.PI);
+    const structureCount = clamp(Math.round(params.structureFrequency || 1), 1, 4);
+    const structureSeed = Number.isFinite(Number(params.terrainSeed)) ? Number(params.terrainSeed) : 0;
+    let depth = dip - amplitude * structuralDomeField(x / width, y / height, structureCount, structureSeed);
     const heterogeneity = clamp(Number(params.heterogeneity ?? 0), 0, 1);
     if (heterogeneity > 0) {
       const seed = Number.isFinite(Number(params.terrainSeed)) ? Number(params.terrainSeed) : 0;
@@ -128,7 +162,7 @@
       const normalizedY = y / height;
       const waveField = terrainWaveField(normalizedX, normalizedY, seed);
       const fineNoise = (terrainNoise(normalizedX, normalizedY, seed) - 0.5) * 2;
-      depth += (waveField * 0.78 + fineNoise * 0.22) * heterogeneity * 0.78;
+      depth += (waveField * 0.9 + fineNoise * 0.1) * heterogeneity * 3;
     }
     for (let i = 0; i < (params.faults || []).length; i++) {
       depth += faultDisplacement(x, y, params.faults[i], i, params);
@@ -283,5 +317,5 @@
     };
   };
 
-  return { createVe2dState, stepVe2d, topDepth, faceTransmissibility, faultCoversY, faultXAtY, terrainNoise, terrainWaveField, faultDisplacement };
+  return { createVe2dState, stepVe2d, topDepth, faceTransmissibility, faultCoversY, faultXAtY, terrainNoise, terrainFeatureField, terrainWaveField, structuralDomeField, faultDisplacement };
 });

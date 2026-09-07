@@ -116,8 +116,8 @@ const createRandomGridConfig = (random = Math.random) => {
     heterogeneity: 0.6 + randomInt(0, 7) * 0.05,
     mapCols: 80 + randomInt(0, 6) * 8,
     dipPercent: -2.5 + randomInt(0, 10) * 0.5,
-    amplitude: randomInt(2, 6) * 5,
-    frequency: 0.75 + randomInt(0, 3) * 0.25,
+    amplitude: randomInt(1, 4) * 5,
+    frequency: 1,
     faultOffset: 0.4 + randomInt(0, 11) * 0.2,
     faultCount,
     faults: Array.from({ length: 3 }, (_, index) => randomFault(index))
@@ -702,7 +702,7 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
   const dragRef = useRef(null);
   const pinchRef = useRef(null);
   const [camera, setCamera] = useState(resetTopographyCamera);
-  const [elevationScale, setElevationScale] = useState(1);
+  const [elevationScale, setElevationScale] = useState(1.35);
   const [showGrid, setShowGrid] = useState(true);
   const gridRows = mapRows || Math.max(12, Math.round(mapCols * 0.6));
   const time = Number(mapSnapshot.time) || 0;
@@ -741,9 +741,19 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
       if (!depths.has(key)) depths.set(key, globalThis.VE2D.topDepth(sampleX * width, y * height, structure));
       return depths.get(key);
     };
-    const depthSpan = 10;
+    const depthSpan = 4;
     const surfaceAt = (x, y, plume = 0, faultSides = {}) =>
       Math.max(0.04, Math.min(0.96, 0.5 - (surfaceDepth(x, y, faultSides) / depthSpan) * 0.5 * elevationScale + plume * 0.08));
+    const surfaceLight = (x, y, faultSides = {}) => {
+      const step = 0.008;
+      const left = surfaceAt(Math.max(0, x - step), y, 0, faultSides);
+      const right = surfaceAt(Math.min(1, x + step), y, 0, faultSides);
+      const north = surfaceAt(x, Math.max(0, y - step), 0, faultSides);
+      const south = surfaceAt(x, Math.min(1, y + step), 0, faultSides);
+      const normal = { x: -(right - left) / (2 * step), y: -(south - north) / (2 * step), z: 1 };
+      const length = Math.hypot(normal.x, normal.y, normal.z);
+      return Math.max(0.34, Math.min(1, (normal.x * -0.38 + normal.y * 0.42 + normal.z * 0.82) / length));
+    };
     const stateRatio = (values, x, y) => {
       const col = Math.max(0, Math.min(mapCols - 1, Math.round(x * (mapCols - 1))));
       const row = Math.max(0, Math.min(gridRows - 1, Math.round(y * (gridRows - 1))));
@@ -774,23 +784,23 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
           const plumeRatio = stateRatio(h, center.x, center.y);
           const historicRatio = stateRatio(hMax, center.x, center.y);
           const surfaceRatio = Math.max(0, Math.min(1, 0.5 - surfaceDepth(center.x, center.y, piece.faultSides) / depthSpan));
-          cells.push({ points: piece.points, faultSides: piece.faultSides, plumeRatio, historicRatio, surfaceRatio, depth: center.y * Math.cos(camera.azimuth) + center.x * Math.sin(camera.azimuth) });
+          cells.push({ points: piece.points, faultSides: piece.faultSides, plumeRatio, historicRatio, surfaceRatio, light: surfaceLight(center.x, center.y, piece.faultSides), depth: center.y * Math.cos(camera.azimuth) + center.x * Math.sin(camera.azimuth) });
         });
       }
     }
     cells.sort((a, b) => a.depth - b.depth).forEach(cell => {
       const points = cell.points.map(point => pointAt(point, cell.faultSides));
-      const shade = Math.round(41 + cell.surfaceRatio * 54);
+      const shade = 0.38 + cell.light * 0.82;
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
       points.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
       ctx.closePath();
       ctx.fillStyle = cell.plumeRatio > 0.0001
-        ? `rgb(${Math.round(18 + cell.historicRatio * 22)}, ${Math.round(104 + cell.plumeRatio * 116)}, ${Math.round(104 + cell.plumeRatio * 74)})`
-        : `rgb(${Math.round(15 + cell.surfaceRatio * 24)}, ${shade + 30}, ${shade + 24})`;
+        ? `rgb(${Math.round((18 + cell.historicRatio * 22) * shade)}, ${Math.round((104 + cell.plumeRatio * 116) * shade)}, ${Math.round((104 + cell.plumeRatio * 74) * shade)})`
+        : `rgb(${Math.round((15 + cell.surfaceRatio * 24) * shade)}, ${Math.round((92 + cell.surfaceRatio * 76) * shade)}, ${Math.round((86 + cell.surfaceRatio * 60) * shade)})`;
       ctx.fill();
       if (showGrid) {
-        ctx.strokeStyle = 'rgba(194, 221, 220, 0.22)';
+        ctx.strokeStyle = 'rgba(194, 221, 220, 0.14)';
         ctx.lineWidth = 0.8;
         ctx.stroke();
       }
@@ -916,7 +926,7 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
       />
       <div className="ve-topography-status">
         <span>Year {time} · {mapCols}×{gridRows} grid · seed {terrainSeed} · heterogeneity {heterogeneity.toFixed(2)}</span>
-        <span>Z span 10 model units · Zoom {zoomLabel}</span>
+        <span>Z span 4 model units · Zoom {zoomLabel}</span>
         <label>
           Elevation exaggeration {elevationLabel}
           <input type="range" min="0.65" max="2.2" step="0.05" value={elevationScale} onChange={event => setElevationScale(Number(event.target.value))} />
@@ -939,9 +949,9 @@ const SimulatorPage = () => {
   const dx = 1000.0 / cellCount;
 
   // Topography parameters (Formula sliders)
-  const [dipPercent, setDipPercent] = useState(1.5); // Regional dip in % (-5% to 5%)
-  const [amplitude, setAmplitude] = useState(25); // Anticline wave amplitude (0 to 50px)
-  const [frequency, setFrequency] = useState(2); // Wave frequency multiplier (0.5 to 4)
+  const [dipPercent, setDipPercent] = useState(0.8); // Regional dip in % (-5% to 5%)
+  const [amplitude, setAmplitude] = useState(15); // Anticline wave amplitude (0 to 50px)
+  const [frequency, setFrequency] = useState(1); // Anticline count (0.5 to 4)
   const [faultOffset, setFaultOffset] = useState(1.2); // Fault displacement (0 to 3)
 
   // Injection parameters
@@ -950,8 +960,8 @@ const SimulatorPage = () => {
   const [wellY, setWellY] = useState(50); // Plan-view injector y-coordinate %
   const [mapCols, setMapCols] = useState(72); // Plan-view x resolution; y follows domain aspect ratio
   const [injDuration, setInjDuration] = useState(240); // Frame count of active injection (50 to 400)
-  const [terrainSeed, setTerrainSeed] = useState(2107);
-  const [heterogeneity, setHeterogeneity] = useState(0.28);
+  const [terrainSeed, setTerrainSeed] = useState(3901);
+  const [heterogeneity, setHeterogeneity] = useState(0.55);
   
   // Fault parameters
   const [faultCount, setFaultCount] = useState(2); // Number of faults (0 to 3)
@@ -1316,9 +1326,9 @@ const SimulatorPage = () => {
       setFaultCount(0);
       setResidualTrapFraction(0.30);
     } else if (presetName === 'faulted') {
-      setDipPercent(1.8);
+      setDipPercent(1.2);
       setAmplitude(15);
-      setFrequency(2);
+      setFrequency(1);
       setFaultOffset(1.8);
       setTerrainSeed(7314);
       setHeterogeneity(0.34);
@@ -1349,12 +1359,12 @@ const SimulatorPage = () => {
       ]);
       setResidualTrapFraction(0.25);
     } else if (presetName === 'default') {
-      setDipPercent(1.5);
-      setAmplitude(25);
-      setFrequency(2);
+      setDipPercent(0.8);
+      setAmplitude(15);
+      setFrequency(1);
       setFaultOffset(1.2);
-      setTerrainSeed(2107);
-      setHeterogeneity(0.28);
+      setTerrainSeed(3901);
+      setHeterogeneity(0.55);
       setK(1.70);
       setPorosity(0.25);
       setQ(2.30);

@@ -477,7 +477,7 @@ test('3D topography reuses the map structure, surface overlays, and shared playb
   assert.match(panel, /faultXAtNormalizedY\(fault, y/);
   assert.match(panel, /splitTopographyPieceByFault/);
   assert.match(panel, /visibleFaultSegment/);
-  assert.match(panel, /const depthSpan = 10/);
+  assert.match(panel, /const depthSpan = 4/);
   assert.match(panel, /aria-pressed=\{showGrid\}/);
   assert.match(panel, /faultPoints\.forEach/);
   assert.match(panel, /surfaceAt\(/);

@@ -51,20 +51,51 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     return value / weight;
   };
 
-  // Seeded multi-scale terrain field. It deliberately uses value noise only:
-  // sinusoids made the random grids read as evenly spaced waves.
+  // Seeded, anisotropic domes and basins give the surface a structural character
+  // without the repeating bands produced by a sinusoidal field.
+  const terrainFeatureField = (x, y, seed) => {
+    let value = 0;
+    for (let index = 0; index < 11; index++) {
+      const centerX = 0.08 + hashNoise(index * 1.7, 0.3, seed + 17) * 0.84;
+      const centerY = 0.08 + hashNoise(index * 2.3, 0.7, seed + 41) * 0.84;
+      const angle = hashNoise(index * 3.1, 1.1, seed + 73) * Math.PI * 2;
+      const major = 0.1 + hashNoise(index * 4.1, 1.5, seed + 101) * 0.18;
+      const minor = 0.05 + hashNoise(index * 5.3, 1.9, seed + 131) * 0.12;
+      const dx = x - centerX;
+      const dy = y - centerY;
+      const along = dx * Math.cos(angle) + dy * Math.sin(angle);
+      const across = -dx * Math.sin(angle) + dy * Math.cos(angle);
+      const amplitude = (index % 2 ? -1 : 1) * (0.45 + hashNoise(index * 6.7, 2.2, seed + 163) * 0.55);
+      value += amplitude * Math.exp(-0.5 * ((along / major) ** 2 + (across / minor) ** 2));
+    }
+    return clamp(value * 0.62, -1, 1);
+  };
+
+  // Seeded multi-scale terrain field. It deliberately avoids periodic waves.
   const terrainWaveField = (x, y, seed) => {
-    const warpX = (smoothNoise(x * 1.1 + 4.1, y * 1.1 + 8.7, seed + 19) - 0.5) * 0.32;
-    const warpY = (smoothNoise(x * 1.1 + 13.3, y * 1.1 + 2.6, seed + 43) - 0.5) * 0.32;
+    const warpX = (smoothNoise(x * 1.1 + 4.1, y * 1.1 + 8.7, seed + 19) - 0.5) * 0.18;
+    const warpY = (smoothNoise(x * 1.1 + 13.3, y * 1.1 + 2.6, seed + 43) - 0.5) * 0.18;
     const warpedX = x + warpX;
     const warpedY = y + warpY;
     const rotation = hashNoise(0.7, 0.2, seed + 59) * Math.PI * 2;
     const rotatedX = warpedX * Math.cos(rotation) - warpedY * Math.sin(rotation);
     const rotatedY = warpedX * Math.sin(rotation) + warpedY * Math.cos(rotation);
-    const broad = (smoothNoise(warpedX * 1.6, warpedY * 1.6, seed + 211) - 0.5) * 2;
-    const regional = (terrainNoise(rotatedX * 0.8, rotatedY * 0.8, seed + 307) - 0.5) * 2;
-    const detail = (terrainNoise(warpedX * 2.1, warpedY * 2.1, seed + 401) - 0.5) * 2;
-    return clamp(broad * 0.5 + regional * 0.38 + detail * 0.12, -1, 1);
+    const broad = terrainFeatureField(warpedX, warpedY, seed + 211);
+    const regional = terrainFeatureField(rotatedX * 0.78 + 0.2, rotatedY * 0.78 + 0.2, seed + 307);
+    const detail = (terrainNoise(warpedX * 2.4, warpedY * 2.4, seed + 401) - 0.5) * 2;
+    return clamp(broad * 0.68 + regional * 0.22 + detail * 0.1, -1, 1);
+  };
+  const structuralDomeField = (x, y, count, seed) => {
+    let value = 0;
+    for (let index = 0; index < count; index++) {
+      const centerX = count === 1 ? 0.5 : 0.18 + hashNoise(index * 2.1, 0.4, seed + 503) * 0.64;
+      const centerY = count === 1 ? 0.5 : 0.18 + hashNoise(index * 2.9, 0.8, seed + 547) * 0.64;
+      const angle = hashNoise(index * 3.7, 1.2, seed + 571) * Math.PI;
+      const along = (x - centerX) * Math.cos(angle) + (y - centerY) * Math.sin(angle);
+      const across = -(x - centerX) * Math.sin(angle) + (y - centerY) * Math.cos(angle);
+      value += Math.exp(-0.5 * ((along / 0.25) ** 2 + (across / 0.15) ** 2));
+    }
+    return value / count;
   };
   const createVe2dState = ({
     cols = 48,
@@ -121,10 +152,12 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     } = params;
     const xn = x / width - 0.5;
     const yn = y / height - 0.5;
-    const dip = xn * (params.dipX || 0) * 4 + yn * (params.dipY || 0) * 4;
+    // UI inputs are percentages; use their fractional value in the depth field.
+    const dip = xn * (params.dipX || 0) * 0.04 + yn * (params.dipY || 0) * 0.04;
     const amplitude = (params.structureAmplitude || 0) / 15;
-    const frequency = params.structureFrequency || 1;
-    let depth = dip - amplitude * Math.cos(xn * Math.PI * 2 * frequency) * Math.cos(yn * Math.PI);
+    const structureCount = clamp(Math.round(params.structureFrequency || 1), 1, 4);
+    const structureSeed = Number.isFinite(Number(params.terrainSeed)) ? Number(params.terrainSeed) : 0;
+    let depth = dip - amplitude * structuralDomeField(x / width, y / height, structureCount, structureSeed);
     const heterogeneity = clamp(Number(params.heterogeneity ?? 0), 0, 1);
     if (heterogeneity > 0) {
       const seed = Number.isFinite(Number(params.terrainSeed)) ? Number(params.terrainSeed) : 0;
@@ -132,7 +165,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       const normalizedY = y / height;
       const waveField = terrainWaveField(normalizedX, normalizedY, seed);
       const fineNoise = (terrainNoise(normalizedX, normalizedY, seed) - 0.5) * 2;
-      depth += (waveField * 0.78 + fineNoise * 0.22) * heterogeneity * 0.78;
+      depth += (waveField * 0.9 + fineNoise * 0.1) * heterogeneity * 3;
     }
     for (let i = 0; i < (params.faults || []).length; i++) {
       depth += faultDisplacement(x, y, params.faults[i], i, params);
@@ -284,7 +317,9 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     faultCoversY,
     faultXAtY,
     terrainNoise,
+    terrainFeatureField,
     terrainWaveField,
+    structuralDomeField,
     faultDisplacement
   };
 });
@@ -1233,8 +1268,8 @@ const createRandomGridConfig = (random = Math.random) => {
     heterogeneity: 0.6 + randomInt(0, 7) * 0.05,
     mapCols: 80 + randomInt(0, 6) * 8,
     dipPercent: -2.5 + randomInt(0, 10) * 0.5,
-    amplitude: randomInt(2, 6) * 5,
-    frequency: 0.75 + randomInt(0, 3) * 0.25,
+    amplitude: randomInt(1, 4) * 5,
+    frequency: 1,
     faultOffset: 0.4 + randomInt(0, 11) * 0.2,
     faultCount,
     faults: Array.from({
@@ -2073,7 +2108,7 @@ const Ve3DTopographyPanel = ({
   const dragRef = useRef(null);
   const pinchRef = useRef(null);
   const [camera, setCamera] = useState(resetTopographyCamera);
-  const [elevationScale, setElevationScale] = useState(1);
+  const [elevationScale, setElevationScale] = useState(1.35);
   const [showGrid, setShowGrid] = useState(true);
   const gridRows = mapRows || Math.max(12, Math.round(mapCols * 0.6));
   const time = Number(mapSnapshot.time) || 0;
@@ -2119,8 +2154,22 @@ const Ve3DTopographyPanel = ({
       if (!depths.has(key)) depths.set(key, globalThis.VE2D.topDepth(sampleX * width, y * height, structure));
       return depths.get(key);
     };
-    const depthSpan = 10;
+    const depthSpan = 4;
     const surfaceAt = (x, y, plume = 0, faultSides = {}) => Math.max(0.04, Math.min(0.96, 0.5 - surfaceDepth(x, y, faultSides) / depthSpan * 0.5 * elevationScale + plume * 0.08));
+    const surfaceLight = (x, y, faultSides = {}) => {
+      const step = 0.008;
+      const left = surfaceAt(Math.max(0, x - step), y, 0, faultSides);
+      const right = surfaceAt(Math.min(1, x + step), y, 0, faultSides);
+      const north = surfaceAt(x, Math.max(0, y - step), 0, faultSides);
+      const south = surfaceAt(x, Math.min(1, y + step), 0, faultSides);
+      const normal = {
+        x: -(right - left) / (2 * step),
+        y: -(south - north) / (2 * step),
+        z: 1
+      };
+      const length = Math.hypot(normal.x, normal.y, normal.z);
+      return Math.max(0.34, Math.min(1, (normal.x * -0.38 + normal.y * 0.42 + normal.z * 0.82) / length));
+    };
     const stateRatio = (values, x, y) => {
       const col = Math.max(0, Math.min(mapCols - 1, Math.round(x * (mapCols - 1))));
       const row = Math.max(0, Math.min(gridRows - 1, Math.round(y * (gridRows - 1))));
@@ -2181,6 +2230,7 @@ const Ve3DTopographyPanel = ({
             plumeRatio,
             historicRatio,
             surfaceRatio,
+            light: surfaceLight(center.x, center.y, piece.faultSides),
             depth: center.y * Math.cos(camera.azimuth) + center.x * Math.sin(camera.azimuth)
           });
         });
@@ -2188,15 +2238,15 @@ const Ve3DTopographyPanel = ({
     }
     cells.sort((a, b) => a.depth - b.depth).forEach(cell => {
       const points = cell.points.map(point => pointAt(point, cell.faultSides));
-      const shade = Math.round(41 + cell.surfaceRatio * 54);
+      const shade = 0.38 + cell.light * 0.82;
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
       points.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
       ctx.closePath();
-      ctx.fillStyle = cell.plumeRatio > 0.0001 ? `rgb(${Math.round(18 + cell.historicRatio * 22)}, ${Math.round(104 + cell.plumeRatio * 116)}, ${Math.round(104 + cell.plumeRatio * 74)})` : `rgb(${Math.round(15 + cell.surfaceRatio * 24)}, ${shade + 30}, ${shade + 24})`;
+      ctx.fillStyle = cell.plumeRatio > 0.0001 ? `rgb(${Math.round((18 + cell.historicRatio * 22) * shade)}, ${Math.round((104 + cell.plumeRatio * 116) * shade)}, ${Math.round((104 + cell.plumeRatio * 74) * shade)})` : `rgb(${Math.round((15 + cell.surfaceRatio * 24) * shade)}, ${Math.round((92 + cell.surfaceRatio * 76) * shade)}, ${Math.round((86 + cell.surfaceRatio * 60) * shade)})`;
       ctx.fill();
       if (showGrid) {
-        ctx.strokeStyle = 'rgba(194, 221, 220, 0.22)';
+        ctx.strokeStyle = 'rgba(194, 221, 220, 0.14)';
         ctx.lineWidth = 0.8;
         ctx.stroke();
       }
@@ -2398,7 +2448,7 @@ const Ve3DTopographyPanel = ({
     }
   }), /*#__PURE__*/React.createElement("div", {
     className: "ve-topography-status"
-  }, /*#__PURE__*/React.createElement("span", null, "Year ", time, " \xB7 ", mapCols, "\xD7", gridRows, " grid \xB7 seed ", terrainSeed, " \xB7 heterogeneity ", heterogeneity.toFixed(2)), /*#__PURE__*/React.createElement("span", null, "Z span 10 model units \xB7 Zoom ", zoomLabel), /*#__PURE__*/React.createElement("label", null, "Elevation exaggeration ", elevationLabel, /*#__PURE__*/React.createElement("input", {
+  }, /*#__PURE__*/React.createElement("span", null, "Year ", time, " \xB7 ", mapCols, "\xD7", gridRows, " grid \xB7 seed ", terrainSeed, " \xB7 heterogeneity ", heterogeneity.toFixed(2)), /*#__PURE__*/React.createElement("span", null, "Z span 4 model units \xB7 Zoom ", zoomLabel), /*#__PURE__*/React.createElement("label", null, "Elevation exaggeration ", elevationLabel, /*#__PURE__*/React.createElement("input", {
     type: "range",
     min: "0.65",
     max: "2.2",
@@ -2421,9 +2471,9 @@ const SimulatorPage = () => {
   const dx = 1000.0 / cellCount;
 
   // Topography parameters (Formula sliders)
-  const [dipPercent, setDipPercent] = useState(1.5); // Regional dip in % (-5% to 5%)
-  const [amplitude, setAmplitude] = useState(25); // Anticline wave amplitude (0 to 50px)
-  const [frequency, setFrequency] = useState(2); // Wave frequency multiplier (0.5 to 4)
+  const [dipPercent, setDipPercent] = useState(0.8); // Regional dip in % (-5% to 5%)
+  const [amplitude, setAmplitude] = useState(15); // Anticline wave amplitude (0 to 50px)
+  const [frequency, setFrequency] = useState(1); // Anticline count (0.5 to 4)
   const [faultOffset, setFaultOffset] = useState(1.2); // Fault displacement (0 to 3)
 
   // Injection parameters
@@ -2432,8 +2482,8 @@ const SimulatorPage = () => {
   const [wellY, setWellY] = useState(50); // Plan-view injector y-coordinate %
   const [mapCols, setMapCols] = useState(72); // Plan-view x resolution; y follows domain aspect ratio
   const [injDuration, setInjDuration] = useState(240); // Frame count of active injection (50 to 400)
-  const [terrainSeed, setTerrainSeed] = useState(2107);
-  const [heterogeneity, setHeterogeneity] = useState(0.28);
+  const [terrainSeed, setTerrainSeed] = useState(3901);
+  const [heterogeneity, setHeterogeneity] = useState(0.55);
 
   // Fault parameters
   const [faultCount, setFaultCount] = useState(2); // Number of faults (0 to 3)
@@ -2863,9 +2913,9 @@ const SimulatorPage = () => {
       setFaultCount(0);
       setResidualTrapFraction(0.30);
     } else if (presetName === 'faulted') {
-      setDipPercent(1.8);
+      setDipPercent(1.2);
       setAmplitude(15);
-      setFrequency(2);
+      setFrequency(1);
       setFaultOffset(1.8);
       setTerrainSeed(7314);
       setHeterogeneity(0.34);
@@ -2918,12 +2968,12 @@ const SimulatorPage = () => {
       }]);
       setResidualTrapFraction(0.25);
     } else if (presetName === 'default') {
-      setDipPercent(1.5);
-      setAmplitude(25);
-      setFrequency(2);
+      setDipPercent(0.8);
+      setAmplitude(15);
+      setFrequency(1);
       setFaultOffset(1.2);
-      setTerrainSeed(2107);
-      setHeterogeneity(0.28);
+      setTerrainSeed(3901);
+      setHeterogeneity(0.55);
       setK(1.70);
       setPorosity(0.25);
       setQ(2.30);

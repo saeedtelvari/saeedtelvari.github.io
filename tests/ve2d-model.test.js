@@ -115,11 +115,23 @@ test('seeded terrain noise is deterministic and adds relief when enabled', () =>
   assert.notEqual(model.terrainNoise(0.25, 0.3, 42), model.terrainNoise(0.75, 0.3, 42));
 });
 
+test('regional dip treats UI values as percentages', () => {
+  const params = { ...baseParams, dipX: 2, structureAmplitude: 0, heterogeneity: 0 };
+  assert.equal(model.topDepth(1000, 300, params) - model.topDepth(0, 300, params), 0.08);
+});
+
 test('seeded terrain waves vary across both axes', () => {
   const field = model.terrainWaveField;
   assert.notEqual(field(0.2, 0.4, 42), field(0.8, 0.4, 42));
   assert.notEqual(field(0.2, 0.2, 42), field(0.2, 0.8, 42));
   assert.equal(field(0.35, 0.65, 42), field(0.35, 0.65, 42));
+  assert.ok(Math.abs(model.terrainFeatureField(0.35, 0.65, 42)) <= 1);
+});
+
+test('structural highs are localized domes rather than repeating bands', () => {
+  const field = model.structuralDomeField;
+  assert.ok(field(0.5, 0.5, 1, 42) > field(0.05, 0.05, 1, 42));
+  assert.notEqual(field(0.25, 0.5, 2, 42), field(0.5, 0.25, 2, 42));
 });
 
 test('fault throw is a sharp local step limited to the fault segment', () => {
