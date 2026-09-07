@@ -114,3 +114,27 @@ test('seeded terrain noise is deterministic and adds relief when enabled', () =>
   assert.notEqual(a, flat);
   assert.notEqual(model.terrainNoise(0.25, 0.3, 42), model.terrainNoise(0.75, 0.3, 42));
 });
+
+test('seeded terrain waves vary across both axes', () => {
+  const field = model.terrainWaveField;
+  assert.notEqual(field(0.2, 0.4, 42), field(0.8, 0.4, 42));
+  assert.notEqual(field(0.2, 0.2, 42), field(0.2, 0.8, 42));
+  assert.equal(field(0.35, 0.65, 42), field(0.35, 0.65, 42));
+});
+
+test('fault throw is a sharp local step limited to the fault segment', () => {
+  const params = {
+    width: 1000,
+    height: 600,
+    structureAmplitude: 0,
+    heterogeneity: 0,
+    faultOffset: 2,
+    faults: [{ xPercent: 50, yStartPercent: 30, yEndPercent: 70, dipSlope: 0 }]
+  };
+  const insideLeft = model.topDepth(250, 300, params);
+  const insideRight = model.topDepth(750, 300, params);
+  const outsideLeft = model.topDepth(250, 120, params);
+  const outsideRight = model.topDepth(750, 120, params);
+  assert.ok(Math.abs(insideRight - insideLeft - 1.6) < 1e-9);
+  assert.equal(outsideRight - outsideLeft, 0);
+});

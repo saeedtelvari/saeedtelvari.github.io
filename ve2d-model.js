@@ -51,6 +51,27 @@
     return value / weight;
   };
 
+  // Seeded multi-directional wave field: independent x/y bands plus diagonals
+  // keep the generated surface from reading like a single extruded ridge.
+  const terrainWaveField = (x, y, seed) => {
+    let value = 0;
+    let weight = 0;
+    for (let index = 0; index < 12; index++) {
+      const frequencyX = 0.65 + hashNoise(index * 1.71, 0.2, seed + 17) * 4.2;
+      const frequencyY = 0.65 + hashNoise(index * 2.13, 0.8, seed + 43) * 4.2;
+      const phaseX = hashNoise(index * 2.91, 1.4, seed + 71) * Math.PI * 2;
+      const phaseY = hashNoise(index * 3.47, 1.9, seed + 97) * Math.PI * 2;
+      const phaseXY = hashNoise(index * 4.03, 2.3, seed + 131) * Math.PI * 2;
+      const amplitude = 1 / (1 + index * 0.16);
+      const xWave = Math.sin(x * frequencyX * Math.PI * 2 + phaseX);
+      const yWave = Math.cos(y * frequencyY * Math.PI * 2 + phaseY);
+      const diagonalWave = Math.sin((x * frequencyX + y * frequencyY) * Math.PI * 2 + phaseXY);
+      value += amplitude * (xWave * 0.38 + yWave * 0.38 + diagonalWave * 0.24);
+      weight += amplitude;
+    }
+    return weight ? value / weight : 0;
+  };
+
   const createVe2dState = ({ cols = 48, rows = 30 } = {}) => {
     cols = clamp(Math.round(cols), 6, 160);
     rows = clamp(Math.round(rows), 6, 100);
@@ -67,6 +88,11 @@
   const faultSide = (x, y, fault, width, height) => {
     const lineX = (fault.xPercent / 100) * width + (fault.dipSlope || 0) * (y - height / 2);
     return x - lineX;
+  };
+
+  const faultDisplacement = (x, y, fault, index, params) => {
+    if (!faultCoversY(fault, y, params.height) || faultSide(x, y, fault, params.width, params.height) <= 0) return 0;
+    return (index % 2 === 0 ? 1 : -1) * (params.faultOffset || 0) * 0.8;
   };
 
   const faceTransmissibility = (x1, y1, x2, y2, faults, width, height) => {
@@ -96,13 +122,14 @@
     const heterogeneity = clamp(Number(params.heterogeneity ?? 0), 0, 1);
     if (heterogeneity > 0) {
       const seed = Number.isFinite(Number(params.terrainSeed)) ? Number(params.terrainSeed) : 0;
-      depth += (terrainNoise(x / width, y / height, seed) - 0.5) * heterogeneity * 1.1;
+      const normalizedX = x / width;
+      const normalizedY = y / height;
+      const waveField = terrainWaveField(normalizedX, normalizedY, seed);
+      const fineNoise = (terrainNoise(normalizedX, normalizedY, seed) - 0.5) * 2;
+      depth += (waveField * 0.78 + fineNoise * 0.22) * heterogeneity * 1.25;
     }
-    for (let i = 0; i < params.faults.length; i++) {
-      const fault = params.faults[i];
-      if (faultCoversY(fault, y, height) && faultSide(x, y, fault, width, height) > 0) {
-        depth += (i % 2 === 0 ? 1 : -1) * (params.faultOffset || 0) * 0.8;
-      }
+    for (let i = 0; i < (params.faults || []).length; i++) {
+      depth += faultDisplacement(x, y, params.faults[i], i, params);
     }
     return depth;
   };
@@ -254,5 +281,5 @@
     };
   };
 
-  return { createVe2dState, stepVe2d, topDepth, faceTransmissibility, faultCoversY, terrainNoise };
+  return { createVe2dState, stepVe2d, topDepth, faceTransmissibility, faultCoversY, terrainNoise, terrainWaveField, faultDisplacement };
 });
