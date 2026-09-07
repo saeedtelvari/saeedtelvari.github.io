@@ -100,14 +100,14 @@ const createRandomGridConfig = (random = Math.random) => {
     const yStartPercent = randomInt(1, 10) * 5;
     const yEndPercent = yStartPercent + randomInt(5, Math.floor((95 - yStartPercent) / 5)) * 5;
     return {
-      xPercent: randomInt(3, 17) * 5,
+      xPercent: randomInt(5, 15) * 5,
       yStartPercent,
       yEndPercent,
       isSealed: random() < 0.3,
       thresholdHeight: 0.2 + randomInt(0, 3) * 0.1,
       leakRate: 0.06 + randomInt(0, 8) * 0.02,
       transmissibility: 0.35 + randomInt(0, 12) * 0.05,
-      dipSlope: randomValue(index % 2 ? -0.28 : -0.38, index % 2 ? 0.38 : 0.28, 2)
+      dipSlope: randomValue(index % 2 ? -0.22 : -0.26, index % 2 ? 0.22 : 0.26, 2)
     };
   };
   const faultCount = randomInt(1, 3);
@@ -116,8 +116,8 @@ const createRandomGridConfig = (random = Math.random) => {
     heterogeneity: 0.6 + randomInt(0, 7) * 0.05,
     mapCols: 80 + randomInt(0, 6) * 8,
     dipPercent: -2.5 + randomInt(0, 10) * 0.5,
-    amplitude: randomInt(2, 9) * 5,
-    frequency: 0.5 + randomInt(0, 7) * 0.5,
+    amplitude: randomInt(2, 6) * 5,
+    frequency: 0.75 + randomInt(0, 3) * 0.25,
     faultOffset: 0.4 + randomInt(0, 11) * 0.2,
     faultCount,
     faults: Array.from({ length: 3 }, (_, index) => randomFault(index))
@@ -154,6 +154,55 @@ const projectTopographyPoint = ({ x = 0.5, y = 0.5, height = 0.5 } = {}, camera,
     x: projectedX * width,
     y: projectedY * heightPx
   };
+};
+
+const faultXAtNormalizedY = (fault, y) => {
+  if (typeof globalThis.VE2D?.faultXAtY === 'function') return globalThis.VE2D.faultXAtY(fault, y * 600, 1000, 600) / 1000;
+  return (Number(fault?.xPercent) || 0) / 100 + (Number(fault?.dipSlope) || 0) * 0.6 * (y - 0.5);
+};
+
+const visibleFaultSegment = fault => {
+  const start = Math.max(0, Math.min(100, Number(fault?.yStartPercent ?? 0))) / 100;
+  const end = Math.max(0, Math.min(100, Number(fault?.yEndPercent ?? 100))) / 100;
+  const yStart = Math.min(start, end);
+  const yEnd = Math.max(start, end);
+  const xAtCenter = (Number(fault?.xPercent) || 0) / 100;
+  const normalizedSlope = (Number(fault?.dipSlope) || 0) * 0.6;
+  if (Math.abs(normalizedSlope) < 1e-9) return xAtCenter > 0 && xAtCenter < 1 ? { yStart, yEnd } : null;
+  const crossings = [(0 - xAtCenter) / normalizedSlope + 0.5, (1 - xAtCenter) / normalizedSlope + 0.5];
+  const clippedStart = Math.max(yStart, Math.min(...crossings));
+  const clippedEnd = Math.min(yEnd, Math.max(...crossings));
+  return clippedEnd - clippedStart > 1e-6 ? { yStart: clippedStart, yEnd: clippedEnd } : null;
+};
+
+const clipPolygonByFault = (points, fault, keepRight) => {
+  const clipped = [];
+  for (let index = 0; index < points.length; index++) {
+    const from = points[index];
+    const to = points[(index + 1) % points.length];
+    const fromSide = from.x - faultXAtNormalizedY(fault, from.y);
+    const toSide = to.x - faultXAtNormalizedY(fault, to.y);
+    const fromInside = keepRight ? fromSide >= -1e-9 : fromSide <= 1e-9;
+    const toInside = keepRight ? toSide >= -1e-9 : toSide <= 1e-9;
+    if (fromInside) clipped.push(from);
+    if (fromInside !== toInside) {
+      const ratio = fromSide / (fromSide - toSide);
+      clipped.push({ x: from.x + (to.x - from.x) * ratio, y: from.y + (to.y - from.y) * ratio });
+    }
+  }
+  return clipped;
+};
+
+const splitTopographyPieceByFault = (piece, fault, faultIndex, y0, y1, segment) => {
+  if (y0 < segment.yStart - 1e-9 || y1 > segment.yEnd + 1e-9) return [piece];
+  const sides = piece.points.map(point => point.x - faultXAtNormalizedY(fault, point.y));
+  if (Math.min(...sides) >= -1e-9 || Math.max(...sides) <= 1e-9) return [piece];
+  const left = clipPolygonByFault(piece.points, fault, false);
+  const right = clipPolygonByFault(piece.points, fault, true);
+  return [
+    ...(left.length >= 3 ? [{ points: left, faultSides: { ...piece.faultSides, [faultIndex]: -1 } }] : []),
+    ...(right.length >= 3 ? [{ points: right, faultSides: { ...piece.faultSides, [faultIndex]: 1 } }] : [])
+  ];
 };
 
 const formatMass = value => `${Number(value || 0).toLocaleString('en-GB', { maximumFractionDigits: 1 })} kt`;
@@ -530,11 +579,11 @@ const Ve2DMapPanel = ({
     }
 
     paramsRef.current.faults.forEach(fault => {
-      const yStart = Math.max(0, Math.min(100, Number(fault.yStartPercent ?? 0))) / 100 * height;
-      const yEnd = Math.max(0, Math.min(100, Number(fault.yEndPercent ?? 100))) / 100 * height;
-      const y0 = Math.min(yStart, yEnd);
-      const y1 = Math.max(yStart, yEnd);
-      const lineX = y => (fault.xPercent / 100) * width + (fault.dipSlope || 0) * (y - height / 2);
+      const segment = visibleFaultSegment(fault);
+      if (!segment) return;
+      const y0 = segment.yStart * height;
+      const y1 = segment.yEnd * height;
+      const lineX = y => globalThis.VE2D.faultXAtY(fault, y, width, height);
       ctx.beginPath();
       ctx.moveTo(lineX(y0), y0);
       ctx.lineTo(lineX(y1), y1);
@@ -679,40 +728,58 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
     const h = Array.isArray(mapSnapshot.h) ? mapSnapshot.h : [];
     const hMax = Array.isArray(mapSnapshot.hMax) ? mapSnapshot.hMax : h;
     const peak = Math.max(0.0001, ...hMax.map(value => Number(value) || 0));
+    const activeFaults = faults.slice(0, faultCount).map((fault, index) => ({ fault, index, segment: visibleFaultSegment(fault) })).filter(item => item.segment);
     const structure = { width, height, faults: [], ...(mapSnapshot.params || {}) };
     const depths = new Map();
-    const surfaceDepth = (x, y) => {
-      const key = `${x.toFixed(4)}:${y.toFixed(4)}`;
-      if (!depths.has(key)) depths.set(key, globalThis.VE2D.topDepth(x * width, y * height, structure));
+    const surfaceDepth = (x, y, faultSides = {}) => {
+      let sampleX = x;
+      Object.entries(faultSides).forEach(([faultIndex, side]) => {
+        const fault = activeFaults.find(item => item.index === Number(faultIndex))?.fault;
+        if (fault && Math.abs(x - faultXAtNormalizedY(fault, y)) < 1e-7) sampleX += Number(side) * 0.00002;
+      });
+      const key = `${sampleX.toFixed(5)}:${y.toFixed(5)}`;
+      if (!depths.has(key)) depths.set(key, globalThis.VE2D.topDepth(sampleX * width, y * height, structure));
       return depths.get(key);
     };
-    for (let row = 0; row < gridRows; row++) {
-      for (let col = 0; col < mapCols; col++) surfaceDepth(col / Math.max(1, mapCols - 1), row / Math.max(1, gridRows - 1));
-    }
     const depthSpan = 10;
-    const surfaceAt = (x, y, plume = 0) =>
-      Math.max(0.04, Math.min(0.96, 0.5 - (surfaceDepth(x, y) / depthSpan) * 0.5 * elevationScale + plume * 0.08));
-    const pointAt = (col, row) => {
-      const index = Math.min(hMax.length - 1, Math.max(0, row * mapCols + col));
-      const plume = (Number(h[index]) || 0) / peak;
-      return projectTopographyPoint({
-        x: col / Math.max(1, mapCols - 1),
-        y: row / Math.max(1, gridRows - 1),
-        height: surfaceAt(col / Math.max(1, mapCols - 1), row / Math.max(1, gridRows - 1), plume)
-      }, camera, width, height);
+    const surfaceAt = (x, y, plume = 0, faultSides = {}) =>
+      Math.max(0.04, Math.min(0.96, 0.5 - (surfaceDepth(x, y, faultSides) / depthSpan) * 0.5 * elevationScale + plume * 0.08));
+    const stateRatio = (values, x, y) => {
+      const col = Math.max(0, Math.min(mapCols - 1, Math.round(x * (mapCols - 1))));
+      const row = Math.max(0, Math.min(gridRows - 1, Math.round(y * (gridRows - 1))));
+      return (Number(values[row * mapCols + col]) || 0) / peak;
     };
+    const pointAt = (point, faultSides = {}) => projectTopographyPoint({
+      x: point.x,
+      y: point.y,
+      height: surfaceAt(point.x, point.y, stateRatio(h, point.x, point.y), faultSides)
+    }, camera, width, height);
+    const yCoordinates = [...new Set([
+      ...Array.from({ length: gridRows }, (_, row) => row / Math.max(1, gridRows - 1)),
+      ...activeFaults.flatMap(item => [item.segment.yStart, item.segment.yEnd])
+    ].map(value => Number(value.toFixed(7))))].sort((a, b) => a - b);
     const cells = [];
-    for (let row = 0; row < gridRows - 1; row++) {
+    for (let row = 0; row < yCoordinates.length - 1; row++) {
+      const y0 = yCoordinates[row];
+      const y1 = yCoordinates[row + 1];
       for (let col = 0; col < mapCols - 1; col++) {
-        const index = row * mapCols + col;
-        const plumeRatio = (Number(h[index]) || 0) / peak;
-        const historicRatio = (Number(hMax[index]) || 0) / peak;
-        const surfaceRatio = Math.max(0, Math.min(1, 0.5 - surfaceDepth(col / Math.max(1, mapCols - 1), row / Math.max(1, gridRows - 1)) / depthSpan));
-        cells.push({ col, row, plumeRatio, historicRatio, surfaceRatio, depth: row * Math.cos(camera.azimuth) + col * Math.sin(camera.azimuth) });
+        const x0 = col / Math.max(1, mapCols - 1);
+        const x1 = (col + 1) / Math.max(1, mapCols - 1);
+        let pieces = [{ points: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], faultSides: {} }];
+        activeFaults.forEach(({ fault, index, segment }) => {
+          pieces = pieces.flatMap(piece => splitTopographyPieceByFault(piece, fault, index, y0, y1, segment));
+        });
+        pieces.forEach(piece => {
+          const center = piece.points.reduce((sum, point) => ({ x: sum.x + point.x / piece.points.length, y: sum.y + point.y / piece.points.length }), { x: 0, y: 0 });
+          const plumeRatio = stateRatio(h, center.x, center.y);
+          const historicRatio = stateRatio(hMax, center.x, center.y);
+          const surfaceRatio = Math.max(0, Math.min(1, 0.5 - surfaceDepth(center.x, center.y, piece.faultSides) / depthSpan));
+          cells.push({ points: piece.points, faultSides: piece.faultSides, plumeRatio, historicRatio, surfaceRatio, depth: center.y * Math.cos(camera.azimuth) + center.x * Math.sin(camera.azimuth) });
+        });
       }
     }
     cells.sort((a, b) => a.depth - b.depth).forEach(cell => {
-      const points = [pointAt(cell.col, cell.row), pointAt(cell.col + 1, cell.row), pointAt(cell.col + 1, cell.row + 1), pointAt(cell.col, cell.row + 1)];
+      const points = cell.points.map(point => pointAt(point, cell.faultSides));
       const shade = Math.round(41 + cell.surfaceRatio * 54);
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
@@ -729,23 +796,32 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
       }
     });
 
-    faults.slice(0, faultCount).forEach(fault => {
-      const x = (Number(fault.xPercent) || 0) / 100;
-      const slope = Number(fault.dipSlope) || 0;
-      const start = Math.max(0, Math.min(100, Number(fault.yStartPercent ?? 0))) / 100;
-      const end = Math.max(0, Math.min(100, Number(fault.yEndPercent ?? 100))) / 100;
-      const yStart = Math.min(start, end);
-      const yEnd = Math.max(start, end);
+    activeFaults.forEach(({ fault, index, segment }) => {
+      const faultYs = yCoordinates.filter(y => y >= segment.yStart - 1e-9 && y <= segment.yEnd + 1e-9);
       const faultPoints = [];
-      const samples = Math.max(12, Math.ceil((yEnd - yStart) * 96));
-      for (let sample = 0; sample <= samples; sample++) {
-        const y = yStart + (yEnd - yStart) * (sample / samples);
-        const faultX = x + slope * (y - 0.5);
-        faultPoints.push(projectTopographyPoint({ x: faultX, y, height: surfaceAt(faultX, y, 0.025) }, camera, width, height));
+      for (let sample = 0; sample < faultYs.length - 1; sample++) {
+        const y0 = faultYs[sample];
+        const y1 = faultYs[sample + 1];
+        const x0 = faultXAtNormalizedY(fault, y0);
+        const x1 = faultXAtNormalizedY(fault, y1);
+        const left0 = projectTopographyPoint({ x: x0, y: y0, height: surfaceAt(x0, y0, 0, { [index]: -1 }) }, camera, width, height);
+        const left1 = projectTopographyPoint({ x: x1, y: y1, height: surfaceAt(x1, y1, 0, { [index]: -1 }) }, camera, width, height);
+        const right0 = projectTopographyPoint({ x: x0, y: y0, height: surfaceAt(x0, y0, 0, { [index]: 1 }) }, camera, width, height);
+        const right1 = projectTopographyPoint({ x: x1, y: y1, height: surfaceAt(x1, y1, 0, { [index]: 1 }) }, camera, width, height);
+        ctx.beginPath();
+        ctx.moveTo(left0.x, left0.y);
+        ctx.lineTo(left1.x, left1.y);
+        ctx.lineTo(right1.x, right1.y);
+        ctx.lineTo(right0.x, right0.y);
+        ctx.closePath();
+        ctx.fillStyle = fault.isSealed ? 'rgba(68, 119, 111, 0.84)' : 'rgba(111, 76, 67, 0.78)';
+        ctx.fill();
+        faultPoints.push({ x: (left0.x + right0.x) / 2, y: (left0.y + right0.y) / 2 });
+        if (sample === faultYs.length - 2) faultPoints.push({ x: (left1.x + right1.x) / 2, y: (left1.y + right1.y) / 2 });
       }
       if (faultPoints.length < 2) return;
       ctx.beginPath();
-      faultPoints.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+      faultPoints.forEach((point, pointIndex) => pointIndex ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
       ctx.strokeStyle = fault.isSealed ? '#d6a65a' : '#d97a63';
       ctx.lineWidth = 2;
       ctx.setLineDash(fault.isSealed ? [] : [7, 5]);

@@ -51,35 +51,20 @@
     return value / weight;
   };
 
-  // Seeded multi-directional wave field. Domain warping breaks up the visible
-  // periodicity of sinusoids while retaining coherent x/y and diagonal relief.
+  // Seeded multi-scale terrain field. It deliberately uses value noise only:
+  // sinusoids made the random grids read as evenly spaced waves.
   const terrainWaveField = (x, y, seed) => {
-    const warpX = (terrainNoise(x * 1.25 + 4.1, y * 1.25 + 8.7, seed + 19) - 0.5) * 0.24;
-    const warpY = (terrainNoise(x * 1.25 + 13.3, y * 1.25 + 2.6, seed + 43) - 0.5) * 0.24;
+    const warpX = (smoothNoise(x * 1.1 + 4.1, y * 1.1 + 8.7, seed + 19) - 0.5) * 0.32;
+    const warpY = (smoothNoise(x * 1.1 + 13.3, y * 1.1 + 2.6, seed + 43) - 0.5) * 0.32;
     const warpedX = x + warpX;
     const warpedY = y + warpY;
-    let value = 0;
-    let weight = 0;
-    for (let index = 0; index < 16; index++) {
-      const frequencyX = 0.65 + hashNoise(index * 1.71, 0.2, seed + 17) * 4.2;
-      const frequencyY = 0.65 + hashNoise(index * 2.13, 0.8, seed + 43) * 4.2;
-      const angle = hashNoise(index * 1.33, 2.8, seed + 59) * Math.PI * 2;
-      const phaseX = hashNoise(index * 2.91, 1.4, seed + 71) * Math.PI * 2;
-      const phaseY = hashNoise(index * 3.47, 1.9, seed + 97) * Math.PI * 2;
-      const phaseXY = hashNoise(index * 4.03, 2.3, seed + 131) * Math.PI * 2;
-      const amplitude = 1 / (1 + index * 0.16);
-      const rotatedX = warpedX * Math.cos(angle) - warpedY * Math.sin(angle);
-      const rotatedY = warpedX * Math.sin(angle) + warpedY * Math.cos(angle);
-      const xWave = Math.sin(rotatedX * frequencyX * Math.PI * 2 + phaseX);
-      const yWave = Math.cos(rotatedY * frequencyY * Math.PI * 2 + phaseY);
-      const diagonalWave = Math.sin((rotatedX * frequencyX + rotatedY * frequencyY) * Math.PI * 2 + phaseXY);
-      value += amplitude * (xWave * 0.38 + yWave * 0.38 + diagonalWave * 0.24);
-      weight += amplitude;
-    }
-    const waveValue = weight ? value / weight : 0;
-    const broad = (terrainNoise(warpedX * 1.2, warpedY * 1.2, seed + 211) - 0.5) * 2;
-    const detail = (terrainNoise(warpedX * 3.6, warpedY * 3.6, seed + 307) - 0.5) * 2;
-    return clamp(waveValue * 0.5 + broad * 0.4 + detail * 0.1, -1, 1);
+    const rotation = hashNoise(0.7, 0.2, seed + 59) * Math.PI * 2;
+    const rotatedX = warpedX * Math.cos(rotation) - warpedY * Math.sin(rotation);
+    const rotatedY = warpedX * Math.sin(rotation) + warpedY * Math.cos(rotation);
+    const broad = (smoothNoise(warpedX * 1.6, warpedY * 1.6, seed + 211) - 0.5) * 2;
+    const regional = (terrainNoise(rotatedX * 0.8, rotatedY * 0.8, seed + 307) - 0.5) * 2;
+    const detail = (terrainNoise(warpedX * 2.1, warpedY * 2.1, seed + 401) - 0.5) * 2;
+    return clamp(broad * 0.5 + regional * 0.38 + detail * 0.12, -1, 1);
   };
 
   const createVe2dState = ({ cols = 48, rows = 30 } = {}) => {
@@ -95,14 +80,15 @@
     };
   };
 
-  const faultSide = (x, y, fault, width, height) => {
-    const lineX = (fault.xPercent / 100) * width + (fault.dipSlope || 0) * (y - height / 2);
-    return x - lineX;
-  };
+  const faultXAtY = (fault, y, width, height) =>
+    (Number(fault?.xPercent) || 0) / 100 * width + (Number(fault?.dipSlope) || 0) * (y - height / 2);
+
+  const faultSide = (x, y, fault, width, height) => x - faultXAtY(fault, y, width, height);
 
   const faultDisplacement = (x, y, fault, index, params) => {
     const [minY, maxY] = faultYBounds(fault, params.height);
-    if (y < minY || y > maxY || faultSide(x, y, fault, params.width, params.height) <= 0) return 0;
+    const lineX = faultXAtY(fault, y, params.width, params.height);
+    if (y < minY || y > maxY || lineX <= 0 || lineX >= params.width || x <= lineX) return 0;
     const segmentLength = Math.max(1, maxY - minY);
     const taperLength = Math.min(params.height * 0.08, segmentLength * 0.22);
     const smoothstep = value => value * value * (3 - 2 * value);
@@ -297,5 +283,5 @@
     };
   };
 
-  return { createVe2dState, stepVe2d, topDepth, faceTransmissibility, faultCoversY, terrainNoise, terrainWaveField, faultDisplacement };
+  return { createVe2dState, stepVe2d, topDepth, faceTransmissibility, faultCoversY, faultXAtY, terrainNoise, terrainWaveField, faultDisplacement };
 });

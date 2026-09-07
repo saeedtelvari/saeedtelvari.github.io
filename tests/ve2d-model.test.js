@@ -138,3 +138,18 @@ test('fault throw is a sharp local step limited to the fault segment', () => {
   assert.ok(Math.abs(insideRight - insideLeft - 1.6) < 1e-9);
   assert.equal(outsideRight - outsideLeft, 0);
 });
+
+test('fault displacement stops when its trace exits the model boundary', () => {
+  const params = {
+    width: 1000,
+    height: 600,
+    structureAmplitude: 0,
+    heterogeneity: 0,
+    faultOffset: 2,
+    faults: [{ xPercent: -10, yStartPercent: 0, yEndPercent: 100, dipSlope: 0 }]
+  };
+
+  assert.equal(model.faultXAtY({ xPercent: 50, dipSlope: 0.2 }, 0, 1000, 600), 440);
+  assert.equal(model.faultXAtY({ xPercent: 50, dipSlope: 0.2 }, 600, 1000, 600), 560);
+  assert.equal(model.topDepth(900, 300, params), 0);
+});
