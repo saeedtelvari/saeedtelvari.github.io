@@ -474,7 +474,9 @@ test('3D topography reuses the map structure, surface overlays, and shared playb
 
   assert.match(panel, /globalThis\.VE2D\.topDepth/);
   assert.match(panel, /const faultPoints = \[\]/);
-  assert.match(panel, /slope \* \(y \* 0\.6 - 0\.3\)/);
+  assert.match(panel, /slope \* \(y - 0\.5\)/);
+  assert.match(panel, /const depthSpan = 10/);
+  assert.match(panel, /aria-pressed=\{showGrid\}/);
   assert.match(panel, /faultPoints\.forEach\(\(point, index\)/);
   assert.match(panel, /surfaceAt\(/);
   assert.match(panel, /onMapCommand\(mapSnapshot\.isRunning \? 'pause' : 'resume'\)/);

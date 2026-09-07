@@ -42,8 +42,8 @@
     let value = 0;
     let weight = 0;
     let amplitude = 1;
-    for (let octave = 0; octave < 3; octave++) {
-      const scale = 3 * (2 ** octave);
+    for (let octave = 0; octave < 5; octave++) {
+      const scale = 1.5 * (2 ** octave);
       value += smoothNoise(x * scale, y * scale, seed + octave * 101) * amplitude;
       weight += amplitude;
       amplitude *= 0.5;
@@ -51,25 +51,35 @@
     return value / weight;
   };
 
-  // Seeded multi-directional wave field: independent x/y bands plus diagonals
-  // keep the generated surface from reading like a single extruded ridge.
+  // Seeded multi-directional wave field. Domain warping breaks up the visible
+  // periodicity of sinusoids while retaining coherent x/y and diagonal relief.
   const terrainWaveField = (x, y, seed) => {
+    const warpX = (terrainNoise(x * 1.25 + 4.1, y * 1.25 + 8.7, seed + 19) - 0.5) * 0.24;
+    const warpY = (terrainNoise(x * 1.25 + 13.3, y * 1.25 + 2.6, seed + 43) - 0.5) * 0.24;
+    const warpedX = x + warpX;
+    const warpedY = y + warpY;
     let value = 0;
     let weight = 0;
-    for (let index = 0; index < 12; index++) {
+    for (let index = 0; index < 16; index++) {
       const frequencyX = 0.65 + hashNoise(index * 1.71, 0.2, seed + 17) * 4.2;
       const frequencyY = 0.65 + hashNoise(index * 2.13, 0.8, seed + 43) * 4.2;
+      const angle = hashNoise(index * 1.33, 2.8, seed + 59) * Math.PI * 2;
       const phaseX = hashNoise(index * 2.91, 1.4, seed + 71) * Math.PI * 2;
       const phaseY = hashNoise(index * 3.47, 1.9, seed + 97) * Math.PI * 2;
       const phaseXY = hashNoise(index * 4.03, 2.3, seed + 131) * Math.PI * 2;
       const amplitude = 1 / (1 + index * 0.16);
-      const xWave = Math.sin(x * frequencyX * Math.PI * 2 + phaseX);
-      const yWave = Math.cos(y * frequencyY * Math.PI * 2 + phaseY);
-      const diagonalWave = Math.sin((x * frequencyX + y * frequencyY) * Math.PI * 2 + phaseXY);
+      const rotatedX = warpedX * Math.cos(angle) - warpedY * Math.sin(angle);
+      const rotatedY = warpedX * Math.sin(angle) + warpedY * Math.cos(angle);
+      const xWave = Math.sin(rotatedX * frequencyX * Math.PI * 2 + phaseX);
+      const yWave = Math.cos(rotatedY * frequencyY * Math.PI * 2 + phaseY);
+      const diagonalWave = Math.sin((rotatedX * frequencyX + rotatedY * frequencyY) * Math.PI * 2 + phaseXY);
       value += amplitude * (xWave * 0.38 + yWave * 0.38 + diagonalWave * 0.24);
       weight += amplitude;
     }
-    return weight ? value / weight : 0;
+    const waveValue = weight ? value / weight : 0;
+    const broad = (terrainNoise(warpedX * 1.2, warpedY * 1.2, seed + 211) - 0.5) * 2;
+    const detail = (terrainNoise(warpedX * 3.6, warpedY * 3.6, seed + 307) - 0.5) * 2;
+    return clamp(waveValue * 0.5 + broad * 0.4 + detail * 0.1, -1, 1);
   };
 
   const createVe2dState = ({ cols = 48, rows = 30 } = {}) => {
@@ -91,8 +101,14 @@
   };
 
   const faultDisplacement = (x, y, fault, index, params) => {
-    if (!faultCoversY(fault, y, params.height) || faultSide(x, y, fault, params.width, params.height) <= 0) return 0;
-    return (index % 2 === 0 ? 1 : -1) * (params.faultOffset || 0) * 0.8;
+    const [minY, maxY] = faultYBounds(fault, params.height);
+    if (y < minY || y > maxY || faultSide(x, y, fault, params.width, params.height) <= 0) return 0;
+    const segmentLength = Math.max(1, maxY - minY);
+    const taperLength = Math.min(params.height * 0.08, segmentLength * 0.22);
+    const smoothstep = value => value * value * (3 - 2 * value);
+    const startTaper = taperLength ? smoothstep(Math.max(0, Math.min(1, (y - minY) / taperLength))) : 1;
+    const endTaper = taperLength ? smoothstep(Math.max(0, Math.min(1, (maxY - y) / taperLength))) : 1;
+    return (index % 2 === 0 ? 1 : -1) * (params.faultOffset || 0) * 0.8 * Math.min(startTaper, endTaper);
   };
 
   const faceTransmissibility = (x1, y1, x2, y2, faults, width, height) => {
@@ -126,7 +142,7 @@
       const normalizedY = y / height;
       const waveField = terrainWaveField(normalizedX, normalizedY, seed);
       const fineNoise = (terrainNoise(normalizedX, normalizedY, seed) - 0.5) * 2;
-      depth += (waveField * 0.78 + fineNoise * 0.22) * heterogeneity * 1.25;
+      depth += (waveField * 0.78 + fineNoise * 0.22) * heterogeneity * 0.78;
     }
     for (let i = 0; i < (params.faults || []).length; i++) {
       depth += faultDisplacement(x, y, params.faults[i], i, params);

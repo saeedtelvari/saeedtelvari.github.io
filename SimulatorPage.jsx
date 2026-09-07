@@ -653,7 +653,8 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
   const dragRef = useRef(null);
   const pinchRef = useRef(null);
   const [camera, setCamera] = useState(resetTopographyCamera);
-  const [elevationScale, setElevationScale] = useState(1.25);
+  const [elevationScale, setElevationScale] = useState(1);
+  const [showGrid, setShowGrid] = useState(true);
   const gridRows = mapRows || Math.max(12, Math.round(mapCols * 0.6));
   const time = Number(mapSnapshot.time) || 0;
   const zoomLabel = `${camera.zoom.toFixed(2)}×`;
@@ -688,12 +689,9 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
     for (let row = 0; row < gridRows; row++) {
       for (let col = 0; col < mapCols; col++) surfaceDepth(col / Math.max(1, mapCols - 1), row / Math.max(1, gridRows - 1));
     }
-    const depthValues = [...depths.values()];
-    const minDepth = Math.min(...depthValues);
-    const maxDepth = Math.max(...depthValues);
-    const depthSpan = Math.max(0.001, maxDepth - minDepth);
+    const depthSpan = 10;
     const surfaceAt = (x, y, plume = 0) =>
-      0.5 + ((maxDepth - surfaceDepth(x, y)) / depthSpan - 0.5) * elevationScale + plume * 0.08;
+      Math.max(0.04, Math.min(0.96, 0.5 - (surfaceDepth(x, y) / depthSpan) * 0.5 * elevationScale + plume * 0.08));
     const pointAt = (col, row) => {
       const index = Math.min(hMax.length - 1, Math.max(0, row * mapCols + col));
       const plume = (Number(h[index]) || 0) / peak;
@@ -709,7 +707,7 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
         const index = row * mapCols + col;
         const plumeRatio = (Number(h[index]) || 0) / peak;
         const historicRatio = (Number(hMax[index]) || 0) / peak;
-        const surfaceRatio = (maxDepth - surfaceDepth(col / Math.max(1, mapCols - 1), row / Math.max(1, gridRows - 1))) / depthSpan;
+        const surfaceRatio = Math.max(0, Math.min(1, 0.5 - surfaceDepth(col / Math.max(1, mapCols - 1), row / Math.max(1, gridRows - 1)) / depthSpan));
         cells.push({ col, row, plumeRatio, historicRatio, surfaceRatio, depth: row * Math.cos(camera.azimuth) + col * Math.sin(camera.azimuth) });
       }
     }
@@ -724,9 +722,11 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
         ? `rgb(${Math.round(18 + cell.historicRatio * 22)}, ${Math.round(104 + cell.plumeRatio * 116)}, ${Math.round(104 + cell.plumeRatio * 74)})`
         : `rgb(${Math.round(15 + cell.surfaceRatio * 24)}, ${shade + 30}, ${shade + 24})`;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(194, 221, 220, 0.22)';
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
+      if (showGrid) {
+        ctx.strokeStyle = 'rgba(194, 221, 220, 0.22)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
     });
 
     faults.slice(0, faultCount).forEach(fault => {
@@ -737,10 +737,10 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
       const yStart = Math.min(start, end);
       const yEnd = Math.max(start, end);
       const faultPoints = [];
-      for (let row = 0; row < gridRows; row++) {
-        const y = row / Math.max(1, gridRows - 1);
-        if (y < yStart || y > yEnd) continue;
-        const faultX = x + slope * (y * 0.6 - 0.3);
+      const samples = Math.max(12, Math.ceil((yEnd - yStart) * 96));
+      for (let sample = 0; sample <= samples; sample++) {
+        const y = yStart + (yEnd - yStart) * (sample / samples);
+        const faultX = x + slope * (y - 0.5);
         faultPoints.push(projectTopographyPoint({ x: faultX, y, height: surfaceAt(faultX, y, 0.025) }, camera, width, height));
       }
       if (faultPoints.length < 2) return;
@@ -762,7 +762,7 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
     ctx.strokeStyle = '#fff3d6';
     ctx.lineWidth = 2;
     ctx.stroke();
-  }, [camera, elevationScale, faultCount, faults, gridRows, injLocation, mapCols, mapSnapshot, wellY]);
+  }, [camera, elevationScale, faultCount, faults, gridRows, injLocation, mapCols, mapSnapshot, showGrid, wellY]);
 
   const updateZoom = delta => setCamera(current => clampTopographyCamera({ ...current, zoom: current.zoom + delta }));
   const resetView = () => setCamera(resetTopographyCamera());
@@ -817,6 +817,7 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
           <button type="button" onClick={() => onMapCommand('speed')} aria-label="Change map simulation speed">{mapSnapshot.speed || 1}×</button>
           <button type="button" onClick={() => updateZoom(-0.12)} aria-label="Zoom out">−</button>
           <button type="button" onClick={() => updateZoom(0.12)} aria-label="Zoom in">+</button>
+          <button type="button" onClick={() => setShowGrid(current => !current)} aria-pressed={showGrid}>{showGrid ? 'Grid on' : 'Grid off'}</button>
           <button type="button" onClick={resetView}>Reset view</button>
         </div>
       </div>
@@ -839,7 +840,7 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
       />
       <div className="ve-topography-status">
         <span>Year {time} · {mapCols}×{gridRows} grid · seed {terrainSeed} · heterogeneity {heterogeneity.toFixed(2)}</span>
-        <span>Zoom {zoomLabel}</span>
+        <span>Z span 10 model units · Zoom {zoomLabel}</span>
         <label>
           Elevation exaggeration {elevationLabel}
           <input type="range" min="0.65" max="2.2" step="0.05" value={elevationScale} onChange={event => setElevationScale(Number(event.target.value))} />

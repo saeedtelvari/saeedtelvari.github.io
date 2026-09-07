@@ -42,8 +42,8 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     let value = 0;
     let weight = 0;
     let amplitude = 1;
-    for (let octave = 0; octave < 3; octave++) {
-      const scale = 3 * 2 ** octave;
+    for (let octave = 0; octave < 5; octave++) {
+      const scale = 1.5 * 2 ** octave;
       value += smoothNoise(x * scale, y * scale, seed + octave * 101) * amplitude;
       weight += amplitude;
       amplitude *= 0.5;
@@ -51,25 +51,35 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     return value / weight;
   };
 
-  // Seeded multi-directional wave field: independent x/y bands plus diagonals
-  // keep the generated surface from reading like a single extruded ridge.
+  // Seeded multi-directional wave field. Domain warping breaks up the visible
+  // periodicity of sinusoids while retaining coherent x/y and diagonal relief.
   const terrainWaveField = (x, y, seed) => {
+    const warpX = (terrainNoise(x * 1.25 + 4.1, y * 1.25 + 8.7, seed + 19) - 0.5) * 0.24;
+    const warpY = (terrainNoise(x * 1.25 + 13.3, y * 1.25 + 2.6, seed + 43) - 0.5) * 0.24;
+    const warpedX = x + warpX;
+    const warpedY = y + warpY;
     let value = 0;
     let weight = 0;
-    for (let index = 0; index < 12; index++) {
+    for (let index = 0; index < 16; index++) {
       const frequencyX = 0.65 + hashNoise(index * 1.71, 0.2, seed + 17) * 4.2;
       const frequencyY = 0.65 + hashNoise(index * 2.13, 0.8, seed + 43) * 4.2;
+      const angle = hashNoise(index * 1.33, 2.8, seed + 59) * Math.PI * 2;
       const phaseX = hashNoise(index * 2.91, 1.4, seed + 71) * Math.PI * 2;
       const phaseY = hashNoise(index * 3.47, 1.9, seed + 97) * Math.PI * 2;
       const phaseXY = hashNoise(index * 4.03, 2.3, seed + 131) * Math.PI * 2;
       const amplitude = 1 / (1 + index * 0.16);
-      const xWave = Math.sin(x * frequencyX * Math.PI * 2 + phaseX);
-      const yWave = Math.cos(y * frequencyY * Math.PI * 2 + phaseY);
-      const diagonalWave = Math.sin((x * frequencyX + y * frequencyY) * Math.PI * 2 + phaseXY);
+      const rotatedX = warpedX * Math.cos(angle) - warpedY * Math.sin(angle);
+      const rotatedY = warpedX * Math.sin(angle) + warpedY * Math.cos(angle);
+      const xWave = Math.sin(rotatedX * frequencyX * Math.PI * 2 + phaseX);
+      const yWave = Math.cos(rotatedY * frequencyY * Math.PI * 2 + phaseY);
+      const diagonalWave = Math.sin((rotatedX * frequencyX + rotatedY * frequencyY) * Math.PI * 2 + phaseXY);
       value += amplitude * (xWave * 0.38 + yWave * 0.38 + diagonalWave * 0.24);
       weight += amplitude;
     }
-    return weight ? value / weight : 0;
+    const waveValue = weight ? value / weight : 0;
+    const broad = (terrainNoise(warpedX * 1.2, warpedY * 1.2, seed + 211) - 0.5) * 2;
+    const detail = (terrainNoise(warpedX * 3.6, warpedY * 3.6, seed + 307) - 0.5) * 2;
+    return clamp(waveValue * 0.5 + broad * 0.4 + detail * 0.1, -1, 1);
   };
   const createVe2dState = ({
     cols = 48,
@@ -96,8 +106,14 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     return x - lineX;
   };
   const faultDisplacement = (x, y, fault, index, params) => {
-    if (!faultCoversY(fault, y, params.height) || faultSide(x, y, fault, params.width, params.height) <= 0) return 0;
-    return (index % 2 === 0 ? 1 : -1) * (params.faultOffset || 0) * 0.8;
+    const [minY, maxY] = faultYBounds(fault, params.height);
+    if (y < minY || y > maxY || faultSide(x, y, fault, params.width, params.height) <= 0) return 0;
+    const segmentLength = Math.max(1, maxY - minY);
+    const taperLength = Math.min(params.height * 0.08, segmentLength * 0.22);
+    const smoothstep = value => value * value * (3 - 2 * value);
+    const startTaper = taperLength ? smoothstep(Math.max(0, Math.min(1, (y - minY) / taperLength))) : 1;
+    const endTaper = taperLength ? smoothstep(Math.max(0, Math.min(1, (maxY - y) / taperLength))) : 1;
+    return (index % 2 === 0 ? 1 : -1) * (params.faultOffset || 0) * 0.8 * Math.min(startTaper, endTaper);
   };
   const faceTransmissibility = (x1, y1, x2, y2, faults, width, height) => {
     let multiplier = 1;
@@ -132,7 +148,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       const normalizedY = y / height;
       const waveField = terrainWaveField(normalizedX, normalizedY, seed);
       const fineNoise = (terrainNoise(normalizedX, normalizedY, seed) - 0.5) * 2;
-      depth += (waveField * 0.78 + fineNoise * 0.22) * heterogeneity * 1.25;
+      depth += (waveField * 0.78 + fineNoise * 0.22) * heterogeneity * 0.78;
     }
     for (let i = 0; i < (params.faults || []).length; i++) {
       depth += faultDisplacement(x, y, params.faults[i], i, params);
@@ -2009,7 +2025,8 @@ const Ve3DTopographyPanel = ({
   const dragRef = useRef(null);
   const pinchRef = useRef(null);
   const [camera, setCamera] = useState(resetTopographyCamera);
-  const [elevationScale, setElevationScale] = useState(1.25);
+  const [elevationScale, setElevationScale] = useState(1);
+  const [showGrid, setShowGrid] = useState(true);
   const gridRows = mapRows || Math.max(12, Math.round(mapCols * 0.6));
   const time = Number(mapSnapshot.time) || 0;
   const zoomLabel = `${camera.zoom.toFixed(2)}×`;
@@ -2047,11 +2064,8 @@ const Ve3DTopographyPanel = ({
     for (let row = 0; row < gridRows; row++) {
       for (let col = 0; col < mapCols; col++) surfaceDepth(col / Math.max(1, mapCols - 1), row / Math.max(1, gridRows - 1));
     }
-    const depthValues = [...depths.values()];
-    const minDepth = Math.min(...depthValues);
-    const maxDepth = Math.max(...depthValues);
-    const depthSpan = Math.max(0.001, maxDepth - minDepth);
-    const surfaceAt = (x, y, plume = 0) => 0.5 + ((maxDepth - surfaceDepth(x, y)) / depthSpan - 0.5) * elevationScale + plume * 0.08;
+    const depthSpan = 10;
+    const surfaceAt = (x, y, plume = 0) => Math.max(0.04, Math.min(0.96, 0.5 - surfaceDepth(x, y) / depthSpan * 0.5 * elevationScale + plume * 0.08));
     const pointAt = (col, row) => {
       const index = Math.min(hMax.length - 1, Math.max(0, row * mapCols + col));
       const plume = (Number(h[index]) || 0) / peak;
@@ -2067,7 +2081,7 @@ const Ve3DTopographyPanel = ({
         const index = row * mapCols + col;
         const plumeRatio = (Number(h[index]) || 0) / peak;
         const historicRatio = (Number(hMax[index]) || 0) / peak;
-        const surfaceRatio = (maxDepth - surfaceDepth(col / Math.max(1, mapCols - 1), row / Math.max(1, gridRows - 1))) / depthSpan;
+        const surfaceRatio = Math.max(0, Math.min(1, 0.5 - surfaceDepth(col / Math.max(1, mapCols - 1), row / Math.max(1, gridRows - 1)) / depthSpan));
         cells.push({
           col,
           row,
@@ -2087,9 +2101,11 @@ const Ve3DTopographyPanel = ({
       ctx.closePath();
       ctx.fillStyle = cell.plumeRatio > 0.0001 ? `rgb(${Math.round(18 + cell.historicRatio * 22)}, ${Math.round(104 + cell.plumeRatio * 116)}, ${Math.round(104 + cell.plumeRatio * 74)})` : `rgb(${Math.round(15 + cell.surfaceRatio * 24)}, ${shade + 30}, ${shade + 24})`;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(194, 221, 220, 0.22)';
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
+      if (showGrid) {
+        ctx.strokeStyle = 'rgba(194, 221, 220, 0.22)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
     });
     faults.slice(0, faultCount).forEach(fault => {
       const x = (Number(fault.xPercent) || 0) / 100;
@@ -2099,10 +2115,10 @@ const Ve3DTopographyPanel = ({
       const yStart = Math.min(start, end);
       const yEnd = Math.max(start, end);
       const faultPoints = [];
-      for (let row = 0; row < gridRows; row++) {
-        const y = row / Math.max(1, gridRows - 1);
-        if (y < yStart || y > yEnd) continue;
-        const faultX = x + slope * (y * 0.6 - 0.3);
+      const samples = Math.max(12, Math.ceil((yEnd - yStart) * 96));
+      for (let sample = 0; sample <= samples; sample++) {
+        const y = yStart + (yEnd - yStart) * (sample / samples);
+        const faultX = x + slope * (y - 0.5);
         faultPoints.push(projectTopographyPoint({
           x: faultX,
           y,
@@ -2132,7 +2148,7 @@ const Ve3DTopographyPanel = ({
     ctx.strokeStyle = '#fff3d6';
     ctx.lineWidth = 2;
     ctx.stroke();
-  }, [camera, elevationScale, faultCount, faults, gridRows, injLocation, mapCols, mapSnapshot, wellY]);
+  }, [camera, elevationScale, faultCount, faults, gridRows, injLocation, mapCols, mapSnapshot, showGrid, wellY]);
   const updateZoom = delta => setCamera(current => clampTopographyCamera({
     ...current,
     zoom: current.zoom + delta
@@ -2223,6 +2239,10 @@ const Ve3DTopographyPanel = ({
     "aria-label": "Zoom in"
   }, "+"), /*#__PURE__*/React.createElement("button", {
     type: "button",
+    onClick: () => setShowGrid(current => !current),
+    "aria-pressed": showGrid
+  }, showGrid ? 'Grid on' : 'Grid off'), /*#__PURE__*/React.createElement("button", {
+    type: "button",
     onClick: resetView
   }, "Reset view"))), /*#__PURE__*/React.createElement("canvas", {
     ref: canvasRef,
@@ -2245,7 +2265,7 @@ const Ve3DTopographyPanel = ({
     }
   }), /*#__PURE__*/React.createElement("div", {
     className: "ve-topography-status"
-  }, /*#__PURE__*/React.createElement("span", null, "Year ", time, " \xB7 ", mapCols, "\xD7", gridRows, " grid \xB7 seed ", terrainSeed, " \xB7 heterogeneity ", heterogeneity.toFixed(2)), /*#__PURE__*/React.createElement("span", null, "Zoom ", zoomLabel), /*#__PURE__*/React.createElement("label", null, "Elevation exaggeration ", elevationLabel, /*#__PURE__*/React.createElement("input", {
+  }, /*#__PURE__*/React.createElement("span", null, "Year ", time, " \xB7 ", mapCols, "\xD7", gridRows, " grid \xB7 seed ", terrainSeed, " \xB7 heterogeneity ", heterogeneity.toFixed(2)), /*#__PURE__*/React.createElement("span", null, "Z span 10 model units \xB7 Zoom ", zoomLabel), /*#__PURE__*/React.createElement("label", null, "Elevation exaggeration ", elevationLabel, /*#__PURE__*/React.createElement("input", {
     type: "range",
     min: "0.65",
     max: "2.2",

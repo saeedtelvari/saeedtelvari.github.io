@@ -565,6 +565,12 @@
   transform: scale(0.97);
 }
 
+.ve-topography-actions button[aria-pressed="true"] {
+  color: var(--ve-accent);
+  border-color: var(--ve-accent);
+  background: var(--ve-accent-soft);
+}
+
 .ve-topography-canvas {
   display: block;
   flex: 1;
