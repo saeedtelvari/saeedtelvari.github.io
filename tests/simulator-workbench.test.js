@@ -13,6 +13,8 @@ const loadRunStateHelpers = () => {
   const prelude = page.slice(0, page.indexOf('const UQParamConfig'));
   const context = { React: {} };
   vm.runInNewContext(`${prelude}\nthis.helpers = {\n    createScenarioSignature: typeof createScenarioSignature === 'undefined' ? undefined : createScenarioSignature,\n    deriveRunStatus: typeof deriveRunStatus === 'undefined' ? undefined : deriveRunStatus,\n    executeFileAction: typeof executeFileAction === 'undefined' ? undefined : executeFileAction,\n    getPlaybackAction: typeof getPlaybackAction === 'undefined' ? undefined : getPlaybackAction,\n    copyTextToClipboard: typeof copyTextToClipboard === 'undefined' ? undefined : copyTextToClipboard,\n    toggleMobilePanel: typeof toggleMobilePanel === 'undefined' ? undefined : toggleMobilePanel,\n    focusMobilePanelTrigger: typeof focusMobilePanelTrigger === 'undefined' ? undefined : focusMobilePanelTrigger,\n    lockPageScroll: typeof lockPageScroll === 'undefined' ? undefined : lockPageScroll,\n    selectPresentedMobilePanel: typeof selectPresentedMobilePanel === 'undefined' ? undefined : selectPresentedMobilePanel,\n    getMobileFocusWrapTarget: typeof getMobileFocusWrapTarget === 'undefined' ? undefined : getMobileFocusWrapTarget,\n    setMobilePanelBackgroundInert: typeof setMobilePanelBackgroundInert === 'undefined' ? undefined : setMobilePanelBackgroundInert,\n    normalizeParameterInput: typeof normalizeParameterInput === 'undefined' ? undefined : normalizeParameterInput\n  };`, context);
+  vm.runInNewContext(`this.helpers.getStoredTheme = typeof getStoredTheme === 'undefined' ? undefined : getStoredTheme;
+this.helpers.persistTheme = typeof persistTheme === 'undefined' ? undefined : persistTheme;`, context);
   vm.runInNewContext(`this.helpers.clampTopographyCamera = typeof clampTopographyCamera === 'undefined' ? undefined : clampTopographyCamera;
 this.helpers.resetTopographyCamera = typeof resetTopographyCamera === 'undefined' ? undefined : resetTopographyCamera;
 this.helpers.projectTopographyPoint = typeof projectTopographyPoint === 'undefined' ? undefined : projectTopographyPoint;`, context);
@@ -304,6 +306,38 @@ test('map view reports map simulation results', () => {
 
   assert.deepEqual(select('map', crossSection, map), map);
   assert.deepEqual(select('profile', crossSection, map), crossSection);
+});
+
+test('3D topography is the default and shares the 2D map model while cross-section stays separate', () => {
+  const page = read('SimulatorPage.jsx');
+  const select = loadActiveResultSelector() || (() => ({ time: -1, masses: {} }));
+  const crossSection = { time: 120, masses: { injected: 12 } };
+  const map = { time: 44, masses: { injected: 7 } };
+
+  assert.match(page, /const \[activeSubTab, setActiveSubTab\] = useState\('topography'\)/);
+  assert.deepEqual(select('map', crossSection, map), map);
+  assert.deepEqual(select('topography', crossSection, map), map);
+  assert.deepEqual(select('profile', crossSection, map), crossSection);
+});
+
+test('theme choice is persisted and the GUI exposes an accessible dark-mode toggle', () => {
+  const { getStoredTheme, persistTheme } = loadRunStateHelpers();
+  const page = read('SimulatorPage.jsx');
+  const css = read('simulator-workbench.css');
+  const writes = [];
+  const storage = {
+    getItem: () => 'dark',
+    setItem: (...args) => writes.push(args)
+  };
+
+  assert.equal(getStoredTheme(storage), 'dark');
+  assert.equal(getStoredTheme({ getItem: () => 'unexpected' }), 'light');
+  persistTheme('dark', storage);
+  assert.deepEqual(writes, [['ve-simulator-theme', 'dark']]);
+  assert.match(page, /className="ve-theme-toggle"/);
+  assert.match(page, /aria-label=\{`Dark mode \$\{theme === 'dark' \? 'on' : 'off'\}`\}/);
+  assert.match(page, /aria-pressed=\{theme === 'dark'\}/);
+  assert.match(css, /\.ve-standalone\[data-theme="dark"\]\s*\{/);
 });
 
 test('map commands are consumed once without clearing a newer command', () => {

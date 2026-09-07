@@ -24,6 +24,32 @@
   background: var(--ve-app);
 }
 
+.ve-standalone[data-theme="dark"] {
+  --ve-app: #10171d;
+  --ve-surface: #17212a;
+  --ve-surface-subtle: #1d2933;
+  --ve-ink: #e5edf2;
+  --ve-muted: #a6b5c1;
+  --ve-border: #334552;
+  --ve-accent: #75d6c8;
+  --ve-accent-soft: #1b3d3c;
+  --ve-warning: #f1bd6e;
+  --ve-danger: #fa8a82;
+  --ve-canvas: #0d171f;
+}
+
+.ve-standalone[data-theme="dark"] .ve-run-status--running-backward,
+.ve-standalone[data-theme="dark"] .ve-run-status--inputs-changed {
+  background-color: #3b2f1d;
+  border-color: #76562c;
+}
+
+.ve-standalone[data-theme="dark"] .ve-theme-toggle[aria-pressed="true"] {
+  color: var(--ve-accent);
+  background-color: var(--ve-accent-soft);
+  border-color: #4a8d86;
+}
+
 .ve-app-loader {
   position: fixed;
   inset: 0;

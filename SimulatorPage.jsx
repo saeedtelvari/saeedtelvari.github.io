@@ -187,6 +187,23 @@ const normalizeParameterInput = (raw, min, max) => {
   };
 };
 
+const THEME_STORAGE_KEY = 've-simulator-theme';
+
+const getStoredTheme = storage => {
+  try {
+    return storage?.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light';
+  } catch (_) {
+    return 'light';
+  }
+};
+
+const persistTheme = (theme, storage) => {
+  if (theme !== 'dark' && theme !== 'light') return;
+  try {
+    storage?.setItem(THEME_STORAGE_KEY, theme);
+  } catch (_) { /* Storage may be unavailable in private browsing. */ }
+};
+
 // Draw one sample for a parameter given its config and nominal value.
 // Returns { value, sampled } — sampled=false means the nominal was used unchanged.
 const sampleUqParam = (def, cfg, nominal) => {
@@ -830,7 +847,8 @@ const SimulatorPage = () => {
   const [simTime, setSimTime] = useState(0); // simulation timer frame
 
   // Tab Navigation state
-  const [activeSubTab, setActiveSubTab] = useState('profile'); // 'profile' (2D reservoir) or 'uq' (Sensitivity & UQ Analysis)
+  const [activeSubTab, setActiveSubTab] = useState('topography');
+  const [theme, setTheme] = useState(() => getStoredTheme(window.localStorage));
   const [selectedPreset, setSelectedPreset] = useState('default');
   const [shareStatus, setShareStatus] = useState('');
   const [mobilePanel, setMobilePanel] = useState(null);
@@ -845,6 +863,11 @@ const SimulatorPage = () => {
   const reservoirSvgRef = useRef(null);
   const uqWorkerRef = useRef(null);
   const presentedPanel = selectPresentedMobilePanel(mobilePanel, responsivePanelViewport);
+
+  useEffect(() => {
+    document.querySelector('.ve-standalone')?.setAttribute('data-theme', theme);
+    persistTheme(theme, window.localStorage);
+  }, [theme]);
 
   const dismissMobilePanel = useCallback((returnFocus = true) => {
     if (!mobilePanel) return;
@@ -2919,6 +2942,14 @@ const SimulatorPage = () => {
           <button onClick={() => runFileAction(exportCsv, 'Mass balance export failed. Please retry.')}>Mass balance CSV</button>
           <button onClick={() => runFileAction(exportSvg, 'Reservoir export failed. Please retry.')}>Reservoir SVG</button>
         </details>
+        <button
+          className="ve-theme-toggle"
+          aria-label={`Dark mode ${theme === 'dark' ? 'on' : 'off'}`}
+          aria-pressed={theme === 'dark'}
+          onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}
+        >
+          <i className={theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon'} aria-hidden="true" /> Dark mode
+        </button>
         <button className="ve-run-button" onClick={runActiveSimulation}>Run scenario</button>
       </section>
       <nav className="ve-workspace-nav" aria-label="Simulator workspace">
