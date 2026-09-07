@@ -444,6 +444,7 @@ const Ve2DMapPanel = ({
 }) => {
   const mapRows = Math.max(12, Math.round(mapCols * 0.6));
   const canvasRef = useRef(null);
+  const depthCacheRef = useRef(null);
   const stateRef = useRef(globalThis.VE2D.createVe2dState({ cols: mapCols, rows: mapRows }));
   const timeRef = useRef(0);
   const paramsRef = useRef(null);
@@ -533,11 +534,18 @@ const Ve2DMapPanel = ({
 
     const cellWidth = width / mapState.cols;
     const cellHeight = height / mapState.rows;
-    const depths = mapState.h.map((_, index) => {
-      const col = index % mapState.cols;
-      const row = Math.floor(index / mapState.cols);
-      return globalThis.VE2D.topDepth((col + 0.5) * cellWidth, (row + 0.5) * cellHeight, paramsRef.current);
-    });
+    const depthKey = JSON.stringify({ cols: mapState.cols, rows: mapState.rows, params: paramsRef.current });
+    if (depthCacheRef.current?.key !== depthKey) {
+      depthCacheRef.current = {
+        key: depthKey,
+        depths: mapState.h.map((_, index) => {
+          const col = index % mapState.cols;
+          const row = Math.floor(index / mapState.cols);
+          return globalThis.VE2D.topDepth((col + 0.5) * cellWidth, (row + 0.5) * cellHeight, paramsRef.current);
+        })
+      };
+    }
+    const depths = depthCacheRef.current.depths;
     const minDepth = Math.min(...depths);
     const maxDepth = Math.max(...depths);
     const depthSpan = Math.max(0.001, maxDepth - minDepth);
@@ -557,7 +565,7 @@ const Ve2DMapPanel = ({
           ? Math.min(mapState.h[index], Math.max(0, (mapState.h[index] - residualTrapFraction * historic) / (1 - residualTrapFraction)))
           : 0;
         const trappedRatio = mapState.h[index] > 0 ? 1 - mobile / mapState.h[index] : 0;
-        ctx.fillStyle = `rgba(${Math.round(13 + trappedRatio * 18)}, ${Math.round(252 - trappedRatio * 72)}, ${Math.round(162 - trappedRatio * 32)}, ${0.24 + intensity * 0.72})`;
+        ctx.fillStyle = `rgba(${Math.round(230 + trappedRatio * 25)}, ${Math.round(132 - trappedRatio * 58)}, ${Math.round(48 - trappedRatio * 16)}, ${0.24 + intensity * 0.72})`;
         ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
       }
     }
@@ -667,8 +675,8 @@ const Ve2DMapPanel = ({
           style={{ width: '100%', height: '100%', minHeight: 420, display: 'block' }}
         />
         <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', flexWrap: 'wrap', gap: 10, padding: '7px 11px', borderRadius: 14, background: 'rgba(0,0,0,0.58)', fontSize: 10, color: '#fff', pointerEvents: 'none' }}>
-          <span><b style={{ color: '#0dfca2' }}>■</b> Mobile CO₂</span>
-          <span><b style={{ color: '#20b894' }}>■</b> Residual CO₂</span>
+          <span><b style={{ color: '#f59e0b' }}>■</b> Mobile CO₂</span>
+          <span><b style={{ color: '#b45309' }}>■</b> Residual CO₂</span>
           <span><b style={{ color: '#ffb300' }}>●</b> Injector</span>
           <span><b style={{ color: '#64ffda' }}>━</b> Sealed fault</span>
           <span><b style={{ color: '#ff6b6b' }}>┄</b> Transmissive fault</span>
@@ -688,8 +696,8 @@ const Ve2DMapPanel = ({
       </div>
       <div className="sim-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '0 14px 12px', background: 'rgba(0,0,0,0.2)' }}>
         <StatBox label="Injected" value={mapState.masses.injected.toFixed(1)} color="#fff" opacity="0.7" />
-        <StatBox label="Mobile" value={mapState.masses.mobile.toFixed(1)} color="#64ffda" />
-        <StatBox label="Trapped" value={mapState.masses.trapped.toFixed(1)} color="#3ca68e" />
+        <StatBox label="Mobile" value={mapState.masses.mobile.toFixed(1)} color="#f59e0b" />
+        <StatBox label="Trapped" value={mapState.masses.trapped.toFixed(1)} color="#b45309" />
         <StatBox label="Leaked" value={mapState.masses.leaked.toFixed(1)} color="#ff6b6b" />
       </div>
     </div>
@@ -698,6 +706,7 @@ const Ve2DMapPanel = ({
 
 const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, faults = [], injLocation, wellY, onMapCommand }) => {
   const canvasRef = useRef(null);
+  const terrainCacheRef = useRef(null);
   const pointersRef = useRef(new Map());
   const dragRef = useRef(null);
   const pinchRef = useRef(null);
@@ -730,6 +739,8 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
     const peak = Math.max(0.0001, ...hMax.map(value => Number(value) || 0));
     const activeFaults = faults.slice(0, faultCount).map((fault, index) => ({ fault, index, segment: visibleFaultSegment(fault) })).filter(item => item.segment);
     const structure = { width, height, faults: [], ...(mapSnapshot.params || {}) };
+    const terrainKey = JSON.stringify({ mapCols, gridRows, camera, elevationScale, structure, activeFaults });
+    const cachedTerrain = terrainCacheRef.current?.key === terrainKey ? terrainCacheRef.current : null;
     const depths = new Map();
     const surfaceDepth = (x, y, faultSides = {}) => {
       let sampleX = x;
@@ -759,44 +770,53 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
       const row = Math.max(0, Math.min(gridRows - 1, Math.round(y * (gridRows - 1))));
       return (Number(values[row * mapCols + col]) || 0) / peak;
     };
-    const pointAt = (point, faultSides = {}) => projectTopographyPoint({
-      x: point.x,
-      y: point.y,
-      height: surfaceAt(point.x, point.y, stateRatio(h, point.x, point.y), faultSides)
-    }, camera, width, height);
     const yCoordinates = [...new Set([
       ...Array.from({ length: gridRows }, (_, row) => row / Math.max(1, gridRows - 1)),
       ...activeFaults.flatMap(item => [item.segment.yStart, item.segment.yEnd])
     ].map(value => Number(value.toFixed(7))))].sort((a, b) => a - b);
-    const cells = [];
-    for (let row = 0; row < yCoordinates.length - 1; row++) {
-      const y0 = yCoordinates[row];
-      const y1 = yCoordinates[row + 1];
-      for (let col = 0; col < mapCols - 1; col++) {
-        const x0 = col / Math.max(1, mapCols - 1);
-        const x1 = (col + 1) / Math.max(1, mapCols - 1);
-        let pieces = [{ points: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], faultSides: {} }];
-        activeFaults.forEach(({ fault, index, segment }) => {
-          pieces = pieces.flatMap(piece => splitTopographyPieceByFault(piece, fault, index, y0, y1, segment));
-        });
-        pieces.forEach(piece => {
-          const center = piece.points.reduce((sum, point) => ({ x: sum.x + point.x / piece.points.length, y: sum.y + point.y / piece.points.length }), { x: 0, y: 0 });
-          const plumeRatio = stateRatio(h, center.x, center.y);
-          const historicRatio = stateRatio(hMax, center.x, center.y);
-          const surfaceRatio = Math.max(0, Math.min(1, 0.5 - surfaceDepth(center.x, center.y, piece.faultSides) / depthSpan));
-          cells.push({ points: piece.points, faultSides: piece.faultSides, plumeRatio, historicRatio, surfaceRatio, light: surfaceLight(center.x, center.y, piece.faultSides), depth: center.y * Math.cos(camera.azimuth) + center.x * Math.sin(camera.azimuth) });
-        });
+    let cells = cachedTerrain?.cells;
+    if (!cachedTerrain) {
+      cells = [];
+      for (let row = 0; row < yCoordinates.length - 1; row++) {
+        const y0 = yCoordinates[row];
+        const y1 = yCoordinates[row + 1];
+        for (let col = 0; col < mapCols - 1; col++) {
+          const x0 = col / Math.max(1, mapCols - 1);
+          const x1 = (col + 1) / Math.max(1, mapCols - 1);
+          let pieces = [{ points: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], faultSides: {} }];
+          activeFaults.forEach(({ fault, index, segment }) => {
+            pieces = pieces.flatMap(piece => splitTopographyPieceByFault(piece, fault, index, y0, y1, segment));
+          });
+          pieces.forEach(piece => {
+            const center = piece.points.reduce((sum, point) => ({ x: sum.x + point.x / piece.points.length, y: sum.y + point.y / piece.points.length }), { x: 0, y: 0 });
+            const surfaceRatio = Math.max(0, Math.min(1, 0.5 - surfaceDepth(center.x, center.y, piece.faultSides) / depthSpan));
+            cells.push({
+              rawPoints: piece.points,
+              points: piece.points.map(point => projectTopographyPoint({ x: point.x, y: point.y, height: surfaceAt(point.x, point.y, 0, piece.faultSides) }, camera, width, height)),
+              faultSides: piece.faultSides,
+              center,
+              surfaceRatio,
+              light: surfaceLight(center.x, center.y, piece.faultSides),
+              depth: center.y * Math.cos(camera.azimuth) + center.x * Math.sin(camera.azimuth)
+            });
+          });
+        }
       }
+      cells.sort((a, b) => a.depth - b.depth);
+      terrainCacheRef.current = { key: terrainKey, cells };
     }
-    cells.sort((a, b) => a.depth - b.depth).forEach(cell => {
-      const points = cell.points.map(point => pointAt(point, cell.faultSides));
+    const plumeLift = Math.sin(camera.elevation) * camera.zoom * 0.62 * height * 0.08;
+    cells.forEach(cell => {
+      const plumeRatio = stateRatio(h, cell.center.x, cell.center.y);
+      const historicRatio = stateRatio(hMax, cell.center.x, cell.center.y);
+      const points = cell.points.map((point, index) => ({ x: point.x, y: point.y - stateRatio(h, cell.rawPoints[index].x, cell.rawPoints[index].y) * plumeLift }));
       const shade = 0.38 + cell.light * 0.82;
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
       points.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
       ctx.closePath();
-      ctx.fillStyle = cell.plumeRatio > 0.0001
-        ? `rgb(${Math.round((18 + cell.historicRatio * 22) * shade)}, ${Math.round((104 + cell.plumeRatio * 116) * shade)}, ${Math.round((104 + cell.plumeRatio * 74) * shade)})`
+      ctx.fillStyle = plumeRatio > 0.0001
+        ? `rgb(${Math.round((205 + historicRatio * 42) * shade)}, ${Math.round((76 + plumeRatio * 86) * shade)}, ${Math.round((34 + plumeRatio * 30) * shade)})`
         : `rgb(${Math.round((15 + cell.surfaceRatio * 24) * shade)}, ${Math.round((92 + cell.surfaceRatio * 76) * shade)}, ${Math.round((86 + cell.surfaceRatio * 60) * shade)})`;
       ctx.fill();
       if (showGrid) {
@@ -2768,14 +2788,14 @@ const SimulatorPage = () => {
             <strong style={{ color: '#fff', fontFamily: 'monospace' }}>{formatMass(chartMasses.injected)}</strong>
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 2.5, background: '#64ffda' }} />
+            <span style={{ width: 10, height: 2.5, background: '#f59e0b' }} />
             <span style={{ color: 'rgba(255,255,255,0.7)' }}>Mobile:</span>
-            <strong style={{ color: '#64ffda', fontFamily: 'monospace' }}>{formatMass(chartMasses.mobile)}</strong>
+            <strong style={{ color: '#f59e0b', fontFamily: 'monospace' }}>{formatMass(chartMasses.mobile)}</strong>
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 2.5, background: '#3ca68e' }} />
+            <span style={{ width: 10, height: 2.5, background: '#b45309' }} />
             <span style={{ color: 'rgba(255,255,255,0.7)' }}>Trapped:</span>
-            <strong style={{ color: '#3ca68e', fontFamily: 'monospace' }}>{formatMass(chartMasses.trapped)}</strong>
+            <strong style={{ color: '#b45309', fontFamily: 'monospace' }}>{formatMass(chartMasses.trapped)}</strong>
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <span style={{ width: 10, height: 2.5, background: '#ff6b6b' }} />
@@ -2813,8 +2833,8 @@ const SimulatorPage = () => {
           
           {/* Plot Lines */}
           {pathInj && <path d={pathInj} fill="none" stroke="#ffffff" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.6"/>}
-          {pathMob && <path d={pathMob} fill="none" stroke="#64ffda" strokeWidth="2" style={{ filter: 'drop-shadow(0 0 2px rgba(100,255,218,0.4))' }}/>}
-          {pathTrap && <path d={pathTrap} fill="none" stroke="#3ca68e" strokeWidth="1.8"/>}
+          {pathMob && <path d={pathMob} fill="none" stroke="#f59e0b" strokeWidth="2" style={{ filter: 'drop-shadow(0 0 2px rgba(245,158,11,0.35))' }}/>}
+          {pathTrap && <path d={pathTrap} fill="none" stroke="#b45309" strokeWidth="1.8"/>}
           {pathLeak && <path d={pathLeak} fill="none" stroke="#ff6b6b" strokeWidth="2"/>}
           
           {/* Vertical line indicator for current simTime */}
@@ -3462,10 +3482,10 @@ const SimulatorPage = () => {
                       zIndex: 5, pointerEvents: 'none'
                     }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#0dfca2' }} /> Mobile CO₂ (S_g → 0.90)
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#f59e0b' }} /> Mobile CO₂ (S_g → 0.90)
                       </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#20c997', border: '1px solid #1a8e8f' }} /> Trapped Gas (S_gr ≈ 0.25)
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#b45309', border: '1px solid #7c2d12' }} /> Trapped Gas (S_gr ≈ 0.25)
                       </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                         <span style={{ width: 14, height: 0, borderTop: '2px dashed #64ffda' }} /> Max Envelope (h_max)
@@ -3497,9 +3517,9 @@ const SimulatorPage = () => {
                   </clipPath>
                   
                   <linearGradient id="plume-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#0dfca2" stopOpacity="0.95"/>
-                    <stop offset="40%" stopColor="#05e67c" stopOpacity="0.85"/>
-                    <stop offset="100%" stopColor="#05ab5e" stopOpacity="0.75"/>
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.95"/>
+                    <stop offset="40%" stopColor="#f97316" stopOpacity="0.85"/>
+                    <stop offset="100%" stopColor="#c2410c" stopOpacity="0.75"/>
                   </linearGradient>
                   
                   <linearGradient id="trapped-grad" x1="0" y1="0" x2="0" y2="1">
@@ -3509,11 +3529,11 @@ const SimulatorPage = () => {
 
                   {/* Active Mobile Supercritical Flow Gradient (S_max: Green -> Aqua/Teal) */}
                   <linearGradient id="active-mobile-sim-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#0dfca2" stopOpacity="0.98"/>
-                    <stop offset="45%" stopColor="#0dfca2" stopOpacity="0.95"/>
-                    <stop offset="70%" stopColor="#05e67c" stopOpacity="0.92"/>
-                    <stop offset="88%" stopColor="#20c997" stopOpacity="0.90"/>
-                    <stop offset="100%" stopColor="#1a8e8f" stopOpacity="0.85"/>
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.98"/>
+                    <stop offset="45%" stopColor="#f59e0b" stopOpacity="0.95"/>
+                    <stop offset="70%" stopColor="#f97316" stopOpacity="0.92"/>
+                    <stop offset="88%" stopColor="#ea580c" stopOpacity="0.90"/>
+                    <stop offset="100%" stopColor="#9a3412" stopOpacity="0.85"/>
                   </linearGradient>
 
                   {/* Residual Trapped Gas Swept Footprint Gradient (S_gr Seafoam/Teal -> Brine Blue) */}

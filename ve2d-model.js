@@ -4,6 +4,7 @@
   root.VE2D = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const depthGridCache = new Map();
 
   const faultYBounds = (fault, height) => {
     const start = clamp(Number(fault?.yStartPercent ?? 0), 0, 100) / 100 * height;
@@ -217,22 +218,36 @@
     let injected = state.masses.injected;
     let leaked = state.masses.leaked;
 
-    const coordinates = (index) => ({
-      x: (index % cols + 0.5) * dx,
-      y: (Math.floor(index / cols) + 0.5) * dy
+    const geometryKey = JSON.stringify({
+      cols, rows, width: params.width, height: params.height, dipX: params.dipX, dipY: params.dipY,
+      structureAmplitude: params.structureAmplitude, structureFrequency: params.structureFrequency,
+      faultOffset: params.faultOffset, terrainSeed: params.terrainSeed, heterogeneity: params.heterogeneity, faults: params.faults
     });
+    let geometry = depthGridCache.get(geometryKey);
+    if (!geometry) {
+      const cellX = new Array(h.length);
+      const cellY = new Array(h.length);
+      const cellDepth = new Array(h.length);
+      for (let index = 0; index < h.length; index++) {
+        cellX[index] = (index % cols + 0.5) * dx;
+        cellY[index] = (Math.floor(index / cols) + 0.5) * dy;
+        cellDepth[index] = topDepth(cellX[index], cellY[index], params);
+      }
+      geometry = { cellX, cellY, cellDepth };
+      depthGridCache.set(geometryKey, geometry);
+      if (depthGridCache.size > 8) depthGridCache.delete(depthGridCache.keys().next().value);
+    }
+    const { cellX, cellY, cellDepth } = geometry;
 
     for (let substep = 0; substep < substeps; substep++) {
       const mobile = h.map((value, index) => partition(value, hMax[index], params.residualTrapFraction).mobile);
       const delta = new Array(h.length).fill(0);
 
       const transfer = (from, to, distance) => {
-        const a = coordinates(from);
-        const b = coordinates(to);
-        const trans = faceTransmissibility(a.x, a.y, b.x, b.y, params.faults, params.width, params.height);
+        const trans = faceTransmissibility(cellX[from], cellY[from], cellX[to], cellY[to], params.faults, params.width, params.height);
         if (trans === 0) return;
-        const potentialA = topDepth(a.x, a.y, params) + h[from];
-        const potentialB = topDepth(b.x, b.y, params) + h[to];
+        const potentialA = cellDepth[from] + h[from];
+        const potentialB = cellDepth[to] + h[to];
         if (Math.abs(potentialA - potentialB) < 1e-12) return;
         const donor = potentialA > potentialB ? from : to;
         const receiver = donor === from ? to : from;
@@ -277,11 +292,10 @@
       }
 
       for (let index = 0; index < h.length; index++) {
-        const point = coordinates(index);
         for (const fault of params.faults) {
           if (fault.isSealed || !fault.leakRate) continue;
-          if (!faultCoversY(fault, point.y, params.height)) continue;
-          const distance = Math.abs(faultSide(point.x, point.y, fault, params.width, params.height));
+          if (!faultCoversY(fault, cellY[index], params.height)) continue;
+          const distance = Math.abs(faultSide(cellX[index], cellY[index], fault, params.width, params.height));
           if (distance > Math.max(dx, dy) * 0.55 || h[index] <= (fault.thresholdHeight || 0)) continue;
           const lostHeight = Math.min(h[index] - (fault.thresholdHeight || 0), fault.leakRate * dt * 0.12);
           h[index] -= lostHeight;

@@ -9,6 +9,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
   root.VE2D = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const depthGridCache = new Map();
   const faultYBounds = (fault, height) => {
     const start = clamp(Number(fault?.yStartPercent ?? 0), 0, 100) / 100 * height;
     const end = clamp(Number(fault?.yEndPercent ?? 100), 0, 100) / 100 * height;
@@ -217,20 +218,51 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     const hMax = state.hMax.slice();
     let injected = state.masses.injected;
     let leaked = state.masses.leaked;
-    const coordinates = index => ({
-      x: (index % cols + 0.5) * dx,
-      y: (Math.floor(index / cols) + 0.5) * dy
+    const geometryKey = JSON.stringify({
+      cols,
+      rows,
+      width: params.width,
+      height: params.height,
+      dipX: params.dipX,
+      dipY: params.dipY,
+      structureAmplitude: params.structureAmplitude,
+      structureFrequency: params.structureFrequency,
+      faultOffset: params.faultOffset,
+      terrainSeed: params.terrainSeed,
+      heterogeneity: params.heterogeneity,
+      faults: params.faults
     });
+    let geometry = depthGridCache.get(geometryKey);
+    if (!geometry) {
+      const cellX = new Array(h.length);
+      const cellY = new Array(h.length);
+      const cellDepth = new Array(h.length);
+      for (let index = 0; index < h.length; index++) {
+        cellX[index] = (index % cols + 0.5) * dx;
+        cellY[index] = (Math.floor(index / cols) + 0.5) * dy;
+        cellDepth[index] = topDepth(cellX[index], cellY[index], params);
+      }
+      geometry = {
+        cellX,
+        cellY,
+        cellDepth
+      };
+      depthGridCache.set(geometryKey, geometry);
+      if (depthGridCache.size > 8) depthGridCache.delete(depthGridCache.keys().next().value);
+    }
+    const {
+      cellX,
+      cellY,
+      cellDepth
+    } = geometry;
     for (let substep = 0; substep < substeps; substep++) {
       const mobile = h.map((value, index) => partition(value, hMax[index], params.residualTrapFraction).mobile);
       const delta = new Array(h.length).fill(0);
       const transfer = (from, to, distance) => {
-        const a = coordinates(from);
-        const b = coordinates(to);
-        const trans = faceTransmissibility(a.x, a.y, b.x, b.y, params.faults, params.width, params.height);
+        const trans = faceTransmissibility(cellX[from], cellY[from], cellX[to], cellY[to], params.faults, params.width, params.height);
         if (trans === 0) return;
-        const potentialA = topDepth(a.x, a.y, params) + h[from];
-        const potentialB = topDepth(b.x, b.y, params) + h[to];
+        const potentialA = cellDepth[from] + h[from];
+        const potentialB = cellDepth[to] + h[to];
         if (Math.abs(potentialA - potentialB) < 1e-12) return;
         const donor = potentialA > potentialB ? from : to;
         const receiver = donor === from ? to : from;
@@ -272,11 +304,10 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
         injected += injectedThisStep;
       }
       for (let index = 0; index < h.length; index++) {
-        const point = coordinates(index);
         for (const fault of params.faults) {
           if (fault.isSealed || !fault.leakRate) continue;
-          if (!faultCoversY(fault, point.y, params.height)) continue;
-          const distance = Math.abs(faultSide(point.x, point.y, fault, params.width, params.height));
+          if (!faultCoversY(fault, cellY[index], params.height)) continue;
+          const distance = Math.abs(faultSide(cellX[index], cellY[index], fault, params.width, params.height));
           if (distance > Math.max(dx, dy) * 0.55 || h[index] <= (fault.thresholdHeight || 0)) continue;
           const lostHeight = Math.min(h[index] - (fault.thresholdHeight || 0), fault.leakRate * dt * 0.12);
           h[index] -= lostHeight;
@@ -1698,6 +1729,7 @@ const Ve2DMapPanel = ({
 }) => {
   const mapRows = Math.max(12, Math.round(mapCols * 0.6));
   const canvasRef = useRef(null);
+  const depthCacheRef = useRef(null);
   const stateRef = useRef(globalThis.VE2D.createVe2dState({
     cols: mapCols,
     rows: mapRows
@@ -1805,11 +1837,22 @@ const Ve2DMapPanel = ({
     ctx.clearRect(0, 0, width, height);
     const cellWidth = width / mapState.cols;
     const cellHeight = height / mapState.rows;
-    const depths = mapState.h.map((_, index) => {
-      const col = index % mapState.cols;
-      const row = Math.floor(index / mapState.cols);
-      return globalThis.VE2D.topDepth((col + 0.5) * cellWidth, (row + 0.5) * cellHeight, paramsRef.current);
+    const depthKey = JSON.stringify({
+      cols: mapState.cols,
+      rows: mapState.rows,
+      params: paramsRef.current
     });
+    if (depthCacheRef.current?.key !== depthKey) {
+      depthCacheRef.current = {
+        key: depthKey,
+        depths: mapState.h.map((_, index) => {
+          const col = index % mapState.cols;
+          const row = Math.floor(index / mapState.cols);
+          return globalThis.VE2D.topDepth((col + 0.5) * cellWidth, (row + 0.5) * cellHeight, paramsRef.current);
+        })
+      };
+    }
+    const depths = depthCacheRef.current.depths;
     const minDepth = Math.min(...depths);
     const maxDepth = Math.max(...depths);
     const depthSpan = Math.max(0.001, maxDepth - minDepth);
@@ -1825,7 +1868,7 @@ const Ve2DMapPanel = ({
         const historic = mapState.hMax[index];
         const mobile = residualTrapFraction < 1 ? Math.min(mapState.h[index], Math.max(0, (mapState.h[index] - residualTrapFraction * historic) / (1 - residualTrapFraction))) : 0;
         const trappedRatio = mapState.h[index] > 0 ? 1 - mobile / mapState.h[index] : 0;
-        ctx.fillStyle = `rgba(${Math.round(13 + trappedRatio * 18)}, ${Math.round(252 - trappedRatio * 72)}, ${Math.round(162 - trappedRatio * 32)}, ${0.24 + intensity * 0.72})`;
+        ctx.fillStyle = `rgba(${Math.round(230 + trappedRatio * 25)}, ${Math.round(132 - trappedRatio * 58)}, ${Math.round(48 - trappedRatio * 16)}, ${0.24 + intensity * 0.72})`;
         ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
       }
     }
@@ -1959,11 +2002,11 @@ const Ve2DMapPanel = ({
     }
   }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
     style: {
-      color: '#0dfca2'
+      color: '#f59e0b'
     }
   }, "\u25A0"), " Mobile CO\u2082"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
     style: {
-      color: '#20b894'
+      color: '#b45309'
     }
   }, "\u25A0"), " Residual CO\u2082"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
     style: {
@@ -2082,11 +2125,11 @@ const Ve2DMapPanel = ({
   }), /*#__PURE__*/React.createElement(StatBox, {
     label: "Mobile",
     value: mapState.masses.mobile.toFixed(1),
-    color: "#64ffda"
+    color: "#f59e0b"
   }), /*#__PURE__*/React.createElement(StatBox, {
     label: "Trapped",
     value: mapState.masses.trapped.toFixed(1),
-    color: "#3ca68e"
+    color: "#b45309"
   }), /*#__PURE__*/React.createElement(StatBox, {
     label: "Leaked",
     value: mapState.masses.leaked.toFixed(1),
@@ -2104,6 +2147,7 @@ const Ve3DTopographyPanel = ({
   onMapCommand
 }) => {
   const canvasRef = useRef(null);
+  const terrainCacheRef = useRef(null);
   const pointersRef = useRef(new Map());
   const dragRef = useRef(null);
   const pinchRef = useRef(null);
@@ -2143,6 +2187,15 @@ const Ve3DTopographyPanel = ({
       faults: [],
       ...(mapSnapshot.params || {})
     };
+    const terrainKey = JSON.stringify({
+      mapCols,
+      gridRows,
+      camera,
+      elevationScale,
+      structure,
+      activeFaults
+    });
+    const cachedTerrain = terrainCacheRef.current?.key === terrainKey ? terrainCacheRef.current : null;
     const depths = new Map();
     const surfaceDepth = (x, y, faultSides = {}) => {
       let sampleX = x;
@@ -2175,75 +2228,86 @@ const Ve3DTopographyPanel = ({
       const row = Math.max(0, Math.min(gridRows - 1, Math.round(y * (gridRows - 1))));
       return (Number(values[row * mapCols + col]) || 0) / peak;
     };
-    const pointAt = (point, faultSides = {}) => projectTopographyPoint({
-      x: point.x,
-      y: point.y,
-      height: surfaceAt(point.x, point.y, stateRatio(h, point.x, point.y), faultSides)
-    }, camera, width, height);
     const yCoordinates = [...new Set([...Array.from({
       length: gridRows
     }, (_, row) => row / Math.max(1, gridRows - 1)), ...activeFaults.flatMap(item => [item.segment.yStart, item.segment.yEnd])].map(value => Number(value.toFixed(7))))].sort((a, b) => a - b);
-    const cells = [];
-    for (let row = 0; row < yCoordinates.length - 1; row++) {
-      const y0 = yCoordinates[row];
-      const y1 = yCoordinates[row + 1];
-      for (let col = 0; col < mapCols - 1; col++) {
-        const x0 = col / Math.max(1, mapCols - 1);
-        const x1 = (col + 1) / Math.max(1, mapCols - 1);
-        let pieces = [{
-          points: [{
-            x: x0,
-            y: y0
-          }, {
-            x: x1,
-            y: y0
-          }, {
-            x: x1,
-            y: y1
-          }, {
-            x: x0,
-            y: y1
-          }],
-          faultSides: {}
-        }];
-        activeFaults.forEach(({
-          fault,
-          index,
-          segment
-        }) => {
-          pieces = pieces.flatMap(piece => splitTopographyPieceByFault(piece, fault, index, y0, y1, segment));
-        });
-        pieces.forEach(piece => {
-          const center = piece.points.reduce((sum, point) => ({
-            x: sum.x + point.x / piece.points.length,
-            y: sum.y + point.y / piece.points.length
-          }), {
-            x: 0,
-            y: 0
+    let cells = cachedTerrain?.cells;
+    if (!cachedTerrain) {
+      cells = [];
+      for (let row = 0; row < yCoordinates.length - 1; row++) {
+        const y0 = yCoordinates[row];
+        const y1 = yCoordinates[row + 1];
+        for (let col = 0; col < mapCols - 1; col++) {
+          const x0 = col / Math.max(1, mapCols - 1);
+          const x1 = (col + 1) / Math.max(1, mapCols - 1);
+          let pieces = [{
+            points: [{
+              x: x0,
+              y: y0
+            }, {
+              x: x1,
+              y: y0
+            }, {
+              x: x1,
+              y: y1
+            }, {
+              x: x0,
+              y: y1
+            }],
+            faultSides: {}
+          }];
+          activeFaults.forEach(({
+            fault,
+            index,
+            segment
+          }) => {
+            pieces = pieces.flatMap(piece => splitTopographyPieceByFault(piece, fault, index, y0, y1, segment));
           });
-          const plumeRatio = stateRatio(h, center.x, center.y);
-          const historicRatio = stateRatio(hMax, center.x, center.y);
-          const surfaceRatio = Math.max(0, Math.min(1, 0.5 - surfaceDepth(center.x, center.y, piece.faultSides) / depthSpan));
-          cells.push({
-            points: piece.points,
-            faultSides: piece.faultSides,
-            plumeRatio,
-            historicRatio,
-            surfaceRatio,
-            light: surfaceLight(center.x, center.y, piece.faultSides),
-            depth: center.y * Math.cos(camera.azimuth) + center.x * Math.sin(camera.azimuth)
+          pieces.forEach(piece => {
+            const center = piece.points.reduce((sum, point) => ({
+              x: sum.x + point.x / piece.points.length,
+              y: sum.y + point.y / piece.points.length
+            }), {
+              x: 0,
+              y: 0
+            });
+            const surfaceRatio = Math.max(0, Math.min(1, 0.5 - surfaceDepth(center.x, center.y, piece.faultSides) / depthSpan));
+            cells.push({
+              rawPoints: piece.points,
+              points: piece.points.map(point => projectTopographyPoint({
+                x: point.x,
+                y: point.y,
+                height: surfaceAt(point.x, point.y, 0, piece.faultSides)
+              }, camera, width, height)),
+              faultSides: piece.faultSides,
+              center,
+              surfaceRatio,
+              light: surfaceLight(center.x, center.y, piece.faultSides),
+              depth: center.y * Math.cos(camera.azimuth) + center.x * Math.sin(camera.azimuth)
+            });
           });
-        });
+        }
       }
+      cells.sort((a, b) => a.depth - b.depth);
+      terrainCacheRef.current = {
+        key: terrainKey,
+        cells
+      };
     }
-    cells.sort((a, b) => a.depth - b.depth).forEach(cell => {
-      const points = cell.points.map(point => pointAt(point, cell.faultSides));
+    const plumeLift = Math.sin(camera.elevation) * camera.zoom * 0.62 * height * 0.08;
+    cells.forEach(cell => {
+      const plumeRatio = stateRatio(h, cell.center.x, cell.center.y);
+      const historicRatio = stateRatio(hMax, cell.center.x, cell.center.y);
+      const points = cell.points.map((point, index) => ({
+        x: point.x,
+        y: point.y - stateRatio(h, cell.rawPoints[index].x, cell.rawPoints[index].y) * plumeLift
+      }));
       const shade = 0.38 + cell.light * 0.82;
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
       points.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
       ctx.closePath();
-      ctx.fillStyle = cell.plumeRatio > 0.0001 ? `rgb(${Math.round((18 + cell.historicRatio * 22) * shade)}, ${Math.round((104 + cell.plumeRatio * 116) * shade)}, ${Math.round((104 + cell.plumeRatio * 74) * shade)})` : `rgb(${Math.round((15 + cell.surfaceRatio * 24) * shade)}, ${Math.round((92 + cell.surfaceRatio * 76) * shade)}, ${Math.round((86 + cell.surfaceRatio * 60) * shade)})`;
+      ctx.fillStyle = plumeRatio > 0.0001 ? `rgb(${Math.round((205 + historicRatio * 42) * shade)}, ${Math.round((76 + plumeRatio * 86) * shade)}, ${Math.round((34 + plumeRatio * 30) * shade)})` : `rgb(${Math.round((15 + cell.surfaceRatio * 24) * shade)}, ${Math.round((92 + cell.surfaceRatio * 76) * shade)}, ${Math.round((86 + cell.surfaceRatio * 60) * shade)})`;
       ctx.fill();
       if (showGrid) {
         ctx.strokeStyle = 'rgba(194, 221, 220, 0.14)';
@@ -4476,7 +4540,7 @@ const SimulatorPage = () => {
       style: {
         width: 10,
         height: 2.5,
-        background: '#64ffda'
+        background: '#f59e0b'
       }
     }), /*#__PURE__*/React.createElement("span", {
       style: {
@@ -4484,7 +4548,7 @@ const SimulatorPage = () => {
       }
     }, "Mobile:"), /*#__PURE__*/React.createElement("strong", {
       style: {
-        color: '#64ffda',
+        color: '#f59e0b',
         fontFamily: 'monospace'
       }
     }, formatMass(chartMasses.mobile))), /*#__PURE__*/React.createElement("span", {
@@ -4497,7 +4561,7 @@ const SimulatorPage = () => {
       style: {
         width: 10,
         height: 2.5,
-        background: '#3ca68e'
+        background: '#b45309'
       }
     }), /*#__PURE__*/React.createElement("span", {
       style: {
@@ -4505,7 +4569,7 @@ const SimulatorPage = () => {
       }
     }, "Trapped:"), /*#__PURE__*/React.createElement("strong", {
       style: {
-        color: '#3ca68e',
+        color: '#b45309',
         fontFamily: 'monospace'
       }
     }, formatMass(chartMasses.trapped))), /*#__PURE__*/React.createElement("span", {
@@ -4586,15 +4650,15 @@ const SimulatorPage = () => {
     }), pathMob && /*#__PURE__*/React.createElement("path", {
       d: pathMob,
       fill: "none",
-      stroke: "#64ffda",
+      stroke: "#f59e0b",
       strokeWidth: "2",
       style: {
-        filter: 'drop-shadow(0 0 2px rgba(100,255,218,0.4))'
+        filter: 'drop-shadow(0 0 2px rgba(245,158,11,0.35))'
       }
     }), pathTrap && /*#__PURE__*/React.createElement("path", {
       d: pathTrap,
       fill: "none",
-      stroke: "#3ca68e",
+      stroke: "#b45309",
       strokeWidth: "1.8"
     }), pathLeak && /*#__PURE__*/React.createElement("path", {
       d: pathLeak,
@@ -5600,7 +5664,7 @@ const SimulatorPage = () => {
           width: 8,
           height: 8,
           borderRadius: 2,
-          background: '#0dfca2'
+          background: '#f59e0b'
         }
       }), " Mobile CO\u2082 (S_g \u2192 0.90)"), /*#__PURE__*/React.createElement("span", {
         style: {
@@ -5613,8 +5677,8 @@ const SimulatorPage = () => {
           width: 8,
           height: 8,
           borderRadius: 2,
-          background: '#20c997',
-          border: '1px solid #1a8e8f'
+          background: '#b45309',
+          border: '1px solid #7c2d12'
         }
       }), " Trapped Gas (S_gr \u2248 0.25)"), /*#__PURE__*/React.createElement("span", {
         style: {
@@ -5688,15 +5752,15 @@ const SimulatorPage = () => {
         y2: "1"
       }, /*#__PURE__*/React.createElement("stop", {
         offset: "0%",
-        stopColor: "#0dfca2",
+        stopColor: "#f59e0b",
         stopOpacity: "0.95"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "40%",
-        stopColor: "#05e67c",
+        stopColor: "#f97316",
         stopOpacity: "0.85"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "100%",
-        stopColor: "#05ab5e",
+        stopColor: "#c2410c",
         stopOpacity: "0.75"
       })), /*#__PURE__*/React.createElement("linearGradient", {
         id: "trapped-grad",
@@ -5720,23 +5784,23 @@ const SimulatorPage = () => {
         y2: "1"
       }, /*#__PURE__*/React.createElement("stop", {
         offset: "0%",
-        stopColor: "#0dfca2",
+        stopColor: "#f59e0b",
         stopOpacity: "0.98"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "45%",
-        stopColor: "#0dfca2",
+        stopColor: "#f59e0b",
         stopOpacity: "0.95"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "70%",
-        stopColor: "#05e67c",
+        stopColor: "#f97316",
         stopOpacity: "0.92"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "88%",
-        stopColor: "#20c997",
+        stopColor: "#ea580c",
         stopOpacity: "0.90"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "100%",
-        stopColor: "#1a8e8f",
+        stopColor: "#9a3412",
         stopOpacity: "0.85"
       })), /*#__PURE__*/React.createElement("linearGradient", {
         id: "residual-trapped-sim-grad",
