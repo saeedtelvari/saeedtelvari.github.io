@@ -125,7 +125,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     const lineX = faultXAtY(fault, y, params.width, params.height);
     if (y < minY || y > maxY || lineX <= 0 || lineX >= params.width || x <= lineX) return 0;
     const segmentLength = Math.max(1, maxY - minY);
-    const taperLength = Math.min(params.height * 0.08, segmentLength * 0.22);
+    const taperLength = Math.min(params.height * 0.18, segmentLength * 0.45);
     const smoothstep = value => value * value * (3 - 2 * value);
     const startTaper = taperLength ? smoothstep(Math.max(0, Math.min(1, (y - minY) / taperLength))) : 1;
     const endTaper = taperLength ? smoothstep(Math.max(0, Math.min(1, (maxY - y) / taperLength))) : 1;
@@ -1434,7 +1434,7 @@ const visibleFaultSegment = fault => {
 };
 const faultEndpointFade = (y, segment) => {
   const length = Math.max(1e-6, segment.yEnd - segment.yStart);
-  const taper = Math.min(0.08, length * 0.22);
+  const taper = Math.min(0.18, length * 0.45);
   const smoothstep = value => value * value * (3 - 2 * value);
   const start = smoothstep(Math.max(0, Math.min(1, (y - segment.yStart) / taper)));
   const end = smoothstep(Math.max(0, Math.min(1, (segment.yEnd - y) / taper)));
@@ -1442,7 +1442,7 @@ const faultEndpointFade = (y, segment) => {
 };
 const faultEndpointCoordinates = segment => {
   const length = Math.max(1e-6, segment.yEnd - segment.yStart);
-  const taper = Math.min(0.08, length * 0.22);
+  const taper = Math.min(0.18, length * 0.45);
   return [segment.yStart, segment.yStart + taper * 0.25, segment.yStart + taper * 0.5, segment.yStart + taper * 0.75, segment.yStart + taper, segment.yEnd - taper, segment.yEnd - taper * 0.75, segment.yEnd - taper * 0.5, segment.yEnd - taper * 0.25, segment.yEnd];
 };
 const clipPolygonByFault = (points, fault, keepRight) => {

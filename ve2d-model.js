@@ -123,7 +123,7 @@
     const lineX = faultXAtY(fault, y, params.width, params.height);
     if (y < minY || y > maxY || lineX <= 0 || lineX >= params.width || x <= lineX) return 0;
     const segmentLength = Math.max(1, maxY - minY);
-    const taperLength = Math.min(params.height * 0.08, segmentLength * 0.22);
+    const taperLength = Math.min(params.height * 0.18, segmentLength * 0.45);
     const smoothstep = value => value * value * (3 - 2 * value);
     const startTaper = taperLength ? smoothstep(Math.max(0, Math.min(1, (y - minY) / taperLength))) : 1;
     const endTaper = taperLength ? smoothstep(Math.max(0, Math.min(1, (maxY - y) / taperLength))) : 1;

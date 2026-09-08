@@ -166,6 +166,22 @@ test('fault throw is a sharp local step limited to the fault segment', () => {
   assert.equal(outsideRight - outsideLeft, 0);
 });
 
+test('finite fault endpoints taper over a visible transition instead of forming a step', () => {
+  const params = {
+    width: 1000,
+    height: 600,
+    structureAmplitude: 0,
+    heterogeneity: 0,
+    faultOffset: 2,
+    faults: [{ xPercent: 50, yStartPercent: 30, yEndPercent: 70, dipSlope: 0 }]
+  };
+  const nearStart = model.topDepth(750, 210, params) - model.topDepth(250, 210, params);
+  const plateau = model.topDepth(750, 300, params) - model.topDepth(250, 300, params);
+
+  assert.ok(nearStart > 0);
+  assert.ok(nearStart < plateau * 0.4);
+});
+
 test('fault displacement stops when its trace exits the model boundary', () => {
   const params = {
     width: 1000,

@@ -223,7 +223,7 @@ const visibleFaultSegment = fault => {
 
 const faultEndpointFade = (y, segment) => {
   const length = Math.max(1e-6, segment.yEnd - segment.yStart);
-  const taper = Math.min(0.08, length * 0.22);
+  const taper = Math.min(0.18, length * 0.45);
   const smoothstep = value => value * value * (3 - 2 * value);
   const start = smoothstep(Math.max(0, Math.min(1, (y - segment.yStart) / taper)));
   const end = smoothstep(Math.max(0, Math.min(1, (segment.yEnd - y) / taper)));
@@ -232,7 +232,7 @@ const faultEndpointFade = (y, segment) => {
 
 const faultEndpointCoordinates = segment => {
   const length = Math.max(1e-6, segment.yEnd - segment.yStart);
-  const taper = Math.min(0.08, length * 0.22);
+  const taper = Math.min(0.18, length * 0.45);
   return [
     segment.yStart,
     segment.yStart + taper * 0.25,

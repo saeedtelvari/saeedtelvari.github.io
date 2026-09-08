@@ -586,7 +586,7 @@ test('fault faces stay behind the reservoir surface and fade at finite endpoints
   assert.equal(faultEndpointFade(0.6, { yStart: 0.2, yEnd: 0.6 }), 0);
   assert.equal(faultEndpointFade(0.4, { yStart: 0.2, yEnd: 0.6 }), 1);
   assert.equal(faultEndpointCoordinates({ yStart: 0.2, yEnd: 0.6 }).length, 10);
-  assert.equal(faultEndpointCoordinates({ yStart: 0.2, yEnd: 0.6 })[1], 0.22);
+  assert.equal(faultEndpointCoordinates({ yStart: 0.2, yEnd: 0.6 })[1], 0.245);
   assert.match(panel, /faultFaces\.forEach/);
   assert.match(panel, /faultTracePoints\.forEach/);
   assert.match(panel, /faultEndpointCoordinates\(item\.segment\)/);
