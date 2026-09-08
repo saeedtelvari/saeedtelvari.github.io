@@ -20,7 +20,9 @@ this.helpers.persistTheme = typeof persistTheme === 'undefined' ? undefined : pe
 this.helpers.massBalanceCsv = typeof massBalanceCsv === 'undefined' ? undefined : massBalanceCsv;`, context);
   vm.runInNewContext(`this.helpers.clampTopographyCamera = typeof clampTopographyCamera === 'undefined' ? undefined : clampTopographyCamera;
 this.helpers.resetTopographyCamera = typeof resetTopographyCamera === 'undefined' ? undefined : resetTopographyCamera;
-this.helpers.projectTopographyPoint = typeof projectTopographyPoint === 'undefined' ? undefined : projectTopographyPoint;`, context);
+this.helpers.projectTopographyPoint = typeof projectTopographyPoint === 'undefined' ? undefined : projectTopographyPoint;
+this.helpers.faultEndpointFade = typeof faultEndpointFade === 'undefined' ? undefined : faultEndpointFade;
+this.helpers.faultEndpointCoordinates = typeof faultEndpointCoordinates === 'undefined' ? undefined : faultEndpointCoordinates;`, context);
   return context.helpers;
 };
 
@@ -497,7 +499,7 @@ test('3D topography reuses the map structure, surface overlays, and shared playb
   const panel = page.slice(page.indexOf('const Ve3DTopographyPanel'), page.indexOf('// Main Simulator component'));
 
   assert.match(panel, /globalThis\.VE2D\.topDepth/);
-  assert.match(panel, /const faultPoints = \[\]/);
+  assert.match(panel, /faultTracePoints = \[\]/);
   assert.match(panel, /faultXAtNormalizedY\(fault, y/);
   assert.match(panel, /splitTopographyPieceByFault/);
   assert.match(panel, /visibleFaultSegment/);
@@ -558,6 +560,25 @@ test('3D topography panel exposes orbit controls without a new renderer dependen
   assert.doesNotMatch(panel, /three|THREE|requestAnimationFrame/);
   assert.match(css, /\.ve-topography-canvas\s*\{[\s\S]*?touch-action:\s*none/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.ve-topography-actions button/);
+});
+
+test('fault faces stay behind the reservoir surface and fade at finite endpoints', () => {
+  const page = read('SimulatorPage.jsx');
+  const panel = page.slice(page.indexOf('const Ve3DTopographyPanel'), page.indexOf('// Main Simulator component'));
+  const { faultEndpointFade, faultEndpointCoordinates } = loadRunStateHelpers();
+
+  assert.equal(typeof faultEndpointFade, 'function');
+  assert.equal(faultEndpointFade(0.2, { yStart: 0.2, yEnd: 0.6 }), 0);
+  assert.equal(faultEndpointFade(0.6, { yStart: 0.2, yEnd: 0.6 }), 0);
+  assert.equal(faultEndpointFade(0.4, { yStart: 0.2, yEnd: 0.6 }), 1);
+  assert.equal(faultEndpointCoordinates({ yStart: 0.2, yEnd: 0.6 }).length, 10);
+  assert.equal(faultEndpointCoordinates({ yStart: 0.2, yEnd: 0.6 })[1], 0.22);
+  assert.match(panel, /faultFaces\.forEach/);
+  assert.match(panel, /faultTracePoints\.forEach/);
+  assert.match(panel, /faultEndpointCoordinates\(item\.segment\)/);
+  assert.ok(panel.indexOf('faultFaces.forEach') < panel.indexOf('cells.forEach'));
+  assert.ok(panel.indexOf('cells.forEach') < panel.indexOf('faultTracePoints.forEach'));
+  assert.match(panel, /ctx\.fillStyle = 'rgba\(20, 75, 73, 0\.46\)'/);
 });
 
 test('risk and methodology render as peer workspaces outside the visualization tabs', () => {
