@@ -201,12 +201,14 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       faultOffset: 0,
       terrainSeed: 0,
       heterogeneity: 0,
+      boundaryCondition: 'initial-pressure',
       faults: [],
       ...inputParams
     };
     params.faults = (params.faults || []).filter(Boolean);
     params.porosity = clamp(params.porosity, 0.01, 0.8);
     params.residualTrapFraction = clamp(params.residualTrapFraction, 0, 0.95);
+    const openBoundary = params.boundaryCondition !== 'closed';
     const dx = params.width / cols;
     const dy = params.height / rows;
     const scaledArea = dx / 5 * (dy / 5);
@@ -258,6 +260,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     for (let substep = 0; substep < substeps; substep++) {
       const mobile = h.map((value, index) => partition(value, hMax[index], params.residualTrapFraction).mobile);
       const delta = new Array(h.length).fill(0);
+      let boundaryOutflow = 0;
       const transfer = (from, to, distance) => {
         const trans = faceTransmissibility(cellX[from], cellY[from], cellX[to], cellY[to], params.faults, params.width, params.height);
         if (trans === 0) return;
@@ -276,9 +279,17 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
           const index = row * cols + col;
           if (col + 1 < cols) transfer(index, index + 1, dx);
           if (row + 1 < rows) transfer(index, index + cols, dy);
+          if (openBoundary && (col === 0 || col === cols - 1 || row === 0 || row === rows - 1)) {
+            const boundaryDistance = col === 0 || col === cols - 1 ? dx / 2 : dy / 2;
+            const gradient = h[index] / Math.max(1, boundaryDistance / 50);
+            const amount = Math.min(mobile[index] * 0.22, mobility * mobile[index] * gradient * dt);
+            delta[index] -= amount;
+            boundaryOutflow += amount;
+          }
         }
       }
       h = h.map((value, index) => Math.max(0, value + delta[index]));
+      leaked += boundaryOutflow * params.porosity * scaledArea;
       if (params.injectionRate > 0 && frame <= params.injectionDuration) {
         const wellCol = clamp(Math.floor(params.wellX / 100 * cols), 0, cols - 1);
         const wellRow = clamp(Math.floor(params.wellY / 100 * rows), 0, rows - 1);
@@ -1106,6 +1117,7 @@ function _extends() { _extends = Object.assign ? Object.assign.bind() : function
 const SIM_TABS = ['profile', 'map', 'topography', 'uq', 'guide'];
 const VISUALIZATION_TABS = ['profile', 'map', 'topography'];
 const MAP_TABS = ['map', 'topography'];
+const OPEN_BOUNDARY_LABEL = 'Open · initial pressure';
 
 // Shared visualization colors keep the scientific layers distinct across map,
 // topography, profile, legends, charts, and outcome metrics.
@@ -1783,6 +1795,7 @@ const Ve2DMapPanel = ({
   faults,
   mapCols,
   wellY,
+  boundaryCondition,
   preset,
   command,
   onCommandConsumed,
@@ -1824,6 +1837,7 @@ const Ve2DMapPanel = ({
     faultOffset,
     terrainSeed,
     heterogeneity,
+    boundaryCondition,
     faults: faults.slice(0, faultCount).map(fault => ({
       ...fault
     }))
@@ -2151,7 +2165,7 @@ const Ve2DMapPanel = ({
       fontSize: 11,
       color: 'rgba(255,255,255,0.72)'
     }
-  }, "Year ", mapTime, " \xB7 ", mapCols, "\xD7", mapRows, " cells \xB7 seed ", terrainSeed, " \xB7 heterogeneity ", heterogeneity.toFixed(2)), /*#__PURE__*/React.createElement("div", {
+  }, "Year ", mapTime, " \xB7 ", mapCols, "\xD7", mapRows, " cells \xB7 seed ", terrainSeed, " \xB7 heterogeneity ", heterogeneity.toFixed(2), " \xB7 ", boundaryCondition === 'closed' ? 'Closed boundary' : OPEN_BOUNDARY_LABEL), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1
     }
@@ -2211,6 +2225,7 @@ const Ve3DTopographyPanel = ({
   faults = [],
   injLocation,
   wellY,
+  boundaryCondition,
   onMapCommand
 }) => {
   const canvasRef = useRef(null);
@@ -2656,7 +2671,7 @@ const Ve3DTopographyPanel = ({
     }
   }), /*#__PURE__*/React.createElement("div", {
     className: "ve-topography-status"
-  }, /*#__PURE__*/React.createElement("span", null, "Year ", time, " \xB7 ", mapCols, "\xD7", gridRows, " grid \xB7 seed ", terrainSeed, " \xB7 heterogeneity ", heterogeneity.toFixed(2)), /*#__PURE__*/React.createElement("span", null, "Z span 4 model units \xB7 Zoom ", zoomLabel), /*#__PURE__*/React.createElement("label", null, "Elevation exaggeration ", elevationLabel, /*#__PURE__*/React.createElement("input", {
+  }, /*#__PURE__*/React.createElement("span", null, "Year ", time, " \xB7 ", mapCols, "\xD7", gridRows, " grid \xB7 seed ", terrainSeed, " \xB7 heterogeneity ", heterogeneity.toFixed(2)), /*#__PURE__*/React.createElement("span", null, "Z span 4 model units \xB7 Zoom ", zoomLabel, " \xB7 ", boundaryCondition === 'closed' ? 'Closed boundary' : OPEN_BOUNDARY_LABEL), /*#__PURE__*/React.createElement("label", null, "Elevation exaggeration ", elevationLabel, /*#__PURE__*/React.createElement("input", {
     type: "range",
     min: "0.65",
     max: "2.2",
@@ -2688,6 +2703,7 @@ const SimulatorPage = () => {
       injDuration: 240,
       terrainSeed: 3901,
       heterogeneity: 0.55,
+      boundaryCondition: 'initial-pressure',
       faultCount: 2,
       faults: [{
         xPercent: 28,
@@ -4313,6 +4329,7 @@ const SimulatorPage = () => {
       faultCount,
       faults,
       residualTrapFraction,
+      boundaryCondition = 'initial-pressure',
       parentDX
     } = params;
     const N = cellCount;
@@ -4384,14 +4401,24 @@ const SimulatorPage = () => {
         fluxes[i] = rawFlux;
       }
 
-      // Ghost cells boundaries (zero far-field flux)
+      // Boundary fluxes: fixed initial-pressure ghosts (open) or zero flux (closed)
+      const openBoundary = boundaryCondition !== 'closed';
+      const boundaryFluxes = new Array(N).fill(0);
+      if (openBoundary) {
+        for (const edge of [0, N - 1]) {
+          const gradient = hMob[edge] / Math.max(1, dx / 2.0 / 5.0);
+          const rawFlux = K / porosity * hMob[edge] * gradient * 0.08;
+          boundaryFluxes[edge] = Math.min(rawFlux, 0.30 * hMob[edge] / dt);
+        }
+      }
       const H_res = 175.0 / 15.0; // 11.667 m physical maximum thickness of reservoir sandstone bed
       const hTmp = [...nextH];
       for (let i = 0; i < N; i++) {
         const fL = i === 0 ? 0 : fluxes[i - 1];
         const fR = i === N - 1 ? 0 : fluxes[i];
-        hTmp[i] = Math.max(0, Math.min(H_res, nextH[i] + dt * (fL - fR)));
+        hTmp[i] = Math.max(0, Math.min(H_res, nextH[i] + dt * (fL - fR - boundaryFluxes[i])));
       }
+      leaked += dt * (boundaryFluxes[0] + boundaryFluxes[N - 1]) * porosity * (dx / 5.0);
 
       // Injection: Smooth wellbore Gaussian kernel over adjacent cells to prevent point singularity
       const cellInjIdx = Math.floor(injLocation / 100.0 * N);
@@ -5842,7 +5869,7 @@ const SimulatorPage = () => {
       fontSize: 10.5,
       color: 'rgba(255,255,255,0.5)'
     }
-  }, "Year ", simTime, " / 1000") : activeSubTab === 'map' ? /*#__PURE__*/React.createElement("span", {
+  }, "Year ", simTime, " / 1000 \xB7 ", profileParams.boundaryCondition === 'closed' ? 'Closed boundary' : OPEN_BOUNDARY_LABEL) : activeSubTab === 'map' ? /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10.5,
       color: 'rgba(255,255,255,0.5)'
@@ -6924,6 +6951,7 @@ const SimulatorPage = () => {
     faults: mapParams.faults,
     injLocation: mapParams.injLocation,
     wellY: mapParams.wellY,
+    boundaryCondition: mapParams.boundaryCondition,
     onMapCommand: sendMapCommand
   }))), /*#__PURE__*/React.createElement("p", {
     style: {

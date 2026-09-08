@@ -47,6 +47,21 @@ test('one model year conserves an injected mass of 2 units', () => {
   assert.ok(Math.abs(accounted - 2) < 0.01);
 });
 
+test('default model boundaries are open to initial pressure while closed mode retains the plume', () => {
+  const seed = () => {
+    const state = createVe2dState({ cols: 6, rows: 6 });
+    state.h[3 * 6] = 2;
+    state.hMax[3 * 6] = 2;
+    return state;
+  };
+  const open = stepVe2d(seed(), baseParams, 1);
+  const closed = stepVe2d(seed(), { ...baseParams, boundaryCondition: 'closed' }, 1);
+
+  assert.ok(open.masses.leaked > 0, 'initial-pressure boundary must accept outflow');
+  assert.equal(closed.masses.leaked, 0, 'closed boundary must not leak mass');
+  assert.ok(open.masses.mobile + open.masses.trapped < closed.masses.mobile + closed.masses.trapped);
+});
+
 test('a centered plume spreads in both x and y directions', () => {
   const initial = createVe2dState({ cols: 7, rows: 7 });
   if (initial) {

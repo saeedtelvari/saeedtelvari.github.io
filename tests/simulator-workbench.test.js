@@ -450,6 +450,17 @@ test('3D topography is a visualization peer and keeps the 2D map mounted', () =>
   assert.match(page, /const runStatus = isMapView/);
 });
 
+test('1D cross-section uses the open initial-pressure boundary contract', () => {
+  const page = read('SimulatorPage.jsx');
+  const solver = page.slice(page.indexOf('const runSolverStep'), page.indexOf('// --- NODE-BASED RIBBON BUILDER'));
+
+  assert.match(solver, /boundaryCondition = 'initial-pressure'/);
+  assert.match(solver, /const openBoundary = boundaryCondition !== 'closed'/);
+  assert.match(solver, /const boundaryFluxes = new Array\(N\)\.fill\(0\)/);
+  assert.match(solver, /- boundaryFluxes\[i\]/);
+  assert.match(solver, /boundaryFluxes\[0\] \+ boundaryFluxes\[N - 1\]/);
+});
+
 test('map run status reports changed inputs after the last run', () => {
   const deriveStatus = loadMapLifecycleHelpers().deriveMapRunStatus || (() => 'missing');
   const snapshot = { isRunning: false, time: 18 };

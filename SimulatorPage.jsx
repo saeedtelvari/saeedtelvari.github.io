@@ -4,6 +4,7 @@ const { useCallback, useEffect, useMemo, useRef, useState } = React;
 const SIM_TABS = ['profile', 'map', 'topography', 'uq', 'guide'];
 const VISUALIZATION_TABS = ['profile', 'map', 'topography'];
 const MAP_TABS = ['map', 'topography'];
+const OPEN_BOUNDARY_LABEL = 'Open · initial pressure';
 
 // Shared visualization colors keep the scientific layers distinct across map,
 // topography, profile, legends, charts, and outcome metrics.
@@ -510,7 +511,7 @@ const UQParamConfig = ({ def, cfg, onChange }) => {
 
 const Ve2DMapPanel = ({
   K, porosity, residualTrapFraction, dipPercent, amplitude, frequency, faultOffset,
-  terrainSeed, heterogeneity, Q, injLocation, injDuration, faultCount, faults, mapCols, wellY, preset,
+  terrainSeed, heterogeneity, Q, injLocation, injDuration, faultCount, faults, mapCols, wellY, boundaryCondition, preset,
   command, onCommandConsumed, onRun, onReset, onSnapshot
 }) => {
   const mapRows = Math.max(12, Math.round(mapCols * 0.6));
@@ -542,6 +543,7 @@ const Ve2DMapPanel = ({
     faultOffset,
     terrainSeed,
     heterogeneity,
+    boundaryCondition,
     faults: faults.slice(0, faultCount).map(fault => ({ ...fault }))
   };
 
@@ -764,7 +766,7 @@ const Ve2DMapPanel = ({
         <button onClick={() => { setIsRunning(false); advanceMap(); }} aria-label="Advance 2D map one year" style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}><i className="fas fa-step-forward" /></button>
         <button onClick={onReset} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}><i className="fas fa-redo" /> Reset</button>
         <button onClick={() => setMapSpeed(value => value === 1 ? 2 : value === 2 ? 4 : 1)} style={{ background: 'none', color: '#64ffda', border: 0, cursor: 'pointer', fontWeight: 700 }}>{mapSpeed}×</button>
-        <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.72)' }}>Year {mapTime} · {mapCols}×{mapRows} cells · seed {terrainSeed} · heterogeneity {heterogeneity.toFixed(2)}</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.72)' }}>Year {mapTime} · {mapCols}×{mapRows} cells · seed {terrainSeed} · heterogeneity {heterogeneity.toFixed(2)} · {boundaryCondition === 'closed' ? 'Closed boundary' : OPEN_BOUNDARY_LABEL}</span>
         <div style={{ flex: 1 }} />
         <button onClick={() => downloadMap('csv')} style={{ background: 'none', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '6px 9px', cursor: 'pointer' }}>Grid CSV</button>
         <button onClick={() => downloadMap('png')} style={{ background: 'none', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '6px 9px', cursor: 'pointer' }}>Map PNG</button>
@@ -779,7 +781,7 @@ const Ve2DMapPanel = ({
   );
 };
 
-const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, faults = [], injLocation, wellY, onMapCommand }) => {
+const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, faults = [], injLocation, wellY, boundaryCondition, onMapCommand }) => {
   const canvasRef = useRef(null);
   const terrainCacheRef = useRef(null);
   const pointersRef = useRef(new Map());
@@ -1060,7 +1062,7 @@ const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, f
       />
       <div className="ve-topography-status">
         <span>Year {time} · {mapCols}×{gridRows} grid · seed {terrainSeed} · heterogeneity {heterogeneity.toFixed(2)}</span>
-        <span>Z span 4 model units · Zoom {zoomLabel}</span>
+        <span>Z span 4 model units · Zoom {zoomLabel} · {boundaryCondition === 'closed' ? 'Closed boundary' : OPEN_BOUNDARY_LABEL}</span>
         <label>
           Elevation exaggeration {elevationLabel}
           <input type="range" min="0.65" max="2.2" step="0.05" value={elevationScale} onChange={event => setElevationScale(Number(event.target.value))} />
@@ -1079,6 +1081,7 @@ const SimulatorPage = () => {
     const defaults = { K: 1.7, porosity: 0.25, cellCount: 200, residualTrapFraction: 0.25,
     dipPercent: 0.8, amplitude: 15, frequency: 1, faultOffset: 1.2,
     Q: 2.3, injLocation: 70, wellY: 50, mapCols: 72, injDuration: 240, terrainSeed: 3901, heterogeneity: 0.55,
+    boundaryCondition: 'initial-pressure',
     faultCount: 2, faults: [
       { xPercent: 28, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 1, dipSlope: -0.22 },
       { xPercent: 48, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.30, leakRate: 0.12, transmissibility: 1, dipSlope: 0.25 }
@@ -2507,6 +2510,7 @@ const SimulatorPage = () => {
       faultCount,
       faults,
       residualTrapFraction,
+      boundaryCondition = 'initial-pressure',
       parentDX
     } = params;
 
@@ -2575,14 +2579,24 @@ const SimulatorPage = () => {
         fluxes[i] = rawFlux;
       }
 
-      // Ghost cells boundaries (zero far-field flux)
+      // Boundary fluxes: fixed initial-pressure ghosts (open) or zero flux (closed)
+      const openBoundary = boundaryCondition !== 'closed';
+      const boundaryFluxes = new Array(N).fill(0);
+      if (openBoundary) {
+        for (const edge of [0, N - 1]) {
+          const gradient = hMob[edge] / Math.max(1, (dx / 2.0) / 5.0);
+          const rawFlux = (K / porosity) * hMob[edge] * gradient * 0.08;
+          boundaryFluxes[edge] = Math.min(rawFlux, (0.30 * hMob[edge]) / dt);
+        }
+      }
       const H_res = 175.0 / 15.0; // 11.667 m physical maximum thickness of reservoir sandstone bed
       const hTmp = [...nextH];
       for (let i = 0; i < N; i++) {
         const fL = i === 0 ? 0 : fluxes[i - 1];
         const fR = i === N - 1 ? 0 : fluxes[i];
-        hTmp[i] = Math.max(0, Math.min(H_res, nextH[i] + dt * (fL - fR)));
+        hTmp[i] = Math.max(0, Math.min(H_res, nextH[i] + dt * (fL - fR - boundaryFluxes[i])));
       }
+      leaked += dt * (boundaryFluxes[0] + boundaryFluxes[N - 1]) * porosity * (dx / 5.0);
 
       // Injection: Smooth wellbore Gaussian kernel over adjacent cells to prevent point singularity
       const cellInjIdx = Math.floor((injLocation / 100.0) * N);
@@ -3578,7 +3592,7 @@ const SimulatorPage = () => {
               </div>
               <div className="sim-tab-status" style={{ paddingRight: 8 }}>
                 {activeSubTab === 'profile' ? (
-                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Year {simTime} / 1000</span>
+                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Year {simTime} / 1000 · {profileParams.boundaryCondition === 'closed' ? 'Closed boundary' : OPEN_BOUNDARY_LABEL}</span>
                 ) : activeSubTab === 'map' ? (
                   <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>x–y plume-height model</span>
                 ) : activeSubTab === 'topography' ? (
@@ -4252,6 +4266,7 @@ const SimulatorPage = () => {
                 faults={mapParams.faults}
                 injLocation={mapParams.injLocation}
                 wellY={mapParams.wellY}
+                boundaryCondition={mapParams.boundaryCondition}
                 onMapCommand={sendMapCommand}
               />
             </div>

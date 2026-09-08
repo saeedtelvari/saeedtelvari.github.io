@@ -199,12 +199,14 @@
       faultOffset: 0,
       terrainSeed: 0,
       heterogeneity: 0,
+      boundaryCondition: 'initial-pressure',
       faults: [],
       ...inputParams
     };
     params.faults = (params.faults || []).filter(Boolean);
     params.porosity = clamp(params.porosity, 0.01, 0.8);
     params.residualTrapFraction = clamp(params.residualTrapFraction, 0, 0.95);
+    const openBoundary = params.boundaryCondition !== 'closed';
 
     const dx = params.width / cols;
     const dy = params.height / rows;
@@ -242,6 +244,7 @@
     for (let substep = 0; substep < substeps; substep++) {
       const mobile = h.map((value, index) => partition(value, hMax[index], params.residualTrapFraction).mobile);
       const delta = new Array(h.length).fill(0);
+      let boundaryOutflow = 0;
 
       const transfer = (from, to, distance) => {
         const trans = faceTransmissibility(cellX[from], cellY[from], cellX[to], cellY[to], params.faults, params.width, params.height);
@@ -265,9 +268,20 @@
           const index = row * cols + col;
           if (col + 1 < cols) transfer(index, index + 1, dx);
           if (row + 1 < rows) transfer(index, index + cols, dy);
+          if (openBoundary && (col === 0 || col === cols - 1 || row === 0 || row === rows - 1)) {
+            const boundaryDistance = col === 0 || col === cols - 1 ? dx / 2 : dy / 2;
+            const gradient = h[index] / Math.max(1, boundaryDistance / 50);
+            const amount = Math.min(
+              mobile[index] * 0.22,
+              mobility * mobile[index] * gradient * dt
+            );
+            delta[index] -= amount;
+            boundaryOutflow += amount;
+          }
         }
       }
       h = h.map((value, index) => Math.max(0, value + delta[index]));
+      leaked += boundaryOutflow * params.porosity * scaledArea;
 
       if (params.injectionRate > 0 && frame <= params.injectionDuration) {
         const wellCol = clamp(Math.floor((params.wellX / 100) * cols), 0, cols - 1);
