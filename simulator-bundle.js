@@ -1197,6 +1197,28 @@ const scenarioNumber = (query, key, min, max, fallback, integer = false) => {
   return integer ? Math.round(clamped) : clamped;
 };
 const createScenarioSignature = parameters => JSON.stringify(parameters);
+const updateScenarioParameter = (scenario, key, value) => {
+  const next = {
+    ...scenario,
+    [key]: typeof value === 'function' ? value(scenario[key]) : value
+  };
+  if (key === 'faultCount' || key === 'faults') {
+    next.faults = Array.from({
+      length: Math.max(next.faultCount, next.faults.length)
+    }, (_, index) => next.faults[index] || {
+      xPercent: 30 + index * 20,
+      yStartPercent: 0,
+      yEndPercent: 100,
+      isSealed: false,
+      thresholdHeight: 0.3,
+      leakRate: 0.12,
+      transmissibility: 1,
+      dipSlope: 0
+    });
+  }
+  return next;
+};
+const massBalanceCsv = (history, modelType, terrainSeed) => ['year,injected_kt,mobile_kt,trapped_kt,leaked_kt,model_type,terrain_seed', ...history.map(r => [r.time, r.injected, r.mobile, r.trapped, r.leaked, modelType, modelType === 'map' ? terrainSeed : ''].join(','))].join('\n');
 const deriveRunStatus = ({
   isPlaying,
   isReversing,
@@ -1796,7 +1818,8 @@ const Ve2DMapPanel = ({
     setMapState(next);
     setMapTime(nextTime);
   };
-  useEffect(() => resetMap(), [resetMap, preset]);
+  const mapScenarioKey = JSON.stringify(paramsRef.current);
+  useEffect(() => resetMap(), [resetMap, preset, mapScenarioKey]);
   useEffect(() => {
     if (!command) return;
     const transition = getMapPlaybackTransition({
@@ -1811,8 +1834,8 @@ const Ve2DMapPanel = ({
   }, [command, onCommandConsumed, resetMap]);
   useEffect(() => {
     onSnapshot(createMapSnapshot({
-      time: mapTime,
-      mapState,
+      time: timeRef.current,
+      mapState: stateRef.current,
       history: historyRef.current,
       isRunning,
       speed: mapSpeed,
@@ -1861,14 +1884,17 @@ const Ve2DMapPanel = ({
       const col = index % mapState.cols;
       const row = Math.floor(index / mapState.cols);
       const depthRatio = (depths[index] - minDepth) / depthSpan;
-      ctx.fillStyle = `rgb(${20 + Math.round(depthRatio * 16)}, ${28 + Math.round(depthRatio * 12)}, ${42 + Math.round(depthRatio * 16)})`;
+      ctx.fillStyle = `rgb(${15 + Math.round(depthRatio * 18)}, ${58 + Math.round(depthRatio * 32)}, ${61 + Math.round(depthRatio * 28)})`;
       ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
       if (mapState.h[index] > 0.0001) {
         const intensity = Math.sqrt(mapState.h[index] / maxPlume);
         const historic = mapState.hMax[index];
         const mobile = residualTrapFraction < 1 ? Math.min(mapState.h[index], Math.max(0, (mapState.h[index] - residualTrapFraction * historic) / (1 - residualTrapFraction))) : 0;
         const trappedRatio = mapState.h[index] > 0 ? 1 - mobile / mapState.h[index] : 0;
-        ctx.fillStyle = `rgba(${Math.round(230 + trappedRatio * 25)}, ${Math.round(132 - trappedRatio * 58)}, ${Math.round(48 - trappedRatio * 16)}, ${0.24 + intensity * 0.72})`;
+        const plumeRed = Math.round(245 - trappedRatio * 115);
+        const plumeGreen = Math.round(158 - trappedRatio * 90);
+        const plumeBlue = Math.round(11 + trappedRatio * 24);
+        ctx.fillStyle = `rgba(${plumeRed}, ${plumeGreen}, ${plumeBlue}, ${0.24 + intensity * 0.72})`;
         ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
       }
     }
@@ -1945,8 +1971,8 @@ const Ve2DMapPanel = ({
     } else {
       const cellWidth = 1000 / mapState.cols;
       const cellHeight = 600 / mapState.rows;
-      const rows = ['x_m,y_m,h_m,h_max_m'];
-      mapState.h.forEach((value, index) => rows.push([(index % mapState.cols + 0.5) * cellWidth, (Math.floor(index / mapState.cols) + 0.5) * cellHeight, value, mapState.hMax[index]].join(',')));
+      const rows = ['x_m,y_m,h_m,h_max_m,model_type,terrain_seed,year'];
+      mapState.h.forEach((value, index) => rows.push([(index % mapState.cols + 0.5) * cellWidth, (Math.floor(index / mapState.cols) + 0.5) * cellHeight, value, mapState.hMax[index], 'map', terrainSeed, mapTime].join(',')));
       link.href = URL.createObjectURL(new Blob([rows.join('\n')], {
         type: 'text/csv;charset=utf-8'
       }));
@@ -2031,7 +2057,7 @@ const Ve2DMapPanel = ({
       gap: 10
     }
   }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => isRunning ? setIsRunning(false) : onRun(),
+    onClick: () => isRunning ? setIsRunning(false) : mapTime > 0 ? setIsRunning(true) : onRun(),
     "aria-label": isRunning ? 'Pause 2D map simulation' : 'Run 2D map simulation',
     style: {
       background: '#64ffda',
@@ -2045,7 +2071,10 @@ const Ve2DMapPanel = ({
   }, /*#__PURE__*/React.createElement("i", {
     className: `fas ${isRunning ? 'fa-pause' : 'fa-play'}`
   }), " ", isRunning ? 'Pause' : 'Run'), /*#__PURE__*/React.createElement("button", {
-    onClick: advanceMap,
+    onClick: () => {
+      setIsRunning(false);
+      advanceMap();
+    },
     "aria-label": "Advance 2D map one year",
     style: {
       background: 'rgba(255,255,255,0.08)',
@@ -2190,12 +2219,16 @@ const Ve3DTopographyPanel = ({
     const terrainKey = JSON.stringify({
       mapCols,
       gridRows,
-      camera,
-      elevationScale,
       structure,
       activeFaults
     });
-    const cachedTerrain = terrainCacheRef.current?.key === terrainKey ? terrainCacheRef.current : null;
+    const projectionKey = JSON.stringify({
+      terrainKey,
+      camera,
+      elevationScale
+    });
+    const cachedTerrain = terrainCacheRef.current?.projectionKey === projectionKey ? terrainCacheRef.current : null;
+    const cachedBaseTerrain = terrainCacheRef.current?.terrainKey === terrainKey ? terrainCacheRef.current.baseCells : null;
     const depths = new Map();
     const surfaceDepth = (x, y, faultSides = {}) => {
       let sampleX = x;
@@ -2208,13 +2241,15 @@ const Ve3DTopographyPanel = ({
       return depths.get(key);
     };
     const depthSpan = 4;
+    const surfaceHeight = (x, y, faultSides = {}) => Math.max(0.04, Math.min(0.96, 0.5 - surfaceDepth(x, y, faultSides) / depthSpan * 0.5));
+    const projectedHeight = (heightValue, plume = 0) => Math.max(0.04, Math.min(0.96, 0.5 - (0.5 - heightValue) * elevationScale + plume * 0.08));
     const surfaceAt = (x, y, plume = 0, faultSides = {}) => Math.max(0.04, Math.min(0.96, 0.5 - surfaceDepth(x, y, faultSides) / depthSpan * 0.5 * elevationScale + plume * 0.08));
     const surfaceLight = (x, y, faultSides = {}) => {
       const step = 0.008;
-      const left = surfaceAt(Math.max(0, x - step), y, 0, faultSides);
-      const right = surfaceAt(Math.min(1, x + step), y, 0, faultSides);
-      const north = surfaceAt(x, Math.max(0, y - step), 0, faultSides);
-      const south = surfaceAt(x, Math.min(1, y + step), 0, faultSides);
+      const left = surfaceHeight(Math.max(0, x - step), y, faultSides);
+      const right = surfaceHeight(Math.min(1, x + step), y, faultSides);
+      const north = surfaceHeight(x, Math.max(0, y - step), faultSides);
+      const south = surfaceHeight(x, Math.min(1, y + step), faultSides);
       const normal = {
         x: -(right - left) / (2 * step),
         y: -(south - north) / (2 * step),
@@ -2231,9 +2266,9 @@ const Ve3DTopographyPanel = ({
     const yCoordinates = [...new Set([...Array.from({
       length: gridRows
     }, (_, row) => row / Math.max(1, gridRows - 1)), ...activeFaults.flatMap(item => [item.segment.yStart, item.segment.yEnd])].map(value => Number(value.toFixed(7))))].sort((a, b) => a - b);
-    let cells = cachedTerrain?.cells;
-    if (!cachedTerrain) {
-      cells = [];
+    let baseCells = cachedBaseTerrain;
+    if (!baseCells) {
+      baseCells = [];
       for (let row = 0; row < yCoordinates.length - 1; row++) {
         const y0 = yCoordinates[row];
         const y1 = yCoordinates[row + 1];
@@ -2272,25 +2307,34 @@ const Ve3DTopographyPanel = ({
               y: 0
             });
             const surfaceRatio = Math.max(0, Math.min(1, 0.5 - surfaceDepth(center.x, center.y, piece.faultSides) / depthSpan));
-            cells.push({
+            baseCells.push({
               rawPoints: piece.points,
-              points: piece.points.map(point => projectTopographyPoint({
-                x: point.x,
-                y: point.y,
-                height: surfaceAt(point.x, point.y, 0, piece.faultSides)
-              }, camera, width, height)),
               faultSides: piece.faultSides,
               center,
+              surfaceHeights: piece.points.map(point => surfaceHeight(point.x, point.y, piece.faultSides)),
               surfaceRatio,
-              light: surfaceLight(center.x, center.y, piece.faultSides),
-              depth: center.y * Math.cos(camera.azimuth) + center.x * Math.sin(camera.azimuth)
+              light: surfaceLight(center.x, center.y, piece.faultSides)
             });
           });
         }
       }
+    }
+    let cells = cachedTerrain?.cells;
+    if (!cells) {
+      cells = baseCells.map(cell => ({
+        ...cell,
+        points: cell.rawPoints.map((point, index) => projectTopographyPoint({
+          x: point.x,
+          y: point.y,
+          height: projectedHeight(cell.surfaceHeights[index])
+        }, camera, width, height)),
+        depth: cell.center.y * Math.cos(camera.azimuth) + cell.center.x * Math.sin(camera.azimuth)
+      }));
       cells.sort((a, b) => a.depth - b.depth);
       terrainCacheRef.current = {
-        key: terrainKey,
+        terrainKey,
+        projectionKey,
+        baseCells,
         cells
       };
     }
@@ -2361,7 +2405,7 @@ const Ve3DTopographyPanel = ({
         ctx.lineTo(right1.x, right1.y);
         ctx.lineTo(right0.x, right0.y);
         ctx.closePath();
-        ctx.fillStyle = fault.isSealed ? 'rgba(68, 119, 111, 0.84)' : 'rgba(111, 76, 67, 0.78)';
+        ctx.fillStyle = fault.isSealed ? 'rgba(36, 126, 112, 0.84)' : 'rgba(190, 74, 58, 0.78)';
         ctx.fill();
         faultPoints.push({
           x: (left0.x + right0.x) / 2,
@@ -2375,7 +2419,7 @@ const Ve3DTopographyPanel = ({
       if (faultPoints.length < 2) return;
       ctx.beginPath();
       faultPoints.forEach((point, pointIndex) => pointIndex ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
-      ctx.strokeStyle = fault.isSealed ? '#d6a65a' : '#d97a63';
+      ctx.strokeStyle = fault.isSealed ? '#64ffda' : '#ff6b6b';
       ctx.lineWidth = 2;
       ctx.setLineDash(fault.isSealed ? [] : [7, 5]);
       ctx.stroke();
@@ -2400,6 +2444,7 @@ const Ve3DTopographyPanel = ({
     ...current,
     zoom: current.zoom + delta
   }));
+  const updateCamera = updater => setCamera(current => clampTopographyCamera(updater(current)));
   const resetView = () => setCamera(resetTopographyCamera());
   const pointerDistance = points => Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
   const onPointerDown = event => {
@@ -2509,6 +2554,20 @@ const Ve3DTopographyPanel = ({
       if (event.key === 'r' || event.key === 'R') resetView();
       if (event.key === '+' || event.key === '=') updateZoom(0.12);
       if (event.key === '-') updateZoom(-0.12);
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        updateCamera(current => ({
+          ...current,
+          azimuth: current.azimuth + (event.key === 'ArrowRight' ? 0.12 : -0.12)
+        }));
+      }
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        updateCamera(current => ({
+          ...current,
+          elevation: current.elevation + (event.key === 'ArrowUp' ? 0.08 : -0.08)
+        }));
+      }
     }
   }), /*#__PURE__*/React.createElement("div", {
     className: "ve-topography-status"
@@ -2524,57 +2583,117 @@ const Ve3DTopographyPanel = ({
 
 // Main Simulator component
 const SimulatorPage = () => {
-  // --- STATE PARAMETERS ---
-  // Physical parameters
-  const [K, setK] = useState(1.70); // Absolute permeability scaling (0.1 to 3.5)
-  const [porosity, setPorosity] = useState(0.25); // Porosity (0.1 to 0.4)
-  const [cellCount, setCellCount] = useState(200); // N cells resolution (50 to 300)
-  const [residualTrapFraction, setResidualTrapFraction] = useState(0.25); // Trapping fraction Sgr (0.0 to 0.40)
-
-  // Define dx in the outer scope of the component so it is available to all rendering sub-blocks
-  const dx = 1000.0 / cellCount;
-
-  // Topography parameters (Formula sliders)
-  const [dipPercent, setDipPercent] = useState(0.8); // Regional dip in % (-5% to 5%)
-  const [amplitude, setAmplitude] = useState(15); // Anticline wave amplitude (0 to 50px)
-  const [frequency, setFrequency] = useState(1); // Anticline count (0.5 to 4)
-  const [faultOffset, setFaultOffset] = useState(1.2); // Fault displacement (0 to 3)
-
-  // Injection parameters
-  const [Q, setQ] = useState(2.30); // Constant injection rate (0.0 to 3.5)
-  const [injLocation, setInjLocation] = useState(70); // Injection cell index % (10% to 90%)
-  const [wellY, setWellY] = useState(50); // Plan-view injector y-coordinate %
-  const [mapCols, setMapCols] = useState(72); // Plan-view x resolution; y follows domain aspect ratio
-  const [injDuration, setInjDuration] = useState(240); // Frame count of active injection (50 to 400)
-  const [terrainSeed, setTerrainSeed] = useState(3901);
-  const [heterogeneity, setHeterogeneity] = useState(0.55);
-
-  // Fault parameters
-  const [faultCount, setFaultCount] = useState(2); // Number of faults (0 to 3)
-  const [faults, setFaults] = useState(() => [{
-    xPercent: 28,
-    yStartPercent: 0,
-    yEndPercent: 100,
-    isSealed: false,
-    thresholdHeight: 0.35,
-    leakRate: 0.14,
-    transmissibility: 1.0,
-    dipSlope: -0.22
-  }, {
-    xPercent: 48,
-    yStartPercent: 0,
-    yEndPercent: 100,
-    isSealed: false,
-    thresholdHeight: 0.30,
-    leakRate: 0.12,
-    transmissibility: 1.0,
-    dipSlope: 0.25
-  }]);
-
-  // Capillary fringe state
-  const [hasCapillaryFringe, setHasCapillaryFringe] = useState(true);
-  const [fringeScale, setFringeScale] = useState(0.65); // subtle, crisp capillary transition zone thickness (meters)
-  const [entryPressure, setEntryPressure] = useState(15); // entry capillary pressure (kPa)
+  const [activeSubTab, setActiveSubTab] = useState('topography');
+  const [riskModel, setRiskModel] = useState('map');
+  // The two solvers retain independent inputs, histories and playback state.
+  const [scenarios, setScenarios] = useState(() => {
+    const defaults = {
+      K: 1.7,
+      porosity: 0.25,
+      cellCount: 200,
+      residualTrapFraction: 0.25,
+      dipPercent: 0.8,
+      amplitude: 15,
+      frequency: 1,
+      faultOffset: 1.2,
+      Q: 2.3,
+      injLocation: 70,
+      wellY: 50,
+      mapCols: 72,
+      injDuration: 240,
+      terrainSeed: 3901,
+      heterogeneity: 0.55,
+      faultCount: 2,
+      faults: [{
+        xPercent: 28,
+        yStartPercent: 0,
+        yEndPercent: 100,
+        isSealed: false,
+        thresholdHeight: 0.35,
+        leakRate: 0.14,
+        transmissibility: 1,
+        dipSlope: -0.22
+      }, {
+        xPercent: 48,
+        yStartPercent: 0,
+        yEndPercent: 100,
+        isSealed: false,
+        thresholdHeight: 0.30,
+        leakRate: 0.12,
+        transmissibility: 1,
+        dipSlope: 0.25
+      }],
+      hasCapillaryFringe: true,
+      fringeScale: 0.65,
+      entryPressure: 15,
+      selectedPreset: 'default'
+    };
+    return {
+      map: defaults,
+      profile: {
+        ...defaults,
+        faults: defaults.faults.map(f => ({
+          ...f
+        }))
+      }
+    };
+  });
+  const activeModel = activeSubTab === 'profile' || activeSubTab === 'uq' && riskModel === 'profile' ? 'profile' : 'map';
+  const profileParams = scenarios.profile;
+  const mapParams = scenarios.map;
+  const {
+    K,
+    porosity,
+    cellCount,
+    residualTrapFraction,
+    dipPercent,
+    amplitude,
+    frequency,
+    faultOffset,
+    Q,
+    injLocation,
+    wellY,
+    mapCols,
+    injDuration,
+    terrainSeed,
+    heterogeneity,
+    faultCount,
+    faults,
+    hasCapillaryFringe,
+    fringeScale,
+    entryPressure,
+    selectedPreset
+  } = scenarios[activeModel];
+  const loadingModelRef = useRef(null);
+  const setParameter = (key, value) => {
+    const model = loadingModelRef.current || activeModel;
+    setScenarios(current => ({
+      ...current,
+      [model]: updateScenarioParameter(current[model], key, value)
+    }));
+  };
+  const setK = value => setParameter('K', value);
+  const setPorosity = value => setParameter('porosity', value);
+  const setCellCount = value => setParameter('cellCount', value);
+  const setResidualTrapFraction = value => setParameter('residualTrapFraction', value);
+  const setDipPercent = value => setParameter('dipPercent', value);
+  const setAmplitude = value => setParameter('amplitude', value);
+  const setFrequency = value => setParameter('frequency', value);
+  const setFaultOffset = value => setParameter('faultOffset', value);
+  const setQ = value => setParameter('Q', value);
+  const setInjLocation = value => setParameter('injLocation', value);
+  const setWellY = value => setParameter('wellY', value);
+  const setMapCols = value => setParameter('mapCols', value);
+  const setInjDuration = value => setParameter('injDuration', value);
+  const setTerrainSeed = value => setParameter('terrainSeed', value);
+  const setHeterogeneity = value => setParameter('heterogeneity', value);
+  const setFaultCount = value => setParameter('faultCount', value);
+  const setFaults = value => setParameter('faults', value);
+  const setHasCapillaryFringe = value => setParameter('hasCapillaryFringe', value);
+  const setFringeScale = value => setParameter('fringeScale', value);
+  const setEntryPressure = value => setParameter('entryPressure', value);
+  const setSelectedPreset = value => setParameter('selectedPreset', value);
+  const dx = 1000 / profileParams.cellCount;
 
   // Simulation run state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -2584,10 +2703,7 @@ const SimulatorPage = () => {
   const [simTime, setSimTime] = useState(0); // simulation timer frame
 
   // Tab Navigation state
-  const [activeSubTab, setActiveSubTab] = useState('topography');
-  const [riskModel, setRiskModel] = useState('map');
   const [theme, setTheme] = useState(() => getStoredTheme(window.localStorage));
-  const [selectedPreset, setSelectedPreset] = useState('default');
   const [shareStatus, setShareStatus] = useState('');
   const [mobilePanel, setMobilePanel] = useState(null);
   const [responsivePanelViewport, setResponsivePanelViewport] = useState(() => ({
@@ -2665,30 +2781,11 @@ const SimulatorPage = () => {
     if (mobilePanel) dismissMobilePanel(false);
     setActiveSubTab(workspace);
   };
-  const scenarioSignature = useMemo(() => createScenarioSignature({
-    K,
-    porosity,
-    cellCount,
-    residualTrapFraction,
-    dipPercent,
-    amplitude,
-    frequency,
-    faultOffset,
-    terrainSeed,
-    heterogeneity,
-    Q,
-    injLocation,
-    wellY,
-    mapCols,
-    injDuration,
-    faultCount,
-    faults,
-    hasCapillaryFringe,
-    fringeScale,
-    entryPressure
-  }), [K, porosity, cellCount, residualTrapFraction, dipPercent, amplitude, frequency, faultOffset, terrainSeed, heterogeneity, Q, injLocation, wellY, mapCols, injDuration, faultCount, faults, hasCapillaryFringe, fringeScale, entryPressure]);
-  const lastRunSignatureRef = useRef(scenarioSignature);
-  const mapLastRunSignatureRef = useRef(scenarioSignature);
+  const scenarioSignature = createScenarioSignature(scenarios[activeModel]);
+  const profileSignature = createScenarioSignature(scenarios.profile);
+  const mapSignature = createScenarioSignature(scenarios.map);
+  const lastRunSignatureRef = useRef(profileSignature);
+  const mapLastRunSignatureRef = useRef(mapSignature);
 
   // SA/UQ uncertainty bounds configuration states (default +/- percentages)
   // --- UQ / SA PARAMETER SELECTION CONFIG ---
@@ -2845,22 +2942,8 @@ const SimulatorPage = () => {
   // Initialize solver parameters reference to prevent interval resets on slider modifications
   const solverParamsRef = useRef(null);
   solverParamsRef.current = {
-    K,
-    porosity,
-    cellCount,
-    dipPercent,
-    amplitude,
-    frequency,
-    faultOffset,
-    terrainSeed,
-    heterogeneity,
-    Q,
-    injLocation,
-    injDuration,
-    faultCount,
-    parentDX: dx,
-    faults,
-    residualTrapFraction
+    ...profileParams,
+    parentDX: dx
   };
 
   // Compute mobile and trapped heights dynamically for SVG visualization
@@ -2871,7 +2954,7 @@ const SimulatorPage = () => {
     const N = h.length;
     const hMob = new Array(N).fill(0);
     const hTrap = new Array(N).fill(0);
-    const R = residualTrapFraction;
+    const R = profileParams.residualTrapFraction;
     for (let i = 0; i < N; i++) {
       const H = h[i];
       const hm = hMax[i];
@@ -2884,16 +2967,16 @@ const SimulatorPage = () => {
       hMobile: hMob,
       hTrapped: hTrap
     };
-  }, [h, hMax, residualTrapFraction]);
-
-  // Initialize solver vectors when cell count changes
+  }, [h, hMax, profileParams.residualTrapFraction]);
+  const profileReplayRef = useRef(false);
+  // Rebuild only the changed model. Realization loading already builds its history.
   useEffect(() => {
-    resetSimulation();
-  }, [cellCount]);
+    if (profileReplayRef.current) profileReplayRef.current = false;else resetSimulation();
+  }, [profileSignature]);
 
   // Reset simulation function
   const resetSimulation = () => {
-    const arr = new Array(cellCount).fill(0);
+    const arr = new Array(profileParams.cellCount).fill(0);
     setH(arr);
     setHMax(arr);
     const initialMasses = {
@@ -2952,18 +3035,17 @@ const SimulatorPage = () => {
   const crossSectionRunStatus = deriveRunStatus({
     isPlaying,
     isReversing,
-    scenarioSignature,
+    scenarioSignature: profileSignature,
     lastRunSignature: lastRunSignatureRef.current,
     simTime
   });
-  const runStatus = isMapView ? deriveMapRunStatus(mapSnapshot, scenarioSignature, mapLastRunSignatureRef.current) : crossSectionRunStatus;
+  const runStatus = isMapView ? deriveMapRunStatus(mapSnapshot, mapSignature, mapLastRunSignatureRef.current) : crossSectionRunStatus;
 
   // Preset Scenario Handlers
   const applyPreset = rawName => {
     const presetName = rawName === 'anticline' ? 'dome' : rawName === 'fault' ? 'faulted' : rawName === 'dipping' ? 'monocline' : rawName;
     setSelectedPreset(presetName);
     setWellY(50);
-    resetSimulation();
     if (presetName === 'dome') {
       setDipPercent(0.2);
       setAmplitude(45);
@@ -3078,40 +3160,40 @@ const SimulatorPage = () => {
     setFaultOffset(config.faultOffset);
     setFaultCount(config.faultCount);
     setFaults(config.faults);
-    resetSimulation();
     setShareStatus(`Generated random grid · seed ${config.terrainSeed} · ${config.mapCols} columns · ${config.faultCount} faults`);
   };
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const tab = query.get('tab');
+    loadingModelRef.current = tab === 'profile' || tab === 'uq' && query.get('risk') === 'profile' ? 'profile' : 'map';
     const preset = query.get('preset');
     if (['default', 'dome', 'faulted', 'monocline'].includes(preset)) applyPreset(preset);
     if (preset === 'random') setSelectedPreset('random');
     if (SIM_TABS.includes(tab)) setActiveSubTab(tab);
     if (query.get('risk') === 'profile' || query.get('risk') === 'map') setRiskModel(query.get('risk'));
-    setK(scenarioNumber(query, 'k', 0.1, 3.5, K));
-    setPorosity(scenarioNumber(query, 'phi', 0.1, 0.4, porosity));
-    setCellCount(scenarioNumber(query, 'cells', 50, 300, cellCount, true));
-    setResidualTrapFraction(scenarioNumber(query, 'sgr', 0, 0.4, residualTrapFraction));
-    setDipPercent(scenarioNumber(query, 'dip', -5, 5, dipPercent));
-    setAmplitude(scenarioNumber(query, 'amp', 0, 50, amplitude, true));
-    setFrequency(scenarioNumber(query, 'freq', 0.5, 4, frequency));
-    setFaultOffset(scenarioNumber(query, 'slip', 0, 3, faultOffset));
-    setQ(scenarioNumber(query, 'q', 0, 3.5, Q));
-    setInjLocation(scenarioNumber(query, 'well', 10, 90, injLocation, true));
-    setWellY(scenarioNumber(query, 'wellY', 10, 90, wellY, true));
-    setMapCols(scenarioNumber(query, 'mapCells', 24, 128, mapCols, true));
-    setTerrainSeed(scenarioNumber(query, 'terrain', 0, 999999, terrainSeed, true));
-    setHeterogeneity(scenarioNumber(query, 'hetero', 0, 1, heterogeneity));
-    setInjDuration(scenarioNumber(query, 'stop', 50, 400, injDuration, true));
-    setFaultCount(scenarioNumber(query, 'faults', 0, 3, faultCount, true));
+    if (query.has('k')) setK(scenarioNumber(query, 'k', 0.1, 3.5, K));
+    if (query.has('phi')) setPorosity(scenarioNumber(query, 'phi', 0.1, 0.4, porosity));
+    if (query.has('cells')) setCellCount(scenarioNumber(query, 'cells', 50, 300, cellCount, true));
+    if (query.has('sgr')) setResidualTrapFraction(scenarioNumber(query, 'sgr', 0, 0.4, residualTrapFraction));
+    if (query.has('dip')) setDipPercent(scenarioNumber(query, 'dip', -5, 5, dipPercent));
+    if (query.has('amp')) setAmplitude(scenarioNumber(query, 'amp', 0, 50, amplitude, true));
+    if (query.has('freq')) setFrequency(scenarioNumber(query, 'freq', 0.5, 4, frequency));
+    if (query.has('slip')) setFaultOffset(scenarioNumber(query, 'slip', 0, 3, faultOffset));
+    if (query.has('q')) setQ(scenarioNumber(query, 'q', 0, 3.5, Q));
+    if (query.has('well')) setInjLocation(scenarioNumber(query, 'well', 10, 90, injLocation, true));
+    if (query.has('wellY')) setWellY(scenarioNumber(query, 'wellY', 10, 90, wellY, true));
+    if (query.has('mapCells')) setMapCols(scenarioNumber(query, 'mapCells', 24, 128, mapCols, true));
+    if (query.has('terrain')) setTerrainSeed(scenarioNumber(query, 'terrain', 0, 999999, terrainSeed, true));
+    if (query.has('hetero')) setHeterogeneity(scenarioNumber(query, 'hetero', 0, 1, heterogeneity));
+    if (query.has('stop')) setInjDuration(scenarioNumber(query, 'stop', 50, 400, injDuration, true));
+    if (query.has('faults')) setFaultCount(scenarioNumber(query, 'faults', 0, 3, faultCount, true));
     try {
       const decoded = JSON.parse(query.get('faultData') || 'null');
-      if (Array.isArray(decoded) && decoded.length <= 3) {
+      if (Array.isArray(decoded) && decoded.length <= 3 && decoded.every(f => f && typeof f === 'object')) {
         setFaults(decoded.map((f, i) => ({
           xPercent: Math.max(10, Math.min(90, Number(f.xPercent) || 30 + i * 20)),
           yStartPercent: Math.max(0, Math.min(100, Number(f.yStartPercent) || 0)),
-          yEndPercent: Math.max(0, Math.min(100, Number(f.yEndPercent) || 100)),
+          yEndPercent: Math.max(0, Math.min(100, Number.isFinite(Number(f.yEndPercent)) ? Number(f.yEndPercent) : 100)),
           isSealed: Boolean(f.isSealed),
           thresholdHeight: Math.max(0, Math.min(2, Number(f.thresholdHeight) || 0)),
           leakRate: Math.max(0.01, Math.min(0.4, Number(f.leakRate) || 0.01)),
@@ -3120,6 +3202,7 @@ const SimulatorPage = () => {
         })));
       }
     } catch (_) {/* Invalid shared fault data falls back to the preset. */}
+    loadingModelRef.current = null;
   }, []);
   useEffect(() => () => {
     if (uqWorkerRef.current) uqWorkerRef.current.terminate();
@@ -3180,10 +3263,10 @@ const SimulatorPage = () => {
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   };
   const exportCsv = () => {
-    const rows = ['year,injected_kt,mobile_kt,trapped_kt,leaked_kt', ...massHistory.map(r => [r.time, r.injected, r.mobile, r.trapped, r.leaked].join(','))];
-    downloadBlob(new Blob([rows.join('\n')], {
+    const csv = massBalanceCsv(activeMassHistory, activeModel, terrainSeed);
+    downloadBlob(new Blob([csv], {
       type: 'text/csv;charset=utf-8'
-    }), 've-simulator-mass-balance.csv');
+    }), `ve-${activeModel}-mass-balance.csv`);
   };
   const exportSvg = () => {
     if (!reservoirSvgRef.current) throw new Error('Reservoir figure is unavailable');
@@ -3191,6 +3274,14 @@ const SimulatorPage = () => {
     downloadBlob(new Blob([markup], {
       type: 'image/svg+xml;charset=utf-8'
     }), 've-simulator-reservoir.svg');
+  };
+  const exportCanvas = () => {
+    const canvas = document.querySelector(isMapView && activeSubTab === 'topography' ? '.ve-topography-canvas' : '#tabpanel-map canvas');
+    if (!canvas) throw new Error('Map figure is unavailable');
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/png');
+    link.download = `ve-${activeSubTab}-seed-${terrainSeed}.png`;
+    link.click();
   };
   const runFileAction = (action, failureMessage) => executeFileAction(action, () => {
     setShareStatus(failureMessage);
@@ -3200,7 +3291,7 @@ const SimulatorPage = () => {
   // Geometry helpers accept an optional params object `p` so Monte Carlo
   // realizations can vary dip/amplitude/faultOffset/faults independently of
   // the live UI state. Passing no `p` (all render call sites) uses closure state.
-  const capRockBaseProfile = (x, p) => {
+  const capRockBaseProfile = (x, p = profileParams) => {
     const dip = 150 + x * ((p ? p.dipPercent : dipPercent) / 100.0) * 8.0; // regional dip
     const wave = -(p ? p.amplitude : amplitude) * Math.sin(x * Math.PI / 1000.0 * (p ? p.frequency : frequency) * 2);
     return dip + wave;
@@ -3237,17 +3328,14 @@ const SimulatorPage = () => {
 
   // Computes elevation for any geological stratum displaced along the sloped fault
   const stratumY = (x, cellIdx = null, yOffset = 0, p) => {
-    const g = p || {
-      faultOffset,
-      faults,
-      faultCount
-    };
+    const g = p || profileParams;
     const base = stratumBaseProfile(x, yOffset, p);
     let offset = 0;
-    const xRef = cellIdx !== null ? cellIdx * dx + dx / 2.0 : x;
+    const cellWidth = g.parentDX || 1000 / g.cellCount;
+    const xRef = cellIdx !== null ? cellIdx * cellWidth + cellWidth / 2 : x;
     for (let idx = 0; idx < g.faultCount; idx++) {
       const f = g.faults[idx];
-      const inter = getSimStratumFaultIntersection(f, idx, yOffset, p);
+      const inter = getSimStratumFaultIntersection(f, idx, yOffset, g);
       if (xRef > inter.x) {
         const direction = idx % 2 === 0 ? 1 : -1;
         offset += direction * g.faultOffset * 12;
@@ -3676,7 +3764,9 @@ const SimulatorPage = () => {
         setUqRunning(false);
         setMcResults({
           runs: data.results,
-          sampledKeys: Array.from(sampledKeys)
+          sampledKeys: Array.from(sampledKeys),
+          modelType: riskModel,
+          scenario: scenarios[riskModel]
         });
         worker.terminate();
         uqWorkerRef.current = null;
@@ -3833,71 +3923,30 @@ const SimulatorPage = () => {
     }).sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
   }, [mcResults, uqTargetMetric, faultCount]);
 
-  // Load a selected Monte Carlo model back to 2D simulator
+  // Restore the exact case used by this batch, including unsampled parameters.
   const loadUQRealization = realization => {
-    if (!realization) return;
-
-    // 1. Apply the realization's parameters to the live UI controls
-    const loadedK = parseFloat(realization.params.K.toFixed(3));
-    const loadedSgr = parseFloat(realization.params.residualTrapFraction.toFixed(3));
-    const loadedPor = parseFloat(realization.params.porosity.toFixed(3));
-    const loadedQ = parseFloat(realization.params.Q.toFixed(3));
-    const loadedInjLoc = Math.round(realization.params.injLocation);
-    const loadedDip = parseFloat(realization.params.dipPercent.toFixed(2));
-    const loadedAmp = Math.round(realization.params.amplitude);
-    setK(loadedK);
-    setResidualTrapFraction(loadedSgr);
-    setPorosity(loadedPor);
-    setQ(loadedQ);
-    setInjLocation(loadedInjLoc);
-    setDipPercent(loadedDip);
-    setAmplitude(loadedAmp);
-    if (riskModel === 'map') {
-      if (Number.isFinite(realization.params.terrainSeed)) setTerrainSeed(realization.params.terrainSeed);
-      if (Number.isFinite(realization.params.heterogeneity)) setHeterogeneity(realization.params.heterogeneity);
-    }
-    const newFaults = faults.map((f, i) => {
-      const rf = realization.params.faults[i];
-      if (rf) {
-        return {
-          ...f,
-          thresholdHeight: parseFloat(rf.thresholdHeight.toFixed(3)),
-          leakRate: rf.leakRate !== undefined ? parseFloat(rf.leakRate.toFixed(3)) : f.leakRate,
-          transmissibility: rf.transmissibility !== undefined ? parseFloat(rf.transmissibility.toFixed(3)) : f.transmissibility !== undefined ? f.transmissibility : 1.0
-        };
-      }
-      return f;
-    });
-    setFaults(newFaults);
-    if (riskModel === 'map') {
+    if (!realization || !mcResults) return;
+    const {
+      modelType,
+      scenario
+    } = mcResults;
+    const loadedParams = {
+      ...scenario,
+      ...realization.params,
+      parentDX: 1000 / scenario.cellCount
+    };
+    setScenarios(current => ({
+      ...current,
+      [modelType]: loadedParams
+    }));
+    if (modelType === 'map') {
       setActiveSubTab('topography');
-      // Let the parameter setters commit before asking the mounted map panel to replay.
       setTimeout(() => sendMapCommand('run'), 0);
       return;
     }
-
-    // 2. Snapshot the realization's EXACT solver params (the ref still holds
-    //    the pre-load values until the next render, so build it explicitly).
-    const loadedParams = {
-      K: loadedK,
-      porosity: loadedPor,
-      cellCount,
-      dipPercent: loadedDip,
-      amplitude: loadedAmp,
-      frequency,
-      faultOffset,
-      Q: loadedQ,
-      injLocation: loadedInjLoc,
-      injDuration,
-      faultCount,
-      parentDX: dx,
-      faults: newFaults.map(f => ({
-        ...f
-      })),
-      residualTrapFraction: loadedSgr
-    };
-    solverParamsRef.current = loadedParams;
-
+    profileReplayRef.current = true;
+    lastRunSignatureRef.current = createScenarioSignature(loadedParams);
+    const cellCount = loadedParams.cellCount;
     // 3. Replay the realization year-by-year so the ENTIRE timeline is
     //    scrubbable (previously only years 0 and 1000 existed, which left
     //    the seek slider, milestones, play and scrub dead after loading).
@@ -3916,7 +3965,7 @@ const SimulatorPage = () => {
       masses: {
         ...rMasses
       },
-      params: snapshotParams()
+      params: loadedParams
     }];
     const replayMassHistory = [{
       time: 0,
@@ -3934,7 +3983,7 @@ const SimulatorPage = () => {
         masses: {
           ...res.masses
         },
-        params: snapshotParams()
+        params: loadedParams
       });
       if (yr % 5 === 0 || yr === 1) replayMassHistory.push({
         time: yr,
@@ -3956,7 +4005,7 @@ const SimulatorPage = () => {
       }
     };
     historyRef.current = replayHistory;
-    if (riskModel === 'map') setActiveSubTab('topography');else setActiveSubTab('profile');
+    setActiveSubTab('profile');
   };
 
   // SVG Histogram Renderer
@@ -4323,6 +4372,9 @@ const SimulatorPage = () => {
   const buildSmoothRibbon = (topElevationFn, botElevationFn, kStart, kEnd) => {
     if (kStart > kEnd) return "";
     let path = "";
+    const {
+      cellCount
+    } = profileParams;
     for (let k = kStart; k <= kEnd; k++) {
       const x = k * dx;
       const isFault = k > 0 && k < cellCount && Math.abs(capRockY(x, k - 1) - capRockY(x, k)) > 0.1;
@@ -4386,6 +4438,12 @@ const SimulatorPage = () => {
   // Swept Residual Trapping Footprint (hTrapped)
   // Fringe thickness modulated by entry pressure: higher P_e => thinner imbibe transition (Brooks-Corey)
   const getSweptResidualSimPath = () => {
+    const {
+      cellCount,
+      hasCapillaryFringe,
+      fringeScale,
+      entryPressure
+    } = profileParams;
     const N = cellCount;
     const scale = 15.0;
     const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.25 * (15.0 / entryPressure) : 0;
@@ -4402,6 +4460,12 @@ const SimulatorPage = () => {
 
   // Active Flowing Mobile Plume (hMobile)
   const getActiveMobileSimPath = () => {
+    const {
+      cellCount,
+      hasCapillaryFringe,
+      fringeScale,
+      entryPressure
+    } = profileParams;
     const N = cellCount;
     const scale = 15.0;
     const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.35 * (15.0 / entryPressure) : 0;
@@ -4418,6 +4482,12 @@ const SimulatorPage = () => {
 
   // Maximum Historic Gas Saturation Boundary (hMax Swept Footprint Dashed Line)
   const getMaxHgLinePath = () => {
+    const {
+      cellCount,
+      hasCapillaryFringe,
+      fringeScale,
+      entryPressure
+    } = profileParams;
     const N = cellCount;
     const scale = 15.0;
     const bounds = getSimActiveBounds(k => getSimNodeValue(hMax, k, 'avg'), N, 0.001);
@@ -4456,12 +4526,12 @@ const SimulatorPage = () => {
     swept: getSweptResidualSimPath(),
     mobile: getActiveMobileSimPath(),
     maxEnv: getMaxHgLinePath()
-  }), [hMobile, hTrapped, hMax, cellCount, dx, dipPercent, amplitude, frequency, faultOffset, faultCount, faults, hasCapillaryFringe, fringeScale, entryPressure]);
+  }), [hMobile, hTrapped, hMax, profileParams]);
 
   // Reservoir Conformable Grid block columns
   const reservoirBlocks = useMemo(() => {
     const blocks = [];
-    const N = cellCount;
+    const N = profileParams.cellCount;
     for (let i = 0; i < N; i++) {
       const x1 = i * dx;
       const x2 = (i + 1) * dx;
@@ -4488,7 +4558,7 @@ const SimulatorPage = () => {
       });
     }
     return blocks;
-  }, [cellCount, dipPercent, amplitude, frequency, faultOffset, faultCount, faults]);
+  }, [profileParams]);
 
   // --- Dynamic SVG Chart Drawing ---
   const renderSVGChart = (chartMasses, chartHistory, chartTime) => {
@@ -5211,14 +5281,18 @@ const SimulatorPage = () => {
     className: `ve-run-status ve-run-status--${runStatus.toLowerCase().replace(/\s+/g, '-')}`,
     role: "status"
   }, runStatus), /*#__PURE__*/React.createElement("button", {
+    className: "ve-reset-button",
     onClick: resetActiveSimulation
   }, "Reset"), /*#__PURE__*/React.createElement("button", {
+    className: "ve-share-button",
     onClick: copyScenarioLink
   }, "Copy scenario link"), /*#__PURE__*/React.createElement("details", {
     className: "ve-export-menu"
   }, /*#__PURE__*/React.createElement("summary", null, "Export"), /*#__PURE__*/React.createElement("button", {
     onClick: () => runFileAction(exportCsv, 'Mass balance export failed. Please retry.')
-  }, "Mass balance CSV"), /*#__PURE__*/React.createElement("button", {
+  }, "Mass balance CSV"), isMapView ? /*#__PURE__*/React.createElement("button", {
+    onClick: () => runFileAction(exportCanvas, 'Map export failed. Please retry.')
+  }, "View PNG") : /*#__PURE__*/React.createElement("button", {
     onClick: () => runFileAction(exportSvg, 'Reservoir export failed. Please retry.')
   }, "Reservoir SVG")), /*#__PURE__*/React.createElement("button", {
     className: "ve-theme-toggle",
@@ -5409,7 +5483,9 @@ const SimulatorPage = () => {
     type: "checkbox",
     checked: fault.isSealed,
     onChange: event => {
-      const next = [...faults];
+      const next = faults.map(f => ({
+        ...f
+      }));
       next[index].isSealed = event.target.checked;
       setFaults(next);
     }
@@ -5421,7 +5497,9 @@ const SimulatorPage = () => {
     step: 5,
     value: fault.xPercent,
     onChange: value => {
-      const next = [...faults];
+      const next = faults.map(f => ({
+        ...f
+      }));
       next[index].xPercent = value;
       setFaults(next);
     }
@@ -5433,7 +5511,9 @@ const SimulatorPage = () => {
     step: 5,
     value: fault.yStartPercent ?? 0,
     onChange: value => {
-      const next = [...faults];
+      const next = faults.map(f => ({
+        ...f
+      }));
       next[index].yStartPercent = value;
       setFaults(next);
     }
@@ -5445,7 +5525,9 @@ const SimulatorPage = () => {
     step: 5,
     value: fault.yEndPercent ?? 100,
     onChange: value => {
-      const next = [...faults];
+      const next = faults.map(f => ({
+        ...f
+      }));
       next[index].yEndPercent = value;
       setFaults(next);
     }
@@ -5457,7 +5539,9 @@ const SimulatorPage = () => {
     step: 0.1,
     value: fault.thresholdHeight,
     onChange: value => {
-      const next = [...faults];
+      const next = faults.map(f => ({
+        ...f
+      }));
       next[index].thresholdHeight = value;
       setFaults(next);
     }
@@ -5469,7 +5553,9 @@ const SimulatorPage = () => {
     step: 0.05,
     value: fault.transmissibility ?? 1,
     onChange: value => {
-      const next = [...faults];
+      const next = faults.map(f => ({
+        ...f
+      }));
       next[index].transmissibility = value;
       setFaults(next);
     }
@@ -5481,7 +5567,9 @@ const SimulatorPage = () => {
     step: 0.02,
     value: fault.leakRate,
     onChange: value => {
-      const next = [...faults];
+      const next = faults.map(f => ({
+        ...f
+      }));
       next[index].leakRate = value;
       setFaults(next);
     }
@@ -5511,7 +5599,7 @@ const SimulatorPage = () => {
     onChange: setEntryPressure
   }))), /*#__PURE__*/React.createElement("section", {
     className: "ve-input-group"
-  }, /*#__PURE__*/React.createElement("h3", null, "Grid detail"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(ParameterField, {
+  }, /*#__PURE__*/React.createElement("h3", null, "Grid detail"), /*#__PURE__*/React.createElement("div", null, !isMapView && /*#__PURE__*/React.createElement(ParameterField, {
     label: "Grid cells (N)",
     unit: "cells",
     min: 50,
@@ -5838,12 +5926,12 @@ const SimulatorPage = () => {
         y2: "1"
       }, /*#__PURE__*/React.createElement("stop", {
         offset: "0%",
-        stopColor: "#0b7a61",
-        stopOpacity: "0.85"
+        stopColor: "#9a4b2d",
+        stopOpacity: "0.90"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "100%",
-        stopColor: "#034d3c",
-        stopOpacity: "0.75"
+        stopColor: "#2f1c18",
+        stopOpacity: "0.70"
       })), /*#__PURE__*/React.createElement("linearGradient", {
         id: "active-mobile-sim-grad",
         x1: "0",
@@ -5878,24 +5966,20 @@ const SimulatorPage = () => {
         y2: "1"
       }, /*#__PURE__*/React.createElement("stop", {
         offset: "0%",
-        stopColor: "#20c997",
-        stopOpacity: "0.85"
+        stopColor: "#9a4b2d",
+        stopOpacity: "0.90"
       }), /*#__PURE__*/React.createElement("stop", {
-        offset: "40%",
-        stopColor: "#20c997",
-        stopOpacity: "0.75"
+        offset: "45%",
+        stopColor: "#7a3824",
+        stopOpacity: "0.82"
       }), /*#__PURE__*/React.createElement("stop", {
-        offset: "75%",
-        stopColor: "#1a8e8f",
-        stopOpacity: "0.65"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "92%",
-        stopColor: "#125672",
-        stopOpacity: "0.45"
+        offset: "78%",
+        stopColor: "#55291d",
+        stopOpacity: "0.72"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "100%",
-        stopColor: "#0a2a4d",
-        stopOpacity: "0.25"
+        stopColor: "#2f1c18",
+        stopOpacity: "0.55"
       })), /*#__PURE__*/React.createElement("linearGradient", {
         id: "fringe-sim-grad",
         x1: "0",
@@ -6377,6 +6461,7 @@ const SimulatorPage = () => {
       }, /*#__PURE__*/React.createElement("span", null, "Run risk on"), /*#__PURE__*/React.createElement("button", {
         type: "button",
         "aria-pressed": riskModel === 'map',
+        disabled: uqRunning,
         onClick: () => {
           setRiskModel('map');
           setMcResults(null);
@@ -6384,6 +6469,7 @@ const SimulatorPage = () => {
       }, "2D / 3D map"), /*#__PURE__*/React.createElement("button", {
         type: "button",
         "aria-pressed": riskModel === 'profile',
+        disabled: uqRunning,
         onClick: () => {
           setRiskModel('profile');
           setMcResults(null);
@@ -6716,7 +6802,7 @@ const SimulatorPage = () => {
     hidden: activeSubTab !== 'map' && activeSubTab !== 'topography'
   }, /*#__PURE__*/React.createElement("div", {
     hidden: activeSubTab !== 'map'
-  }, /*#__PURE__*/React.createElement(Ve2DMapPanel, {
+  }, /*#__PURE__*/React.createElement(Ve2DMapPanel, _extends({
     K: K,
     porosity: porosity,
     residualTrapFraction: residualTrapFraction,
@@ -6732,26 +6818,27 @@ const SimulatorPage = () => {
     faultCount: faultCount,
     faults: faults,
     mapCols: mapCols,
-    wellY: wellY,
-    preset: selectedPreset,
+    wellY: wellY
+  }, mapParams, {
+    preset: mapParams.selectedPreset,
     command: mapCommand,
     onCommandConsumed: consumeMapCommandOnce,
     onRun: runActiveSimulation,
     onReset: resetActiveSimulation,
     onSnapshot: setMapSnapshot
-  }))), /*#__PURE__*/React.createElement("div", {
+  })))), /*#__PURE__*/React.createElement("div", {
     id: "tabpanel-topography",
     role: "tabpanel",
     "aria-labelledby": "tab-topography",
     hidden: activeSubTab !== 'topography'
   }, /*#__PURE__*/React.createElement(Ve3DTopographyPanel, {
     mapSnapshot: mapSnapshot,
-    mapCols: mapCols,
-    mapRows: Math.max(12, Math.round(mapCols * 0.6)),
-    faultCount: faultCount,
-    faults: faults,
-    injLocation: injLocation,
-    wellY: wellY,
+    mapCols: mapParams.mapCols,
+    mapRows: Math.max(12, Math.round(mapParams.mapCols * 0.6)),
+    faultCount: mapParams.faultCount,
+    faults: mapParams.faults,
+    injLocation: mapParams.injLocation,
+    wellY: mapParams.wellY,
     onMapCommand: sendMapCommand
   }))), /*#__PURE__*/React.createElement("p", {
     style: {

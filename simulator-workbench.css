@@ -1185,9 +1185,26 @@
     margin-block: 0;
   }
 
-  .ve-scenario-bar > button:not(.ve-run-button),
-  .ve-scenario-bar > .ve-export-menu {
+  .ve-scenario-bar > .ve-share-button {
     display: none;
+  }
+
+  .ve-scenario-bar {
+    overflow-x: auto;
+    justify-content: flex-start;
+    scrollbar-width: none;
+  }
+
+  .ve-scenario-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ve-scenario-bar > .ve-reset-button,
+  .ve-scenario-bar > .ve-export-menu,
+  .ve-scenario-bar > .ve-theme-toggle,
+  .ve-scenario-bar > .ve-run-button {
+    display: inline-flex;
+    flex: 0 0 auto;
   }
 
   .ve-run-status {
@@ -1321,6 +1338,10 @@
   .ve-playback-bar {
     overflow-x: auto;
   }
+
+  .simulator-page-wrapper [style*="animation"] {
+    animation: none !important;
+  }
 }
 
 @media (max-width: 900px) {
@@ -1335,6 +1356,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .simulator-page-wrapper [style*="animation"] {
+    animation: none !important;
+  }
+
   .app-header--workbench .header-container,
   .app-header--workbench a,
   .app-header--workbench button,

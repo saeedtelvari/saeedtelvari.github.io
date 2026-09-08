@@ -16,6 +16,8 @@ const loadRunStateHelpers = () => {
   vm.runInNewContext(`this.helpers.getStoredTheme = typeof getStoredTheme === 'undefined' ? undefined : getStoredTheme;
 this.helpers.persistTheme = typeof persistTheme === 'undefined' ? undefined : persistTheme;`, context);
   vm.runInNewContext(`this.helpers.createRandomGridConfig = typeof createRandomGridConfig === 'undefined' ? undefined : createRandomGridConfig;`, context);
+  vm.runInNewContext(`this.helpers.updateScenarioParameter = typeof updateScenarioParameter === 'undefined' ? undefined : updateScenarioParameter;
+this.helpers.massBalanceCsv = typeof massBalanceCsv === 'undefined' ? undefined : massBalanceCsv;`, context);
   vm.runInNewContext(`this.helpers.clampTopographyCamera = typeof clampTopographyCamera === 'undefined' ? undefined : clampTopographyCamera;
 this.helpers.resetTopographyCamera = typeof resetTopographyCamera === 'undefined' ? undefined : resetTopographyCamera;
 this.helpers.projectTopographyPoint = typeof projectTopographyPoint === 'undefined' ? undefined : projectTopographyPoint;`, context);
@@ -57,6 +59,28 @@ test('scenario signature changes when a nested fault input changes', () => {
   const after = createSignature({ ...scenario, faults: [{ ...scenario.faults[0], xPercent: 35 }] });
 
   assert.notEqual(after, before);
+});
+
+test('increasing fault count creates editable faults without mutating another model', () => {
+  const { updateScenarioParameter } = loadRunStateHelpers();
+  assert.equal(typeof updateScenarioParameter, 'function');
+  const original = { faultCount: 1, faults: [{ xPercent: 28, isSealed: true }] };
+  const next = updateScenarioParameter(original, 'faultCount', 3);
+  assert.equal(next.faultCount, 3);
+  assert.equal(next.faults.length, 3);
+  assert.equal(original.faults.length, 1);
+  assert.ok(next.faults.every(f => Number.isFinite(f.xPercent)));
+  const reduced = updateScenarioParameter(next, 'faultCount', 0);
+  assert.equal(updateScenarioParameter(reduced, 'faultCount', 3).faults[0].isSealed, true);
+});
+
+test('mass CSV preserves the selected history and identifies its model and terrain', () => {
+  const { massBalanceCsv } = loadRunStateHelpers();
+  assert.equal(typeof massBalanceCsv, 'function');
+  const csv = massBalanceCsv([{ time: 9, injected: 12, mobile: 8, trapped: 3, leaked: 1 }], 'map', 42);
+  assert.equal(csv.split('\n')[1], '9,12,8,3,1,map,42');
+  assert.match(csv.split('\n')[0], /model_type,terrain_seed$/);
+  assert.equal(massBalanceCsv([{ time: 0 }], 'profile', 42).split('\n')[1].split(',').at(-1), '');
 });
 
 test('active playback state wins over modified inputs', () => {
@@ -486,6 +510,19 @@ test('3D topography reuses the map structure, surface overlays, and shared playb
   assert.match(panel, /onMapCommand\('speed'\)/);
   assert.match(page, /getMapPlaybackTransition\(\{ isRunning, speed: mapSpeed \}, command\.type\)/);
   assert.match(page, /onMapCommand=\{sendMapCommand\}/);
+});
+
+test('terrain and CO₂ palettes keep their semantic roles across views', () => {
+  const page = read('SimulatorPage.jsx');
+  assert.match(page, /ctx\.fillStyle = `rgb\(\$\{15 \+ Math\.round\(depthRatio \* 18\)\}, \$\{58 \+ Math\.round\(depthRatio \* 32\)\}, \$\{61 \+ Math\.round\(depthRatio \* 28\)\}\)`/);
+  assert.match(page, /const plumeRed = Math\.round\(245 - trappedRatio \* 115\)/);
+  assert.match(page, /const plumeGreen = Math\.round\(158 - trappedRatio \* 90\)/);
+  assert.match(page, /const plumeBlue = Math\.round\(11 \+ trappedRatio \* 24\)/);
+  assert.match(page, /id="residual-trapped-sim-grad"[\s\S]*?stopColor="#9a4b2d"/);
+  assert.match(page, /id="trapped-grad"[\s\S]*?stopColor="#9a4b2d"/);
+  assert.match(page, /fault\.isSealed \? '#64ffda' : '#ff6b6b'/);
+  assert.match(page, /const terrainKey = JSON\.stringify\(\{ mapCols, gridRows, structure, activeFaults \}\)/);
+  assert.match(page, /const projectionKey = JSON\.stringify\(\{ terrainKey, camera, elevationScale \}\)/);
 });
 
 test('year-zero dome structure has non-flat authoritative topography', () => {
