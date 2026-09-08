@@ -1107,6 +1107,34 @@ const SIM_TABS = ['profile', 'map', 'topography', 'uq', 'guide'];
 const VISUALIZATION_TABS = ['profile', 'map', 'topography'];
 const MAP_TABS = ['map', 'topography'];
 
+// Shared visualization colors keep the scientific layers distinct across map,
+// topography, profile, legends, charts, and outcome metrics.
+const SIM_PALETTE = Object.freeze({
+  terrainLow: [15, 60, 66],
+  terrainHigh: [43, 160, 146],
+  mobile: '#e78bff',
+  mobileRgb: [231, 139, 255],
+  trapped: '#6d4ca3',
+  trappedRgb: [109, 76, 163],
+  leakage: '#ff718a',
+  injector: '#f6c453',
+  injectorEdge: '#fff2c7',
+  sealedFault: '#7ce5d3',
+  transmissiveFault: '#ff8a82',
+  active: '#a6f7cf',
+  activeDeep: '#60d9ad',
+  capillary: '#3bbfa3',
+  capillaryDeep: '#267f95',
+  brine: '#162d54',
+  brineDeep: '#091a34'
+});
+const interpolateRgb = (from, to, ratio) => {
+  const t = Math.max(0, Math.min(1, Number(ratio) || 0));
+  return from.map((value, index) => Math.round(value + (to[index] - value) * t));
+};
+const rgbCss = values => `rgb(${values.join(', ')})`;
+const rgbaCss = (values, alpha) => `rgba(${values.join(', ')}, ${alpha})`;
+
 // Declarative registry of every parameter the UQ batch can sample.
 // dec = display decimals; dec 0 params are sampled as integers.
 const UQ_PARAM_DEFS = [{
@@ -1734,7 +1762,7 @@ const UQParamConfig = ({
   }), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 9,
-      color: parseValueList(cfg.values).length > 0 ? 'rgba(255,255,255,0.35)' : '#ff6b6b'
+      color: parseValueList(cfg.values).length > 0 ? 'rgba(255,255,255,0.35)' : SIM_PALETTE.leakage
     }
   }, parseValueList(cfg.values).length, " valid value", parseValueList(cfg.values).length === 1 ? '' : 's', " \u2014 sampled uniformly")));
 };
@@ -1897,17 +1925,14 @@ const Ve2DMapPanel = ({
       const col = index % mapState.cols;
       const row = Math.floor(index / mapState.cols);
       const depthRatio = (depths[index] - minDepth) / depthSpan;
-      ctx.fillStyle = `rgb(${15 + Math.round(depthRatio * 18)}, ${58 + Math.round(depthRatio * 32)}, ${61 + Math.round(depthRatio * 28)})`;
+      ctx.fillStyle = rgbCss(interpolateRgb(SIM_PALETTE.terrainLow, SIM_PALETTE.terrainHigh, depthRatio));
       ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
       if (mapState.h[index] > 0.0001) {
         const intensity = Math.sqrt(mapState.h[index] / maxPlume);
         const historic = mapState.hMax[index];
         const mobile = residualTrapFraction < 1 ? Math.min(mapState.h[index], Math.max(0, (mapState.h[index] - residualTrapFraction * historic) / (1 - residualTrapFraction))) : 0;
         const trappedRatio = mapState.h[index] > 0 ? 1 - mobile / mapState.h[index] : 0;
-        const plumeRed = Math.round(245 - trappedRatio * 115);
-        const plumeGreen = Math.round(158 - trappedRatio * 90);
-        const plumeBlue = Math.round(11 + trappedRatio * 24);
-        ctx.fillStyle = `rgba(${plumeRed}, ${plumeGreen}, ${plumeBlue}, ${0.24 + intensity * 0.72})`;
+        ctx.fillStyle = rgbaCss(interpolateRgb(SIM_PALETTE.mobileRgb, SIM_PALETTE.trappedRgb, trappedRatio), 0.24 + intensity * 0.72);
         ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
       }
     }
@@ -1933,7 +1958,7 @@ const Ve2DMapPanel = ({
       ctx.beginPath();
       ctx.moveTo(lineX(y0), y0);
       ctx.lineTo(lineX(y1), y1);
-      ctx.strokeStyle = fault.isSealed ? '#64ffda' : '#ff6b6b';
+      ctx.strokeStyle = fault.isSealed ? SIM_PALETTE.sealedFault : SIM_PALETTE.transmissiveFault;
       ctx.lineWidth = fault.isSealed ? 3 : 2;
       ctx.setLineDash(fault.isSealed ? [] : [9, 7]);
       ctx.stroke();
@@ -1943,7 +1968,7 @@ const Ve2DMapPanel = ({
     const wellMapY = wellY / 100 * height;
     ctx.beginPath();
     ctx.arc(wellX, wellMapY, 10, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffb300';
+    ctx.fillStyle = SIM_PALETTE.injector;
     ctx.fill();
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 3;
@@ -2005,7 +2030,7 @@ const Ve2DMapPanel = ({
       flex: 1,
       display: 'flex',
       flexDirection: 'column',
-      background: '#111823',
+      background: '#101a2a',
       minHeight: 520
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -2041,23 +2066,23 @@ const Ve2DMapPanel = ({
     }
   }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
     style: {
-      color: '#f59e0b'
+      color: SIM_PALETTE.mobile
     }
   }, "\u25A0"), " Mobile CO\u2082"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
     style: {
-      color: '#b45309'
+      color: SIM_PALETTE.trapped
     }
   }, "\u25A0"), " Residual CO\u2082"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
     style: {
-      color: '#ffb300'
+      color: SIM_PALETTE.injector
     }
   }, "\u25CF"), " Injector"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
     style: {
-      color: '#64ffda'
+      color: SIM_PALETTE.sealedFault
     }
   }, "\u2501"), " Sealed fault"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", {
     style: {
-      color: '#ff6b6b'
+      color: SIM_PALETTE.transmissiveFault
     }
   }, "\u2504"), " Transmissive fault"))), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -2167,15 +2192,15 @@ const Ve2DMapPanel = ({
   }), /*#__PURE__*/React.createElement(StatBox, {
     label: "Mobile",
     value: mapState.masses.mobile.toFixed(1),
-    color: "#f59e0b"
+    color: SIM_PALETTE.mobile
   }), /*#__PURE__*/React.createElement(StatBox, {
     label: "Trapped",
     value: mapState.masses.trapped.toFixed(1),
-    color: "#b45309"
+    color: SIM_PALETTE.trapped
   }), /*#__PURE__*/React.createElement(StatBox, {
     label: "Leaked",
     value: mapState.masses.leaked.toFixed(1),
-    color: "#ff6b6b"
+    color: SIM_PALETTE.leakage
   })));
 };
 const Ve3DTopographyPanel = ({
@@ -2461,10 +2486,13 @@ const Ve3DTopographyPanel = ({
       ctx.moveTo(points[0].x, points[0].y);
       points.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
       ctx.closePath();
-      ctx.fillStyle = plumeRatio > 0.0001 ? `rgb(${Math.round((205 + historicRatio * 42) * shade)}, ${Math.round((76 + plumeRatio * 86) * shade)}, ${Math.round((34 + plumeRatio * 30) * shade)})` : `rgb(${Math.round((15 + cell.surfaceRatio * 24) * shade)}, ${Math.round((92 + cell.surfaceRatio * 76) * shade)}, ${Math.round((86 + cell.surfaceRatio * 60) * shade)})`;
+      const terrainColor = interpolateRgb(SIM_PALETTE.terrainLow, SIM_PALETTE.terrainHigh, cell.surfaceRatio);
+      const plumeColor = interpolateRgb(SIM_PALETTE.trappedRgb, SIM_PALETTE.mobileRgb, plumeRatio * 0.85 + historicRatio * 0.15);
+      const shadedColor = (plumeRatio > 0.0001 ? plumeColor : terrainColor).map(value => Math.round(value * shade));
+      ctx.fillStyle = rgbCss(shadedColor);
       ctx.fill();
       if (showGrid) {
-        ctx.strokeStyle = 'rgba(194, 221, 220, 0.14)';
+        ctx.strokeStyle = 'rgba(219, 246, 239, 0.14)';
         ctx.lineWidth = 0.8;
         ctx.stroke();
       }
@@ -2476,7 +2504,7 @@ const Ve3DTopographyPanel = ({
       if (faultPoints.length < 2) return;
       ctx.beginPath();
       faultPoints.forEach((point, pointIndex) => pointIndex ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
-      ctx.strokeStyle = fault.isSealed ? 'rgba(100,255,218,0.86)' : 'rgba(255,107,107,0.78)';
+      ctx.strokeStyle = fault.isSealed ? SIM_PALETTE.sealedFault : SIM_PALETTE.transmissiveFault;
       ctx.lineWidth = 1.8;
       ctx.setLineDash(fault.isSealed ? [] : [7, 5]);
       ctx.stroke();
@@ -2491,9 +2519,9 @@ const Ve3DTopographyPanel = ({
     }, camera, width, height);
     ctx.beginPath();
     ctx.arc(injector.x, injector.y, 7, 0, Math.PI * 2);
-    ctx.fillStyle = '#e5b15e';
+    ctx.fillStyle = SIM_PALETTE.injector;
     ctx.fill();
-    ctx.strokeStyle = '#fff3d6';
+    ctx.strokeStyle = SIM_PALETTE.injectorEdge;
     ctx.lineWidth = 2;
     ctx.stroke();
   }, [camera, elevationScale, faultCount, faults, gridRows, injLocation, mapCols, mapSnapshot, showGrid, wellY]);
@@ -4112,22 +4140,22 @@ const SimulatorPage = () => {
         y: y,
         width: barWidth,
         height: barHeight,
-        fill: "rgba(100, 255, 218, 0.22)",
-        stroke: "rgba(100, 255, 218, 0.5)",
+        fill: "rgba(124, 229, 211, 0.22)",
+        stroke: "rgba(124, 229, 211, 0.5)",
         strokeWidth: "1"
       });
     }), [{
       label: 'P10',
       val: data.p10Val,
-      color: '#64ffda'
+      color: SIM_PALETTE.sealedFault
     }, {
       label: 'P50',
       val: data.p50Val,
-      color: '#ffb300'
+      color: SIM_PALETTE.injector
     }, {
       label: 'P90',
       val: data.p90Val,
-      color: '#ff6b6b'
+      color: SIM_PALETTE.leakage
     }].map((p, i) => {
       const x = getX(p.val);
       return /*#__PURE__*/React.createElement("g", {
@@ -4234,8 +4262,8 @@ const SimulatorPage = () => {
       const xStart = item.r >= 0 ? centerOffset : getX(item.r);
       const xEnd = item.r >= 0 ? getX(item.r) : centerOffset;
       const rectWidth = Math.max(1, xEnd - xStart);
-      const color = item.r >= 0 ? '#64ffda' : '#ff6b6b';
-      const fill = item.r >= 0 ? 'rgba(100, 255, 218, 0.25)' : 'rgba(255, 107, 107, 0.25)';
+      const color = item.r >= 0 ? SIM_PALETTE.sealedFault : SIM_PALETTE.leakage;
+      const fill = item.r >= 0 ? 'rgba(124, 229, 211, 0.25)' : 'rgba(255, 113, 138, 0.25)';
       return /*#__PURE__*/React.createElement("g", {
         key: idx
       }, /*#__PURE__*/React.createElement("text", {
@@ -4599,9 +4627,9 @@ const SimulatorPage = () => {
 
       // Permeability noise mapping for sandstone heterogeneity
       const permFactor = 0.5 + 0.5 * Math.sin(i * 12.7 + 1.1);
-      const r = Math.floor(35 + permFactor * 14);
-      const g = Math.floor(26 + permFactor * 10);
-      const b = Math.floor(20 + permFactor * 6);
+      const r = Math.floor(28 + permFactor * 18);
+      const g = Math.floor(34 + permFactor * 16);
+      const b = Math.floor(54 + permFactor * 22);
       const colFill = `rgb(${r}, ${g}, ${b})`;
       blocks.push({
         points: `${x1},${yt1} ${x2},${yt2} ${x2},${yb2} ${x1},${yb1}`,
@@ -4697,7 +4725,7 @@ const SimulatorPage = () => {
       style: {
         width: 10,
         height: 2.5,
-        background: '#f59e0b'
+        background: SIM_PALETTE.mobile
       }
     }), /*#__PURE__*/React.createElement("span", {
       style: {
@@ -4705,7 +4733,7 @@ const SimulatorPage = () => {
       }
     }, "Mobile:"), /*#__PURE__*/React.createElement("strong", {
       style: {
-        color: '#f59e0b',
+        color: SIM_PALETTE.mobile,
         fontFamily: 'monospace'
       }
     }, formatMass(chartMasses.mobile))), /*#__PURE__*/React.createElement("span", {
@@ -4718,7 +4746,7 @@ const SimulatorPage = () => {
       style: {
         width: 10,
         height: 2.5,
-        background: '#b45309'
+        background: SIM_PALETTE.trapped
       }
     }), /*#__PURE__*/React.createElement("span", {
       style: {
@@ -4726,7 +4754,7 @@ const SimulatorPage = () => {
       }
     }, "Trapped:"), /*#__PURE__*/React.createElement("strong", {
       style: {
-        color: '#b45309',
+        color: SIM_PALETTE.trapped,
         fontFamily: 'monospace'
       }
     }, formatMass(chartMasses.trapped))), /*#__PURE__*/React.createElement("span", {
@@ -4739,7 +4767,7 @@ const SimulatorPage = () => {
       style: {
         width: 10,
         height: 2.5,
-        background: '#ff6b6b'
+        background: SIM_PALETTE.leakage
       }
     }), /*#__PURE__*/React.createElement("span", {
       style: {
@@ -4747,7 +4775,7 @@ const SimulatorPage = () => {
       }
     }, "Leaked:"), /*#__PURE__*/React.createElement("strong", {
       style: {
-        color: '#ff6b6b',
+        color: SIM_PALETTE.leakage,
         fontFamily: 'monospace'
       }
     }, formatMass(chartMasses.leaked)))), /*#__PURE__*/React.createElement("svg", {
@@ -4807,27 +4835,27 @@ const SimulatorPage = () => {
     }), pathMob && /*#__PURE__*/React.createElement("path", {
       d: pathMob,
       fill: "none",
-      stroke: "#f59e0b",
+      stroke: SIM_PALETTE.mobile,
       strokeWidth: "2",
       style: {
-        filter: 'drop-shadow(0 0 2px rgba(245,158,11,0.35))'
+        filter: 'drop-shadow(0 0 2px rgba(231,139,255,0.35))'
       }
     }), pathTrap && /*#__PURE__*/React.createElement("path", {
       d: pathTrap,
       fill: "none",
-      stroke: "#b45309",
+      stroke: SIM_PALETTE.trapped,
       strokeWidth: "1.8"
     }), pathLeak && /*#__PURE__*/React.createElement("path", {
       d: pathLeak,
       fill: "none",
-      stroke: "#ff6b6b",
+      stroke: SIM_PALETTE.leakage,
       strokeWidth: "2"
     }), /*#__PURE__*/React.createElement("line", {
       x1: getX(chartTime),
       y1: padding.top,
       x2: getX(chartTime),
       y2: height - padding.bottom,
-      stroke: "#64ffda",
+      stroke: SIM_PALETTE.sealedFault,
       strokeWidth: "1.2",
       strokeDasharray: "2 2",
       opacity: "0.8"
@@ -4835,7 +4863,7 @@ const SimulatorPage = () => {
       cx: getX(chartTime),
       cy: padding.top,
       r: "3",
-      fill: "#64ffda"
+      fill: SIM_PALETTE.sealedFault
     }), /*#__PURE__*/React.createElement("line", {
       x1: padding.left,
       y1: padding.top,
@@ -4941,8 +4969,8 @@ const SimulatorPage = () => {
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
-        background: isPast ? 'rgba(255, 179, 0, 0.1)' : 'rgba(100, 255, 218, 0.1)',
-        border: `1px solid ${isPast ? 'rgba(255, 179, 0, 0.3)' : 'rgba(100, 255, 218, 0.3)'}`,
+        background: isPast ? 'rgba(246, 196, 83, 0.1)' : 'rgba(124, 229, 211, 0.1)',
+        border: `1px solid ${isPast ? 'rgba(246, 196, 83, 0.3)' : 'rgba(124, 229, 211, 0.3)'}`,
         padding: '12px 14px',
         borderRadius: 12,
         display: 'flex',
@@ -4956,15 +4984,15 @@ const SimulatorPage = () => {
         gap: 8,
         fontSize: 11,
         fontWeight: 'bold',
-        color: isPast ? '#ffb300' : '#64ffda'
+        color: isPast ? SIM_PALETTE.injector : '#64ffda'
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
         width: 8,
         height: 8,
         borderRadius: '50%',
-        background: isPast ? '#ffb300' : '#64ffda',
-        boxShadow: `0 0 8px ${isPast ? '#ffb300' : '#64ffda'}`,
+        background: isPast ? SIM_PALETTE.injector : '#64ffda',
+        boxShadow: `0 0 8px ${isPast ? SIM_PALETTE.injector : '#64ffda'}`,
         animation: 'pulseFlare 1.5s infinite'
       }
     }), isPast ? `VIEWING PAST \u00B7 YEAR ${simTime}` : `SIMULATING \u00B7 YEAR ${simTime}`), /*#__PURE__*/React.createElement("div", {
@@ -4990,7 +5018,7 @@ const SimulatorPage = () => {
         handlePlayToggle();
       },
       style: {
-        background: '#0dfca2',
+        background: SIM_PALETTE.active,
         border: 'none',
         color: '#000',
         padding: '8px 12px',
@@ -5072,7 +5100,7 @@ const SimulatorPage = () => {
       style: {
         background: 'none',
         border: 'none',
-        color: isReversing ? '#ff6b6b' : '#64ffda',
+        color: isReversing ? SIM_PALETTE.leakage : '#64ffda',
         cursor: 'pointer'
       },
       title: isReversing ? "Pause" : "Play Reverse"
@@ -5090,7 +5118,7 @@ const SimulatorPage = () => {
       style: {
         background: 'none',
         border: 'none',
-        color: !isPlaying && !isReversing ? '#ffb300' : '#fff',
+        color: !isPlaying && !isReversing ? SIM_PALETTE.injector : '#fff',
         cursor: 'pointer'
       },
       title: "Pause"
@@ -5105,7 +5133,7 @@ const SimulatorPage = () => {
       style: {
         background: 'none',
         border: 'none',
-        color: isPlaying ? '#0dfca2' : '#64ffda',
+        color: isPlaying ? SIM_PALETTE.active : '#64ffda',
         cursor: 'pointer'
       },
       title: isPlaying ? "Pause" : "Play Forward"
@@ -5182,7 +5210,7 @@ const SimulatorPage = () => {
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
-        color: '#ff6b6b',
+        color: SIM_PALETTE.leakage,
         textDecoration: 'line-through'
       }
     }, diff.original), /*#__PURE__*/React.createElement("span", {
@@ -5196,7 +5224,7 @@ const SimulatorPage = () => {
       }
     })), /*#__PURE__*/React.createElement("span", {
       style: {
-        color: '#0dfca2',
+        color: SIM_PALETTE.active,
         fontWeight: 'bold'
       }
     }, diff.current)))) : /*#__PURE__*/React.createElement("div", {
@@ -5269,9 +5297,9 @@ const SimulatorPage = () => {
           width: 12,
           height: 12,
           borderRadius: '50%',
-          background: isCurrent ? '#0dfca2' : isSimulated ? '#3ca68e' : 'rgba(100,255,218,0.2)',
+          background: isCurrent ? SIM_PALETTE.active : isSimulated ? SIM_PALETTE.capillary : 'rgba(100,255,218,0.2)',
           border: isCurrent ? '2px solid #fff' : isSimulated ? '2px solid transparent' : '1px dashed rgba(100,255,218,0.6)',
-          boxShadow: isCurrent ? '0 0 6px #0dfca2' : 'none',
+          boxShadow: isCurrent ? `0 0 6px ${SIM_PALETTE.active}` : 'none',
           zIndex: 2,
           transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease',
           display: 'flex',
@@ -5282,7 +5310,7 @@ const SimulatorPage = () => {
         style: {
           fontSize: 11.5,
           fontFamily: 'monospace',
-          color: isCurrent ? '#0dfca2' : isSimulated ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)',
+          color: isCurrent ? SIM_PALETTE.active : isSimulated ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)',
           fontWeight: isCurrent ? 'bold' : 'normal'
         }
       }, "Year ", m, " ", isCurrent && '\u2190'));
@@ -5844,7 +5872,7 @@ const SimulatorPage = () => {
           flex: 1,
           position: 'relative',
           display: 'flex',
-          background: '#1c1626'
+          background: '#101a2a'
         }
       }, /*#__PURE__*/React.createElement("div", {
         className: "sim-hud-legend",
@@ -5877,7 +5905,7 @@ const SimulatorPage = () => {
           width: 8,
           height: 8,
           borderRadius: 2,
-          background: '#f59e0b'
+          background: SIM_PALETTE.mobile
         }
       }), " Mobile CO\u2082 (S_g \u2192 0.90)"), /*#__PURE__*/React.createElement("span", {
         style: {
@@ -5890,8 +5918,8 @@ const SimulatorPage = () => {
           width: 8,
           height: 8,
           borderRadius: 2,
-          background: '#b45309',
-          border: '1px solid #7c2d12'
+          background: SIM_PALETTE.trapped,
+          border: '1px solid #4a3270'
         }
       }), " Trapped Gas (S_gr \u2248 0.25)"), /*#__PURE__*/React.createElement("span", {
         style: {
@@ -5903,7 +5931,7 @@ const SimulatorPage = () => {
         style: {
           width: 14,
           height: 0,
-          borderTop: '2px dashed #64ffda'
+          borderTop: `2px dashed ${SIM_PALETTE.sealedFault}`
         }
       }), " Max Envelope (h_max)"), hasCapillaryFringe && /*#__PURE__*/React.createElement("span", {
         style: {
@@ -5916,8 +5944,8 @@ const SimulatorPage = () => {
           width: 8,
           height: 8,
           borderRadius: 2,
-          background: 'linear-gradient(180deg, #20c997, #1a8e8f, #0a2a4d)',
-          border: '1px solid #20c997'
+          background: `linear-gradient(180deg, ${SIM_PALETTE.capillary}, ${SIM_PALETTE.capillaryDeep}, ${SIM_PALETTE.brine})`,
+          border: `1px solid ${SIM_PALETTE.capillary}`
         }
       }), " Capillary Fringe"), /*#__PURE__*/React.createElement("span", {
         style: {
@@ -5930,7 +5958,7 @@ const SimulatorPage = () => {
           width: 8,
           height: 8,
           borderRadius: 2,
-          background: '#0a2a4d'
+          background: SIM_PALETTE.brine
         }
       }), " Brine (S_w = 1.0)")), /*#__PURE__*/React.createElement("svg", {
         ref: reservoirSvgRef,
@@ -5965,15 +5993,15 @@ const SimulatorPage = () => {
         y2: "1"
       }, /*#__PURE__*/React.createElement("stop", {
         offset: "0%",
-        stopColor: "#f59e0b",
+        stopColor: "#f3c4ff",
         stopOpacity: "0.95"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "40%",
-        stopColor: "#f97316",
+        stopColor: "#e78bff",
         stopOpacity: "0.85"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "100%",
-        stopColor: "#c2410c",
+        stopColor: "#9b5bd1",
         stopOpacity: "0.75"
       })), /*#__PURE__*/React.createElement("linearGradient", {
         id: "trapped-grad",
@@ -5983,11 +6011,11 @@ const SimulatorPage = () => {
         y2: "1"
       }, /*#__PURE__*/React.createElement("stop", {
         offset: "0%",
-        stopColor: "#9a4b2d",
+        stopColor: "#6d4ca3",
         stopOpacity: "0.90"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "100%",
-        stopColor: "#2f1c18",
+        stopColor: "#2d2048",
         stopOpacity: "0.70"
       })), /*#__PURE__*/React.createElement("linearGradient", {
         id: "active-mobile-sim-grad",
@@ -5997,23 +6025,23 @@ const SimulatorPage = () => {
         y2: "1"
       }, /*#__PURE__*/React.createElement("stop", {
         offset: "0%",
-        stopColor: "#f59e0b",
+        stopColor: "#f3c4ff",
         stopOpacity: "0.98"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "45%",
-        stopColor: "#f59e0b",
+        stopColor: "#e78bff",
         stopOpacity: "0.95"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "70%",
-        stopColor: "#f97316",
+        stopColor: "#c477f0",
         stopOpacity: "0.92"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "88%",
-        stopColor: "#ea580c",
+        stopColor: "#9b5bd1",
         stopOpacity: "0.90"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "100%",
-        stopColor: "#9a3412",
+        stopColor: "#6d4ca3",
         stopOpacity: "0.85"
       })), /*#__PURE__*/React.createElement("linearGradient", {
         id: "residual-trapped-sim-grad",
@@ -6023,19 +6051,19 @@ const SimulatorPage = () => {
         y2: "1"
       }, /*#__PURE__*/React.createElement("stop", {
         offset: "0%",
-        stopColor: "#9a4b2d",
+        stopColor: "#6d4ca3",
         stopOpacity: "0.90"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "45%",
-        stopColor: "#7a3824",
+        stopColor: "#573b82",
         stopOpacity: "0.82"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "78%",
-        stopColor: "#55291d",
+        stopColor: "#3f2d61",
         stopOpacity: "0.72"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "100%",
-        stopColor: "#2f1c18",
+        stopColor: "#2d2048",
         stopOpacity: "0.55"
       })), /*#__PURE__*/React.createElement("linearGradient", {
         id: "fringe-sim-grad",
@@ -6045,19 +6073,19 @@ const SimulatorPage = () => {
         y2: "1"
       }, /*#__PURE__*/React.createElement("stop", {
         offset: "0%",
-        stopColor: "#20c997",
+        stopColor: "#3bbfa3",
         stopOpacity: "0.80"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "50%",
-        stopColor: "#1a8e8f",
+        stopColor: "#267f95",
         stopOpacity: "0.60"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "85%",
-        stopColor: "#125672",
+        stopColor: "#1e5c78",
         stopOpacity: "0.35"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "100%",
-        stopColor: "#0a2a4d",
+        stopColor: "#162d54",
         stopOpacity: "0.10"
       })), /*#__PURE__*/React.createElement("linearGradient", {
         id: "brine-grad",
@@ -6067,11 +6095,11 @@ const SimulatorPage = () => {
         y2: "1"
       }, /*#__PURE__*/React.createElement("stop", {
         offset: "0%",
-        stopColor: "#0a2a4d",
+        stopColor: "#162d54",
         stopOpacity: "0.85"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "100%",
-        stopColor: "#051426",
+        stopColor: "#091a34",
         stopOpacity: "0.95"
       })), /*#__PURE__*/React.createElement("linearGradient", {
         id: "well-gradient",
@@ -6099,10 +6127,10 @@ const SimulatorPage = () => {
         y2: "1"
       }, /*#__PURE__*/React.createElement("stop", {
         offset: "0%",
-        stopColor: "#64ffda"
+        stopColor: "#f6c453"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "100%",
-        stopColor: "#05e67c"
+        stopColor: "#d58f2d"
       })), /*#__PURE__*/React.createElement("radialGradient", {
         id: "inj-flare-glow",
         cx: "50%",
@@ -6110,15 +6138,15 @@ const SimulatorPage = () => {
         r: "50%"
       }, /*#__PURE__*/React.createElement("stop", {
         offset: "0%",
-        stopColor: "#0dfca2",
+        stopColor: "#a6f7cf",
         stopOpacity: "0.9"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "45%",
-        stopColor: "#05e67c",
+        stopColor: "#60d9ad",
         stopOpacity: "0.5"
       }), /*#__PURE__*/React.createElement("stop", {
         offset: "100%",
-        stopColor: "#0dfca2",
+        stopColor: "#a6f7cf",
         stopOpacity: "0"
       }))), /*#__PURE__*/React.createElement("path", {
         d: `M 0 0 L 1000 0 L 1000 ${capRockY(1000, cellCount - 1)} ` + Array.from({
@@ -6170,7 +6198,7 @@ const SimulatorPage = () => {
       }), plumePaths.maxEnv && /*#__PURE__*/React.createElement("path", {
         d: plumePaths.maxEnv,
         fill: "none",
-        stroke: "#64ffda",
+        stroke: SIM_PALETTE.sealedFault,
         strokeWidth: "1.4",
         strokeDasharray: "5 3.5",
         opacity: "0.85"
@@ -6210,7 +6238,7 @@ const SimulatorPage = () => {
           y1: "6",
           x2: xWell + 11,
           y2: "6",
-          stroke: "#64ffda",
+          stroke: SIM_PALETTE.injector,
           strokeWidth: "2.5",
           strokeLinecap: "round"
         }), /*#__PURE__*/React.createElement("circle", {
@@ -6243,7 +6271,7 @@ const SimulatorPage = () => {
             y1: py,
             x2: xWell + 6,
             y2: py,
-            stroke: isInjecting ? '#0dfca2' : 'rgba(255,255,255,0.7)',
+            stroke: isInjecting ? SIM_PALETTE.active : 'rgba(255,255,255,0.7)',
             strokeWidth: "1.6",
             strokeLinecap: "round"
           });
@@ -6263,7 +6291,7 @@ const SimulatorPage = () => {
           cx: xWell,
           cy: 12 + (yCap - 12) * (idx / 3.0),
           r: "2",
-          fill: "#0dfca2",
+          fill: SIM_PALETTE.active,
           style: {
             animation: `streakRise 1.5s linear ${delay}s infinite`
           }
@@ -6273,7 +6301,7 @@ const SimulatorPage = () => {
       }).map((_, idx) => {
         const f = faults[idx];
         const inter = getSimFaultIntersection(f, idx);
-        const color = f.isSealed ? '#64ffda' : '#ff6b6b';
+        const color = f.isSealed ? SIM_PALETTE.sealedFault : SIM_PALETTE.transmissiveFault;
         const yStart = 0;
         const yEnd = 450;
         const xStart = inter.x0 + inter.slope * yStart;
@@ -6312,7 +6340,7 @@ const SimulatorPage = () => {
             y1: inter.y,
             x2: xTop,
             y2: yTop,
-            stroke: "#ff6b6b",
+            stroke: SIM_PALETTE.leakage,
             strokeWidth: "1.5",
             strokeDasharray: "4 3",
             opacity: "0.8",
@@ -6324,7 +6352,7 @@ const SimulatorPage = () => {
             cx: inter.x,
             cy: inter.y,
             r: "1.6",
-            fill: "#ff6b6b",
+            fill: SIM_PALETTE.leakage,
             style: {
               opacity: 0,
               '--travel-x': `${travelX}px`,
@@ -6374,7 +6402,7 @@ const SimulatorPage = () => {
         style: {
           background: 'none',
           border: 'none',
-          color: isReversing ? '#ff6b6b' : '#64ffda',
+          color: isReversing ? SIM_PALETTE.leakage : '#64ffda',
           cursor: 'pointer'
         },
         title: isReversing ? "Pause Reverse" : "Reverse Play"
@@ -6389,7 +6417,7 @@ const SimulatorPage = () => {
         style: {
           background: 'none',
           border: 'none',
-          color: isPlaying ? '#0dfca2' : '#64ffda',
+          color: isPlaying ? SIM_PALETTE.active : '#64ffda',
           cursor: 'pointer'
         },
         title: isPlaying ? "Pause" : "Play Forward"
@@ -6942,15 +6970,15 @@ const SimulatorPage = () => {
   }, /*#__PURE__*/React.createElement(ProgressBar, {
     label: "Structural Trapping (Mobile)",
     pct: activeMasses.injected > 0 ? activeMasses.mobile / activeMasses.injected * 100 : 0,
-    color: "#64ffda"
+    color: SIM_PALETTE.mobile
   }), /*#__PURE__*/React.createElement(ProgressBar, {
     label: "Residual Capillary Trapping",
     pct: activeMasses.injected > 0 ? activeMasses.trapped / activeMasses.injected * 100 : 0,
-    color: "#3ca68e"
+    color: SIM_PALETTE.trapped
   }), /*#__PURE__*/React.createElement(ProgressBar, {
     label: "Cumulative Leaked Fraction",
     pct: activeMasses.injected > 0 ? activeMasses.leaked / activeMasses.injected * 100 : 0,
-    color: "#ff6b6b"
+    color: SIM_PALETTE.leakage
   })))))));
 };
 const InputRail = ({

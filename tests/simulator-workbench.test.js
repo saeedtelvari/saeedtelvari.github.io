@@ -516,13 +516,16 @@ test('3D topography reuses the map structure, surface overlays, and shared playb
 
 test('terrain and CO₂ palettes keep their semantic roles across views', () => {
   const page = read('SimulatorPage.jsx');
-  assert.match(page, /ctx\.fillStyle = `rgb\(\$\{15 \+ Math\.round\(depthRatio \* 18\)\}, \$\{58 \+ Math\.round\(depthRatio \* 32\)\}, \$\{61 \+ Math\.round\(depthRatio \* 28\)\}\)`/);
-  assert.match(page, /const plumeRed = Math\.round\(245 - trappedRatio \* 115\)/);
-  assert.match(page, /const plumeGreen = Math\.round\(158 - trappedRatio \* 90\)/);
-  assert.match(page, /const plumeBlue = Math\.round\(11 \+ trappedRatio \* 24\)/);
-  assert.match(page, /id="residual-trapped-sim-grad"[\s\S]*?stopColor="#9a4b2d"/);
-  assert.match(page, /id="trapped-grad"[\s\S]*?stopColor="#9a4b2d"/);
-  assert.match(page, /fault\.isSealed \? '#64ffda' : '#ff6b6b'/);
+  assert.match(page, /const SIM_PALETTE = Object\.freeze\(/);
+  assert.match(page, /mobile: '#e78bff'/);
+  assert.match(page, /trapped: '#6d4ca3'/);
+  assert.match(page, /leakage: '#ff718a'/);
+  assert.match(page, /SIM_PALETTE\.terrainLow/);
+  assert.match(page, /SIM_PALETTE\.mobileRgb/);
+  assert.match(page, /SIM_PALETTE\.trappedRgb/);
+  assert.match(page, /id="residual-trapped-sim-grad"[\s\S]*?stopColor="#6d4ca3"/);
+  assert.match(page, /id="trapped-grad"[\s\S]*?stopColor="#6d4ca3"/);
+  assert.match(page, /fault\.isSealed \? SIM_PALETTE\.sealedFault : SIM_PALETTE\.transmissiveFault/);
   assert.match(page, /const terrainKey = JSON\.stringify\(\{ mapCols, gridRows, structure, activeFaults \}\)/);
   assert.match(page, /const projectionKey = JSON\.stringify\(\{ terrainKey, camera, elevationScale \}\)/);
 });
