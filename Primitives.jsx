@@ -44,32 +44,36 @@ const Reveal = ({ children, delay = '', className = '', style = {} }) => {
    ===================================================== */
 const GlassCard = ({ children, hover = true, padding = 24, radius = 24, style = {}, className = '', onClick }) => {
   const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
   const base = {
-    background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.045) 100%)',
-    backdropFilter: 'blur(12px) saturate(135%)',
-    WebkitBackdropFilter: 'blur(12px) saturate(135%)',
-    border: '1px solid rgba(255,255,255,0.16)',
-    borderTop: '1px solid rgba(255,255,255,0.24)',
-    borderLeft: '1px solid rgba(255,255,255,0.20)',
+    background: 'linear-gradient(145deg, rgba(18, 22, 38, 0.78) 0%, rgba(14, 18, 33, 0.72) 100%)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderTop: '1px solid rgba(255,255,255,0.15)',
+    borderLeft: '1px solid rgba(255,255,255,0.12)',
     borderRadius: radius,
     padding,
-    boxShadow: '0 6px 22px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.16)',
-    transition: 'transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275), box-shadow 0.4s ease, border-color 0.4s ease',
-    color: 'rgba(255,255,255,0.85)',
+    boxShadow: '0 8px 26px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.08)',
+    transition: 'transform 200ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 200ms ease, border-color 200ms ease',
+    color: 'rgba(255,255,255,0.92)',
     cursor: onClick ? 'pointer' : 'default',
     ...style,
   };
   if (hover && hovered) {
-    base.transform = 'translateY(-4px)';
+    base.transform = 'translateY(-3px)';
     base.borderColor = 'rgba(100, 255, 218, 0.35)';
-    base.boxShadow = '0 12px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.20), 0 0 18px rgba(100,255,218,0.10)';
+    base.boxShadow = '0 12px 32px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.15), 0 0 20px rgba(100,255,218,0.12)';
+  }
+  if (onClick && pressed) {
+    base.transform = 'scale(0.98)';
   }
   return (
     <div
       className={`glass-card ${className}`.trim()}
       style={base}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseLeave={() => { setHovered(false); setPressed(false); }}
+      onMouseDown={() => { if (onClick) setPressed(true); }}
+      onMouseUp={() => setPressed(false)}
       onClick={onClick}
     >
       {children}
@@ -104,19 +108,20 @@ const GlassButton = ({ children, variant = 'glass', onClick, icon, style = {} })
     WebkitBackdropFilter: 'blur(10px)',
     boxShadow: '0 4px 15px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.30)',
     cursor: 'pointer',
-    transition: 'all 0.4s cubic-bezier(0.175,0.885,0.32,1.275)',
+    transition: 'transform 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms ease, border-color 160ms ease, background 160ms ease',
     display: 'inline-flex',
     alignItems: 'center',
     gap: 8,
     textDecoration: 'none',
+    userSelect: 'none',
     ...style,
   };
   if (state === 'hover') {
-    base.transform = 'translateY(-3px) scale(1.02)';
+    base.transform = 'translateY(-2px) scale(1.02)';
     base.boxShadow = '0 8px 25px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.40), 0 0 20px rgba(255,255,255,0.10)';
     base.borderColor = 'rgba(255,255,255,0.55)';
   } else if (state === 'press') {
-    base.transform = 'translateY(-1px) scale(0.98)';
+    base.transform = 'scale(0.97)';
   }
   return (
     <button

@@ -54,31 +54,40 @@ const GlassCard = ({
   onClick
 }) => {
   const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
   const base = {
-    background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.045) 100%)',
-    backdropFilter: 'blur(12px) saturate(135%)',
-    WebkitBackdropFilter: 'blur(12px) saturate(135%)',
-    border: '1px solid rgba(255,255,255,0.16)',
-    borderTop: '1px solid rgba(255,255,255,0.24)',
-    borderLeft: '1px solid rgba(255,255,255,0.20)',
+    background: 'linear-gradient(145deg, rgba(18, 22, 38, 0.78) 0%, rgba(14, 18, 33, 0.72) 100%)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderTop: '1px solid rgba(255,255,255,0.15)',
+    borderLeft: '1px solid rgba(255,255,255,0.12)',
     borderRadius: radius,
     padding,
-    boxShadow: '0 6px 22px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.16)',
-    transition: 'transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275), box-shadow 0.4s ease, border-color 0.4s ease',
-    color: 'rgba(255,255,255,0.85)',
+    boxShadow: '0 8px 26px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.08)',
+    transition: 'transform 200ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 200ms ease, border-color 200ms ease',
+    color: 'rgba(255,255,255,0.92)',
     cursor: onClick ? 'pointer' : 'default',
     ...style
   };
   if (hover && hovered) {
-    base.transform = 'translateY(-4px)';
+    base.transform = 'translateY(-3px)';
     base.borderColor = 'rgba(100, 255, 218, 0.35)';
-    base.boxShadow = '0 12px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.20), 0 0 18px rgba(100,255,218,0.10)';
+    base.boxShadow = '0 12px 32px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.15), 0 0 20px rgba(100,255,218,0.12)';
+  }
+  if (onClick && pressed) {
+    base.transform = 'scale(0.98)';
   }
   return /*#__PURE__*/React.createElement("div", {
     className: `glass-card ${className}`.trim(),
     style: base,
     onMouseEnter: () => setHovered(true),
-    onMouseLeave: () => setHovered(false),
+    onMouseLeave: () => {
+      setHovered(false);
+      setPressed(false);
+    },
+    onMouseDown: () => {
+      if (onClick) setPressed(true);
+    },
+    onMouseUp: () => setPressed(false),
     onClick: onClick
   }, children);
 };
@@ -115,19 +124,20 @@ const GlassButton = ({
     WebkitBackdropFilter: 'blur(10px)',
     boxShadow: '0 4px 15px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.30)',
     cursor: 'pointer',
-    transition: 'all 0.4s cubic-bezier(0.175,0.885,0.32,1.275)',
+    transition: 'transform 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms ease, border-color 160ms ease, background 160ms ease',
     display: 'inline-flex',
     alignItems: 'center',
     gap: 8,
     textDecoration: 'none',
+    userSelect: 'none',
     ...style
   };
   if (state === 'hover') {
-    base.transform = 'translateY(-3px) scale(1.02)';
+    base.transform = 'translateY(-2px) scale(1.02)';
     base.boxShadow = '0 8px 25px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.40), 0 0 20px rgba(255,255,255,0.10)';
     base.borderColor = 'rgba(255,255,255,0.55)';
   } else if (state === 'press') {
-    base.transform = 'translateY(-1px) scale(0.98)';
+    base.transform = 'scale(0.97)';
   }
   return /*#__PURE__*/React.createElement("button", {
     style: base,
@@ -1970,7 +1980,14 @@ const Footer = ({
       fontSize: 12,
       color: 'rgba(255,255,255,0.55)'
     }
-  }, "Institute of GeoEnergy Engineering \xB7 Heriot-Watt University")), /*#__PURE__*/React.createElement("nav", {
+  }, "Institute of GeoEnergy Engineering \xB7 Heriot-Watt University")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 24,
+      flexWrap: 'wrap'
+    }
+  }, /*#__PURE__*/React.createElement("nav", {
     role: "navigation",
     "aria-label": "Footer navigation"
   }, /*#__PURE__*/React.createElement("div", {
@@ -1978,7 +1995,8 @@ const Footer = ({
       display: 'flex',
       gap: 20,
       fontSize: 13,
-      flexWrap: 'wrap'
+      flexWrap: 'wrap',
+      alignItems: 'center'
     }
   }, links.map(l => /*#__PURE__*/React.createElement(FooterLink, {
     key: l.id,
@@ -1987,7 +2005,38 @@ const Footer = ({
     onClick: () => {
       if (onNavigate) onNavigate(l.id);else if (window.__onNavigate) window.__onNavigate(l.id);
     }
-  }))))));
+  })))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      if (onNavigate) onNavigate('home');else if (window.__onNavigate) window.__onNavigate('home');else window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    },
+    className: "pressable",
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '8px 16px',
+      borderRadius: 10,
+      background: 'rgba(251, 191, 36, 0.12)',
+      border: '1px solid rgba(251, 191, 36, 0.30)',
+      color: '#fbbf24',
+      fontFamily: 'ui-monospace, monospace',
+      fontSize: 11.5,
+      fontWeight: 700,
+      letterSpacing: '0.06em',
+      cursor: 'pointer',
+      textTransform: 'uppercase',
+      transition: 'transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background 160ms ease, border-color 160ms ease'
+    },
+    title: "Ascend back to surface wellhead"
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-arrow-up",
+    style: {
+      fontSize: 10
+    }
+  }), "Ascend to Surface // 0.0 km"))));
 };
 const FooterLink = ({
   label,
@@ -2003,13 +2052,15 @@ const FooterLink = ({
     },
     onMouseEnter: () => setHover(true),
     onMouseLeave: () => setHover(false),
+    className: "pressable",
     style: {
       color: hover ? '#64ffda' : 'rgba(255,255,255,0.70)',
       textDecoration: 'none',
       cursor: 'pointer',
-      transition: 'all 0.25s ease',
+      transition: 'color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1)',
       fontWeight: hover ? 500 : 400,
-      transform: hover ? 'translateY(-1px)' : 'none'
+      transform: hover ? 'translateY(-1px)' : 'none',
+      userSelect: 'none'
     }
   }, label);
 };
@@ -3119,47 +3170,199 @@ const DepthAxis = () => {
   }, t.label)))));
 };
 
-// Captured CO2 gas feed animation above the wellhead
+// Overland CO2 Supercritical Pipeline with elevated supports and directional chevron flow
 const GasFeedAnimation = ({
   isPlaying,
   geology
 }) => {
   const g = geology || currentGeology;
-  const bubbles = useMemo(() => Array.from({
-    length: 12
-  }, (_, i) => ({
-    id: i,
-    left: `${g.wellXPct + (Math.random() - 0.5) * 1.2}%`,
-    delay: i * 0.45,
-    size: 2 + Math.random() * 3.5,
-    duration: 2.2 + Math.random() * 1.2
-  })), [g.wellXPct]);
+  const wellX = g.wellXPct;
   return /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'absolute',
       left: 0,
       right: 0,
-      top: 0,
-      height: '42vh',
+      top: 'calc(42vh - 36px)',
+      height: 36,
       pointerEvents: 'none',
-      zIndex: 6
+      zIndex: 5
     }
-  }, bubbles.map(b => /*#__PURE__*/React.createElement("div", {
-    key: b.id,
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'absolute',
-      left: b.left,
-      top: 0,
-      width: b.size,
-      height: b.size,
+      left: `calc(${wellX}% + 33px)`,
+      right: 0,
+      height: 36
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      left: 16,
+      top: -16,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 7,
+      fontSize: 9.5,
+      fontFamily: "'JetBrains Mono', ui-monospace, Menlo, monospace",
+      color: '#0dfca2',
+      letterSpacing: '0.12em',
+      textTransform: 'uppercase',
+      fontWeight: 600,
+      textShadow: '0 1px 4px rgba(0,0,0,0.9)',
+      whiteSpace: 'nowrap'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 6,
+      height: 6,
       borderRadius: '50%',
       background: '#0dfca2',
-      boxShadow: '0 0 6px #0dfca2',
-      opacity: 0,
-      animation: `feedBubble ${b.duration}s linear ${b.delay}s infinite`,
+      boxShadow: '0 0 8px #0dfca2',
+      display: 'inline-block'
+    }
+  }), /*#__PURE__*/React.createElement("span", null, "CO\u2082 TRANSMISSION PIPELINE \xB7 110 BAR \xB7 SUPERCRITICAL")), /*#__PURE__*/React.createElement("svg", {
+    width: "100%",
+    height: "36",
+    style: {
+      overflow: 'visible'
+    },
+    preserveAspectRatio: "none"
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+    id: "pipe-steel",
+    x1: "0%",
+    y1: "0%",
+    x2: "0%",
+    y2: "100%"
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0%",
+    stopColor: "#475569"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "18%",
+    stopColor: "#94a3b8"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "42%",
+    stopColor: "#334155"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "75%",
+    stopColor: "#1e293b"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: "#0f172a"
+  })), /*#__PURE__*/React.createElement("linearGradient", {
+    id: "sc-fluid-core",
+    x1: "0%",
+    y1: "0%",
+    x2: "0%",
+    y2: "100%"
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0%",
+    stopColor: "#a7f3d0"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "45%",
+    stopColor: "#0dfca2"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: "#059669"
+  })), /*#__PURE__*/React.createElement("pattern", {
+    id: "chevron-flow-pattern",
+    width: "32",
+    height: "10",
+    patternUnits: "userSpaceOnUse"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M 12 2 L 6 5 L 12 8 M 24 2 L 18 5 L 24 8",
+    fill: "none",
+    stroke: "#ffffff",
+    strokeWidth: "1.3",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    opacity: "0.85"
+  }))), [60, 220, 380, 540, 700, 860, 1020, 1180].map(xPos => /*#__PURE__*/React.createElement("g", {
+    key: `pipe-support-${xPos}`
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: xPos - 2,
+    y: "13",
+    width: "4",
+    height: "21",
+    fill: "#334155",
+    stroke: "#1e293b",
+    strokeWidth: "0.5"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: `M ${xPos - 6} 13 Q ${xPos} 15 ${xPos + 6} 13`,
+    stroke: "#64748b",
+    strokeWidth: "1.6",
+    fill: "none"
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: xPos - 8,
+    y: "32",
+    width: "16",
+    height: "4",
+    rx: "1",
+    fill: "#1e293b",
+    stroke: "#475569",
+    strokeWidth: "0.7"
+  }))), /*#__PURE__*/React.createElement("rect", {
+    x: "0",
+    y: "1",
+    width: "100%",
+    height: "12",
+    rx: "2.5",
+    fill: "url(#pipe-steel)",
+    stroke: "rgba(255,255,255,0.22)",
+    strokeWidth: "0.8",
+    style: {
+      filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.5))'
+    }
+  }), [140, 300, 460, 620, 780, 940, 1100].map(xPos => /*#__PURE__*/React.createElement("g", {
+    key: `flange-collar-${xPos}`
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: xPos - 2.5,
+    y: "0",
+    width: "5",
+    height: "14",
+    rx: "1",
+    fill: "#475569",
+    stroke: "#94a3b8",
+    strokeWidth: "0.7"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: xPos,
+    cy: "2.5",
+    r: "0.8",
+    fill: "#e2e8f0"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: xPos,
+    cy: "11.5",
+    r: "0.8",
+    fill: "#e2e8f0"
+  }))), /*#__PURE__*/React.createElement("rect", {
+    x: "0",
+    y: "4.5",
+    width: "100%",
+    height: "5",
+    rx: "1.5",
+    fill: "url(#sc-fluid-core)",
+    opacity: "0.9",
+    style: {
+      filter: 'drop-shadow(0 0 6px rgba(13,252,162,0.7))'
+    }
+  }), /*#__PURE__*/React.createElement("g", {
+    style: {
+      animation: 'pipelineChevron 1.4s linear infinite',
       animationPlayState: isPlaying ? 'running' : 'paused'
     }
-  })));
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: "-64",
+    y: "3.5",
+    width: "calc(100% + 128px)",
+    height: "7",
+    fill: "url(#chevron-flow-pattern)"
+  })), /*#__PURE__*/React.createElement("line", {
+    x1: "0",
+    y1: "2",
+    x2: "100%",
+    y2: "2",
+    stroke: "rgba(255,255,255,0.55)",
+    strokeWidth: "0.75"
+  }))));
 };
 const Subsurface = ({
   h,
@@ -3298,7 +3501,7 @@ const Subsurface = ({
   }, s.label)));
 };
 
-// Wellhead — small structure above the horizon
+// Wellhead — Precision technical SVG Christmas Tree vector assembly
 const Wellhead = ({
   geology
 }) => {
@@ -3307,84 +3510,250 @@ const Wellhead = ({
     style: {
       position: 'absolute',
       left: `${g.wellXPct}%`,
-      top: 'calc(42vh - 36px)',
-      width: 50,
-      height: 36,
+      top: 'calc(42vh - 46px)',
+      width: 72,
+      height: 46,
       transform: 'translateX(-50%)',
-      zIndex: 5
+      zIndex: 5,
+      pointerEvents: 'none'
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 72 46",
+    width: "72",
+    height: "46",
+    fill: "none",
+    xmlns: "http://www.w3.org/2000/svg",
     style: {
-      width: '100%',
-      height: '100%',
-      position: 'relative'
+      overflow: 'visible',
+      filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.65))'
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+    id: "wh-metal-grad",
+    x1: "0%",
+    y1: "0%",
+    x2: "100%",
+    y2: "0%"
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0%",
+    stopColor: "#1e293b"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "45%",
+    stopColor: "#334155"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "55%",
+    stopColor: "#475569"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: "#0f172a"
+  })), /*#__PURE__*/React.createElement("linearGradient", {
+    id: "wh-flange-grad",
+    x1: "0%",
+    y1: "0%",
+    x2: "0%",
+    y2: "100%"
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0%",
+    stopColor: "#475569"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: "#1e293b"
+  }))), /*#__PURE__*/React.createElement("rect", {
+    x: "23",
+    y: "41",
+    width: "26",
+    height: "5",
+    rx: "1",
+    fill: "url(#wh-flange-grad)",
+    stroke: "rgba(255,255,255,0.25)",
+    strokeWidth: "0.7"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "26",
+    cy: "43.5",
+    r: "0.9",
+    fill: "#94a3b8"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "31",
+    cy: "43.5",
+    r: "0.9",
+    fill: "#94a3b8"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "41",
+    cy: "43.5",
+    r: "0.9",
+    fill: "#94a3b8"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "46",
+    cy: "43.5",
+    r: "0.9",
+    fill: "#94a3b8"
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "32.5",
+    y: "12",
+    width: "7",
+    height: "29",
+    fill: "url(#wh-metal-grad)",
+    stroke: "rgba(255,255,255,0.15)",
+    strokeWidth: "0.6"
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "27",
+    y: "32",
+    width: "18",
+    height: "7",
+    rx: "1.5",
+    fill: "#0f172a",
+    stroke: "rgba(100,255,218,0.45)",
+    strokeWidth: "0.8"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "27",
+    y1: "35.5",
+    x2: "20",
+    y2: "35.5",
+    stroke: "#94a3b8",
+    strokeWidth: "1.2"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "20",
+    y1: "31.5",
+    x2: "20",
+    y2: "39.5",
+    stroke: "#cbd5e1",
+    strokeWidth: "1.8",
+    strokeLinecap: "round"
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "27",
+    y: "23",
+    width: "18",
+    height: "7",
+    rx: "1.5",
+    fill: "#0f172a",
+    stroke: "rgba(100,255,218,0.45)",
+    strokeWidth: "0.8"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "45",
+    y1: "26.5",
+    x2: "52",
+    y2: "26.5",
+    stroke: "#94a3b8",
+    strokeWidth: "1.2"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "52",
+    y1: "22.5",
+    x2: "52",
+    y2: "30.5",
+    stroke: "#cbd5e1",
+    strokeWidth: "1.8",
+    strokeLinecap: "round"
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "26",
+    y: "13",
+    width: "20",
+    height: "8",
+    rx: "1.5",
+    fill: "#0b1322",
+    stroke: "#64ffda",
+    strokeWidth: "1"
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "13",
+    y: "15",
+    width: "13",
+    height: "4",
+    fill: "url(#wh-metal-grad)",
+    stroke: "rgba(255,255,255,0.18)",
+    strokeWidth: "0.6"
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "10",
+    y: "14",
+    width: "3",
+    height: "6",
+    rx: "0.8",
+    fill: "#475569",
+    stroke: "#94a3b8",
+    strokeWidth: "0.6"
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "46",
+    y: "15",
+    width: "24",
+    height: "4",
+    fill: "url(#wh-metal-grad)",
+    stroke: "rgba(255,255,255,0.18)",
+    strokeWidth: "0.6"
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "54",
+    y: "13.5",
+    width: "7",
+    height: "7",
+    rx: "1",
+    fill: "#0f172a",
+    stroke: "rgba(100,255,218,0.6)",
+    strokeWidth: "0.8"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "57.5",
+    y1: "13.5",
+    x2: "57.5",
+    y2: "7.5",
+    stroke: "#94a3b8",
+    strokeWidth: "1.2"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "53.5",
+    y1: "7.5",
+    x2: "61.5",
+    y2: "7.5",
+    stroke: "#cbd5e1",
+    strokeWidth: "1.8",
+    strokeLinecap: "round"
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "29",
+    y: "6",
+    width: "14",
+    height: "6",
+    rx: "1",
+    fill: "#0f172a",
+    stroke: "rgba(255,255,255,0.25)",
+    strokeWidth: "0.7"
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: "30.5",
+    y: "3.5",
+    width: "11",
+    height: "2.5",
+    rx: "0.8",
+    fill: "#334155",
+    stroke: "#64ffda",
+    strokeWidth: "0.6"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "36",
+    y1: "3.5",
+    x2: "36",
+    y2: "1",
+    stroke: "#94a3b8",
+    strokeWidth: "1"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "36",
+    cy: "-2.5",
+    r: "3.2",
+    fill: "#0f172a",
+    stroke: "#64ffda",
+    strokeWidth: "0.8"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "36",
+    y1: "-2.5",
+    x2: "37.8",
+    y2: "-4",
+    stroke: "#0dfca2",
+    strokeWidth: "0.7",
+    strokeLinecap: "round"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "36",
+    cy: "17",
+    r: "1.4",
+    fill: "#0dfca2",
     style: {
-      position: 'absolute',
-      bottom: 0,
-      left: 15,
-      width: 20,
-      height: 6,
-      background: '#444',
-      borderRadius: 1,
-      border: '1px solid #666'
+      filter: 'drop-shadow(0 0 4px #0dfca2)'
     }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      bottom: 6,
-      left: 22,
-      width: 6,
-      height: 22,
-      background: 'linear-gradient(90deg, #333, #aaa, #333)',
-      borderLeft: '1px solid #555'
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      bottom: 16,
-      left: 16,
-      width: 18,
-      height: 8,
-      background: '#222',
-      borderRadius: 2,
-      border: '1px solid #0dfca2'
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      bottom: 18,
-      left: 8,
-      width: 8,
-      height: 4,
-      background: '#aaa',
-      borderRadius: 1
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      bottom: 28,
-      left: 20,
-      width: 10,
-      height: 5,
-      background: 'radial-gradient(circle, #fff, #555)',
-      borderRadius: '50%',
-      border: '1px solid #888'
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      left: 23,
-      top: 12,
-      width: 4,
-      height: 4,
-      borderRadius: '50%',
-      background: '#0dfca2',
-      boxShadow: '0 0 6px #0dfca2',
-      animation: 'twinkle 1s ease-in-out infinite'
-    }
-  })));
+  }, /*#__PURE__*/React.createElement("animate", {
+    attributeName: "opacity",
+    values: "0.35;1;0.35",
+    dur: "1.8s",
+    repeatCount: "indefinite"
+  }))));
 };
 
 // Well — vertical tubing from horizon down through reservoir
@@ -4219,318 +4588,230 @@ Object.assign(window, {
 // [destructured React]
 
 /* =====================================================
-   About + Recent Activity (merged)
+   Research & Background (About + Activity)
    ===================================================== */
-const NEWS = [{
-  month: 'May',
-  year: '2026',
-  title: 'Presented at InterPore 2026',
-  body: 'Presented research on Vertical Equilibrium models for CO\u2082 storage at the InterPore 2026 Annual Meeting.'
+const RECENT_ACTIVITIES = [{
+  date: 'May 2026',
+  venue: 'InterPore 2026',
+  desc: 'Presented research on Vertical Equilibrium modelling for CO₂ storage at the InterPore Annual Meeting.'
 }, {
-  month: 'Oct',
-  year: '2025',
-  title: 'Poster Presentation at EAGE GET 2025',
-  body: 'Presented an extended abstract on "Three-Phase VE Simulation of CO\u2082\u2013Methane\u2013Brine Flow in Reservoirs" at the Sixth EAGE Global Energy Transition Conference.'
+  date: 'October 2025',
+  venue: 'EAGE GET 2025',
+  desc: 'Presented a poster on VE simulation of CO₂, methane and brine flow in reservoirs at the EAGE Global Energy Transition Conference.'
 }, {
-  month: 'Sep',
-  year: '2025',
-  title: 'Presented at InterPore UK 2025',
-  body: 'Delivered a presentation on Vertical Equilibrium flow models at the InterPore UK 2025 Chapter Meeting.'
+  date: 'September 2025',
+  venue: 'InterPore UK Chapter Meeting',
+  desc: 'Presented work on reduced-order Vertical Equilibrium flow modelling.'
 }, {
-  month: 'Sep',
-  year: '2024',
-  title: 'Started PhD at Heriot-Watt University',
-  body: 'Began doctoral research on Vertical Equilibrium Models for CO\u2082 storage.'
+  date: 'September 2024',
+  venue: 'Started doctoral research',
+  desc: 'Began my PhD at Heriot-Watt University’s Institute of GeoEnergy Engineering.'
 }, {
-  month: 'Aug',
-  year: '2024',
-  title: 'M.Sc. Thesis Defense',
-  body: 'Successfully defended thesis on "Machine Learning Methods in Upscaling Fine-scale Discrete Fracture Models" with distinction. GPA: 3.65/4.'
+  date: 'August 2024',
+  venue: 'M.Sc. Thesis Defended',
+  desc: 'Defended thesis on machine learning methods in upscaling fine-scale discrete fracture models with distinction.'
 }, {
-  month: 'May',
-  year: '2023',
-  title: 'Paper Published in Advances in Water Resources',
-  body: 'First-author publication on 3D CNN prediction of two-phase flow properties accepted in a top-tier journal.'
+  date: 'May 2023',
+  venue: 'Advances in Water Resources',
+  desc: 'First-author paper published on 3D CNN prediction of two-phase relative permeability and capillary curves directly from micro-CT sandstone scans.'
 }];
-const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
-  strataTheme: "sedimentary"
-}, /*#__PURE__*/React.createElement("style", null, `
-      .about-main-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-        gap: 48px;
-        align-items: flex-start;
-      }
-      .about-badges-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 14px;
-        margin-top: 28px;
-      }
-      .research-strip-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 14px;
-      }
-      @media (max-width: 960px) {
-        .about-main-grid {
-          grid-template-columns: 1fr !important;
-          gap: 36px !important;
-        }
-        .research-strip-grid {
-          grid-template-columns: repeat(2, 1fr) !important;
-        }
-      }
-      @media (max-width: 600px) {
-        .about-badges-grid {
-          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-          gap: 10px !important;
-        }
-        .research-strip-grid {
-          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-          gap: 10px !important;
-        }
-      }
-    `), /*#__PURE__*/React.createElement("div", {
-  className: "about-main-grid"
-}, /*#__PURE__*/React.createElement("div", {
-  style: {
-    color: 'rgba(255,255,255,0.90)'
-  }
-}, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement(SectionTitle, {
-  style: {
-    marginBottom: 28,
-    fontSize: 34
-  }
-}, "About Me")), /*#__PURE__*/React.createElement(Reveal, {
-  delay: "reveal-delay-1"
-}, /*#__PURE__*/React.createElement("p", {
-  className: "lead about-lead",
-  style: {
-    fontWeight: 500,
-    color: '#fff',
-    marginTop: 0
-  }
-}, "I'm ", /*#__PURE__*/React.createElement("strong", {
-  style: {
-    color: '#64ffda',
-    fontWeight: 600
-  }
-}, "Sa'eed Telvari"), ", a PhD candidate in Petroleum Engineering at Heriot-Watt University. My research keeps subsurface flow simulation both physically faithful and computationally tractable.")), /*#__PURE__*/React.createElement(Reveal, {
-  delay: "reveal-delay-2"
-}, /*#__PURE__*/React.createElement("p", {
-  className: "about-copy",
-  style: {
-    color: 'rgba(255,255,255,0.85)'
-  }
-}, "I completed both my B.Sc. and M.Sc. in Petroleum Engineering with a focus on reservoir simulation and machine learning applications. Based on academic excellence, I was granted direct admission for graduate study, ranking within the top 2% in the national entrance exam.")), /*#__PURE__*/React.createElement(Reveal, {
-  delay: "reveal-delay-3"
-}, /*#__PURE__*/React.createElement("p", {
-  className: "about-copy",
-  style: {
-    color: 'rgba(255,255,255,0.85)'
-  }
-}, "Currently, I'm developing Vertical Equilibrium (VE) models for simulating CO", /*#__PURE__*/React.createElement("sub", null, "2"), " storage in depleted gas reservoirs \u2014 a key simulation strategy for achieving net-zero emissions.")), /*#__PURE__*/React.createElement("div", {
-  className: "about-badges-grid"
-}, [{
-  icon: 'fas fa-graduation-cap',
-  label: 'PhD @ Heriot-Watt'
-}, {
-  icon: 'fas fa-flask',
-  label: 'CCUS Research'
-}, {
-  icon: 'fas fa-code',
-  label: 'Python, MATLAB, Julia'
-}, {
-  icon: 'fas fa-robot',
-  label: 'ML Workflows'
-}].map((h, i) => /*#__PURE__*/React.createElement(Reveal, {
-  key: i,
-  delay: `reveal-delay-${i + 1}`
-}, /*#__PURE__*/React.createElement(GlassCard, {
-  className: "about-badge-card",
-  padding: 16,
-  radius: 16,
-  style: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    height: '100%'
-  }
-}, /*#__PURE__*/React.createElement("i", {
-  className: h.icon,
-  style: {
-    fontSize: 22,
-    color: '#64ffda'
-  }
-}), /*#__PURE__*/React.createElement("span", {
-  style: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.90)',
-    fontWeight: 500
-  }
-}, h.label)))))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement(SectionTitle, {
-  style: {
-    marginBottom: 28,
-    fontSize: 34
-  }
-}, "Recent Activity")), /*#__PURE__*/React.createElement("div", {
-  className: "activity-list",
-  style: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 14
-  }
-}, NEWS.map((n, i) => /*#__PURE__*/React.createElement(Reveal, {
-  key: i,
-  className: "activity-item",
-  delay: `reveal-delay-${i + 1}`
-}, /*#__PURE__*/React.createElement(GlassCard, {
-  padding: 18
-}, /*#__PURE__*/React.createElement("div", {
-  style: {
-    display: 'flex',
-    gap: 16,
-    alignItems: 'flex-start'
-  }
-}, /*#__PURE__*/React.createElement("div", {
-  style: {
-    flexShrink: 0,
-    width: 62,
-    textAlign: 'center',
-    padding: '10px 6px',
-    background: 'linear-gradient(135deg, rgba(100,255,218,0.15) 0%, rgba(100,255,218,0.05) 100%)',
-    border: '1px solid rgba(100,255,218,0.20)',
-    borderRadius: 10
-  }
-}, /*#__PURE__*/React.createElement("div", {
-  style: {
-    fontSize: 12,
-    fontWeight: 700,
-    color: '#64ffda',
-    textTransform: 'uppercase'
-  }
-}, n.month), /*#__PURE__*/React.createElement("div", {
-  style: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.60)',
-    marginTop: 2
-  }
-}, n.year)), /*#__PURE__*/React.createElement("div", {
-  style: {
-    minWidth: 0
-  }
-}, /*#__PURE__*/React.createElement("h3", {
-  style: {
-    fontSize: 15,
-    color: '#fff',
-    fontWeight: 600,
-    margin: '0 0 4px',
-    lineHeight: 1.35
-  }
-}, n.title), /*#__PURE__*/React.createElement("p", {
-  style: {
-    color: 'rgba(255,255,255,0.70)',
-    fontSize: 13,
-    lineHeight: 1.55,
-    margin: 0
-  },
-  dangerouslySetInnerHTML: {
-    __html: n.body
-  }
-}))))))))));
+const RecentActivity = () => {
+  const [expanded, setExpanded] = useState(false);
+  const initialCount = 4;
+  const items = expanded ? RECENT_ACTIVITIES : RECENT_ACTIVITIES.slice(0, initialCount);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "recent-activity-panel"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "activity-panel-title"
+  }, "Recent activity"), /*#__PURE__*/React.createElement("div", {
+    className: "activity-track"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "activity-conduit"
+  }), items.map((item, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    className: "activity-entry"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "activity-node-dot"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "activity-entry-content"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "activity-meta-line"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "activity-date"
+  }, item.date), /*#__PURE__*/React.createElement("span", {
+    className: "activity-bullet"
+  }, "\xB7"), /*#__PURE__*/React.createElement("span", {
+    className: "activity-venue"
+  }, item.venue)), /*#__PURE__*/React.createElement("p", {
+    className: "activity-desc"
+  }, item.desc))))), RECENT_ACTIVITIES.length > initialCount && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "activity-toggle-btn pressable",
+    onClick: () => setExpanded(!expanded),
+    "aria-expanded": expanded
+  }, /*#__PURE__*/React.createElement("i", {
+    className: `fas fa-chevron-${expanded ? 'up' : 'down'}`,
+    style: {
+      fontSize: 11
+    }
+  }), /*#__PURE__*/React.createElement("span", null, expanded ? 'Show recent activity' : 'View earlier activity')));
+};
+const AboutSection = ({
+  onNavigate
+}) => {
+  const handleNav = (id, e) => {
+    if (e) e.preventDefault();
+    if (onNavigate) {
+      onNavigate(id);
+    } else if (window.__onNavigate) {
+      window.__onNavigate(id);
+    } else if (id === 'simulator') {
+      window.location.href = './simulator.html';
+    } else {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({
+        behavior: 'smooth'
+      });
+    }
+  };
+  return /*#__PURE__*/React.createElement(SectionPanel, {
+    strataTheme: "sedimentary"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dossier-masthead"
+  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
+    className: "strata-marker-eyebrow"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "strata-marker-dot"
+  }), "STRATA // SEDIMENTARY BASIN \xB7 DEPTH: 2.4 KM"), /*#__PURE__*/React.createElement("h2", {
+    className: "dossier-headline"
+  }, "Research & background"), /*#__PURE__*/React.createElement("p", {
+    className: "dossier-subtitle"
+  }, "Reservoir simulation, geological CO\u2082 storage and scientific machine learning."))), /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
+    className: "about-intro-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "about-persona-row"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "about-name"
+  }, "Sa\u2019eed Telvari"), /*#__PURE__*/React.createElement("div", {
+    className: "about-affiliation"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "affiliation-primary"
+  }, "PhD Researcher \xB7 Heriot-Watt University"), /*#__PURE__*/React.createElement("span", {
+    className: "affiliation-secondary"
+  }, "Institute of GeoEnergy Engineering, Edinburgh"))), /*#__PURE__*/React.createElement("div", {
+    className: "about-lead-copy"
+  }, /*#__PURE__*/React.createElement("p", null, "I\u2019m a PhD researcher in petroleum engineering, working on computational models for CO\u2082 storage in depleted gas reservoirs. My research focuses on Vertical Equilibrium (VE) methods, which simplify the vertical description of fluid flow to reduce the computational cost of reservoir simulation."), /*#__PURE__*/React.createElement("p", null, "I\u2019m interested in understanding which physical processes a model needs to represent, where simplifying assumptions are appropriate, and when more detailed simulation is necessary.")), /*#__PURE__*/React.createElement("div", {
+    className: "about-actions-strip"
+  }, /*#__PURE__*/React.createElement("a", {
+    href: "./simulator.html",
+    onClick: e => handleNav('simulator', e),
+    className: "btn-sim-prominent pressable",
+    title: "Launch interactive Vertical Equilibrium simulator"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "btn-sim-pulse-dot"
+  }), /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-play",
+    style: {
+      fontSize: 10
+    }
+  }), /*#__PURE__*/React.createElement("span", null, "Try the VE simulator")), /*#__PURE__*/React.createElement("a", {
+    href: "#publications",
+    onClick: e => handleNav('publications', e),
+    className: "btn-text-action pressable"
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-search",
+    style: {
+      fontSize: 11,
+      color: '#64ffda'
+    }
+  }), /*#__PURE__*/React.createElement("span", null, "Explore my research")), /*#__PURE__*/React.createElement("a", {
+    href: "#publications",
+    onClick: e => handleNav('publications', e),
+    className: "btn-text-action pressable"
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-book-open",
+    style: {
+      fontSize: 11,
+      color: '#64ffda'
+    }
+  }), /*#__PURE__*/React.createElement("span", null, "View publications"))))), /*#__PURE__*/React.createElement("div", {
+    className: "about-grid-2col"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "about-main-column"
+  }, /*#__PURE__*/React.createElement(Reveal, {
+    delay: "reveal-delay-1"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "about-block"
+  }, /*#__PURE__*/React.createElement("h4", {
+    className: "about-block-title"
+  }, "Current research"), /*#__PURE__*/React.createElement("p", {
+    className: "about-body-text"
+  }, "Depleted gas reservoirs still contain natural gas and water. This makes modelling injected CO\u2082 more involved than treating the reservoir as an empty storage space."), /*#__PURE__*/React.createElement("p", {
+    className: "about-body-text"
+  }, "I develop VE models to describe the movement of CO\u2082 in these settings and compare them with three-dimensional compositional simulations. The aim is to understand how well reduced-order models capture gas migration, where their assumptions break down, and how they can support studies that require many simulation runs."))), /*#__PURE__*/React.createElement(Reveal, {
+    delay: "reveal-delay-2"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "about-block"
+  }, /*#__PURE__*/React.createElement("h4", {
+    className: "about-block-title"
+  }, "Academic background"), /*#__PURE__*/React.createElement("p", {
+    className: "about-body-text"
+  }, "I completed my B.Sc. and M.Sc. in Petroleum Engineering at Amirkabir University of Technology. My master\u2019s research focused on machine-learning-assisted fracture permeability upscaling, including the use of three-dimensional convolutional neural networks."), /*#__PURE__*/React.createElement("p", {
+    className: "about-body-text"
+  }, "That work forms part of my broader interest in combining physics-based simulation with data-driven methods for subsurface modelling."))), /*#__PURE__*/React.createElement(Reveal, {
+    delay: "reveal-delay-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "about-methods-compact"
+  }, /*#__PURE__*/React.createElement("h4", {
+    className: "about-block-title",
+    style: {
+      marginBottom: 12
+    }
+  }, "Methods & tools"), /*#__PURE__*/React.createElement("div", {
+    className: "methods-entry"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "methods-category"
+  }, "Modelling:"), /*#__PURE__*/React.createElement("span", {
+    className: "methods-content"
+  }, "Vertical Equilibrium ", /*#__PURE__*/React.createElement("span", {
+    className: "method-dot"
+  }, "\xB7"), " Multiphase flow ", /*#__PURE__*/React.createElement("span", {
+    className: "method-dot"
+  }, "\xB7"), " Compositional simulation ", /*#__PURE__*/React.createElement("span", {
+    className: "method-dot"
+  }, "\xB7"), " Permeability upscaling ", /*#__PURE__*/React.createElement("span", {
+    className: "method-dot"
+  }, "\xB7"), " Scientific machine learning")), /*#__PURE__*/React.createElement("div", {
+    className: "methods-entry",
+    style: {
+      marginTop: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "methods-category"
+  }, "Programming & simulation:"), /*#__PURE__*/React.createElement("span", {
+    className: "methods-content"
+  }, "MATLAB ", /*#__PURE__*/React.createElement("span", {
+    className: "method-dot"
+  }, "\xB7"), " Python ", /*#__PURE__*/React.createElement("span", {
+    className: "method-dot"
+  }, "\xB7"), " Julia ", /*#__PURE__*/React.createElement("span", {
+    className: "method-dot"
+  }, "\xB7"), " MRST ", /*#__PURE__*/React.createElement("span", {
+    className: "method-dot"
+  }, "\xB7"), " JutulDarcy"))))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Reveal, {
+    delay: "reveal-delay-1"
+  }, /*#__PURE__*/React.createElement(RecentActivity, null)))));
+};
 
 /* =====================================================
-   Publications + Research Interests (merged)
+   Publications — Interactive Publication Terminal (Crystalline Strata)
    ===================================================== */
-const RESEARCH = [{
-  icon: 'fas fa-cloud',
-  title: 'CO\u2082 Storage Modeling',
-  body: 'Efficient numerical models for CO\u2082 injection into depleted reservoirs.'
-}, {
-  icon: 'fas fa-cubes',
-  title: 'Reservoir Simulation',
-  body: 'Eclipse and MRST workflows for fractured, heterogeneous systems.'
-}, {
-  icon: 'fas fa-layer-group',
-  title: 'Upscaling Methods',
-  body: 'ML-enhanced upscaling of fine-scale discrete fracture models.'
-}, {
-  icon: 'fas fa-microscope',
-  title: 'Digital Rock Analysis',
-  body: '3D CNN prediction of petrophysical properties from micro-CT.'
-}, {
-  icon: 'fas fa-fire',
-  title: 'Depleted Oil/Gas Reservoirs',
-  body: 'Residual gas effects and multi-phase flow under CO\u2082 injection.'
-}, {
-  icon: 'fas fa-brain',
-  title: 'Machine Learning in PE',
-  body: 'Deep learning for reservoir characterization and property prediction.'
-}];
-const ResearchInterestsStrip = () => /*#__PURE__*/React.createElement("div", {
-  style: {
-    marginBottom: 36
-  }
-}, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("h3", {
-  style: {
-    fontSize: 13,
-    fontWeight: 600,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    color: 'rgba(100,255,218,0.85)',
-    margin: '0 0 18px'
-  }
-}, "Research Interests")), /*#__PURE__*/React.createElement("div", {
-  className: "research-strip-grid"
-}, RESEARCH.map((r, i) => /*#__PURE__*/React.createElement(Reveal, {
-  key: i,
-  delay: `reveal-delay-${i % 3 + 1}`
-}, /*#__PURE__*/React.createElement(GlassCard, {
-  className: "research-interest-card",
-  padding: 16,
-  radius: 14,
-  style: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 12,
-    height: '100%'
-  }
-}, /*#__PURE__*/React.createElement("i", {
-  className: r.icon,
-  style: {
-    fontSize: 18,
-    color: '#64ffda',
-    marginTop: 2,
-    flexShrink: 0
-  }
-}), /*#__PURE__*/React.createElement("div", {
-  style: {
-    minWidth: 0
-  }
-}, /*#__PURE__*/React.createElement("div", {
-  style: {
-    fontSize: 14,
-    color: '#fff',
-    fontWeight: 600,
-    margin: '0 0 3px',
-    lineHeight: 1.3
-  },
-  dangerouslySetInnerHTML: {
-    __html: r.title
-  }
-}), /*#__PURE__*/React.createElement("p", {
-  className: "research-interest-copy",
-  style: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.72)',
-    lineHeight: 1.45,
-    margin: 0
-  }
-}, r.body)))))));
 const PUBLICATIONS = [{
+  id: 'pub-ve-co2',
+  category: 'co2',
   badge: 'preprint',
-  badgeLabel: 'Preprint',
+  badgeLabel: 'Preprint · EarthArXiv',
+  badgeClass: 'pub-badge-preprint',
   title: 'A Vertical Equilibrium Model for CO\u2082 Migration in Depleted Gas Fields',
   authors: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("strong", {
     style: {
@@ -4538,11 +4819,50 @@ const PUBLICATIONS = [{
     }
   }, "Telvari, S."), ", Ramachandran, H., Wang, G., & Doster, F. (2026)"),
   venue: 'EarthArXiv preprint · 2026',
+  keyContribution: '2D Vertical Equilibrium reduced-order modeling predicts buoyant plume migration across depleted fields ~1,000× faster than full 3D simulation with bounded caprock error.',
   abstract: 'A reduced-order VE framework that captures the buoyant migration of injected CO\u2082 in depleted gas reservoirs against the cap rock, delivering full-field-scale forecasts orders of magnitude faster than 3D simulation.',
-  link: 'https://doi.org/10.31223/X5P49D'
+  link: 'https://doi.org/10.31223/X5P49D',
+  doi: '10.31223/X5P49D',
+  bibtex: `@article{telvari2026vertical,
+  title={A Vertical Equilibrium Model for CO2 Migration in Depleted Gas Fields},
+  author={Telvari, Sa'eed and Ramachandran, Harish and Wang, Gang and Doster, Florian},
+  journal={EarthArXiv},
+  year={2026},
+  doi={10.31223/X5P49D}
+}`
 }, {
+  id: 'pub-spe-2026',
+  category: 'upscaling',
+  badge: 'published',
+  badgeLabel: 'Peer-Reviewed · SPE Journal',
+  badgeClass: 'pub-badge-journal',
+  title: 'Accelerated Permeability Upscaling: A CNN Approach',
+  authors: /*#__PURE__*/React.createElement(React.Fragment, null, "Sayyafzadeh, M., ", /*#__PURE__*/React.createElement("strong", {
+    style: {
+      color: '#64ffda'
+    }
+  }, "Telvari, S."), ", Gu\\u00e9rillot, D., & Sharifi, M. (2026)"),
+  venue: 'SPE Journal, 31(04), 2242–2260 · 2026',
+  keyContribution: 'Convolutional neural networks achieve 100–400× computational acceleration over fine-scale Darcy flow upscaling in heterogeneous formations.',
+  abstract: 'A novel convolutional neural network approach for rapid permeability upscaling in heterogeneous reservoirs, achieving 100-400\u00d7 computational speedup compared to traditional flow-based methods.',
+  link: 'https://onepetro.org/SJ/article-abstract/31/04/2242/795099/Accelerated-Permeability-Upscaling-A-Convolutional',
+  doi: '10.2118/218018-PA',
+  bibtex: `@article{sayyafzadeh2026accelerated,
+  title={Accelerated Permeability Upscaling: A CNN Approach},
+  author={Sayyafzadeh, Mohammad and Telvari, Sa'eed and Gu{\'e}rillot, Dominique and Sharifi, Mohammad},
+  journal={SPE Journal},
+  volume={31},
+  number={04},
+  pages={2242--2260},
+  year={2026},
+  publisher={Society of Petroleum Engineers}
+}`
+}, {
+  id: 'pub-eage-2025',
+  category: 'co2',
   badge: 'conference',
-  badgeLabel: 'Poster / Extended Abstract',
+  badgeLabel: 'Conference · EAGE GET',
+  badgeClass: 'pub-badge-conf',
   title: 'Three-Phase VE Simulation of CO\u2082\u2013Methane\u2013Brine Flow in Reservoirs',
   authors: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("strong", {
     style: {
@@ -4550,227 +4870,428 @@ const PUBLICATIONS = [{
     }
   }, "Telvari, S."), ", Ramachandran, H., Wang, G., & Doster, F. (2025)"),
   venue: 'Sixth EAGE Global Energy Transition Conference & Exhibition (GET 2025) — Poster Presentation',
+  keyContribution: 'Formulates three-phase CO\u2082–CH\u2084–brine vertical equilibria to capture residual cushion-gas mixing during carbon sequestration in partially depleted gas reservoirs.',
   abstract: 'An extended abstract presenting a Vertical Equilibrium (VE) model for simulating three-phase CO\u2082\u2013methane\u2013brine flow in depleted gas reservoirs, enabling efficient large-scale simulation of CO\u2082 storage with residual methane interactions.',
-  link: 'https://doi.org/10.3997/2214-4609.202521145'
+  link: 'https://doi.org/10.3997/2214-4609.202521145',
+  doi: '10.3997/2214-4609.202521145',
+  bibtex: `@inproceedings{telvari2025three,
+  title={Three-Phase VE Simulation of CO2--Methane--Brine Flow in Reservoirs},
+  author={Telvari, Sa'eed and Ramachandran, Harish and Wang, Gang and Doster, Florian},
+  booktitle={Sixth EAGE Global Energy Transition Conference & Exhibition},
+  year={2025},
+  doi={10.3997/2214-4609.202521145}
+}`
 }, {
+  id: 'pub-awr-2023',
+  category: 'rock',
   badge: 'published',
-  badgeLabel: 'Published',
-  title: 'Accelerated Permeability Upscaling: A CNN Approach',
-  authors: /*#__PURE__*/React.createElement(React.Fragment, null, "Sayyafzadeh, M., ", /*#__PURE__*/React.createElement("strong", {
-    style: {
-      color: '#64ffda'
-    }
-  }, "Telvari, S."), ", Gu\xE9rillot, D., & Sharifi, M. (2026)"),
-  venue: 'SPE Journal, 31(04), 2242–2260 · 2026',
-  abstract: 'A novel convolutional neural network approach for rapid permeability upscaling in heterogeneous reservoirs, achieving 100-400\u00d7 computational speedup compared to traditional flow-based methods.',
-  link: 'https://onepetro.org/SJ/article-abstract/31/04/2242/795099/Accelerated-Permeability-Upscaling-A-Convolutional'
-}, {
-  badge: 'published',
-  badgeLabel: 'Published',
+  badgeLabel: 'Peer-Reviewed · Adv. Water Res.',
+  badgeClass: 'pub-badge-journal',
   title: 'Prediction of two-phase flow properties for digital sandstones using 3D convolutional neural networks',
   authors: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("strong", {
     style: {
       color: '#64ffda'
     }
   }, "Telvari, S."), ", Sayyafzadeh, M., Siavashi, J., & Sharifi, M. (2023)"),
-  venue: 'Advances in Water Resources, 176, 104442',
+  venue: 'Advances in Water Resources, 176, 104442 · 2023',
+  keyContribution: 'Predicts relative permeability and capillary pressure curves directly from 3D micro-CT imagery without costly pore-network or lattice-Boltzmann simulations.',
   abstract: 'Developed a 3D CNN architecture for predicting relative permeability and capillary pressure curves directly from micro-CT images, eliminating the need for expensive pore-network modeling.',
-  link: 'https://doi.org/10.1016/j.advwatres.2023.104442'
+  link: 'https://doi.org/10.1016/j.advwatres.2023.104442',
+  doi: '10.1016/j.advwatres.2023.104442',
+  bibtex: `@article{telvari2023prediction,
+  title={Prediction of two-phase flow properties for digital sandstones using 3D convolutional neural networks},
+  author={Telvari, Sa'eed and Sayyafzadeh, Mohammad and Siavashi, Javad and Sharifi, Mohammad},
+  journal={Advances in Water Resources},
+  volume={176},
+  pages={104442},
+  year={2023},
+  publisher={Elsevier},
+  doi={10.1016/j.advwatres.2023.104442}
+}`
 }];
-const PublicationsList = () => /*#__PURE__*/React.createElement(SectionPanel, {
-  strataTheme: "crystalline"
-}, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement(SectionTitle, null, "Research & Publications")), /*#__PURE__*/React.createElement(ResearchInterestsStrip, null), /*#__PURE__*/React.createElement("div", {
-  style: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 20
-  }
-}, PUBLICATIONS.map((p, i) => /*#__PURE__*/React.createElement(Reveal, {
-  key: i,
-  delay: `reveal-delay-${i % 2 + 1}`
-}, /*#__PURE__*/React.createElement(GlassCard, {
-  className: "publication-card",
-  padding: 28
-}, /*#__PURE__*/React.createElement(Badge, {
-  kind: p.badge
-}, p.badgeLabel), /*#__PURE__*/React.createElement("h3", {
-  style: {
-    fontSize: 21,
-    color: '#fff',
-    fontWeight: 600,
-    margin: '0 0 10px',
-    lineHeight: 1.4
-  },
-  dangerouslySetInnerHTML: {
-    __html: p.title
-  }
-}), /*#__PURE__*/React.createElement("p", {
-  style: {
-    color: 'rgba(255,255,255,0.85)',
-    margin: '0 0 6px',
-    fontSize: 15
-  }
-}, p.authors), /*#__PURE__*/React.createElement("p", {
-  style: {
-    color: 'rgba(255,255,255,0.60)',
-    fontStyle: 'italic',
-    margin: '0 0 14px',
-    fontSize: 14
-  }
-}, p.venue), /*#__PURE__*/React.createElement("p", {
-  className: "publication-abstract",
-  style: {
-    color: 'rgba(255,255,255,0.78)',
-    fontSize: 14,
-    lineHeight: 1.6,
-    margin: '0 0 16px'
-  },
-  dangerouslySetInnerHTML: {
-    __html: p.abstract
-  }
-}), p.link && /*#__PURE__*/React.createElement("a", {
-  href: p.link,
-  target: "_blank",
-  rel: "noreferrer",
-  style: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '10px 18px',
-    borderRadius: 12,
-    background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.10) 100%)',
-    color: '#fff',
-    textDecoration: 'none',
-    fontSize: 13,
-    fontWeight: 600,
-    border: '1px solid rgba(255,255,255,0.30)',
-    boxShadow: '0 4px 15px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.30)'
-  }
-}, /*#__PURE__*/React.createElement("i", {
-  className: "fas fa-external-link-alt",
-  style: {
-    fontSize: 11
-  }
-}), " View Publication"))))));
-
-/* =====================================================
-   Contact
-   ===================================================== */
-const ContactSection = () => {
-  const contacts = [{
-    icon: "fas fa-envelope",
-    label: "st4014@hw.ac.uk",
-    url: "mailto:st4014@hw.ac.uk",
-    aria: "Email Sa'eed Telvari"
-  }, {
-    icon: "fab fa-linkedin",
-    label: "LinkedIn Profile",
-    url: "https://www.linkedin.com/in/stelvari/",
-    aria: "Sa'eed Telvari on LinkedIn"
-  }, {
-    icon: "fab fa-github",
-    label: "GitHub",
-    url: "https://github.com/saeedtelvari",
-    aria: "Sa'eed Telvari on GitHub"
-  }, {
-    icon: "fas fa-graduation-cap",
-    label: "Google Scholar",
-    url: "https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330",
-    aria: "Sa'eed Telvari on Google Scholar"
-  }];
+const DOMAIN_FILTERS = [{
+  id: 'all',
+  label: 'All Research'
+}, {
+  id: 'co2',
+  label: 'CO\u2082 & VE Modeling'
+}, {
+  id: 'rock',
+  label: 'Digital Rock Physics'
+}, {
+  id: 'upscaling',
+  label: 'Permeability Upscaling & ML'
+}];
+const PublicationsList = () => {
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [copiedId, setCopiedId] = useState(null);
+  const [showAll, setShowAll] = useState(false);
+  const filteredPubs = activeFilter === 'all' ? PUBLICATIONS : PUBLICATIONS.filter(p => p.category === activeFilter);
+  const visiblePubs = showAll ? filteredPubs : filteredPubs.slice(0, 2);
+  const handleCopyBibtex = p => {
+    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(p.bibtex.trim()).then(() => {
+        setCopiedId(p.id);
+        setTimeout(() => setCopiedId(null), 1800);
+      }).catch(() => {});
+    }
+  };
   return /*#__PURE__*/React.createElement(SectionPanel, {
-    strataTheme: "mantle"
-  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement(SectionTitle, null, "Get In Touch")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      textAlign: 'center'
-    }
-  }, /*#__PURE__*/React.createElement(Reveal, {
+    strataTheme: "crystalline"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "pub-terminal-header"
+  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
+    className: "pub-strata-eyebrow"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "pub-strata-dot"
+  }), "STRATA // CRYSTALLINE BASEMENT \xB7 DEPTH: 5.2 KM \xB7 T: 145\xB0C \xB7 FRACTURED GRANITE"), /*#__PURE__*/React.createElement("h2", {
+    className: "dossier-headline"
+  }, "Interactive Publication Terminal"), /*#__PURE__*/React.createElement("p", {
+    className: "dossier-subtitle"
+  }, "Peer-reviewed journal articles, conference proceedings, and open preprints spanning reduced-order Vertical Equilibrium, 3D micro-CT characterization, and machine-learning upscaling."))), /*#__PURE__*/React.createElement(Reveal, {
     delay: "reveal-delay-1"
-  }, /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 17,
-      color: 'rgba(255,255,255,0.85)',
-      maxWidth: 620,
-      margin: '0 auto 36px',
-      lineHeight: 1.7
-    }
-  }, "I'm always interested in discussing research collaborations, academic opportunities, or questions about reservoir simulation and CCUS technologies.")), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "pub-filter-bar",
+    role: "tablist",
+    "aria-label": "Publication topic filter"
+  }, DOMAIN_FILTERS.map(f => {
+    const count = f.id === 'all' ? PUBLICATIONS.length : PUBLICATIONS.filter(p => p.category === f.id).length;
+    const isActive = activeFilter === f.id;
+    return /*#__PURE__*/React.createElement("button", {
+      key: f.id,
+      role: "tab",
+      "aria-selected": isActive,
+      className: `pub-filter-pill ${isActive ? 'active' : ''}`,
+      onClick: () => {
+        setActiveFilter(f.id);
+        setShowAll(false);
+      }
+    }, /*#__PURE__*/React.createElement("span", null, f.label), /*#__PURE__*/React.createElement("span", {
+      className: "pub-filter-count"
+    }, count));
+  }))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
-      justifyContent: 'center',
-      flexWrap: 'wrap',
-      gap: 18,
-      marginBottom: 36
+      flexDirection: 'column',
+      gap: 20
     }
-  }, contacts.map((c, i) => /*#__PURE__*/React.createElement(Reveal, {
-    key: i,
-    delay: `reveal-delay-${i + 1}`
-  }, /*#__PURE__*/React.createElement(ContactCard, {
-    icon: c.icon,
-    label: c.label,
-    url: c.url,
-    ariaLabel: c.aria
-  })))), /*#__PURE__*/React.createElement(Reveal, {
-    delay: "reveal-delay-3"
+  }, visiblePubs.map((p, i) => /*#__PURE__*/React.createElement(Reveal, {
+    key: p.id,
+    delay: `reveal-delay-${i % 2 + 1}`
   }, /*#__PURE__*/React.createElement("div", {
+    className: "pub-card-elevated"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "pub-card-top"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: `pub-badge-pill ${p.badgeClass}`
+  }, p.badgeLabel), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11.5,
+      fontFamily: 'ui-monospace, monospace',
+      color: 'rgba(255,255,255,0.50)'
+    }
+  }, "DOI: ", p.doi)), /*#__PURE__*/React.createElement("h3", {
+    className: "pub-card-title"
+  }, p.title), /*#__PURE__*/React.createElement("p", {
+    className: "pub-authors-line"
+  }, p.authors), /*#__PURE__*/React.createElement("p", {
+    className: "pub-venue-line"
+  }, p.venue), /*#__PURE__*/React.createElement("div", {
+    className: "pub-key-contribution"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "pub-key-contribution-label"
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-lightbulb"
+  }), " Key Contribution"), /*#__PURE__*/React.createElement("p", {
+    className: "pub-key-contribution-text"
+  }, p.keyContribution)), /*#__PURE__*/React.createElement("p", {
+    className: "pub-abstract-text"
+  }, p.abstract), /*#__PURE__*/React.createElement("div", {
+    className: "pub-actions-bar"
+  }, p.link && /*#__PURE__*/React.createElement("a", {
+    href: p.link,
+    target: "_blank",
+    rel: "noreferrer",
+    className: "btn-doi-view"
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-external-link-alt",
+    style: {
+      fontSize: 11
+    }
+  }), "View Publication / DOI"), /*#__PURE__*/React.createElement("button", {
+    className: "btn-cite-copy",
+    onClick: () => handleCopyBibtex(p),
+    "aria-label": `Copy BibTeX citation for ${p.title}`
+  }, /*#__PURE__*/React.createElement("i", {
+    className: copiedId === p.id ? "fas fa-check" : "far fa-copy",
+    style: {
+      color: copiedId === p.id ? '#64ffda' : 'inherit'
+    }
+  }), /*#__PURE__*/React.createElement("span", null, copiedId === p.id ? "Citation Copied!" : "Copy BibTeX"), copiedId === p.id && /*#__PURE__*/React.createElement("span", {
+    className: "cite-tooltip-badge"
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-check"
+  }), " BibTeX copied to clipboard"))))))), filteredPubs.length > 2 && /*#__PURE__*/React.createElement("div", {
+    className: "pub-view-more-container"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "pub-view-more-btn pressable",
+    onClick: () => setShowAll(prev => !prev),
+    "aria-expanded": showAll
+  }, /*#__PURE__*/React.createElement("i", {
+    className: `fas ${showAll ? 'fa-chevron-up' : 'fa-chevron-down'}`,
+    style: {
+      fontSize: 11
+    }
+  }), /*#__PURE__*/React.createElement("span", null, showAll ? 'Show Fewer Publications' : `View More Publications (${filteredPubs.length - 2} remaining)`))));
+};
+
+/* =====================================================
+   Contact — Collaboration Terminal & Academic Office (Mantle Strata)
+   ===================================================== */
+const VERIFIED_PROFILES = [{
+  icon: 'fas fa-graduation-cap',
+  label: 'Google Scholar',
+  meta: 'Citation Index & Academic Metrics',
+  url: 'https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330'
+}, {
+  icon: 'fas fa-id-badge',
+  label: 'ORCID Registry',
+  meta: '0000-0002-4896-295X (Verified)',
+  url: 'https://orcid.org/0000-0002-4896-295X'
+}, {
+  icon: 'fab fa-linkedin',
+  label: 'LinkedIn Profile',
+  meta: 'Professional Network & Research Updates',
+  url: 'https://www.linkedin.com/in/stelvari/'
+}, {
+  icon: 'fab fa-github',
+  label: 'GitHub Codebases',
+  meta: 'Open-Source Solvers & Scientific Repos',
+  url: 'https://github.com/saeedtelvari'
+}];
+const ContactSection = () => {
+  const [copiedEmail, setCopiedEmail] = useState(false);
+  const [localTime, setLocalTime] = useState('');
+  useEffect(() => {
+    const updateTime = () => {
+      try {
+        const timeStr = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Europe/London',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        }).format(new Date());
+        setLocalTime(timeStr);
+      } catch (e) {
+        setLocalTime('10:00');
+      }
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 30000);
+    return () => clearInterval(interval);
+  }, []);
+  const copyEmail = () => {
+    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText('st4014@hw.ac.uk').then(() => {
+        setCopiedEmail(true);
+        setTimeout(() => setCopiedEmail(false), 2200);
+      }).catch(() => {});
+    }
+  };
+  return /*#__PURE__*/React.createElement(SectionPanel, {
+    strataTheme: "mantle"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "collab-terminal-header"
+  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
+    className: "collab-strata-eyebrow"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "collab-strata-dot"
+  }), "STRATA // UPPER MANTLE & MOHO \xB7 DEPTH: 15\u201335 KM \xB7 DUCTILE PERIDOTITE"), /*#__PURE__*/React.createElement("h2", {
+    className: "dossier-headline"
+  }, "Collaboration Terminal & Academic Office"), /*#__PURE__*/React.createElement("p", {
+    className: "dossier-subtitle"
+  }, "I am always open to discussions regarding computational reservoir simulation collaborations, industrial CCUS storage assessments, and scientific seminar invitations."))), /*#__PURE__*/React.createElement("div", {
+    className: "collab-console-grid"
+  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
+    className: "collab-hero-tile"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      background: 'rgba(249, 115, 22, 0.15)',
+      border: '1px solid rgba(249, 115, 22, 0.35)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#f97316',
+      fontSize: 16
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-paper-plane"
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: 17,
+      color: '#fff',
+      fontWeight: 700,
+      margin: 0
+    }
+  }, "Direct Academic Communication"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11.5,
+      color: 'rgba(255,255,255,0.60)',
+      fontFamily: 'ui-monospace, monospace'
+    }
+  }, "PRIMARY DESK \xB7 INSTITUTIONAL EMAIL"))), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 14,
+      color: 'rgba(255,255,255,0.80)',
+      lineHeight: 1.6,
+      margin: '0 0 20px'
+    }
+  }, "For preprints, research inquiries, or code questions on Vertical Equilibrium models, feel free to reach out directly:"), /*#__PURE__*/React.createElement("div", {
+    className: "email-copy-action-box pressable",
+    onClick: copyEmail,
+    title: "Click to copy email address",
+    role: "button",
+    tabIndex: 0,
+    onKeyDown: e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        copyEmail();
+      }
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-envelope",
+    style: {
+      fontSize: 20,
+      color: '#64ffda'
+    }
+  }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'rgba(255,255,255,0.55)',
+      fontFamily: 'ui-monospace, monospace'
+    }
+  }, "INSTITUTIONAL ADDRESS"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      color: '#fff',
+      fontWeight: 700,
+      fontFamily: 'ui-monospace, monospace'
+    }
+  }, "st4014@hw.ac.uk"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8
+    }
+  }, copiedEmail ? /*#__PURE__*/React.createElement("span", {
     style: {
       display: 'inline-flex',
       alignItems: 'center',
-      gap: 10,
-      color: 'rgba(255,255,255,0.60)',
-      fontSize: 14
+      gap: 6,
+      fontSize: 12,
+      fontWeight: 700,
+      color: '#64ffda',
+      background: 'rgba(100, 255, 218, 0.15)',
+      padding: '4px 10px',
+      borderRadius: 6,
+      border: '1px solid rgba(100, 255, 218, 0.30)',
+      fontFamily: 'ui-monospace, monospace'
     }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-check"
+  }), " COPIED!") : /*#__PURE__*/React.createElement("span", {
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 6,
+      fontSize: 12,
+      color: 'rgba(255,255,255,0.65)',
+      background: 'rgba(255,255,255,0.06)',
+      padding: '4px 10px',
+      borderRadius: 6,
+      border: '1px solid rgba(255,255,255,0.10)',
+      fontFamily: 'ui-monospace, monospace'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "far fa-copy"
+  }), " COPY"), /*#__PURE__*/React.createElement("a", {
+    href: "mailto:st4014@hw.ac.uk",
+    onClick: e => e.stopPropagation(),
+    style: {
+      width: 32,
+      height: 32,
+      borderRadius: 6,
+      background: 'rgba(255,255,255,0.08)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#fff',
+      fontSize: 12,
+      textDecoration: 'none'
+    },
+    title: "Open mail app"
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-external-link-alt"
+  }))))), /*#__PURE__*/React.createElement("div", {
+    className: "office-telemetry-pill"
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-map-marker-alt",
     style: {
       color: '#f97316'
     }
-  }), "Institute of GeoEnergy Engineering, Heriot-Watt University, Edinburgh, UK"))));
-};
-const ContactCard = ({
-  icon,
-  label,
-  url,
-  ariaLabel
-}) => {
-  const [hovered, setHovered] = useState(false);
-  return /*#__PURE__*/React.createElement("a", {
-    href: url,
+  }), /*#__PURE__*/React.createElement("span", null, "Institute of GeoEnergy Engineering \xB7 Heriot-Watt University, Edinburgh, UK"), /*#__PURE__*/React.createElement("span", {
+    className: "office-time-clock"
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "far fa-clock"
+  }), " ", localTime || '10:00', " UK Time")))), /*#__PURE__*/React.createElement(Reveal, {
+    delay: "reveal-delay-1"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "verified-profiles-grid"
+  }, VERIFIED_PROFILES.map((p, idx) => /*#__PURE__*/React.createElement("a", {
+    key: idx,
+    href: p.url,
     target: "_blank",
     rel: "noreferrer",
-    "aria-label": ariaLabel || label,
-    onMouseEnter: () => setHovered(true),
-    onMouseLeave: () => setHovered(false),
-    style: {
-      display: 'inline-block',
-      height: '100%',
-      textDecoration: 'none',
-      cursor: 'pointer'
-    }
-  }, /*#__PURE__*/React.createElement(GlassCard, {
-    padding: 18,
-    radius: 20,
-    style: {
-      minWidth: 220,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 14,
-      height: '100%'
-    }
+    className: "verified-profile-card pressable"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "verified-profile-icon"
   }, /*#__PURE__*/React.createElement("i", {
-    className: icon,
+    className: p.icon
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 22,
-      color: '#64ffda',
-      transition: 'transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275)',
-      transform: hovered ? 'scale(1.22) rotate(8deg)' : 'scale(1)'
+      minWidth: 0
     }
-  }), /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 14,
-      color: 'rgba(255,255,255,0.90)'
+      fontSize: 14.5,
+      fontWeight: 700,
+      color: '#fff',
+      margin: '0 0 2px'
     }
-  }, label)));
+  }, p.label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: 'rgba(255,255,255,0.65)',
+      lineHeight: 1.35
+    }
+  }, p.meta))))))));
 };
 
 /* =====================================================
@@ -4778,19 +5299,27 @@ const ContactCard = ({
    ===================================================== */
 const HUD_SECTIONS = [{
   id: 'home',
-  label: 'Home',
+  label: 'Surface',
+  depth: '0.0 km',
+  stratum: 'Wellhead & Horizon',
   color: '#64ffda'
 }, {
   id: 'about',
-  label: 'About',
+  label: 'Dossier',
+  depth: '2.4 km',
+  stratum: 'Sedimentary Basin',
   color: '#38bdf8'
 }, {
   id: 'publications',
   label: 'Research',
+  depth: '5.2 km',
+  stratum: 'Crystalline Basement',
   color: '#a855f7'
 }, {
   id: 'contact',
-  label: 'Contact',
+  label: 'Office',
+  depth: '35 km',
+  stratum: 'Moho & Upper Mantle',
   color: '#f97316'
 }];
 const StratigraphicDepthHUD = ({
@@ -4810,7 +5339,7 @@ const StratigraphicDepthHUD = ({
     style: {
       padding: '14px 10px',
       borderRadius: 20,
-      background: 'linear-gradient(180deg, rgba(19,13,28,0.88) 0%, rgba(15,20,38,0.92) 100%)',
+      background: 'linear-gradient(180deg, rgba(19,13,28,0.92) 0%, rgba(15,20,38,0.95) 100%)',
       border: '1px solid rgba(255,255,255,0.15)',
       boxShadow: '0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.20)',
       backdropFilter: 'blur(16px)',
@@ -4831,13 +5360,13 @@ const StratigraphicDepthHUD = ({
       textAlign: 'center',
       lineHeight: 1.2
     }
-  }, "SECTIONS"), /*#__PURE__*/React.createElement("div", {
+  }, "STRATA"), /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'relative',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      gap: 16,
+      gap: 18,
       padding: '6px 0'
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -4871,36 +5400,60 @@ const StratigraphicDepthHUD = ({
         backgroundColor: s.color,
         boxShadow: isActive ? `0 0 14px ${s.color}, inset 0 0 4px #fff` : `0 0 4px ${s.color}`,
         border: isActive ? '2px solid #fff' : '1.5px solid rgba(255,255,255,0.4)',
-        transition: 'all 0.35s cubic-bezier(0.175,0.885,0.32,1.275)',
+        transition: 'all 0.25s cubic-bezier(0.23, 1, 0.32, 1)',
         transform: isHover ? 'scale(1.35)' : 'scale(1)'
       }
     }), (isHover || isActive) && /*#__PURE__*/React.createElement("div", {
       style: {
         position: 'absolute',
-        right: 24,
+        right: 26,
         top: '50%',
         transform: 'translateY(-50%)',
-        background: 'rgba(14,10,22,0.95)',
+        background: 'rgba(14,10,22,0.96)',
         border: `1px solid ${s.color}`,
         borderRadius: 10,
-        padding: '6px 10px',
+        padding: '8px 12px',
         whiteSpace: 'nowrap',
-        boxShadow: `0 4px 18px rgba(0,0,0,0.55), 0 0 10px ${s.color}33`,
+        boxShadow: `0 4px 20px rgba(0,0,0,0.6), 0 0 12px ${s.color}33`,
         backdropFilter: 'blur(12px)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 2,
+        gap: 3,
         pointerEvents: 'none',
         zIndex: 1000
       }
     }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 11,
         fontWeight: 700,
         color: s.color,
         fontFamily: 'ui-monospace, monospace'
       }
-    }, s.label)));
+    }, s.label), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        fontWeight: 700,
+        color: '#fff',
+        background: `${s.color}25`,
+        border: `1px solid ${s.color}55`,
+        padding: '1px 6px',
+        borderRadius: 4,
+        fontFamily: 'ui-monospace, monospace'
+      }
+    }, s.depth)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9.5,
+        color: 'rgba(255,255,255,0.65)',
+        fontFamily: 'ui-monospace, monospace'
+      }
+    }, s.stratum)));
   }))));
 };
 Object.assign(window, {
@@ -5560,11 +6113,15 @@ const App = () => {
     onNavigate: onNavigate
   }), /*#__PURE__*/React.createElement("div", {
     id: "about"
-  }), /*#__PURE__*/React.createElement(AboutSection, null), /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement(AboutSection, {
+    onNavigate: onNavigate
+  }), /*#__PURE__*/React.createElement("div", {
     id: "research"
   }), /*#__PURE__*/React.createElement("div", {
     id: "publications"
-  }), /*#__PURE__*/React.createElement(PublicationsList, null), /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement(PublicationsList, {
+    onNavigate: onNavigate
+  }), /*#__PURE__*/React.createElement("div", {
     id: "contact"
   }), /*#__PURE__*/React.createElement(ContactSection, null), /*#__PURE__*/React.createElement(Footer, {
     onNavigate: onNavigate

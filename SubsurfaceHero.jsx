@@ -1064,37 +1064,161 @@ const DepthAxis = () => {
   );
 };
 
-// Captured CO2 gas feed animation above the wellhead
+// Overland CO2 Supercritical Pipeline with elevated supports and directional chevron flow
 const GasFeedAnimation = ({ isPlaying, geology }) => {
   const g = geology || currentGeology;
-  const bubbles = useMemo(() => Array.from({ length: 12 }, (_, i) => ({
-    id: i,
-    left: `${g.wellXPct + (Math.random() - 0.5) * 1.2}%`,
-    delay: i * 0.45,
-    size: 2 + Math.random() * 3.5,
-    duration: 2.2 + Math.random() * 1.2,
-  })), [g.wellXPct]);
-  
+  const wellX = g.wellXPct;
+
   return (
-    <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: '42vh', pointerEvents: 'none', zIndex: 6 }}>
-      {bubbles.map(b => (
-        <div 
-          key={b.id}
-          style={{
-            position: 'absolute',
-            left: b.left,
-            top: 0,
-            width: b.size,
-            height: b.size,
-            borderRadius: '50%',
+    <div style={{
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 'calc(42vh - 36px)',
+      height: 36,
+      pointerEvents: 'none',
+      zIndex: 5,
+    }}>
+      {/* Pipeline container from wellhead wing flange to right edge */}
+      <div style={{
+        position: 'absolute',
+        left: `calc(${wellX}% + 33px)`,
+        right: 0,
+        height: 36,
+      }}>
+        {/* Telemetry metadata tag above the pipeline */}
+        <div style={{
+          position: 'absolute',
+          left: 16,
+          top: -16,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 7,
+          fontSize: 9.5,
+          fontFamily: "'JetBrains Mono', ui-monospace, Menlo, monospace",
+          color: '#0dfca2',
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          fontWeight: 600,
+          textShadow: '0 1px 4px rgba(0,0,0,0.9)',
+          whiteSpace: 'nowrap',
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
             background: '#0dfca2',
-            boxShadow: '0 0 6px #0dfca2',
-            opacity: 0,
-            animation: `feedBubble ${b.duration}s linear ${b.delay}s infinite`,
+            boxShadow: '0 0 8px #0dfca2',
+            display: 'inline-block',
+          }} />
+          <span>CO₂ TRANSMISSION PIPELINE · 110 BAR · SUPERCRITICAL</span>
+        </div>
+
+        <svg
+          width="100%"
+          height="36"
+          style={{ overflow: 'visible' }}
+          preserveAspectRatio="none"
+        >
+          <defs>
+            {/* Cylindrical metallic pipe gradient */}
+            <linearGradient id="pipe-steel" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#475569" />
+              <stop offset="18%" stopColor="#94a3b8" />
+              <stop offset="42%" stopColor="#334155" />
+              <stop offset="75%" stopColor="#1e293b" />
+              <stop offset="100%" stopColor="#0f172a" />
+            </linearGradient>
+
+            {/* Dense supercritical fluid core gradient */}
+            <linearGradient id="sc-fluid-core" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#a7f3d0" />
+              <stop offset="45%" stopColor="#0dfca2" />
+              <stop offset="100%" stopColor="#059669" />
+            </linearGradient>
+
+            <pattern id="chevron-flow-pattern" width="32" height="10" patternUnits="userSpaceOnUse">
+              <path
+                d="M 12 2 L 6 5 L 12 8 M 24 2 L 18 5 L 24 8"
+                fill="none"
+                stroke="#ffffff"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity="0.85"
+              />
+            </pattern>
+          </defs>
+
+          {/* 1. Ground Support Stanchions (anchoring pipe to surface horizon at y=36) */}
+          {[60, 220, 380, 540, 700, 860, 1020, 1180].map((xPos) => (
+            <g key={`pipe-support-${xPos}`}>
+              {/* Vertical steel column */}
+              <rect x={xPos - 2} y="13" width="4" height="21" fill="#334155" stroke="#1e293b" strokeWidth="0.5" />
+              {/* Horizontal saddle cradle clamp */}
+              <path d={`M ${xPos - 6} 13 Q ${xPos} 15 ${xPos + 6} 13`} stroke="#64748b" strokeWidth="1.6" fill="none" />
+              {/* Concrete foundation sleeper at horizon level */}
+              <rect x={xPos - 8} y="32" width="16" height="4" rx="1" fill="#1e293b" stroke="#475569" strokeWidth="0.7" />
+            </g>
+          ))}
+
+          {/* 2. Main High-Pressure Steel Pipe Body (y: 1 to 13, height 12) */}
+          <rect
+            x="0"
+            y="1"
+            width="100%"
+            height="12"
+            rx="2.5"
+            fill="url(#pipe-steel)"
+            stroke="rgba(255,255,255,0.22)"
+            strokeWidth="0.8"
+            style={{ filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.5))' }}
+          />
+
+          {/* 3. Flanged Pipe Joint Collars with Bolt Rivets */}
+          {[140, 300, 460, 620, 780, 940, 1100].map((xPos) => (
+            <g key={`flange-collar-${xPos}`}>
+              <rect x={xPos - 2.5} y="0" width="5" height="14" rx="1" fill="#475569" stroke="#94a3b8" strokeWidth="0.7" />
+              <circle cx={xPos} cy="2.5" r="0.8" fill="#e2e8f0" />
+              <circle cx={xPos} cy="11.5" r="0.8" fill="#e2e8f0" />
+            </g>
+          ))}
+
+          {/* 4. Inspection Sight Channel / Fluid Core (Continuous high-density fluid conduit) */}
+          <rect
+            x="0"
+            y="4.5"
+            width="100%"
+            height="5"
+            rx="1.5"
+            fill="url(#sc-fluid-core)"
+            opacity="0.9"
+            style={{ filter: 'drop-shadow(0 0 6px rgba(13,252,162,0.7))' }}
+          />
+
+          {/* 5. Directional Chevron Flow Animation (Moving leftward into wellhead) */}
+          <g style={{
+            animation: 'pipelineChevron 1.4s linear infinite',
             animationPlayState: isPlaying ? 'running' : 'paused',
-          }}
-        />
-      ))}
+          }}>
+            <rect
+              x="-64"
+              y="3.5"
+              width="calc(100% + 128px)"
+              height="7"
+              fill="url(#chevron-flow-pattern)"
+            />
+          </g>
+
+          {/* 6. Top Metallic Specular Reflection Highlight */}
+          <line
+            x1="0"
+            y1="2"
+            x2="100%"
+            y2="2"
+            stroke="rgba(255,255,255,0.55)"
+            strokeWidth="0.75"
+          />
+        </svg>
+      </div>
     </div>
   );
 };
@@ -1186,37 +1310,88 @@ const Subsurface = ({ h, hMax, faults, geology }) => {
   );
 };
 
-// Wellhead — small structure above the horizon
+// Wellhead — Precision technical SVG Christmas Tree vector assembly
 const Wellhead = ({ geology }) => {
   const g = geology || currentGeology;
   return (
     <div style={{
-      position: 'absolute', left: `${g.wellXPct}%`, top: 'calc(42vh - 36px)',
-      width: 50, height: 36, transform: 'translateX(-50%)',
+      position: 'absolute',
+      left: `${g.wellXPct}%`,
+      top: 'calc(42vh - 46px)',
+      width: 72,
+      height: 46,
+      transform: 'translateX(-50%)',
       zIndex: 5,
+      pointerEvents: 'none',
     }}>
-      {/* Xmas Tree Wellhead */}
-      <div style={{
-        width: '100%', height: '100%',
-        position: 'relative',
-      }}>
-        {/* Master flange base */}
-        <div style={{ position: 'absolute', bottom: 0, left: 15, width: 20, height: 6, background: '#444', borderRadius: 1, border: '1px solid #666' }}/>
-        {/* Vertical riser */}
-        <div style={{ position: 'absolute', bottom: 6, left: 22, width: 6, height: 22, background: 'linear-gradient(90deg, #333, #aaa, #333)', borderLeft: '1px solid #555' }}/>
-        {/* Flow cross valve block */}
-        <div style={{ position: 'absolute', bottom: 16, left: 16, width: 18, height: 8, background: '#222', borderRadius: 2, border: '1px solid #0dfca2' }}/>
-        {/* Left pressure gauge */}
-        <div style={{ position: 'absolute', bottom: 18, left: 8, width: 8, height: 4, background: '#aaa', borderRadius: 1 }}/>
-        {/* Top gauge/cap */}
-        <div style={{ position: 'absolute', bottom: 28, left: 20, width: 10, height: 5, background: 'radial-gradient(circle, #fff, #555)', borderRadius: '50%', border: '1px solid #888' }}/>
-        {/* Glowing pressure gauge indicator light */}
-        <div style={{
-          position: 'absolute', left: 23, top: 12, width: 4, height: 4, borderRadius: '50%',
-          background: '#0dfca2', boxShadow: '0 0 6px #0dfca2',
-          animation: 'twinkle 1s ease-in-out infinite',
-        }}/>
-      </div>
+      <svg
+        viewBox="0 0 72 46"
+        width="72"
+        height="46"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        style={{ overflow: 'visible', filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.65))' }}
+      >
+        <defs>
+          <linearGradient id="wh-metal-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#1e293b" />
+            <stop offset="45%" stopColor="#334155" />
+            <stop offset="55%" stopColor="#475569" />
+            <stop offset="100%" stopColor="#0f172a" />
+          </linearGradient>
+          <linearGradient id="wh-flange-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#475569" />
+            <stop offset="100%" stopColor="#1e293b" />
+          </linearGradient>
+        </defs>
+
+        {/* 1. Conductor Casing Base Flange */}
+        <rect x="23" y="41" width="26" height="5" rx="1" fill="url(#wh-flange-grad)" stroke="rgba(255,255,255,0.25)" strokeWidth="0.7" />
+        <circle cx="26" cy="43.5" r="0.9" fill="#94a3b8" />
+        <circle cx="31" cy="43.5" r="0.9" fill="#94a3b8" />
+        <circle cx="41" cy="43.5" r="0.9" fill="#94a3b8" />
+        <circle cx="46" cy="43.5" r="0.9" fill="#94a3b8" />
+
+        {/* 2. Vertical Spool Column */}
+        <rect x="32.5" y="12" width="7" height="29" fill="url(#wh-metal-grad)" stroke="rgba(255,255,255,0.15)" strokeWidth="0.6" />
+
+        {/* 3. Lower Master Gate Valve */}
+        <rect x="27" y="32" width="18" height="7" rx="1.5" fill="#0f172a" stroke="rgba(100,255,218,0.45)" strokeWidth="0.8" />
+        <line x1="27" y1="35.5" x2="20" y2="35.5" stroke="#94a3b8" strokeWidth="1.2" />
+        <line x1="20" y1="31.5" x2="20" y2="39.5" stroke="#cbd5e1" strokeWidth="1.8" strokeLinecap="round" />
+
+        {/* 4. Upper Master Gate Valve */}
+        <rect x="27" y="23" width="18" height="7" rx="1.5" fill="#0f172a" stroke="rgba(100,255,218,0.45)" strokeWidth="0.8" />
+        <line x1="45" y1="26.5" x2="52" y2="26.5" stroke="#94a3b8" strokeWidth="1.2" />
+        <line x1="52" y1="22.5" x2="52" y2="30.5" stroke="#cbd5e1" strokeWidth="1.8" strokeLinecap="round" />
+
+        {/* 5. Flow Cross / Tee Block */}
+        <rect x="26" y="13" width="20" height="8" rx="1.5" fill="#0b1322" stroke="#64ffda" strokeWidth="1" />
+
+        {/* 6. Lateral Kill Wing / Monitoring Branch (Left) */}
+        <rect x="13" y="15" width="13" height="4" fill="url(#wh-metal-grad)" stroke="rgba(255,255,255,0.18)" strokeWidth="0.6" />
+        <rect x="10" y="14" width="3" height="6" rx="0.8" fill="#475569" stroke="#94a3b8" strokeWidth="0.6" />
+
+        {/* 7. Lateral Injection Wing Valve (Right — connecting to surface pipeline) */}
+        <rect x="46" y="15" width="24" height="4" fill="url(#wh-metal-grad)" stroke="rgba(255,255,255,0.18)" strokeWidth="0.6" />
+        <rect x="54" y="13.5" width="7" height="7" rx="1" fill="#0f172a" stroke="rgba(100,255,218,0.6)" strokeWidth="0.8" />
+        <line x1="57.5" y1="13.5" x2="57.5" y2="7.5" stroke="#94a3b8" strokeWidth="1.2" />
+        <line x1="53.5" y1="7.5" x2="61.5" y2="7.5" stroke="#cbd5e1" strokeWidth="1.8" strokeLinecap="round" />
+
+        {/* 8. Top Swab Valve & Tree Cap */}
+        <rect x="29" y="6" width="14" height="6" rx="1" fill="#0f172a" stroke="rgba(255,255,255,0.25)" strokeWidth="0.7" />
+        <rect x="30.5" y="3.5" width="11" height="2.5" rx="0.8" fill="#334155" stroke="#64ffda" strokeWidth="0.6" />
+
+        {/* 9. Top Pressure Gauge Assembly */}
+        <line x1="36" y1="3.5" x2="36" y2="1" stroke="#94a3b8" strokeWidth="1" />
+        <circle cx="36" cy="-2.5" r="3.2" fill="#0f172a" stroke="#64ffda" strokeWidth="0.8" />
+        <line x1="36" y1="-2.5" x2="37.8" y2="-4" stroke="#0dfca2" strokeWidth="0.7" strokeLinecap="round" />
+
+        {/* 10. Digital Telemetry Status Light */}
+        <circle cx="36" cy="17" r="1.4" fill="#0dfca2" style={{ filter: 'drop-shadow(0 0 4px #0dfca2)' }}>
+          <animate attributeName="opacity" values="0.35;1;0.35" dur="1.8s" repeatCount="indefinite" />
+        </circle>
+      </svg>
     </div>
   );
 };

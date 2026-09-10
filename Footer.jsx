@@ -8,7 +8,6 @@ const Footer = ({ onNavigate }) => {
     { id: 'contact',      label: 'Contact', href: './index.html#contact' },
     { id: 'cv',           label: 'CV', href: './index.html#cv' },
   ];
-
   return (
     <footer 
       role="contentinfo"
@@ -77,21 +76,52 @@ const Footer = ({ onNavigate }) => {
             Institute of GeoEnergy Engineering · Heriot-Watt University
           </p>
         </div>
-        <nav role="navigation" aria-label="Footer navigation">
-          <div style={{ display: 'flex', gap: 20, fontSize: 13, flexWrap: 'wrap' }}>
-            {links.map(l => (
-              <FooterLink 
-                key={l.id} 
-                label={l.label} 
-                href={l.href}
-                onClick={() => {
-                  if (onNavigate) onNavigate(l.id);
-                  else if (window.__onNavigate) window.__onNavigate(l.id);
-                }} 
-              />
-            ))}
-          </div>
-        </nav>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+          <nav role="navigation" aria-label="Footer navigation">
+            <div style={{ display: 'flex', gap: 20, fontSize: 13, flexWrap: 'wrap', alignItems: 'center' }}>
+              {links.map(l => (
+                <FooterLink 
+                  key={l.id} 
+                  label={l.label} 
+                  href={l.href}
+                  onClick={() => {
+                    if (onNavigate) onNavigate(l.id);
+                    else if (window.__onNavigate) window.__onNavigate(l.id);
+                  }} 
+                />
+              ))}
+            </div>
+          </nav>
+          <button
+            onClick={() => {
+              if (onNavigate) onNavigate('home');
+              else if (window.__onNavigate) window.__onNavigate('home');
+              else window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="pressable"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 16px',
+              borderRadius: 10,
+              background: 'rgba(251, 191, 36, 0.12)',
+              border: '1px solid rgba(251, 191, 36, 0.30)',
+              color: '#fbbf24',
+              fontFamily: 'ui-monospace, monospace',
+              fontSize: 11.5,
+              fontWeight: 700,
+              letterSpacing: '0.06em',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+              transition: 'transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background 160ms ease, border-color 160ms ease',
+            }}
+            title="Ascend back to surface wellhead"
+          >
+            <i className="fas fa-arrow-up" style={{ fontSize: 10 }}></i>
+            Ascend to Surface // 0.0 km
+          </button>
+        </div>
       </div>
     </footer>
   );
@@ -105,13 +135,15 @@ const FooterLink = ({ label, href, onClick }) => {
       onClick={(e) => { e.preventDefault(); onClick(); }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      className="pressable"
       style={{
         color: hover ? '#64ffda' : 'rgba(255,255,255,0.70)',
         textDecoration: 'none',
         cursor: 'pointer',
-        transition: 'all 0.25s ease',
+        transition: 'color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1)',
         fontWeight: hover ? 500 : 400,
         transform: hover ? 'translateY(-1px)' : 'none',
+        userSelect: 'none',
       }}
     >
       {label}

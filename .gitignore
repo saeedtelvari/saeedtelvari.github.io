@@ -1,2 +1,6 @@
 .superpowers/
 .worktrees/
+.agents/
+.claude/
+skills/
+skills-lock.json
