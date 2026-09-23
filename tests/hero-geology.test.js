@@ -3,6 +3,19 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const HeroGeology = require('../hero-geology.js');
 
+test('fault contact balances height while preserving gas and local capacity', () => {
+  for (const [left, right, roofLeft, roofRight, capLeft, capRight] of [
+    [3, 2, 10, 9, 8, 8], [0, 0.2, 10, 9, 8, 8], [4, 6, 10, 9, 4, 8],
+  ]) {
+    const h = [left, right];
+    HeroGeology.balanceFaultContact(h, 0, 1, roofLeft, roofRight, capLeft, capRight);
+    assert.ok(Math.abs(h[0] + h[1] - left - right) < 1e-8);
+    assert.ok(h[0] >= 0 && h[0] <= capLeft && h[1] >= 0 && h[1] <= capRight);
+    if (h[0] > 0 && h[0] < capLeft && h[1] > 0 && h[1] < capRight)
+      assert.ok(Math.abs(roofLeft + h[0] - roofRight - h[1]) < 1e-5);
+  }
+});
+
 test('rock bedding breaks at faults and stays continuous across ordinary cells', () => {
   const source = fs.readFileSync(require.resolve('../SubsurfaceHero.jsx'), 'utf8');
   const trace = new Function(source.slice(source.indexOf('  const trace = elevation'),
@@ -71,7 +84,7 @@ test('varied hero layers stay ordered and both solvers respect their thickness',
   new Function('self', 'importScripts', 'HeroGeology', fs.readFileSync(require.resolve('../hero-simulation-worker.js'), 'utf8'))(
     worker, () => {}, countedGeometry);
   worker.onmessage({ data: { geology: g } });
-  assert.ok(profileCalls <= 800, 'static face profiles must be cached across all time steps');
+  assert.ok(profileCalls <= 840, 'static face profiles must be cached across all time steps');
   const fallback = api.precomputeSimulation(g.faults, g);
   assert.equal(workerHistory.length, 1001);
   assert.ok(workerHistory[0].faultFlow.every(flow => flow === 0), 'no leaking before injection');
@@ -82,6 +95,14 @@ test('varied hero layers stay ordered and both solvers respect their thickness',
       assert.ok(Math.abs(flow - fallback[frame].faultFlow[i]) < 1e-8, 'both solvers report the same leakage');
       const cell = Math.max(0, Math.min(200, Math.round(HeroGeology.getFaultIntersection(g.faults[i], 1, g).x / 5)));
       if (flow > 0 && workerHistory[frame].h[cell] <= g.faults[i].thresholdHeight) leakingAtThreshold = true;
+      for (const [field, depth] of [['h', 1], ['h2', 0.4]]) {
+        const heights = workerHistory[frame][field];
+        const k = Math.round(HeroGeology.getFaultIntersection(g.faults[i], depth, g).x / 5);
+        if (k <= 0 || k >= 201 || heights[k - 1] <= 0.01 || heights[k] <= 0.01) continue;
+        const left = HeroGeology.capRockY(k * 5, g.faults, k - 1, depth, g) + heights[k - 1] * 15;
+        const right = HeroGeology.capRockY(k * 5, g.faults, k, depth, g) + heights[k] * 15;
+        assert.ok(Math.abs(left - right) < 0.2, 'active gas-water contact must meet across a permeable fault');
+      }
     });
     for (const key of ['h', 'hMax', 'h2', 'h2Max']) {
       workerHistory[frame][key].forEach((height, i) => {

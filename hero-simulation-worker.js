@@ -1,5 +1,5 @@
-importScripts('./hero-geology.js?v=1');
-const { capRockY, getFaultIntersection, layerThicknessAt } = HeroGeology;
+importScripts('./hero-geology.js?v=2');
+const { capRockY, getFaultIntersection, layerThicknessAt, balanceFaultContact } = HeroGeology;
 
 const advanceLayer = (h, hMax, faces, maxHeight, g, dt, leaksAt) => {
   const n = h.length;
@@ -23,11 +23,20 @@ self.onmessage = ({ data }) => {
   // Geometry is static for all 10,010 substeps; evaluate it only once.
   const faces = depth => Array.from({ length: n - 1 }, (_, i) => [
     capRockY(i * 5, g.faults, i, depth, g) / 15,
-    capRockY((i + 1) * 5, g.faults, i, depth, g) / 15,
+    capRockY((i + 1) * 5, g.faults, i + 1, depth, g) / 15,
   ]);
   const primaryFaces = faces(1), secondaryFaces = faces(0.4);
   const faultCells = g.faults.map(fault => [1, 0.4].map(depth =>
     Math.max(0, Math.min(n - 1, Math.round(getFaultIntersection(fault, depth, g).x / 5)))));
+  const faultRoofs = faultCells.map(cells => [1, 0.4].map((depth, j) => {
+    const k = cells[j];
+    return [k, capRockY(k * 5, g.faults, k - 1, depth, g) / 15,
+      capRockY(k * 5, g.faults, k, depth, g) / 15];
+  }));
+  const balanceFaults = (heights, limits, layer) => faultRoofs.forEach(contacts => {
+    const [k, left, right] = contacts[layer];
+    if (k > 0 && k < n) balanceFaultContact(heights, k - 1, k, left, right, limits[k - 1], limits[k]);
+  });
   let h = new Array(n).fill(0), hMax = new Array(n).fill(0);
   let h2 = new Array(n).fill(0), h2Max = new Array(n).fill(0);
   const history = [];
@@ -38,6 +47,7 @@ self.onmessage = ({ data }) => {
     faultFlow.fill(0);
     for (let step = 0; step < 10; step++) {
       h = advanceLayer(h, hMax, primaryFaces, primaryMax, g, dt);
+      balanceFaults(h, primaryMax, 0);
       const leaks = [];
       g.faults.forEach((fault, faultIndex) => {
         const [index, upper] = faultCells[faultIndex];
@@ -56,6 +66,7 @@ self.onmessage = ({ data }) => {
       }
       h.forEach((value, i) => { hMax[i] = Math.max(hMax[i], value); });
       h2 = advanceLayer(h2, h2Max, secondaryFaces, secondaryMax, g, dt, leaks);
+      balanceFaults(h2, secondaryMax, 1);
       h2.forEach((value, i) => { h2Max[i] = Math.max(h2Max[i], value); });
     }
   }

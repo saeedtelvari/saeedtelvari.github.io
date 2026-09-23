@@ -140,7 +140,7 @@ let currentGeology = generateRandomGeology();
 const randomizedFaults = currentGeology.faults;
 
 const { capRockBaseProfile, stratumBaseProfile, getStratumFaultIntersection,
-  getFaultIntersection, stratumY, capRockY, layerThicknessAt } = HeroGeology;
+  getFaultIntersection, stratumY, capRockY, layerThicknessAt, balanceFaultContact } = HeroGeology;
 
 // Numerical PDE Simulator: solves explicit Finite Volume VE equations for CO2 gravity tongue (200-cell high-definition grid)
 const precomputeSimulation = (faults = currentGeology.faults, geo = currentGeology) => {
@@ -167,11 +167,20 @@ const precomputeSimulation = (faults = currentGeology.faults, geo = currentGeolo
   const secondaryMax = Array.from({ length: N }, (_, i) => layerThicknessAt(i * 5, 0.4, flts, i, g) / 15);
   const faces = depth => Array.from({ length: N - 1 }, (_, i) => [
     capRockY(i * 5, flts, i, depth, g) / 15,
-    capRockY((i + 1) * 5, flts, i, depth, g) / 15,
+    capRockY((i + 1) * 5, flts, i + 1, depth, g) / 15,
   ]);
   const primaryFaces = faces(1), secondaryFaces = faces(0.4);
   const faultCells = flts.map(f => [1, 0.4].map(depth =>
     Math.max(0, Math.min(N - 1, Math.round(getFaultIntersection(f, depth, g).x / 5)))));
+  const faultRoofs = faultCells.map(cells => [1, 0.4].map((depth, j) => {
+    const k = cells[j];
+    return [k, capRockY(k * 5, flts, k - 1, depth, g) / 15,
+      capRockY(k * 5, flts, k, depth, g) / 15];
+  }));
+  const balanceFaults = (heights, limits, layer) => faultRoofs.forEach(contacts => {
+    const [k, left, right] = contacts[layer];
+    if (k > 0 && k < N) balanceFaultContact(heights, k - 1, k, left, right, limits[k - 1], limits[k]);
+  });
   const faultFlow = flts.map(() => 0);
   
   for (let frame = 0; frame <= totalFrames; frame++) {
@@ -215,6 +224,7 @@ const precomputeSimulation = (faults = currentGeology.faults, geo = currentGeolo
         const fR = i === N - 1 ? 0 : fluxes[i];
         nextH[i] = Math.max(0, Math.min(primaryMax[i], h[i] + dt * (fL - fR)));
       }
+      balanceFaults(nextH, primaryMax, 0);
       
       // Fault capillary seal breaching and leakage
       const leaks = new Array(flts.length).fill(0);
@@ -282,6 +292,7 @@ const precomputeSimulation = (faults = currentGeology.faults, geo = currentGeolo
         const boundedIdx2 = faultCells[idx][1];
         nextH2[boundedIdx2] = Math.min(secondaryMax[boundedIdx2], nextH2[boundedIdx2] + leaks[idx] * 1.5);
       }
+      balanceFaults(nextH2, secondaryMax, 1);
       
       h2 = nextH2.map((val, i) => Math.max(0, Math.min(secondaryMax[i], val)));
       for (let i = 0; i < N; i++) {
@@ -347,7 +358,7 @@ const getReservoirClipPath = (depth, faults, g) => buildSmoothRibbonPath(
     depth < 0.5 ? g.shallowThickness : g.reservoirThickness, g),
   0, 200, faults, depth, g);
 
-// Helper to get continuous node-evaluated height for any cell array
+// Heights belong to nodes; left/right choose the cell adjoining a fault.
 const getNodeValue = (arr, k, side = 'avg') => {
   if (!arr) return 0;
   const N = arr.length;
@@ -355,7 +366,7 @@ const getNodeValue = (arr, k, side = 'avg') => {
   if (k >= N) return arr[N - 1];
   if (side === 'left') return arr[k - 1];
   if (side === 'right') return arr[k];
-  return 0.5 * (arr[k - 1] + arr[k]);
+  return arr[k];
 };
 
 // Helper to find the active continuous domain with sub-grid zero-tapered tip nodes
@@ -504,15 +515,15 @@ const getMeniscusPath = (h, depthMultiplier = 1.0, faults = currentGeology.fault
   return path;
 };
 
-// Maximum Historic Gas Saturation Boundary (hMax Swept Footprint Dashed Line)
-const getMaxHgLinePath = (hMax, depthMultiplier = 1.0, faults = currentGeology.faults, geo = currentGeology) => {
-  if (!hMax) return "";
+// Current gas-water contact, using the same height field as the active plume.
+const getContactLinePath = (h, depthMultiplier = 1.0, faults = currentGeology.faults, geo = currentGeology) => {
+  if (!h) return "";
   const g = geo || currentGeology;
   const flts = faults || g.faults;
-  const N = hMax.length;
+  const N = h.length - 1;
   const scale = 15.0;
   
-  const bounds = getPlumeActiveBounds(k => getNodeValue(hMax, k, 'avg'), N, 0.001);
+  const bounds = getPlumeActiveBounds(k => getNodeValue(h, k, 'avg'), N, 0.001);
   if (!bounds) return "";
   
   let path = "";
@@ -522,20 +533,20 @@ const getMaxHgLinePath = (hMax, depthMultiplier = 1.0, faults = currentGeology.f
     if (k === bounds.kStart) {
       const yTop = capRockY(x, flts, isFault ? k : k, depthMultiplier, g);
       const yBotMax = stratumY(x, flts, isFault ? k : k, depthMultiplier, (depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness), g);
-      const y0 = Math.min(yBotMax, yTop + getNodeValue(hMax, k, isFault ? 'right' : 'avg') * scale);
+      const y0 = Math.min(yBotMax, yTop + getNodeValue(h, k, isFault ? 'right' : 'avg') * scale);
       path = `M ${x} ${y0}`;
     } else if (isFault) {
       const yTopL = capRockY(x, flts, k - 1, depthMultiplier, g);
       const yBotMaxL = stratumY(x, flts, k - 1, depthMultiplier, (depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness), g);
       const yTopR = capRockY(x, flts, k, depthMultiplier, g);
       const yBotMaxR = stratumY(x, flts, k, depthMultiplier, (depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness), g);
-      const yL = Math.min(yBotMaxL, yTopL + getNodeValue(hMax, k, 'left') * scale);
-      const yR = Math.min(yBotMaxR, yTopR + getNodeValue(hMax, k, 'right') * scale);
+      const yL = Math.min(yBotMaxL, yTopL + getNodeValue(h, k, 'left') * scale);
+      const yR = Math.min(yBotMaxR, yTopR + getNodeValue(h, k, 'right') * scale);
       path += ` L ${x} ${yL} L ${x} ${yR}`;
     } else {
       const yTop = capRockY(x, flts, k, depthMultiplier, g);
       const yBotMax = stratumY(x, flts, k, depthMultiplier, (depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness), g);
-      const y = Math.min(yBotMax, yTop + getNodeValue(hMax, k, 'avg') * scale);
+      const y = Math.min(yBotMax, yTop + getNodeValue(h, k, 'avg') * scale);
       path += ` L ${x} ${y}`;
     }
   }
@@ -568,7 +579,7 @@ const SubsurfaceHero = ({ onNavigate }) => {
       const fallback = setTimeout(() => setHistory(precomputeSimulation(faults, geology)), 0);
       return () => clearTimeout(fallback);
     }
-    const worker = new Worker('./hero-simulation-worker.js?v=5');
+    const worker = new Worker('./hero-simulation-worker.js?v=6');
     worker.onmessage = (event) => setHistory(event.data.history);
     worker.onerror = () => setHistory(precomputeSimulation(faults, geology));
     worker.postMessage({ geology });
@@ -607,7 +618,7 @@ const SubsurfaceHero = ({ onNavigate }) => {
     }}>
       {/* Sky and subsurface as discrete background bands */}
       <Sky />
-      <Subsurface h={currentH} hMax={currentHMax} faults={faults} geology={geology} />
+      <Subsurface h={currentH} faults={faults} geology={geology} />
       <Horizon />
 
       {/* Above-ground content */}
@@ -927,22 +938,13 @@ const getStrataPath = (faults = currentGeology.faults, depthMultiplier = 1.0, yO
 };
 
 // Conforming finite volume columns for the reservoir grid block visualization (200 high-definition cells)
-const ReservoirGrid = ({ h, hMax, faults, geology }) => {
+const ReservoirGrid = ({ h, faults, geology }) => {
   const g = geology || currentGeology;
   const flts = faults || g.faults;
   const scale = 15.0; // matching scale factor of the plume
   const N = 200;
   
-  // Precompute smooth fluid depths across all cells
-  const effH = useMemo(() => {
-    const arr = new Array(N).fill(0);
-    for (let i = 0; i < N; i++) {
-      const hCur = h ? h[i] : 0;
-      const hM = hMax ? hMax[i] : 0;
-      arr[i] = Math.max(hCur, hM);
-    }
-    return arr;
-  }, [h, hMax]);
+  const effH = h || new Array(N + 1).fill(0);
 
   // 1. Single continuous seamless Brine Fluid polygon across entire reservoir
   const brinePath = useMemo(() => {
@@ -964,15 +966,8 @@ const ReservoirGrid = ({ h, hMax, faults, geology }) => {
       const yb1 = stratumY(x1, flts, i, 1.0, g.reservoirThickness, g);
       const yb2 = stratumY(x2, flts, i, 1.0, g.reservoirThickness, g);
       
-      const hLeft = i === 0 ? effH[0] : 0.5 * (effH[i - 1] + effH[i]);
-      const hRight = i === N - 1 ? effH[N - 1] : 0.5 * (effH[i] + effH[i + 1]);
-      
-      // Capillary fringe extends fluid zone (crisp, subtle 4px)
-      const fLeft = 4.0 * Math.min(1.0, hLeft * 1.8);
-      const fRight = 4.0 * Math.min(1.0, hRight * 1.8);
-      
-      const yFluid1 = Math.min(yb1, yt1 + hLeft * scale + fLeft);
-      const yFluid2 = Math.min(yb2, yt2 + hRight * scale + fRight);
+      const yFluid1 = Math.min(yb1, yt1 + effH[i] * scale);
+      const yFluid2 = Math.min(yb2, yt2 + effH[i + 1] * scale);
       
       if (i === N - 1) {
         path += ` L ${x2} ${yFluid2}`;
@@ -982,10 +977,8 @@ const ReservoirGrid = ({ h, hMax, faults, geology }) => {
         const yCapLeft = capRockY(x1, flts, i - 1, 1.0, g);
         const yCapRight = yt1;
         if (Math.abs(yCapLeft - yCapRight) > 0.1) {
-          const hPrev = 0.5 * (effH[i - 1] + (i > 1 ? effH[i - 2] : effH[0]));
-          const fPrev = 4.0 * Math.min(1.0, hPrev * 1.8);
           const ybPrev = stratumY(x1, flts, i - 1, 1.0, g.reservoirThickness, g);
-          const yFluidPrev = Math.min(ybPrev, yCapLeft + hPrev * scale + fPrev);
+          const yFluidPrev = Math.min(ybPrev, yCapLeft + effH[i - 1] * scale);
           path += ` L ${x1} ${yFluid1} L ${x1} ${yFluidPrev}`;
         } else {
           path += ` L ${x1} ${yFluid1}`;
@@ -1275,7 +1268,7 @@ const GasFeedAnimation = ({ isPlaying, geology }) => {
   );
 };
 
-const Subsurface = ({ h, hMax, faults, geology }) => {
+const Subsurface = ({ h, faults, geology }) => {
   const g = geology || currentGeology;
   const flts = faults || g.faults;
   const AQUIFER_PATH = useMemo(() => getAquiferPath(flts, g), [flts, g]);
@@ -1323,7 +1316,7 @@ const Subsurface = ({ h, hMax, faults, geology }) => {
           fill="#123147" stroke="rgba(168,237,234,0.30)" strokeWidth="0.8"/>
 
         {/* Sync Background Reservoir: Conforming FVM Grid blocks */}
-        <ReservoirGrid h={h} hMax={hMax} faults={flts} geology={g} />
+        <ReservoirGrid h={h} faults={flts} geology={g} />
 
         {/* Synced Aquifer conforming layer */}
         <path d={AQUIFER_PATH} fill="url(#grad-sediment)"/>
@@ -1772,9 +1765,9 @@ const Plume = ({ h, hMax, h2, h2Max, faultFlow = [], time, isPlaying, faults = [
           )}
 
           {/* 3. Active Flowing Mobile Plume: Radiant Supercritical Emerald (S_max) */}
-          {h && getActiveMobilePath(h, 1.0, flts, 5.0, g) && (
+          {h && getActiveMobilePath(h, 1.0, flts, 0, g) && (
             <path 
-              d={getActiveMobilePath(h, 1.0, flts, 5.0, g)} 
+              d={getActiveMobilePath(h, 1.0, flts, 0, g)}
               fill="url(#active-mobile-grad)" 
               filter="url(#plume-diffuse-blur)"
               opacity="0.98"
@@ -1791,15 +1784,14 @@ const Plume = ({ h, hMax, h2, h2Max, faultFlow = [], time, isPlaying, faults = [
             />
           )}
 
-          {/* 5. Maximum Historic Gas Saturation Boundary (hMax Swept Footprint Dashed Line) */}
-          {hMax && getMaxHgLinePath(hMax, 1.0, flts, g) && (
+          {/* Current gas-water contact; historic swept gas remains a separate diffuse tint. */}
+          {h && getContactLinePath(h, 1.0, flts, g) && (
             <path 
-              d={getMaxHgLinePath(hMax, 1.0, flts, g)} 
+              d={getContactLinePath(h, 1.0, flts, g)}
               fill="none" 
-              stroke="#64ffda" 
-              strokeWidth="1.4" 
-              strokeDasharray="5 3.5" 
-              opacity="0.85" 
+              stroke="#a6e9d7"
+              strokeWidth="1.1"
+              opacity="0.82"
             />
           )}
 
@@ -1840,24 +1832,23 @@ const Plume = ({ h, hMax, h2, h2Max, faultFlow = [], time, isPlaying, faults = [
           )}
 
           {/* Secondary Reservoir Active Mobile Plume */}
-          {h2 && getActiveMobilePath(h2, 0.4, flts, 2.5, g) && (
+          {h2 && getActiveMobilePath(h2, 0.4, flts, 0, g) && (
             <path 
-              d={getActiveMobilePath(h2, 0.4, flts, 2.5, g)} 
+              d={getActiveMobilePath(h2, 0.4, flts, 0, g)}
               fill="url(#active-mobile-grad)" 
               filter="url(#plume-diffuse-blur)"
               opacity="0.96"
             />
           )}
 
-          {/* Secondary Reservoir Maximum Historic Gas Saturation Boundary */}
-          {h2Max && getMaxHgLinePath(h2Max, 0.4, flts, g) && (
+          {/* Current contact in the receiving reservoir. */}
+          {h2 && getContactLinePath(h2, 0.4, flts, g) && (
             <path 
-              d={getMaxHgLinePath(h2Max, 0.4, flts, g)} 
+              d={getContactLinePath(h2, 0.4, flts, g)}
               fill="none" 
-              stroke="#64ffda" 
-              strokeWidth="1.2" 
-              strokeDasharray="4 3" 
-              opacity="0.80" 
+              stroke="#a6e9d7"
+              strokeWidth="1.1"
+              opacity="0.78"
             />
           )}
 

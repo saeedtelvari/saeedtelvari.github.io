@@ -53,8 +53,27 @@ const HeroGeology = (() => {
     stratumY(x, faults, cell, depth, depth < 0.5 ? g.shallowThickness : g.reservoirThickness, g)
     - capRockY(x, faults, cell, depth, g);
 
+  // A permeable fault shares one gas-water level across its two adjacent columns.
+  // Solve for that level without creating or removing CO2 from either reservoir.
+  const balanceFaultContact = (h, left, right, roofLeft, roofRight, maxLeft, maxRight) => {
+    const total = h[left] + h[right];
+    if (total <= 0) return;
+    let low = Math.min(roofLeft, roofRight);
+    let high = Math.max(roofLeft + maxLeft, roofRight + maxRight);
+    for (let i = 0; i < 24; i++) {
+      const level = (low + high) / 2;
+      const gas = Math.max(0, Math.min(maxLeft, level - roofLeft))
+        + Math.max(0, Math.min(maxRight, level - roofRight));
+      if (gas < total) low = level;
+      else high = level;
+    }
+    const level = (low + high) / 2;
+    h[left] = Math.max(0, Math.min(maxLeft, level - roofLeft));
+    h[right] = total - h[left];
+  };
+
   return { capRockBaseProfile, stratumBaseProfile, getStratumFaultIntersection,
-    getFaultIntersection, stratumY, capRockY, layerThicknessAt };
+    getFaultIntersection, stratumY, capRockY, layerThicknessAt, balanceFaultContact };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = HeroGeology;
