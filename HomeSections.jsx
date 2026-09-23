@@ -7,34 +7,24 @@ const { useState } = React;
    ===================================================== */
 const RECENT_ACTIVITIES = [
   {
+    date: 'September 2026',
+    venue: 'InterPore UK Chapter Conference',
+    desc: 'Gave an oral presentation on compositional VE modelling for CO₂ storage and co-chaired a multiphase-flow session.',
+  },
+  {
     date: 'May 2026',
     venue: 'InterPore 2026',
-    desc: 'Presented research on Vertical Equilibrium modelling for CO₂ storage at the InterPore Annual Meeting.',
+    desc: 'Gave an oral presentation on VE modelling of CO₂ migration in depleted reservoirs.',
+  },
+  {
+    date: 'March 2026',
+    venue: 'MATLAB/MRST workshop series',
+    desc: 'Co-organised the series and led a hands-on session building a flow simulator with MRST.',
   },
   {
     date: 'October 2025',
     venue: 'EAGE GET 2025',
-    desc: 'Presented a poster on VE simulation of CO₂, methane and brine flow in reservoirs at the EAGE Global Energy Transition Conference.',
-  },
-  {
-    date: 'September 2025',
-    venue: 'InterPore UK Chapter Meeting',
-    desc: 'Presented work on reduced-order Vertical Equilibrium flow modelling.',
-  },
-  {
-    date: 'September 2024',
-    venue: 'Started doctoral research',
-    desc: 'Began my PhD at Heriot-Watt University’s Institute of GeoEnergy Engineering.',
-  },
-  {
-    date: 'August 2024',
-    venue: 'M.Sc. Thesis Defended',
-    desc: 'Defended thesis on machine learning methods in upscaling fine-scale discrete fracture models with distinction.',
-  },
-  {
-    date: 'May 2023',
-    venue: 'Advances in Water Resources',
-    desc: 'First-author paper published on 3D CNN prediction of two-phase relative permeability and capillary curves directly from micro-CT sandstone scans.',
+    desc: 'Presented a poster on three-phase VE simulation of CO₂, methane and brine flow.',
   },
 ];
 
@@ -111,7 +101,7 @@ const AboutSection = ({ onNavigate }) => {
           <div className="about-persona-row">
             <h3 className="about-name">Sa’eed Telvari</h3>
             <div className="about-affiliation">
-              <span className="affiliation-primary">PhD Researcher &middot; Heriot-Watt University</span>
+              <span className="affiliation-primary">PhD Researcher &middot; James Watt Scholarship recipient</span>
               <span className="affiliation-secondary">Institute of GeoEnergy Engineering, Edinburgh</span>
             </div>
           </div>
@@ -231,8 +221,8 @@ const PUBLICATIONS = [
     title: 'A Vertical Equilibrium Model for CO\u2082 Migration in Depleted Gas Fields',
     authors: <React.Fragment><strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, Ramachandran, H., Wang, G., &amp; Doster, F. (2026)</React.Fragment>,
     venue: 'EarthArXiv preprint · 2026',
-    keyContribution: '2D Vertical Equilibrium reduced-order modeling predicts buoyant plume migration across depleted fields ~1,000× faster than full 3D simulation with bounded caprock error.',
-    abstract: 'A reduced-order VE framework that captures the buoyant migration of injected CO\u2082 in depleted gas reservoirs against the cap rock, delivering full-field-scale forecasts orders of magnitude faster than 3D simulation.',
+    keyContribution: 'A VE model reproduces large-scale CO\u2082 and methane migration while running up to two orders of magnitude faster than full 3D simulation in the reported cases.',
+    abstract: 'This EarthArXiv preprint develops a reduced-order model of CO\u2082, methane and brine flow in depleted gas reservoirs and compares it with three-dimensional compositional simulations.',
     link: 'https://doi.org/10.31223/X5P49D',
     doi: '10.31223/X5P49D',
     bibtex: `@article{telvari2026vertical,
@@ -250,7 +240,7 @@ const PUBLICATIONS = [
     badgeLabel: 'Peer-Reviewed · SPE Journal',
     badgeClass: 'pub-badge-journal',
     title: 'Accelerated Permeability Upscaling: A CNN Approach',
-    authors: <React.Fragment>Sayyafzadeh, M., <strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, Gu\u00e9rillot, D., &amp; Sharifi, M. (2026)</React.Fragment>,
+    authors: <React.Fragment>Sayyafzadeh, M., <strong style={{ color: '#64ffda' }}>Telvari, S.</strong>, Guérillot, D., &amp; Sharifi, M. (2026)</React.Fragment>,
     venue: 'SPE Journal, 31(04), 2242–2260 · 2026',
     keyContribution: 'Convolutional neural networks achieve 100–400× computational acceleration over fine-scale Darcy flow upscaling in heterogeneous formations.',
     abstract: 'A novel convolutional neural network approach for rapid permeability upscaling in heterogeneous reservoirs, achieving 100-400\u00d7 computational speedup compared to traditional flow-based methods.',

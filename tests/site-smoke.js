@@ -27,8 +27,9 @@ has('SubsurfaceHero.jsx', /aria-label="Simulation year"/, 'hero timeline slider 
 has('SubsurfaceHero.jsx', /new Worker\(['"]\.\/hero-simulation-worker\.js/, 'hero precomputation must run off the main thread');
 assert.ok(fs.existsSync(path.join(root, 'hero-simulation-worker.js')), 'hero worker must exist');
 
-has('CVPage.jsx', /Saeed-Telvari-CV\.pdf/, 'CV page must be ready for the real PDF asset');
-has('CVPage.jsx', /Print \/ Save as PDF/, 'CV page must retain a working fallback without the PDF');
+lacks('CVPage.jsx', /Saeed-Telvari-CV\.pdf/, 'CV page must not request a missing PDF asset');
+has('CVPage.jsx', /window\.print\(\)/, 'CV page print action must invoke browser print');
+has('CVPage.jsx', /Print \/ Save as PDF/, 'CV page must offer browser print and PDF export');
 has('CVPage.jsx', /Selected Publications/, 'CV page needs evidence beyond education and skills');
 
 has('HomeSections.jsx', /Telvari[^\n]+Ramachandran[^\n]+Wang[^\n]+Doster/, 'three-phase publication metadata must be corrected');

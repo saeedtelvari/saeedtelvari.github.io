@@ -4092,29 +4092,21 @@ Object.assign(window, {
    Research & Background (About + Activity)
    ===================================================== */
 const RECENT_ACTIVITIES = [{
+  date: 'September 2026',
+  venue: 'InterPore UK Chapter Conference',
+  desc: 'Gave an oral presentation on compositional VE modelling for CO₂ storage and co-chaired a multiphase-flow session.'
+}, {
   date: 'May 2026',
   venue: 'InterPore 2026',
-  desc: 'Presented research on Vertical Equilibrium modelling for CO₂ storage at the InterPore Annual Meeting.'
+  desc: 'Gave an oral presentation on VE modelling of CO₂ migration in depleted reservoirs.'
+}, {
+  date: 'March 2026',
+  venue: 'MATLAB/MRST workshop series',
+  desc: 'Co-organised the series and led a hands-on session building a flow simulator with MRST.'
 }, {
   date: 'October 2025',
   venue: 'EAGE GET 2025',
-  desc: 'Presented a poster on VE simulation of CO₂, methane and brine flow in reservoirs at the EAGE Global Energy Transition Conference.'
-}, {
-  date: 'September 2025',
-  venue: 'InterPore UK Chapter Meeting',
-  desc: 'Presented work on reduced-order Vertical Equilibrium flow modelling.'
-}, {
-  date: 'September 2024',
-  venue: 'Started doctoral research',
-  desc: 'Began my PhD at Heriot-Watt University’s Institute of GeoEnergy Engineering.'
-}, {
-  date: 'August 2024',
-  venue: 'M.Sc. Thesis Defended',
-  desc: 'Defended thesis on machine learning methods in upscaling fine-scale discrete fracture models with distinction.'
-}, {
-  date: 'May 2023',
-  venue: 'Advances in Water Resources',
-  desc: 'First-author paper published on 3D CNN prediction of two-phase relative permeability and capillary curves directly from micro-CT sandstone scans.'
+  desc: 'Presented a poster on three-phase VE simulation of CO₂, methane and brine flow.'
 }];
 const RecentActivity = () => {
   const [expanded, setExpanded] = useState(false);
@@ -4193,7 +4185,7 @@ const AboutSection = ({
     className: "about-affiliation"
   }, /*#__PURE__*/React.createElement("span", {
     className: "affiliation-primary"
-  }, "PhD Researcher \xB7 Heriot-Watt University"), /*#__PURE__*/React.createElement("span", {
+  }, "PhD Researcher \xB7 James Watt Scholarship recipient"), /*#__PURE__*/React.createElement("span", {
     className: "affiliation-secondary"
   }, "Institute of GeoEnergy Engineering, Edinburgh"))), /*#__PURE__*/React.createElement("div", {
     className: "about-lead-copy"
@@ -4316,8 +4308,8 @@ const PUBLICATIONS = [{
     }
   }, "Telvari, S."), ", Ramachandran, H., Wang, G., & Doster, F. (2026)"),
   venue: 'EarthArXiv preprint · 2026',
-  keyContribution: '2D Vertical Equilibrium reduced-order modeling predicts buoyant plume migration across depleted fields ~1,000× faster than full 3D simulation with bounded caprock error.',
-  abstract: 'A reduced-order VE framework that captures the buoyant migration of injected CO\u2082 in depleted gas reservoirs against the cap rock, delivering full-field-scale forecasts orders of magnitude faster than 3D simulation.',
+  keyContribution: 'A VE model reproduces large-scale CO\u2082 and methane migration while running up to two orders of magnitude faster than full 3D simulation in the reported cases.',
+  abstract: 'This EarthArXiv preprint develops a reduced-order model of CO\u2082, methane and brine flow in depleted gas reservoirs and compares it with three-dimensional compositional simulations.',
   link: 'https://doi.org/10.31223/X5P49D',
   doi: '10.31223/X5P49D',
   bibtex: `@article{telvari2026vertical,
@@ -4338,7 +4330,7 @@ const PUBLICATIONS = [{
     style: {
       color: '#64ffda'
     }
-  }, "Telvari, S."), ", Gu\\u00e9rillot, D., & Sharifi, M. (2026)"),
+  }, "Telvari, S."), ", Gu\xE9rillot, D., & Sharifi, M. (2026)"),
   venue: 'SPE Journal, 31(04), 2242–2260 · 2026',
   keyContribution: 'Convolutional neural networks achieve 100–400× computational acceleration over fine-scale Darcy flow upscaling in heterogeneous formations.',
   abstract: 'A novel convolutional neural network approach for rapid permeability upscaling in heterogeneous reservoirs, achieving 100-400\u00d7 computational speedup compared to traditional flow-based methods.',
@@ -4794,23 +4786,11 @@ Object.assign(window, {
 const CVPage = ({
   onNavigate
 }) => {
-  const cvPdf = './assets/Saeed-Telvari-CV.pdf';
-  const [pdfAvailable, setPdfAvailable] = useState(false);
-  useEffect(() => {
-    fetch(cvPdf, {
-      method: 'HEAD'
-    }).then(r => setPdfAvailable(r.ok)).catch(() => setPdfAvailable(false));
-  }, []);
   const handlePrint = () => {
     window.print();
   };
-  const handlePdfDownload = () => {
-    const link = document.createElement('a');
-    link.href = cvPdf;
-    link.download = 'Saeed-Telvari-CV.pdf';
-    link.click();
-  };
   return /*#__PURE__*/React.createElement("div", {
+    className: "cv-page",
     style: {
       minHeight: '100vh',
       backgroundImage: "url('./assets/headerbg3.jpg')",
@@ -4837,22 +4817,28 @@ const CVPage = ({
           }
         }
         @media print {
-          header, nav, footer, .cv-download-btn {
+          .app-header, footer, .cv-download-btn, .cv-background-overlay {
             display: none !important;
           }
-          body {
+          body, .cv-page {
             background: #fff !important;
-            color: #000 !important;
+          }
+          .cv-page {
+            padding: 0 !important;
+          }
+          .cv-card-container, .cv-card-container * {
+            color: #111 !important;
+            -webkit-text-fill-color: #111 !important;
+            background: none !important;
+            box-shadow: none !important;
           }
           .cv-card-container {
-            background: #fff !important;
-            color: #000 !important;
-            box-shadow: none !important;
             border: none !important;
             padding: 0 !important;
           }
         }
       `), /*#__PURE__*/React.createElement("div", {
+    className: "cv-background-overlay",
     style: {
       position: 'fixed',
       inset: 0,
@@ -4958,21 +4944,11 @@ const CVPage = ({
       gap: 12,
       flexWrap: 'wrap'
     }
-  }, pdfAvailable && /*#__PURE__*/React.createElement(GlassButton, {
+  }, /*#__PURE__*/React.createElement(GlassButton, {
     variant: "mint",
-    icon: "fas fa-download",
-    onClick: handlePdfDownload
-  }, "Download CV PDF"), /*#__PURE__*/React.createElement(GlassButton, {
-    variant: pdfAvailable ? 'default' : 'mint',
     icon: "fas fa-print",
     onClick: handlePrint
-  }, "Print / Save as PDF")), !pdfAvailable && /*#__PURE__*/React.createElement("p", {
-    style: {
-      margin: '10px 0 0',
-      color: 'rgba(255,255,255,0.58)',
-      fontSize: 12
-    }
-  }, "A direct download will appear automatically when ", /*#__PURE__*/React.createElement("code", null, "assets/Saeed-Telvari-CV.pdf"), " is added."))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
+  }, "Print / Save as PDF")))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
     icon: "fas fa-flask",
     title: "Research Interests"
   }, /*#__PURE__*/React.createElement("div", {
@@ -5034,15 +5010,15 @@ const CVPage = ({
       inst: 'EarthArXiv preprint · DOI 10.31223/X5P49D',
       details: ['Telvari, S.; Ramachandran, H.; Wang, G.; Doster, F.']
     }, {
-      title: 'Three-Phase VE Simulation of CO₂–Methane–Brine Flow in Reservoirs',
-      date: '2025',
-      inst: 'Sixth EAGE Global Energy Transition Conference & Exhibition',
-      details: ['Telvari, S.; Ramachandran, H.; Wang, G.; Doster, F.']
-    }, {
       title: 'Accelerated Permeability Upscaling: A Convolutional Neural Network Approach',
       date: '2026',
       inst: 'SPE Journal 31(04), 2242–2260',
       details: ['Sayyafzadeh, M.; Telvari, S.; Guérillot, D.; Sharifi, M.']
+    }, {
+      title: 'Three-Phase VE Simulation of CO₂–Methane–Brine Flow in Reservoirs',
+      date: '2025',
+      inst: 'Sixth EAGE Global Energy Transition Conference & Exhibition',
+      details: ['Telvari, S.; Ramachandran, H.; Wang, G.; Doster, F.']
     }, {
       title: 'Prediction of two-phase flow properties for digital sandstones using 3D convolutional neural networks',
       date: '2023',
@@ -5070,6 +5046,31 @@ const CVPage = ({
       color: '#64ffda'
     }
   }, "Google Scholar"))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
+    icon: "fas fa-chalkboard-teacher",
+    title: "Selected Presentations & Teaching"
+  }, /*#__PURE__*/React.createElement(Timeline, {
+    items: [{
+      title: 'Oral presentation & session co-chair',
+      date: 'September 2026',
+      inst: '9th InterPore UK Chapter Conference, Edinburgh',
+      details: ['Presented “A Compositional Vertical Equilibrium Model for CO₂ Storage in Depleted Gas Reservoirs” and co-chaired the Multiphase Phenomena session.']
+    }, {
+      title: 'Oral presentation',
+      date: 'May 2026',
+      inst: 'InterPore2026, Nantes',
+      details: ['Presented “Vertical-Equilibrium Modelling of CO₂ Migration in Depleted Reservoirs”.']
+    }, {
+      title: 'Lead instructor & co-organiser',
+      date: 'March 2026',
+      inst: 'MATLAB/MRST Workshop Series, Heriot-Watt University',
+      details: ['Led a hands-on session building a flow simulator with MRST’s rapid prototyping framework.']
+    }, {
+      title: 'Poster presentation',
+      date: 'October 2025',
+      inst: '6th EAGE Global Energy Transition Conference, Rotterdam',
+      details: ['Presented “Three-Phase VE Simulation of CO₂–Methane–Brine Flow in Reservoirs”.']
+    }]
+  })), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
     icon: "fas fa-tools",
     title: "Skills"
   }, /*#__PURE__*/React.createElement("div", {
@@ -5077,23 +5078,22 @@ const CVPage = ({
   }, /*#__PURE__*/React.createElement(SkillCategory, {
     icon: "fas fa-code",
     title: "Programming",
-    tags: ['Python', 'MATLAB', 'Julia', 'Rust', 'LaTeX'],
-    detail: "Libraries: TensorFlow, PyTorch, Scikit-learn, OpenCV, OpenPNM"
+    tags: ['Python', 'MATLAB', 'Julia']
   }), /*#__PURE__*/React.createElement(SkillCategory, {
     icon: "fas fa-industry",
-    title: "Industry Software",
-    tags: ['Eclipse', 'MRST', 'Petrel RE', 'Saphir', 'PVTSim']
+    title: "Reservoir Simulation",
+    tags: ['MRST', 'Eclipse', 'Petrel RE']
   }), /*#__PURE__*/React.createElement(SkillCategory, {
     icon: "fas fa-cube",
-    title: "CFD & Simulation",
-    tags: ['OpenFOAM', 'PerGeos', 'SALOME', 'MeshLab']
+    title: "Industry Training",
+    tags: ['CMG CO₂ Storage', 'SLB Intersect CCS']
   }), /*#__PURE__*/React.createElement(SkillCategory, {
     icon: "fas fa-laptop-code",
-    title: "Tools & Platforms",
-    tags: ['Linux', 'Docker', 'Git', 'Jupyter', 'VS Code']
+    title: "Research Tools",
+    tags: ['Git', 'Jupyter', 'LaTeX', 'Linux']
   }))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
     icon: "fas fa-award",
-    title: "Honors & Awards"
+    title: "Selected Recognition"
   }, /*#__PURE__*/React.createElement("ul", {
     style: {
       listStyle: 'none',
@@ -5101,20 +5101,17 @@ const CVPage = ({
       margin: 0
     }
   }, [{
-    icon: 'fas fa-trophy',
-    body: 'Ranked within top 2% in Iranian University Entrance Exam for Master\'s degrees'
-  }, {
-    icon: 'fas fa-star',
-    body: 'Direct admission for graduate study from Talented Student Office, Amirkabir University'
+    icon: 'fas fa-graduation-cap',
+    body: 'James Watt Scholarship recipient — full PhD funding, Heriot-Watt University (2024–present)'
   }, {
     icon: 'fas fa-medal',
-    body: 'National undergraduate scholarship (full tuition waiver)'
+    body: 'Runner-up, SPE Aberdeen Section Student Bursary — £1,000 awarded (2026)'
   }, {
-    icon: 'fas fa-trophy',
-    body: 'Ranked within top 4% among 140,000+ students in undergraduate entrance exam'
+    icon: 'fas fa-medal',
+    body: 'Team runner-up, EAGE “The Energy–AI Nexus” Hackathon (2026)'
   }, {
-    icon: 'fas fa-certificate',
-    body: 'Recognized as talented student in NODET entrance exam'
+    icon: 'fas fa-graduation-cap',
+    body: 'National undergraduate scholarship — full tuition waiver'
   }].map((a, i) => /*#__PURE__*/React.createElement("li", {
     key: i,
     style: {

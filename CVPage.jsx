@@ -1,25 +1,12 @@
 // CVPage.jsx — single long glass page mirroring cv.html
 
 const CVPage = ({ onNavigate }) => {
-  const cvPdf = './assets/Saeed-Telvari-CV.pdf';
-  const [pdfAvailable, setPdfAvailable] = useState(false);
-
-  useEffect(() => {
-    fetch(cvPdf, { method: 'HEAD' }).then(r => setPdfAvailable(r.ok)).catch(() => setPdfAvailable(false));
-  }, []);
-
   const handlePrint = () => {
     window.print();
   };
-  const handlePdfDownload = () => {
-    const link = document.createElement('a');
-    link.href = cvPdf;
-    link.download = 'Saeed-Telvari-CV.pdf';
-    link.click();
-  };
 
   return (
-    <div style={{
+    <div className="cv-page" style={{
       minHeight: '100vh',
       backgroundImage: "url('./assets/headerbg3.jpg')",
       backgroundSize: 'cover',
@@ -46,17 +33,22 @@ const CVPage = ({ onNavigate }) => {
           }
         }
         @media print {
-          header, nav, footer, .cv-download-btn {
+          .app-header, footer, .cv-download-btn, .cv-background-overlay {
             display: none !important;
           }
-          body {
+          body, .cv-page {
             background: #fff !important;
-            color: #000 !important;
+          }
+          .cv-page {
+            padding: 0 !important;
+          }
+          .cv-card-container, .cv-card-container * {
+            color: #111 !important;
+            -webkit-text-fill-color: #111 !important;
+            background: none !important;
+            box-shadow: none !important;
           }
           .cv-card-container {
-            background: #fff !important;
-            color: #000 !important;
-            box-shadow: none !important;
             border: none !important;
             padding: 0 !important;
           }
@@ -64,7 +56,7 @@ const CVPage = ({ onNavigate }) => {
       `}</style>
 
       {/* Overlay */}
-      <div style={{
+      <div className="cv-background-overlay" style={{
         position: 'fixed', inset: 0,
         background: 'linear-gradient(135deg, rgba(10,10,20,0.85) 0%, rgba(15,25,45,0.80) 50%, rgba(10,20,40,0.85) 100%)',
         zIndex: 0,
@@ -106,12 +98,8 @@ const CVPage = ({ onNavigate }) => {
           </div>
           <div className="cv-download-btn">
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              {pdfAvailable && <GlassButton variant="mint" icon="fas fa-download" onClick={handlePdfDownload}>Download CV PDF</GlassButton>}
-              <GlassButton variant={pdfAvailable ? 'default' : 'mint'} icon="fas fa-print" onClick={handlePrint}>Print / Save as PDF</GlassButton>
+              <GlassButton variant="mint" icon="fas fa-print" onClick={handlePrint}>Print / Save as PDF</GlassButton>
             </div>
-            {!pdfAvailable && <p style={{ margin: '10px 0 0', color: 'rgba(255,255,255,0.58)', fontSize: 12 }}>
-              A direct download will appear automatically when <code>assets/Saeed-Telvari-CV.pdf</code> is added.
-            </p>}
           </div>
         </header>
 
@@ -159,8 +147,8 @@ const CVPage = ({ onNavigate }) => {
         <CVSection icon="fas fa-book-open" title="Selected Publications">
           <Timeline items={[
             { title: 'A Vertical Equilibrium Model for CO₂ Migration in Depleted Gas Fields', date: '2026', inst: 'EarthArXiv preprint · DOI 10.31223/X5P49D', details: ['Telvari, S.; Ramachandran, H.; Wang, G.; Doster, F.'] },
-            { title: 'Three-Phase VE Simulation of CO₂–Methane–Brine Flow in Reservoirs', date: '2025', inst: 'Sixth EAGE Global Energy Transition Conference & Exhibition', details: ['Telvari, S.; Ramachandran, H.; Wang, G.; Doster, F.'] },
             { title: 'Accelerated Permeability Upscaling: A Convolutional Neural Network Approach', date: '2026', inst: 'SPE Journal 31(04), 2242–2260', details: ['Sayyafzadeh, M.; Telvari, S.; Guérillot, D.; Sharifi, M.'] },
+            { title: 'Three-Phase VE Simulation of CO₂–Methane–Brine Flow in Reservoirs', date: '2025', inst: 'Sixth EAGE Global Energy Transition Conference & Exhibition', details: ['Telvari, S.; Ramachandran, H.; Wang, G.; Doster, F.'] },
             { title: 'Prediction of two-phase flow properties for digital sandstones using 3D convolutional neural networks', date: '2023', inst: 'Advances in Water Resources 176, 104442', details: ['Telvari, S.; Sayyafzadeh, M.; Siavashi, J.; Sharifi, M.'] },
           ]}/>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
@@ -171,27 +159,37 @@ const CVPage = ({ onNavigate }) => {
 
         <Divider />
 
+        <CVSection icon="fas fa-chalkboard-teacher" title="Selected Presentations & Teaching">
+          <Timeline items={[
+            { title: 'Oral presentation & session co-chair', date: 'September 2026', inst: '9th InterPore UK Chapter Conference, Edinburgh', details: ['Presented “A Compositional Vertical Equilibrium Model for CO₂ Storage in Depleted Gas Reservoirs” and co-chaired the Multiphase Phenomena session.'] },
+            { title: 'Oral presentation', date: 'May 2026', inst: 'InterPore2026, Nantes', details: ['Presented “Vertical-Equilibrium Modelling of CO₂ Migration in Depleted Reservoirs”.'] },
+            { title: 'Lead instructor & co-organiser', date: 'March 2026', inst: 'MATLAB/MRST Workshop Series, Heriot-Watt University', details: ['Led a hands-on session building a flow simulator with MRST’s rapid prototyping framework.'] },
+            { title: 'Poster presentation', date: 'October 2025', inst: '6th EAGE Global Energy Transition Conference, Rotterdam', details: ['Presented “Three-Phase VE Simulation of CO₂–Methane–Brine Flow in Reservoirs”.'] },
+          ]}/>
+        </CVSection>
+
+        <Divider />
+
         {/* Skills */}
         <CVSection icon="fas fa-tools" title="Skills">
           <div className="cv-skills-grid">
-            <SkillCategory icon="fas fa-code" title="Programming" tags={['Python', 'MATLAB', 'Julia', 'Rust', 'LaTeX']} detail="Libraries: TensorFlow, PyTorch, Scikit-learn, OpenCV, OpenPNM" />
-            <SkillCategory icon="fas fa-industry" title="Industry Software" tags={['Eclipse', 'MRST', 'Petrel RE', 'Saphir', 'PVTSim']} />
-            <SkillCategory icon="fas fa-cube" title="CFD & Simulation" tags={['OpenFOAM', 'PerGeos', 'SALOME', 'MeshLab']} />
-            <SkillCategory icon="fas fa-laptop-code" title="Tools & Platforms" tags={['Linux', 'Docker', 'Git', 'Jupyter', 'VS Code']} />
+            <SkillCategory icon="fas fa-code" title="Programming" tags={['Python', 'MATLAB', 'Julia']} />
+            <SkillCategory icon="fas fa-industry" title="Reservoir Simulation" tags={['MRST', 'Eclipse', 'Petrel RE']} />
+            <SkillCategory icon="fas fa-cube" title="Industry Training" tags={['CMG CO₂ Storage', 'SLB Intersect CCS']} />
+            <SkillCategory icon="fas fa-laptop-code" title="Research Tools" tags={['Git', 'Jupyter', 'LaTeX', 'Linux']} />
           </div>
         </CVSection>
 
         <Divider />
 
-        {/* Awards */}
-        <CVSection icon="fas fa-award" title="Honors & Awards">
+        {/* Recognition */}
+        <CVSection icon="fas fa-award" title="Selected Recognition">
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {[
-              { icon: 'fas fa-trophy', body: 'Ranked within top 2% in Iranian University Entrance Exam for Master\'s degrees' },
-              { icon: 'fas fa-star', body: 'Direct admission for graduate study from Talented Student Office, Amirkabir University' },
-              { icon: 'fas fa-medal', body: 'National undergraduate scholarship (full tuition waiver)' },
-              { icon: 'fas fa-trophy', body: 'Ranked within top 4% among 140,000+ students in undergraduate entrance exam' },
-              { icon: 'fas fa-certificate', body: 'Recognized as talented student in NODET entrance exam' },
+              { icon: 'fas fa-graduation-cap', body: 'James Watt Scholarship recipient — full PhD funding, Heriot-Watt University (2024–present)' },
+              { icon: 'fas fa-medal', body: 'Runner-up, SPE Aberdeen Section Student Bursary — £1,000 awarded (2026)' },
+              { icon: 'fas fa-medal', body: 'Team runner-up, EAGE “The Energy–AI Nexus” Hackathon (2026)' },
+              { icon: 'fas fa-graduation-cap', body: 'National undergraduate scholarship — full tuition waiver' },
             ].map((a, i) => (
               <li key={i} style={{
                 display: 'flex', alignItems: 'flex-start', gap: 12,

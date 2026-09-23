@@ -1565,7 +1565,7 @@ a:focus:not(:focus-visible) {
    Clean printing of CV and portfolio pages.
    ===================================================== */
 @media print {
-  header, footer, nav, .mobile-drawer-panel, .mobile-drawer-backdrop {
+  .app-header, footer, .mobile-drawer-panel, .mobile-drawer-backdrop {
     display: none !important;
   }
   body {
