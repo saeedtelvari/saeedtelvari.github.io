@@ -2068,6 +2068,64 @@ Object.assign(window, {
   Footer
 });
 
+// File: hero-geology.js
+// Shared by the homepage renderer and its worker. Coordinates are SVG units.
+const HeroGeology = (() => {
+  const layerFraction = (t, x, phase, wavelength) => t + 0.08 * Math.sin(Math.PI * t) * Math.sin(2 * Math.PI * x / wavelength + phase);
+  const capRockBaseProfile = (x, depth = 1, g) => (g.baseDepth + x * g.dipSlope - g.amp1 * Math.sin((x + g.phase1) * Math.PI / g.lambda1) - g.amp2 * Math.sin(x * Math.PI / g.lambda2) - g.amp3 * Math.sin(x * Math.PI / g.lambda3)) * layerFraction(depth, x, g.capThicknessPhase, g.thicknessWavelength);
+  const stratumBaseProfile = (x, depth = 1, yOffset = 0, g) => {
+    const roof = capRockBaseProfile(x, depth, g);
+    if (!yOffset) return roof;
+    const top = capRockBaseProfile(x, 1, g);
+    const wave = Math.sin(2 * Math.PI * x / g.thicknessWavelength + g.reservoirThicknessPhase);
+    if (depth < 0.5) {
+      // The shallow bed occupies part of the seal, with clearance for fault steps.
+      return roof + (top - roof - 0.4 * g.faultThrow - 8) * (0.45 + 0.15 * wave);
+    }
+    const floor = top + 65 + (435 - top) * (g.reservoirThickness / 300) * (0.65 + 0.30 * wave);
+    const t = Math.max(0, Math.min(1, (yOffset - g.reservoirThickness) / 320));
+    // Lower beds redistribute the remaining height; the bottom never moves.
+    return t === 1 ? 580 : floor + (580 - floor) * layerFraction(t, x, g.aquiferThicknessPhase, g.thicknessWavelength * 1.2);
+  };
+  const getStratumFaultIntersection = (fault, depth = 1, yOffset = 0, g) => {
+    const x0 = fault.xPercent * 10;
+    const slope = fault.dipSlope || 0;
+    let x = x0;
+    for (let i = 0; i < 3; i++) x = x0 + slope * stratumBaseProfile(x, depth, yOffset, g);
+    return {
+      x,
+      y: stratumBaseProfile(x, depth, yOffset, g),
+      x0,
+      slope
+    };
+  };
+  const getFaultIntersection = (fault, depth = 1, g) => getStratumFaultIntersection(fault, depth, 0, g);
+  const stratumY = (x, faults, cell = null, depth = 1, yOffset = 0, g) => {
+    let y = stratumBaseProfile(x, depth, yOffset, g);
+    const reference = cell === null ? x : cell * 5 + 2.5;
+    const lowerFraction = depth === 1 ? Math.max(0, Math.min(1, (yOffset - g.reservoirThickness) / 320)) : 0;
+    const throwScale = depth < 0.5 ? depth : 1 - lowerFraction;
+    faults.forEach((fault, i) => {
+      if (reference > getStratumFaultIntersection(fault, depth, yOffset, g).x) {
+        y += (i % 2 ? -1 : 1) * g.faultThrow * throwScale;
+      }
+    });
+    return y;
+  };
+  const capRockY = (x, faults, cell = null, depth = 1, g) => stratumY(x, faults, cell, depth, 0, g);
+  const layerThicknessAt = (x, depth, faults, cell, g) => stratumY(x, faults, cell, depth, depth < 0.5 ? g.shallowThickness : g.reservoirThickness, g) - capRockY(x, faults, cell, depth, g);
+  return {
+    capRockBaseProfile,
+    stratumBaseProfile,
+    getStratumFaultIntersection,
+    getFaultIntersection,
+    stratumY,
+    capRockY,
+    layerThicknessAt
+  };
+})();
+if (typeof module !== 'undefined' && module.exports) module.exports = HeroGeology;
+
 // File: SubsurfaceHero.jsx
 // SubsurfaceHero.jsx — landing hero as a CO2 storage cross-section.
 // Strict layout: sky (top 42vh) holds the identity, subsurface (58vh) holds
@@ -2138,28 +2196,33 @@ const generateRandomizedFaults = () => {
 const generateRandomGeology = () => {
   const faults = generateRandomizedFaults();
 
-  // 1. Regional structural basin dip slope (0.090 to 0.140) & Reference caprock depth (55px to 67px)
-  const dipSlope = parseFloat((0.090 + Math.random() * 0.050).toFixed(3));
-  const baseDepth = parseFloat((55 + Math.random() * 12).toFixed(1));
+  // Broad visual ranges in SVG units; keep the full reservoir inside the section.
+  const dipSlope = parseFloat((0.025 + Math.random() * 0.085).toFixed(3));
+  const baseDepth = parseFloat((110 + Math.random() * 45).toFixed(1));
 
-  // 2. Primary Anticline Structural Trap (Amp 17 to 24px, Wavelength 135 to 165px, Phase -15 to +15px)
-  const amp1 = parseFloat((17.0 + Math.random() * 7.0).toFixed(1));
-  const lambda1 = parseFloat((135 + Math.random() * 30).toFixed(1));
-  const phase1 = parseFloat(((Math.random() - 0.5) * 30).toFixed(1));
+  // Broad gentle folds through shorter, more pronounced anticlines.
+  const amp1 = parseFloat((12 + Math.random() * 20).toFixed(1));
+  const lambda1 = parseFloat((120 + Math.random() * 150).toFixed(1));
+  const phase1 = parseFloat(((Math.random() - 0.5) * 180).toFixed(1));
 
-  // 3. Secondary parasitic fold undulations (Amp 11 to 16px, Wavelength 72 to 88px)
-  const amp2 = parseFloat((11.0 + Math.random() * 5.0).toFixed(1));
-  const lambda2 = parseFloat((72 + Math.random() * 16).toFixed(1));
+  // Smaller folds retain texture without obscuring the larger structures.
+  const amp2 = parseFloat((5 + Math.random() * 7).toFixed(1));
+  const lambda2 = parseFloat((65 + Math.random() * 55).toFixed(1));
 
-  // 4. Micro-topography sub-seismic rugosity (Amp 5 to 8px, Wavelength 40 to 52px)
-  const amp3 = parseFloat((5.0 + Math.random() * 3.0).toFixed(1));
+  // Micro-topography.
+  const amp3 = parseFloat((2 + Math.random() * 3).toFixed(1));
   const lambda3 = parseFloat((40 + Math.random() * 12).toFixed(1));
 
-  // 5. Fault throw offset step (13px to 18px)
-  const faultThrow = parseFloat((13.0 + Math.random() * 5.0).toFixed(1));
+  // Fault throw offset step.
+  const faultThrow = parseFloat((12 + Math.random() * 8).toFixed(1));
 
-  // 6. Sandstone reservoir bed thickness (175px to 205px)
-  const reservoirThickness = parseFloat((175.0 + Math.random() * 30.0).toFixed(1));
+  // Thin sandstone beds through thick storage formations (previously 175–205).
+  const reservoirThickness = parseFloat((100 + Math.random() * 150).toFixed(1));
+  // Keep a seal between the shallow bed and the primary reservoir, even at fold crests.
+  const shallowThickness = Math.min(25 + Math.random() * 25, 0.6 * (baseDepth - amp1 - amp2 - amp3) - 0.4 * faultThrow - 8);
+  // Spacing also clears the fault throws, so the decorative beds cannot cross.
+  const capLayerDepths = [0.55 + Math.random() * 0.03, 0.28 + Math.random() * 0.07, 0.06 + Math.random() * 0.04];
+  const aquiferLayerOffsets = [90 + Math.random() * 12, 176 + Math.random() * 16, 256 + Math.random() * 12];
 
   // 7. Sandstone permeability & trapping petrophysics
   const K = parseFloat((1.15 + Math.random() * 0.35).toFixed(2)); // 1.15 to 1.50 D
@@ -2184,6 +2247,13 @@ const generateRandomGeology = () => {
     lambda3,
     faultThrow,
     reservoirThickness,
+    shallowThickness,
+    capLayerDepths,
+    aquiferLayerOffsets,
+    thicknessWavelength: 650 + Math.random() * 350,
+    reservoirThicknessPhase: Math.random() * 2 * Math.PI,
+    capThicknessPhase: Math.random() * 2 * Math.PI,
+    aquiferThicknessPhase: Math.random() * 2 * Math.PI,
     K,
     R,
     Q,
@@ -2194,69 +2264,15 @@ const generateRandomGeology = () => {
 };
 let currentGeology = generateRandomGeology();
 const randomizedFaults = currentGeology.faults;
-
-// Base unperturbed caprock profile adapting to current geology
-const capRockBaseProfile = (x, depthMultiplier = 1.0, geo = currentGeology) => {
-  const g = geo || currentGeology;
-  const dip = (g.baseDepth + x * g.dipSlope) * depthMultiplier;
-  const wave1 = -g.amp1 * Math.sin((x + g.phase1) * Math.PI / g.lambda1) * depthMultiplier; // Primary anticline
-  const wave2 = -g.amp2 * Math.sin(x * Math.PI / g.lambda2) * depthMultiplier; // Secondary fold
-  const wave3 = -g.amp3 * Math.sin(x * Math.PI / g.lambda3) * depthMultiplier; // Micro-rugosity
-  return dip + wave1 + wave2 + wave3;
-};
-
-// Base unperturbed stratum profile for any depthMultiplier and yOffset
-const stratumBaseProfile = (x, depthMultiplier = 1.0, yOffset = 0, geo = currentGeology) => {
-  return capRockBaseProfile(x, depthMultiplier, geo) + yOffset;
-};
-
-// Computes the exact subpixel intersection (x*, y*) of a sloped fault plane with any geological layer at depth
-const getStratumFaultIntersection = (f, depthMultiplier = 1.0, yOffset = 0, geo = currentGeology) => {
-  const x0 = f.xPercent * 10;
-  const slope = f.dipSlope !== undefined ? f.dipSlope : 0.16;
-  let x = x0;
-  for (let iter = 0; iter < 3; iter++) {
-    const y = stratumBaseProfile(x, depthMultiplier, yOffset, geo);
-    x = x0 + slope * y;
-  }
-  const y = stratumBaseProfile(x, depthMultiplier, yOffset, geo);
-  return {
-    x,
-    y,
-    x0,
-    slope
-  };
-};
-
-// Computes intersection for caprock specifically (depthMultiplier, yOffset = 0)
-const getFaultIntersection = (f, depthMultiplier = 1.0, geo = currentGeology) => {
-  return getStratumFaultIntersection(f, depthMultiplier, 0, geo);
-};
-
-// Computes the exact elevation of any geological layer displaced along the sloped fault plane
-const stratumY = (x, faults = currentGeology.faults, cellIdx = null, depthMultiplier = 1.0, yOffset = 0, geo = currentGeology) => {
-  const g = geo || currentGeology;
-  const flts = faults || g.faults;
-  const base = stratumBaseProfile(x, depthMultiplier, yOffset, g);
-  let offset = 0;
-  const xReference = cellIdx !== null ? cellIdx * 5.0 + 2.5 : x;
-  if (flts) {
-    for (let idx = 0; idx < flts.length; idx++) {
-      const f = flts[idx];
-      const inter = getStratumFaultIntersection(f, depthMultiplier, yOffset, g);
-      if (xReference > inter.x) {
-        const direction = idx % 2 === 0 ? 1 : -1;
-        offset += direction * (g.faultThrow * (depthMultiplier < 0.5 ? 0.4 : 1.0));
-      }
-    }
-  }
-  return base + offset;
-};
-
-// Interpolates a smooth spline of the cap rock underside profile with sloped fault slips
-const capRockY = (x, faults = currentGeology.faults, cellIdx = null, depthMultiplier = 1.0, geo = currentGeology) => {
-  return stratumY(x, faults, cellIdx, depthMultiplier, 0, geo);
-};
+const {
+  capRockBaseProfile,
+  stratumBaseProfile,
+  getStratumFaultIntersection,
+  getFaultIntersection,
+  stratumY,
+  capRockY,
+  layerThicknessAt
+} = HeroGeology;
 
 // Numerical PDE Simulator: solves explicit Finite Volume VE equations for CO2 gravity tongue (200-cell high-definition grid)
 const precomputeSimulation = (faults = currentGeology.faults, geo = currentGeology) => {
@@ -2276,13 +2292,28 @@ const precomputeSimulation = (faults = currentGeology.faults, geo = currentGeolo
   const R = g.R; // Residual trapping coefficient
   const Q = g.Q; // Sustained injection rate
   const wellCell = g.wellCellIdx;
+  const primaryMax = Array.from({
+    length: N
+  }, (_, i) => layerThicknessAt(i * 5, 1, flts, i, g) / 15);
+  const secondaryMax = Array.from({
+    length: N
+  }, (_, i) => layerThicknessAt(i * 5, 0.4, flts, i, g) / 15);
+  const faces = depth => Array.from({
+    length: N - 1
+  }, (_, i) => [capRockY(i * 5, flts, i, depth, g) / 15, capRockY((i + 1) * 5, flts, i, depth, g) / 15]);
+  const primaryFaces = faces(1),
+    secondaryFaces = faces(0.4);
+  const faultCells = flts.map(f => [1, 0.4].map(depth => Math.max(0, Math.min(N - 1, Math.round(getFaultIntersection(f, depth, g).x / 5)))));
+  const faultFlow = flts.map(() => 0);
   for (let frame = 0; frame <= totalFrames; frame++) {
     history.push({
       h: [...h],
       hMax: [...hMax],
       h2: [...h2],
-      h2Max: [...h2Max]
+      h2Max: [...h2Max],
+      faultFlow: [...faultFlow]
     });
+    faultFlow.fill(0);
 
     // Explicit finite volume flux updates (VE gravity tongue flow)
     for (let step = 0; step < substeps; step++) {
@@ -2296,8 +2327,7 @@ const precomputeSimulation = (faults = currentGeology.faults, geo = currentGeolo
       }
       const fluxes = new Array(N - 1).fill(0);
       for (let i = 0; i < N - 1; i++) {
-        const ztL = capRockY(i * 5.0, flts, i, 1.0, g) / 15.0;
-        const ztR = capRockY((i + 1) * 5.0, flts, i, 1.0, g) / 15.0;
+        const [ztL, ztR] = primaryFaces[i];
         const zL = ztL + h[i];
         const zR = ztR + h[i + 1];
         const grad = zR - zL;
@@ -2306,21 +2336,18 @@ const precomputeSimulation = (faults = currentGeology.faults, geo = currentGeolo
       }
 
       // Closed far-field boundaries (preserves CO2 in the regional geological trap)
-      const H_res = g.reservoirThickness / 15.0;
       const nextH = [...h];
       for (let i = 0; i < N; i++) {
         const fL = i === 0 ? 0 : fluxes[i - 1];
         const fR = i === N - 1 ? 0 : fluxes[i];
-        nextH[i] = Math.max(0, Math.min(H_res, h[i] + dt * (fL - fR)));
+        nextH[i] = Math.max(0, Math.min(primaryMax[i], h[i] + dt * (fL - fR)));
       }
 
       // Fault capillary seal breaching and leakage
       const leaks = new Array(flts.length).fill(0);
       for (let idx = 0; idx < flts.length; idx++) {
         const f = flts[idx];
-        const inter1 = getFaultIntersection(f, 1.0, g);
-        const cellIdx = Math.round(inter1.x / 5.0);
-        const boundedIdx = Math.max(0, Math.min(N - 1, cellIdx));
+        const boundedIdx = faultCells[idx][0];
 
         // Leakage occurs only if CO2 column height exceeds entry threshold
         if (nextH[boundedIdx] > f.thresholdHeight) {
@@ -2328,26 +2355,26 @@ const precomputeSimulation = (faults = currentGeology.faults, geo = currentGeolo
           const leak = Math.min(overpressure, f.leakRate * dt);
           nextH[boundedIdx] -= leak;
           leaks[idx] = leak;
+          faultFlow[idx] += leak / (dt * substeps);
         }
       }
 
       // Sustained injection during the first 320 frames centered on wellbore
       if (frame <= 320) {
         if (wellCell >= 2 && wellCell <= N - 3) {
-          nextH[wellCell - 2] = Math.min(H_res, nextH[wellCell - 2] + Q * dt * 0.15);
-          nextH[wellCell - 1] = Math.min(H_res, nextH[wellCell - 1] + Q * dt * 0.25);
-          nextH[wellCell] = Math.min(H_res, nextH[wellCell] + Q * dt * 0.40);
-          nextH[wellCell + 1] = Math.min(H_res, nextH[wellCell + 1] + Q * dt * 0.25);
-          nextH[wellCell + 2] = Math.min(H_res, nextH[wellCell + 2] + Q * dt * 0.15);
+          nextH[wellCell - 2] = Math.min(primaryMax[wellCell - 2], nextH[wellCell - 2] + Q * dt * 0.15);
+          nextH[wellCell - 1] = Math.min(primaryMax[wellCell - 1], nextH[wellCell - 1] + Q * dt * 0.25);
+          nextH[wellCell] = Math.min(primaryMax[wellCell], nextH[wellCell] + Q * dt * 0.40);
+          nextH[wellCell + 1] = Math.min(primaryMax[wellCell + 1], nextH[wellCell + 1] + Q * dt * 0.25);
+          nextH[wellCell + 2] = Math.min(primaryMax[wellCell + 2], nextH[wellCell + 2] + Q * dt * 0.15);
         }
       }
-      h = nextH.map(val => Math.max(0, Math.min(H_res, val)));
+      h = nextH.map((val, i) => Math.max(0, Math.min(primaryMax[i], val)));
       for (let i = 0; i < N; i++) {
-        if (h[i] > hMax[i]) hMax[i] = Math.min(H_res, h[i]);
+        if (h[i] > hMax[i]) hMax[i] = Math.min(primaryMax[i], h[i]);
       }
 
       // --- SECONDARY RESERVOIR (h2) ---
-      const H_res2 = 60.0 / 15.0; // 4.0 m thickness for shallow layer
       const h2Mob = new Array(N).fill(0);
       for (let i = 0; i < N; i++) {
         const H = h2[i];
@@ -2357,8 +2384,7 @@ const precomputeSimulation = (faults = currentGeology.faults, geo = currentGeolo
       }
       const fluxes2 = new Array(N - 1).fill(0);
       for (let i = 0; i < N - 1; i++) {
-        const ztL = capRockY(i * 5.0, flts, i, 0.4, g) / 15.0;
-        const ztR = capRockY((i + 1) * 5.0, flts, i, 0.4, g) / 15.0;
+        const [ztL, ztR] = secondaryFaces[i];
         const zL = ztL + h2[i];
         const zR = ztR + h2[i + 1];
         const grad = zR - zL;
@@ -2369,20 +2395,17 @@ const precomputeSimulation = (faults = currentGeology.faults, geo = currentGeolo
       for (let i = 0; i < N; i++) {
         const fL = i === 0 ? 0 : fluxes2[i - 1];
         const fR = i === N - 1 ? 0 : fluxes2[i];
-        nextH2[i] = Math.max(0, Math.min(H_res2, h2[i] + dt * (fL - fR)));
+        nextH2[i] = Math.max(0, Math.min(secondaryMax[i], h2[i] + dt * (fL - fR)));
       }
 
       // Inject leaked mass from primary into secondary fault locations
       for (let idx = 0; idx < flts.length; idx++) {
-        const f = flts[idx];
-        const inter2 = getFaultIntersection(f, 0.4, g);
-        const cellIdx2 = Math.round(inter2.x / 5.0);
-        const boundedIdx2 = Math.max(0, Math.min(N - 1, cellIdx2));
-        nextH2[boundedIdx2] = Math.min(H_res2, nextH2[boundedIdx2] + leaks[idx] * 1.5);
+        const boundedIdx2 = faultCells[idx][1];
+        nextH2[boundedIdx2] = Math.min(secondaryMax[boundedIdx2], nextH2[boundedIdx2] + leaks[idx] * 1.5);
       }
-      h2 = nextH2.map(val => Math.max(0, Math.min(H_res2, val)));
+      h2 = nextH2.map((val, i) => Math.max(0, Math.min(secondaryMax[i], val)));
       for (let i = 0; i < N; i++) {
-        if (h2[i] > h2Max[i]) h2Max[i] = Math.min(H_res2, h2[i]);
+        if (h2[i] > h2Max[i]) h2Max[i] = Math.min(secondaryMax[i], h2[i]);
       }
     }
   }
@@ -2417,7 +2440,8 @@ const buildSmoothRibbonPath = (topElevationFn, botElevationFn, kStart, kEnd, fau
   // 2. Bottom boundary: right-to-left from kEnd down to kStart
   for (let k = kEnd; k >= kStart; k--) {
     const x = k * dx;
-    const isFault = k > 0 && k < 200 && Math.abs(capRockY(x, flts, k - 1, depthMultiplier, g) - capRockY(x, flts, k, depthMultiplier, g)) > 0.1;
+    const bedOffset = depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness;
+    const isFault = k > 0 && k < 200 && (Math.abs(capRockY(x, flts, k - 1, depthMultiplier, g) - capRockY(x, flts, k, depthMultiplier, g)) > 0.1 || Math.abs(stratumY(x, flts, k - 1, depthMultiplier, bedOffset, g) - stratumY(x, flts, k, depthMultiplier, bedOffset, g)) > 0.1);
     if (isFault) {
       const yR = botElevationFn(k, 'right');
       const yL = botElevationFn(k, 'left');
@@ -2430,6 +2454,9 @@ const buildSmoothRibbonPath = (topElevationFn, botElevationFn, kStart, kEnd, fau
   path += " Z";
   return path;
 };
+
+// Clip both edges of each reservoir, including displaced floor intersections.
+const getReservoirClipPath = (depth, faults, g) => buildSmoothRibbonPath((k, side) => capRockY(k * 5, faults, side === 'left' ? k - 1 : k, depth, g), (k, side) => stratumY(k * 5, faults, side === 'left' ? k - 1 : k, depth, depth < 0.5 ? g.shallowThickness : g.reservoirThickness, g), 0, 200, faults, depth, g);
 
 // Helper to get continuous node-evaluated height for any cell array
 const getNodeValue = (arr, k, side = 'avg') => {
@@ -2474,7 +2501,7 @@ const getBandPath = (h, fraction = 1.0, depthMultiplier = 1.0, faults = currentG
   if (!bounds) return "";
   return buildSmoothRibbonPath((k, side) => capRockY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, g), (k, side) => {
     const yTop = capRockY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, g);
-    const yBotMax = stratumY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, depthMultiplier < 0.5 ? 60 : g.reservoirThickness, g);
+    const yBotMax = stratumY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness, g);
     return Math.min(yBotMax, yTop + getNodeValue(h, k, side) * fraction * scale);
   }, bounds.kStart, bounds.kEnd, flts, depthMultiplier, g);
 };
@@ -2494,11 +2521,11 @@ const getResidualPath = (h, hMax, depthMultiplier = 1.0, faults = currentGeology
   if (!bounds) return "";
   return buildSmoothRibbonPath((k, side) => {
     const yTop = capRockY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, g);
-    const yBotMax = stratumY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, depthMultiplier < 0.5 ? 60 : g.reservoirThickness, g);
+    const yBotMax = stratumY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness, g);
     return Math.min(yBotMax, yTop + getNodeValue(h, k, side) * scale);
   }, (k, side) => {
     const yTop = capRockY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, g);
-    const yBotMax = stratumY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, depthMultiplier < 0.5 ? 60 : g.reservoirThickness, g);
+    const yBotMax = stratumY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness, g);
     return Math.min(yBotMax, yTop + getNodeValue(hMax, k, side) * scale);
   }, bounds.kStart, bounds.kEnd, flts, depthMultiplier, g);
 };
@@ -2514,7 +2541,7 @@ const getSweptResidualPath = (hMax, depthMultiplier = 1.0, faults = currentGeolo
   if (!bounds) return "";
   return buildSmoothRibbonPath((k, side) => capRockY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, g), (k, side) => {
     const yTop = capRockY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, g);
-    const yBotMax = stratumY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, depthMultiplier < 0.5 ? 60 : g.reservoirThickness, g);
+    const yBotMax = stratumY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness, g);
     const hm = getNodeValue(hMax, k, side);
     const f = fringeHeight * Math.min(1.0, hm * 1.5);
     return Math.min(yBotMax, yTop + hm * scale + f);
@@ -2532,7 +2559,7 @@ const getActiveMobilePath = (h, depthMultiplier = 1.0, faults = currentGeology.f
   if (!bounds) return "";
   return buildSmoothRibbonPath((k, side) => capRockY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, g), (k, side) => {
     const yTop = capRockY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, g);
-    const yBotMax = stratumY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, depthMultiplier < 0.5 ? 60 : g.reservoirThickness, g);
+    const yBotMax = stratumY(k * 5.0, flts, side === 'left' ? k - 1 : k, depthMultiplier, depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness, g);
     const hVal = getNodeValue(h, k, side);
     const f = fringeHeight * Math.min(1.0, hVal * 1.8);
     return Math.min(yBotMax, yTop + hVal * scale + f);
@@ -2581,20 +2608,20 @@ const getMaxHgLinePath = (hMax, depthMultiplier = 1.0, faults = currentGeology.f
     const isFault = k > 0 && k < 200 && Math.abs(capRockY(x, flts, k - 1, depthMultiplier, g) - capRockY(x, flts, k, depthMultiplier, g)) > 0.1;
     if (k === bounds.kStart) {
       const yTop = capRockY(x, flts, isFault ? k : k, depthMultiplier, g);
-      const yBotMax = stratumY(x, flts, isFault ? k : k, depthMultiplier, depthMultiplier < 0.5 ? 60 : g.reservoirThickness, g);
+      const yBotMax = stratumY(x, flts, isFault ? k : k, depthMultiplier, depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness, g);
       const y0 = Math.min(yBotMax, yTop + getNodeValue(hMax, k, isFault ? 'right' : 'avg') * scale);
       path = `M ${x} ${y0}`;
     } else if (isFault) {
       const yTopL = capRockY(x, flts, k - 1, depthMultiplier, g);
-      const yBotMaxL = stratumY(x, flts, k - 1, depthMultiplier, depthMultiplier < 0.5 ? 60 : g.reservoirThickness, g);
+      const yBotMaxL = stratumY(x, flts, k - 1, depthMultiplier, depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness, g);
       const yTopR = capRockY(x, flts, k, depthMultiplier, g);
-      const yBotMaxR = stratumY(x, flts, k, depthMultiplier, depthMultiplier < 0.5 ? 60 : g.reservoirThickness, g);
+      const yBotMaxR = stratumY(x, flts, k, depthMultiplier, depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness, g);
       const yL = Math.min(yBotMaxL, yTopL + getNodeValue(hMax, k, 'left') * scale);
       const yR = Math.min(yBotMaxR, yTopR + getNodeValue(hMax, k, 'right') * scale);
       path += ` L ${x} ${yL} L ${x} ${yR}`;
     } else {
       const yTop = capRockY(x, flts, k, depthMultiplier, g);
-      const yBotMax = stratumY(x, flts, k, depthMultiplier, depthMultiplier < 0.5 ? 60 : g.reservoirThickness, g);
+      const yBotMax = stratumY(x, flts, k, depthMultiplier, depthMultiplier < 0.5 ? g.shallowThickness : g.reservoirThickness, g);
       const y = Math.min(yBotMax, yTop + getNodeValue(hMax, k, 'avg') * scale);
       path += ` L ${x} ${y}`;
     }
@@ -2609,7 +2636,7 @@ const getColumnPath = (b, geo = currentGeology) => {
   const xStart = g.wellX - width / 2;
   const xEnd = g.wellX + width / 2;
   const yStart = capRockY(g.wellX, g.faults, null, 1.0, g); // wellbore meets cap rock underside
-  const yEnd = capRockY(g.wellX, g.faults, null, 1.0, g) + 160; // wellbore bottom perforations exactly within reservoir thickness
+  const yEnd = stratumY(g.wellX, g.faults, null, 1.0, g.reservoirThickness, g) - 20;
   return `M ${xStart} ${yStart} L ${xEnd} ${yStart} L ${xEnd} ${yEnd} L ${xStart} ${yEnd} Z`;
 };
 const SubsurfaceHero = ({
@@ -2628,7 +2655,7 @@ const SubsurfaceHero = ({
       const fallback = setTimeout(() => setHistory(precomputeSimulation(faults, geology)), 0);
       return () => clearTimeout(fallback);
     }
-    const worker = new Worker('./hero-simulation-worker.js');
+    const worker = new Worker('./hero-simulation-worker.js?v=5');
     worker.onmessage = event => setHistory(event.data.history);
     worker.onerror = () => setHistory(precomputeSimulation(faults, geology));
     worker.postMessage({
@@ -2690,6 +2717,7 @@ const SubsurfaceHero = ({
     hMax: currentHMax,
     h2: currentH2,
     h2Max: currentH2Max,
+    faultFlow: currentFrame.faultFlow,
     time: time,
     isPlaying: isPlaying,
     faults: faults,
@@ -2870,30 +2898,149 @@ const SimulationController = ({
 };
 
 /* =====================================================
-   Sky — top 42vh: warm-violet gradient + soft atmospheric blobs
+   Sky — moonlit cloud banks and sparse stars over the same cool geological palette.
    ===================================================== */
-const Sky = () => {
-  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      top: 0,
-      height: '42vh',
-      background: 'linear-gradient(180deg, #16101f 0%, #1e1936 50%, #211d34 100%)'
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      top: 0,
-      height: '42vh',
-      background: 'radial-gradient(circle at 22% 28%, rgba(120,119,198,0.20) 0%, transparent 45%), ' + 'radial-gradient(circle at 84% 14%, rgba(255,119,178,0.13) 0%, transparent 38%)',
-      pointerEvents: 'none'
-    }
-  }));
-};
+const Sky = () => useMemo(() => /*#__PURE__*/React.createElement("div", {
+  "data-layer": "sky",
+  "aria-hidden": "true",
+  style: {
+    position: 'absolute',
+    inset: '0 0 auto',
+    height: '42vh',
+    overflow: 'hidden',
+    pointerEvents: 'none',
+    background: 'linear-gradient(180deg, #090f20 0%, #131b30 56%, #1a253b 84%, #172737 100%)'
+  }
+}, /*#__PURE__*/React.createElement("div", {
+  style: {
+    position: 'absolute',
+    inset: 0,
+    background: 'radial-gradient(ellipse at 79% 30%, rgba(142,170,207,0.18), transparent 34%), radial-gradient(ellipse at 70% 105%, rgba(83,131,151,0.12), transparent 55%)'
+  }
+}), Array.from({
+  length: 52
+}, (_, i) => /*#__PURE__*/React.createElement("span", {
+  key: i,
+  style: {
+    position: 'absolute',
+    left: `${(i * 61.803 + 3) % 100}%`,
+    top: `${5 + i * i * 17.31 % 67}%`,
+    width: i % 11 === 0 ? 2 : 1.25,
+    height: i % 11 === 0 ? 2 : 1.25,
+    borderRadius: '50%',
+    background: '#c7dbed',
+    opacity: 0.26 + i % 5 * 0.08,
+    boxShadow: i % 11 === 0 ? '0 0 5px rgba(176,206,238,0.35)' : 'none'
+  }
+})), /*#__PURE__*/React.createElement("div", {
+  className: "hero-night-clouds",
+  style: {
+    position: 'absolute',
+    inset: 0
+  }
+}, /*#__PURE__*/React.createElement("svg", {
+  viewBox: "0 0 1000 420",
+  preserveAspectRatio: "none",
+  width: "104%",
+  height: "100%",
+  style: {
+    marginLeft: '-2%'
+  }
+}, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+  id: "night-cloud-lit",
+  x1: "0",
+  y1: "0",
+  x2: "0.2",
+  y2: "1"
+}, /*#__PURE__*/React.createElement("stop", {
+  stopColor: "#8496b5",
+  stopOpacity: "0.60"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: "25%",
+  stopColor: "#425772",
+  stopOpacity: "0.70"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: "65%",
+  stopColor: "#23324a",
+  stopOpacity: "0.88"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: "100%",
+  stopColor: "#152137",
+  stopOpacity: "0"
+})), /*#__PURE__*/React.createElement("linearGradient", {
+  id: "night-cloud-shadow",
+  x1: "0",
+  y1: "0",
+  x2: "0",
+  y2: "1"
+}, /*#__PURE__*/React.createElement("stop", {
+  stopColor: "#34415d",
+  stopOpacity: "0.72"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: "30%",
+  stopColor: "#131d31",
+  stopOpacity: "0.94"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: "100%",
+  stopColor: "#101b2c",
+  stopOpacity: "0"
+})), /*#__PURE__*/React.createElement("filter", {
+  id: "night-cloud-texture",
+  x: "-10%",
+  y: "-30%",
+  width: "120%",
+  height: "160%",
+  colorInterpolationFilters: "sRGB"
+}, /*#__PURE__*/React.createElement("feTurbulence", {
+  type: "fractalNoise",
+  baseFrequency: "0.009 0.025",
+  numOctaves: "3",
+  seed: "12",
+  result: "cloud-noise"
+}), /*#__PURE__*/React.createElement("feColorMatrix", {
+  in: "cloud-noise",
+  type: "matrix",
+  values: "0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  3 0 0 0 -1",
+  result: "cloud-density"
+}), /*#__PURE__*/React.createElement("feDisplacementMap", {
+  in: "SourceGraphic",
+  in2: "cloud-noise",
+  scale: "38",
+  xChannelSelector: "R",
+  yChannelSelector: "G"
+}), /*#__PURE__*/React.createElement("feGaussianBlur", {
+  stdDeviation: "6"
+}), /*#__PURE__*/React.createElement("feComposite", {
+  in2: "cloud-density",
+  operator: "in"
+}), /*#__PURE__*/React.createElement("feGaussianBlur", {
+  stdDeviation: "1"
+}))), /*#__PURE__*/React.createElement("g", {
+  filter: "url(#night-cloud-texture)"
+}, /*#__PURE__*/React.createElement("g", {
+  fill: "url(#night-cloud-lit)"
+}, /*#__PURE__*/React.createElement("path", {
+  opacity: "0.55",
+  d: "M 390 144 C 445 130 471 147 511 125 C 537 111 563 122 594 110 C 631 92 661 109 687 90 C 729 66 755 91 798 77 C 859 62 882 98 936 84 L 1100 81 L 1100 226 C 916 223 858 185 715 203 C 596 213 496 171 390 185 Z"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M 557 215 C 603 188 625 207 650 187 C 677 165 699 182 722 159 C 741 143 764 163 782 149 C 816 121 839 147 864 136 C 887 126 917 155 943 140 C 991 114 1041 138 1100 118 L 1100 314 C 1023 294 960 317 885 284 C 787 252 723 284 651 250 C 611 235 585 240 557 248 Z"
+}), /*#__PURE__*/React.createElement("path", {
+  opacity: "0.46",
+  d: "M 150 300 C 219 278 257 292 294 275 C 330 258 364 285 400 261 C 431 240 463 263 492 247 C 529 226 555 253 600 241 C 654 226 684 259 725 245 L 832 279 L 901 365 C 690 337 637 355 484 328 C 347 315 259 340 150 332 Z"
+})), /*#__PURE__*/React.createElement("g", {
+  fill: "url(#night-cloud-shadow)"
+}, /*#__PURE__*/React.createElement("path", {
+  d: "M 731 256 C 778 228 808 250 831 225 C 854 206 877 223 901 203 C 929 176 956 207 983 190 C 1022 174 1055 194 1100 181 L 1100 408 L 833 390 C 815 328 778 301 731 295 Z"
+}), /*#__PURE__*/React.createElement("path", {
+  opacity: "0.75",
+  d: "M -80 343 C 4 322 43 341 87 317 C 128 293 157 323 202 304 C 244 280 283 308 320 292 C 362 273 387 311 435 298 L 561 372 L 628 432 L -80 432 Z"
+}))))), /*#__PURE__*/React.createElement("div", {
+  style: {
+    position: 'absolute',
+    inset: 0,
+    background: 'linear-gradient(90deg, rgba(11,15,29,0.88) 0%, rgba(13,17,32,0.65) 32%, transparent 68%), linear-gradient(0deg, rgba(14,26,39,0.65), transparent 20%)'
+  }
+})), []);
 
 /* =====================================================
    Horizon — dashed mint line at 42vh
@@ -3018,8 +3165,9 @@ const ReservoirGrid = ({
     for (let i = 0; i < N; i++) {
       const x1 = i * 5.0;
       const x2 = (i + 1) * 5.0;
+      const yb1 = stratumY(x1, flts, i, 1.0, g.reservoirThickness, g);
       const yb2 = stratumY(x2, flts, i, 1.0, g.reservoirThickness, g);
-      path += ` L ${x2} ${yb2}`;
+      path += ` L ${x1} ${yb1} L ${x2} ${yb2}`;
     }
     // Trace continuous top fluid interface right-to-left
     for (let i = N - 1; i >= 0; i--) {
@@ -3069,11 +3217,7 @@ const ReservoirGrid = ({
     const yt2 = capRockY(x2, flts, i, 1.0, g);
     const yb1 = stratumY(x1, flts, i, 1.0, g.reservoirThickness, g);
     const yb2 = stratumY(x2, flts, i, 1.0, g.reservoirThickness, g);
-    const permHash = 0.55 + 0.45 * Math.sin(i * 14.3 + 2.1);
-    const r = Math.floor(33 + permHash * 14);
-    const gCol = Math.floor(24 + permHash * 8);
-    const b = Math.floor(18 + permHash * 6);
-    const blockFill = `rgb(${r}, ${gCol}, ${b})`;
+    const blockFill = '#182e40';
     cols.push( /*#__PURE__*/React.createElement("polygon", {
       key: i,
       points: `${x1},${yt1} ${x2},${yt2} ${x2},${yb2} ${x1},${yb1}`,
@@ -3088,30 +3232,134 @@ const ReservoirGrid = ({
   }));
 };
 
-// Conforming vertical grid lines for the cap rock stratum (200 cells)
-const CapRockGrid = ({
+// Static rock detail is built once per geology, independent of simulation frames.
+const GeologyTexture = ({
   faults,
-  geology
-}) => {
-  const g = geology || currentGeology;
-  const flts = faults || g.faults;
-  const lines = [];
-  for (let i = 1; i < 200; i++) {
-    const x = i * 5.0;
-    const yTop = 0;
-    const yBot = capRockY(x, flts, i, 1.0, g);
-    lines.push( /*#__PURE__*/React.createElement("line", {
-      key: i,
-      x1: x,
-      y1: yTop,
-      x2: x,
-      y2: yBot,
-      stroke: "rgba(255,255,255,0.015)",
-      strokeWidth: "0.5"
-    }));
-  }
-  return /*#__PURE__*/React.createElement("g", null, lines);
-};
+  geology: g
+}) => useMemo(() => {
+  const reservoirPaths = [0.4, 1].map(depth => getReservoirClipPath(depth, faults, g));
+  const trace = elevation => {
+    let path = '';
+    for (let i = 0; i < 200; i++) {
+      const x = i * 5;
+      const y = elevation(x, i);
+      // Break at displaced contacts instead of drawing a diagonal across a fault.
+      const move = !i || Math.abs(y - elevation(x, i - 1)) > 0.1;
+      path += ` ${move ? 'M' : 'L'} ${x} ${y} L ${x + 5} ${elevation(x + 5, i)}`;
+    }
+    return path;
+  };
+  const sealLines = Array.from({
+    length: 23
+  }, (_, i) => trace((x, cell) => capRockY(x, faults, cell, (i + 1) / 24, g)));
+  const lowerLines = Array.from({
+    length: 25
+  }, (_, i) => trace((x, cell) => stratumY(x, faults, cell, 1, g.reservoirThickness + (i + 1) * 320 / 26, g)));
+  const reservoirLines = [0.4, 1].flatMap(depth => Array.from({
+    length: depth === 1 ? 8 : 3
+  }, (_, i) => {
+    const fraction = (i + 1) / (depth === 1 ? 9 : 4);
+    return trace((x, cell) => capRockY(x, faults, cell, depth, g) + fraction * layerThicknessAt(x, depth, faults, cell, g));
+  }));
+  return /*#__PURE__*/React.createElement("g", {
+    "data-layer": "geology-texture"
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("clipPath", {
+    id: "rock-reservoirs"
+  }, reservoirPaths.map((d, i) => /*#__PURE__*/React.createElement("path", {
+    key: i,
+    d: d
+  }))), /*#__PURE__*/React.createElement("mask", {
+    id: "rock-seals",
+    maskUnits: "userSpaceOnUse",
+    x: "0",
+    y: "0",
+    width: "1000",
+    height: "580"
+  }, /*#__PURE__*/React.createElement("rect", {
+    width: "1000",
+    height: "580",
+    fill: "white"
+  }), reservoirPaths.map((d, i) => /*#__PURE__*/React.createElement("path", {
+    key: i,
+    d: d,
+    fill: "black"
+  }))), /*#__PURE__*/React.createElement("pattern", {
+    id: "rock-grain",
+    width: "137",
+    height: "89",
+    patternUnits: "userSpaceOnUse"
+  }, Array.from({
+    length: 90
+  }, (_, i) => /*#__PURE__*/React.createElement("ellipse", {
+    key: i,
+    cx: (i * 47.13 + 7) % 137,
+    cy: (i * i * 13.71 + 11) % 89,
+    rx: 0.35 + i % 4 * 0.13,
+    ry: 0.25 + i % 3 * 0.12,
+    fill: i % 3 ? '#c4d4d5' : '#040e18',
+    opacity: i % 3 ? 0.17 : 0.3
+  }))), /*#__PURE__*/React.createElement("radialGradient", {
+    id: "rock-mineral-wash"
+  }, /*#__PURE__*/React.createElement("stop", {
+    stopColor: "#9da9a1",
+    stopOpacity: "0.09"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: "#9da9a1",
+    stopOpacity: "0"
+  })), /*#__PURE__*/React.createElement("pattern", {
+    id: "rock-mottle",
+    width: "431",
+    height: "193",
+    patternUnits: "userSpaceOnUse"
+  }, /*#__PURE__*/React.createElement("ellipse", {
+    cx: "120",
+    cy: "60",
+    rx: "115",
+    ry: "39",
+    fill: "url(#rock-mineral-wash)"
+  }), /*#__PURE__*/React.createElement("ellipse", {
+    cx: "320",
+    cy: "147",
+    rx: "101",
+    ry: "43",
+    fill: "url(#rock-mineral-wash)"
+  }))), /*#__PURE__*/React.createElement("rect", {
+    width: "1000",
+    height: "580",
+    fill: "url(#rock-mottle)"
+  }), /*#__PURE__*/React.createElement("rect", {
+    width: "1000",
+    height: "580",
+    fill: "url(#rock-grain)",
+    opacity: "0.55"
+  }), /*#__PURE__*/React.createElement("g", {
+    mask: "url(#rock-seals)",
+    fill: "none",
+    stroke: "#c5b8b1",
+    strokeWidth: "0.65"
+  }, [...sealLines, ...lowerLines].map((d, i) => /*#__PURE__*/React.createElement("path", {
+    key: i,
+    d: d,
+    opacity: i % 4 === 0 ? 0.15 : 0.065,
+    strokeDasharray: i % 3 === 0 ? '31 5 9 3 57 7' : undefined
+  }))), /*#__PURE__*/React.createElement("g", {
+    clipPath: "url(#rock-reservoirs)"
+  }, /*#__PURE__*/React.createElement("rect", {
+    width: "1000",
+    height: "580",
+    fill: "url(#rock-grain)",
+    opacity: "0.65"
+  }), reservoirLines.map((d, i) => /*#__PURE__*/React.createElement("path", {
+    key: i,
+    d: d,
+    fill: "none",
+    stroke: "#93b7c2",
+    strokeWidth: "0.7",
+    opacity: "0.12",
+    strokeDasharray: "47 6 18 4 83 9"
+  }))));
+}, [faults, g]);
 
 // Depth axis — clean ticks on the left margin
 const DepthAxis = () => {
@@ -3375,6 +3623,7 @@ const Subsurface = ({
   const AQUIFER_PATH = useMemo(() => getAquiferPath(flts, g), [flts, g]);
   const CAP_ROCK_FILL = useMemo(() => getCapRockFillPath(flts, g), [flts, g]);
   const CAP_ROCK_UNDERSIDE = useMemo(() => getCapRockPath(flts, g), [flts, g]);
+  const SHALLOW_RESERVOIR_PATH = useMemo(() => getReservoirClipPath(0.4, flts, g), [flts, g]);
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("svg", {
     style: {
       position: 'absolute',
@@ -3414,21 +3663,34 @@ const Subsurface = ({
     offset: "100%",
     stopColor: "#0a1931",
     stopOpacity: "0.95"
+  })), /*#__PURE__*/React.createElement("linearGradient", {
+    id: "grad-sediment",
+    x1: "0",
+    y1: "0",
+    x2: "0",
+    y2: "1"
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0%",
+    stopColor: "#30323c"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "55%",
+    stopColor: "#262d35"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: "#1c252d"
   }))), /*#__PURE__*/React.createElement("path", {
     d: CAP_ROCK_FILL,
     fill: "url(#grad-cap-v2)"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: getStrataPath(flts, 0.85, 0, 0, false, g),
-    fill: "rgba(0,0,0,0.15)"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: getStrataPath(flts, 0.40, 0, 0, false, g),
-    fill: "rgba(0,0,0,0.25)"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: getStrataPath(flts, 0.15, 0, 0, false, g),
-    fill: "rgba(0,0,0,0.35)"
-  }), /*#__PURE__*/React.createElement(CapRockGrid, {
-    faults: flts,
-    geology: g
+  }), g.capLayerDepths.map((depth, i) => /*#__PURE__*/React.createElement("path", {
+    key: i,
+    d: getStrataPath(flts, depth, 0, 0, false, g),
+    fill: `rgba(0,0,0,${0.15 + i * 0.10})`
+  })), /*#__PURE__*/React.createElement("path", {
+    "data-layer": "upper-reservoir",
+    d: SHALLOW_RESERVOIR_PATH,
+    fill: "#123147",
+    stroke: "rgba(168,237,234,0.30)",
+    strokeWidth: "0.8"
   }), /*#__PURE__*/React.createElement(ReservoirGrid, {
     h: h,
     hMax: hMax,
@@ -3436,20 +3698,18 @@ const Subsurface = ({
     geology: g
   }), /*#__PURE__*/React.createElement("path", {
     d: AQUIFER_PATH,
-    fill: "url(#grad-aquifer-v2)"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: getStrataPath(flts, 1.0, g.reservoirThickness + 80, 580, true, g),
-    fill: "rgba(0,0,0,0.20)"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: getStrataPath(flts, 1.0, g.reservoirThickness + 170, 580, true, g),
-    fill: "rgba(0,0,0,0.35)"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: getStrataPath(flts, 1.0, g.reservoirThickness + 260, 580, true, g),
-    fill: "rgba(0,0,0,0.50)"
+    fill: "url(#grad-sediment)"
+  }), g.aquiferLayerOffsets.map((offset, i) => /*#__PURE__*/React.createElement("path", {
+    key: i,
+    d: getStrataPath(flts, 1.0, g.reservoirThickness + offset, 580, true, g),
+    fill: `rgba(0,0,0,${0.20 + i * 0.15})`
+  })), /*#__PURE__*/React.createElement(GeologyTexture, {
+    faults: flts,
+    geology: g
   }), /*#__PURE__*/React.createElement("path", {
     d: `M 0 ${stratumY(0, flts, 0, 1.0, g.reservoirThickness, g)} ` + Array.from({
       length: 200
-    }, (_, i) => `L ${(i + 1) * 5.0} ${stratumY((i + 1) * 5.0, flts, i, 1.0, g.reservoirThickness, g)}`).join(" "),
+    }, (_, i) => `L ${i * 5.0} ${stratumY(i * 5.0, flts, i, 1.0, g.reservoirThickness, g)} L ${(i + 1) * 5.0} ${stratumY((i + 1) * 5.0, flts, i, 1.0, g.reservoirThickness, g)}`).join(" "),
     stroke: "rgba(0,0,0,0.35)",
     strokeWidth: "1.2",
     fill: "none"
@@ -3477,10 +3737,13 @@ const Subsurface = ({
     top: 'calc(42vh + 8px)',
     label: 'Cap rock'
   }, {
-    top: 'calc(58vh + 8px)',
+    top: `${42 + (capRockY(980, flts, null, 0.4, g) + layerThicknessAt(980, 0.4, flts, null, g) / 2) * 0.1}vh`,
+    label: 'Upper reservoir'
+  }, {
+    top: `${42 + (capRockY(980, flts, null, 1, g) + layerThicknessAt(980, 1, flts, null, g) / 2) * 0.1}vh`,
     label: 'Reservoir'
   }, {
-    top: 'calc(88vh + 8px)',
+    top: `${42 + (stratumY(980, flts, null, 1, g.reservoirThickness, g) + 580) * 0.05}vh`,
     label: 'Aquifer'
   }].map((s, i) => /*#__PURE__*/React.createElement("span", {
     key: i,
@@ -3764,7 +4027,7 @@ const Well = ({
 }) => {
   const g = geology || currentGeology;
   const flts = faults || g.faults;
-  const yBotVal = capRockY(g.wellX, flts, null, 1.0, g) + 160;
+  const yBotVal = stratumY(g.wellX, flts, null, 1.0, g.reservoirThickness, g) - 20;
   const heightVh = `${yBotVal * 0.1}vh`;
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -3974,6 +4237,7 @@ const Plume = ({
   hMax,
   h2,
   h2Max,
+  faultFlow = [],
   time,
   isPlaying,
   faults = [],
@@ -4000,13 +4264,11 @@ const Plume = ({
   }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("clipPath", {
     id: "below-caprock"
   }, /*#__PURE__*/React.createElement("path", {
-    d: `${CAP_ROCK_PATH} L 1000 580 L 0 580 Z`
+    d: getReservoirClipPath(1, flts, g)
   })), /*#__PURE__*/React.createElement("clipPath", {
     id: "below-shallow-caprock"
   }, /*#__PURE__*/React.createElement("path", {
-    d: `M 0 ${capRockY(0, flts, null, 0.4, g)} ${Array.from({
-      length: 200
-    }, (_, i) => `L ${(i + 1) * 5.0} ${capRockY((i + 1) * 5.0, flts, null, 0.4, g)}`).join(' ')} L 1000 580 L 0 580 Z`
+    d: getReservoirClipPath(0.4, flts, g)
   })), /*#__PURE__*/React.createElement("filter", {
     id: "band-soften",
     x: "-10%",
@@ -4168,46 +4430,6 @@ const Plume = ({
     stroke: "rgba(255,255,255,0.45)",
     strokeWidth: "0.6",
     fill: "none"
-  })), /*#__PURE__*/React.createElement("g", {
-    clipPath: "url(#below-caprock)"
-  }, [{
-    x: 500,
-    delay: 0.0,
-    activeTime: 40
-  }, {
-    x: 560,
-    delay: 1.2,
-    activeTime: 25
-  }, {
-    x: 620,
-    delay: 0.4,
-    activeTime: 12
-  }, {
-    x: 790,
-    delay: 0.8,
-    activeTime: 15
-  }, {
-    x: 850,
-    delay: 1.6,
-    activeTime: 32
-  }, {
-    x: 920,
-    delay: 0.2,
-    activeTime: 55
-  }].map((d, i) => {
-    if (time < d.activeTime) return null;
-    return /*#__PURE__*/React.createElement("circle", {
-      key: `d${i}`,
-      cx: d.x,
-      cy: "200",
-      r: "1.2",
-      fill: "#0dfca2",
-      style: {
-        opacity: 0,
-        animation: `fingerDrip 6s linear ${d.delay}s infinite`,
-        animationPlayState: isPlaying ? 'running' : 'paused'
-      }
-    });
   })), flts.map((f, idx) => {
     const x0 = f.xPercent * 10;
     const slope = f.dipSlope !== undefined ? f.dipSlope : 0.16;
@@ -4222,28 +4444,28 @@ const Plume = ({
       y1: yStart,
       x2: xEnd,
       y2: yEnd,
-      stroke: "rgba(100,255,218,0.25)",
+      stroke: "rgba(170,191,201,0.26)",
       strokeWidth: "1.0",
       strokeDasharray: "4 4"
     }));
   }), flts.map((f, idx) => {
     const inter1 = getFaultIntersection(f, 1.0, g); // Primary reservoir caprock spill point
     const inter2 = getFaultIntersection(f, 0.4, g); // Secondary shallow reservoir entry point
-    const cellIdx1 = Math.round(inter1.x / 5.0);
-    const hasBreached = h && h[cellIdx1] > f.thresholdHeight;
-    if (!hasBreached) return null;
-    const travelX = inter2.x - inter1.x;
-    const travelY = inter2.y - inter1.y;
+    const flow = faultFlow[idx] || 0;
+    if (flow <= 0) return null;
+    const strength = Math.min(1, Math.sqrt(flow / f.leakRate));
     return /*#__PURE__*/React.createElement("g", {
-      key: `fault-flow-group-${idx}`
+      key: `fault-flow-group-${idx}`,
+      "data-layer": "fault-leak",
+      opacity: strength
     }, /*#__PURE__*/React.createElement("line", {
       x1: inter1.x,
       y1: inter1.y,
       x2: inter2.x,
       y2: inter2.y,
       stroke: "#0dfca2",
-      strokeWidth: "3.5",
-      opacity: "0.22",
+      strokeWidth: "3",
+      opacity: "0.16",
       style: {
         filter: 'blur(2.5px)'
       }
@@ -4253,38 +4475,27 @@ const Plume = ({
       x2: inter2.x,
       y2: inter2.y,
       stroke: "#0dfca2",
-      strokeWidth: "1.6",
-      strokeDasharray: "5 4",
-      opacity: "0.85",
-      style: {
-        animation: 'conduitFlow 1.2s linear infinite',
-        animationPlayState: isPlaying ? 'running' : 'paused'
-      }
-    }), /*#__PURE__*/React.createElement("circle", {
-      cx: inter2.x,
-      cy: inter2.y,
-      r: "1.8",
-      fill: "#0dfca2",
-      opacity: "0.85"
-    }), [0, 0.5, 1.0, 1.5, 2.0].map((delay, i) => /*#__PURE__*/React.createElement("circle", {
-      key: `fb-${idx}-${i}`,
-      cx: inter1.x,
-      cy: inter1.y,
-      r: "1.8",
-      fill: "#0dfca2",
-      style: {
-        opacity: 0,
-        '--travel-x': `${travelX}px`,
-        '--travel-y': `${travelY}px`,
-        animation: `faultRise 2.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) ${delay}s infinite`,
-        animationPlayState: isPlaying ? 'running' : 'paused'
-      }
-    })));
+      strokeWidth: "1.15",
+      opacity: "0.5",
+      strokeLinecap: "round"
+    }), /*#__PURE__*/React.createElement("line", {
+      className: "fault-flow-cue",
+      x1: inter1.x,
+      y1: inter1.y,
+      x2: inter2.x,
+      y2: inter2.y,
+      stroke: "#b3ffe4",
+      strokeWidth: "1.25",
+      strokeLinecap: "round",
+      strokeDasharray: "3 15",
+      strokeDashoffset: -time * 0.18,
+      opacity: "0.65"
+    }));
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'absolute',
       left: '22%',
-      top: 'calc(42vh + 22vh)',
+      top: `${42 + (capRockY(220, flts, null, 1, g) + layerThicknessAt(220, 1, flts, null, g) * 0.7) * 0.1}vh`,
       transform: 'translate(-50%, -50%)',
       fontFamily: "'Montserrat', sans-serif",
       fontWeight: 600,

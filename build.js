@@ -17,6 +17,7 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
       'Primitives.jsx',
       'Header.jsx',
       'Footer.jsx',
+      'hero-geology.js',
       'SubsurfaceHero.jsx',
       'HomeSections.jsx',
       'CVPage.jsx',

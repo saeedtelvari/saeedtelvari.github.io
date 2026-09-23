@@ -29,7 +29,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js">
   <link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js">
-  <link rel="preload" as="script" href="./bundle.js?v=14.0">
+  <link rel="preload" as="script" href="./bundle.js?v=21.0">
   <link rel="icon" href="./assets/logo-minimalist.webp" type="image/webp">
   <script>
     window.__pageLoadStart = Date.now();
@@ -286,12 +286,6 @@
       from { stroke-dashoffset: 0; }
       to   { stroke-dashoffset: 160; }
     }
-    @keyframes fingerDrip {
-      0%   { transform: translateY(0) scale(1);      opacity: 0; }
-      15%  {                                         opacity: 0.55; }
-      85%  { transform: translateY(120px) scale(1.3); opacity: 0.30; }
-      100% { transform: translateY(140px) scale(0.3); opacity: 0; }
-    }
     @keyframes cellPulse {
       0%, 100% { opacity: 0.15; transform: scale(0.85); }
       50%      { opacity: 0.95; transform: scale(1.25); }
@@ -309,17 +303,22 @@
       85%  { transform: translateY(-180px); opacity: 0.45; }
       100% { transform: translateY(-200px); opacity: 0; }
     }
-    @keyframes faultRise {
-      0%   { transform: translate(0, 0) scale(0.8); opacity: 0; }
-      15%  { opacity: 0.95; transform: translate(calc(var(--travel-x, 0px) * 0.15), calc(var(--travel-y, -120px) * 0.15)) scale(0.9); }
-      85%  { opacity: 0.95; transform: translate(calc(var(--travel-x, 0px) * 0.85), calc(var(--travel-y, -120px) * 0.85)) scale(1.0); }
-      100% { transform: translate(var(--travel-x, 0px), var(--travel-y, -120px)) scale(1.2); opacity: 0; }
-    }
     @keyframes faultRiseTilted {
       0%   { transform: translate(0, 0) scale(0.8); opacity: 0; }
       15%  { opacity: 0.95; transform: translate(calc(var(--travel-x, 0px) * 0.15), calc(var(--travel-y, -120px) * 0.15)) scale(0.9); }
       85%  { opacity: 0.95; transform: translate(calc(var(--travel-x, 0px) * 0.85), calc(var(--travel-y, -120px) * 0.85)) scale(1.0); }
       100% { transform: translate(var(--travel-x, 0px), var(--travel-y, -120px)) scale(1.2); opacity: 0; }
+    }
+    .hero-night-clouds {
+      animation: night-cloud-drift 110s linear infinite alternate;
+    }
+    @keyframes night-cloud-drift {
+      from { transform: translate3d(-10px, 0, 0); }
+      to { transform: translate3d(12px, 2px, 0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .fault-flow-cue { stroke-dashoffset: 0 !important; }
+      .hero-night-clouds { animation: none !important; }
     }
     @keyframes conduitFlow {
       0%   { stroke-dashoffset: 24; }
@@ -391,6 +390,6 @@
 
   <div id="root"></div>
 
-  <script src="bundle.js?v=14.0" onload="window.__loadTick && window.__loadTick(90)"></script>
+  <script src="bundle.js?v=21.0" onload="window.__loadTick && window.__loadTick(90)"></script>
 </body>
 </html>
