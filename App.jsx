@@ -128,14 +128,16 @@ const App = () => {
         <main>
           <StratigraphicDepthHUD onNavigate={onNavigate} activeSection={activeSection} />
           <SubsurfaceHero onNavigate={onNavigate} />
-          <div id="about" />
-          <AboutSection onNavigate={onNavigate} />
-          <div id="research" />
-          <div id="publications" />
-          <PublicationsList onNavigate={onNavigate} />
-          <div id="contact" />
-          <ContactSection />
-          <Footer onNavigate={onNavigate} />
+          <GeologicalDescent>
+            <div id="about" />
+            <AboutSection onNavigate={onNavigate} />
+            <div id="research" />
+            <div id="publications" />
+            <PublicationsList onNavigate={onNavigate} />
+            <div id="contact" />
+            <ContactSection />
+            <Footer onNavigate={onNavigate} geological />
+          </GeologicalDescent>
         </main>
       ) : (
         <main>
