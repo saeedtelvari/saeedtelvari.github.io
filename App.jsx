@@ -126,7 +126,6 @@ const App = () => {
 
       {screen === 'home' ? (
         <main>
-          <StratigraphicDepthHUD onNavigate={onNavigate} activeSection={activeSection} />
           <SubsurfaceHero onNavigate={onNavigate} />
           <GeologicalDescent>
             <div id="about" />

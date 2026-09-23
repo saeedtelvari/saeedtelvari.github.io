@@ -965,31 +965,7 @@ const Footer = ({
       flexWrap: 'wrap',
       gap: 24
     }
-  }, /*#__PURE__*/React.createElement("div", null, geological && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10,
-      marginBottom: 8
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      width: 8,
-      height: 8,
-      borderRadius: '50%',
-      backgroundColor: '#c9a38d',
-      display: 'inline-block'
-    }
-  }), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
-      fontFamily: 'ui-monospace, Menlo, Monaco, monospace',
-      letterSpacing: '0.12em',
-      color: '#c9a38d',
-      fontWeight: 700,
-      textTransform: 'uppercase'
-    }
-  }, "Upper mantle \xB7 continuing below 35 km")), /*#__PURE__*/React.createElement("p", {
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
     style: {
       margin: 0,
       fontSize: 13.5,
@@ -1052,13 +1028,13 @@ const Footer = ({
       textTransform: 'uppercase',
       transition: 'transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background 160ms ease, border-color 160ms ease'
     },
-    title: "Ascend back to surface wellhead"
+    title: "Back to top"
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-arrow-up",
     style: {
       fontSize: 10
     }
-  }), "Ascend to Surface // 0.0 km"))));
+  }), "Back to top"))));
 };
 const FooterLink = ({
   label,
@@ -3839,9 +3815,12 @@ const GeologicalDescent = ({
     return () => observer.disconnect();
   }, []);
   const [aboutHeight, researchHeight, contactHeight, footerHeight] = heights;
-  const basementTop = aboutHeight - 70;
-  const mantleTop = aboutHeight + researchHeight - 85;
+  const basementTop = aboutHeight + 75;
+  const mantleTop = aboutHeight + researchHeight + 65;
   const totalHeight = aboutHeight + researchHeight + contactHeight + footerHeight;
+  const sedimentLevels = [0, .05, .12, .24, .30, .42, .50, .60, .65, .75, .84];
+  const sedimentBends = [0, 8, 14, 22, 17, 26, 19, 29, 23, 31, 36];
+  const sedimentColors = ['url(#descent-aquifer-bridge)', '#19282f', '#263840', '#35454a', '#343d40', '#2b3b40', '#424643', '#303a3e', '#494840', '#33383c'];
   const points = (y, amplitude = 0, phase = 0) => Array.from({
     length: 41
   }, (_, i) => {
@@ -3884,6 +3863,17 @@ const GeologicalDescent = ({
     strokeWidth: ".7",
     opacity: ".16"
   })), /*#__PURE__*/React.createElement("pattern", {
+    id: "descent-lamina",
+    width: "110",
+    height: "28",
+    patternUnits: "userSpaceOnUse"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M0 5Q30 2 58 5T110 4M0 19Q35 22 65 18T110 19",
+    fill: "none",
+    stroke: "#c0c9c5",
+    strokeOpacity: ".13",
+    strokeWidth: ".7"
+  })), /*#__PURE__*/React.createElement("pattern", {
     id: "descent-foliation",
     width: "110",
     height: "45",
@@ -3894,6 +3884,30 @@ const GeologicalDescent = ({
     stroke: "#adb3c6",
     strokeWidth: ".8",
     opacity: ".12"
+  })), /*#__PURE__*/React.createElement("pattern", {
+    id: "descent-peridotite",
+    width: "72",
+    height: "62",
+    patternUnits: "userSpaceOnUse"
+  }, /*#__PURE__*/React.createElement("ellipse", {
+    cx: "13",
+    cy: "17",
+    rx: "6",
+    ry: "3",
+    fill: "#9d9b75",
+    opacity: ".11"
+  }), /*#__PURE__*/React.createElement("ellipse", {
+    cx: "52",
+    cy: "43",
+    rx: "3",
+    ry: "5",
+    fill: "#b08d74",
+    opacity: ".11"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M31 7l5 3m-11 39l7 -2",
+    stroke: "#c2ab92",
+    strokeOpacity: ".12",
+    strokeWidth: "1"
   })), /*#__PURE__*/React.createElement("linearGradient", {
     id: "descent-heat",
     x1: "0",
@@ -3902,37 +3916,65 @@ const GeologicalDescent = ({
     y2: "1"
   }, /*#__PURE__*/React.createElement("stop", {
     offset: "0",
-    stopColor: "#342a2c"
+    stopColor: "#302c2b"
   }), /*#__PURE__*/React.createElement("stop", {
     offset: "1",
-    stopColor: "#3b292b"
+    stopColor: "#3b302d"
+  })), /*#__PURE__*/React.createElement("linearGradient", {
+    id: "descent-aquifer-bridge",
+    gradientUnits: "userSpaceOnUse",
+    x1: "0",
+    y1: "0",
+    x2: "0",
+    y2: aboutHeight * .05
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0",
+    stopColor: "#070a0c"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: ".52",
+    stopColor: "#111b20"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "1",
+    stopColor: "#19282f"
   }))), /*#__PURE__*/React.createElement("rect", {
     width: "1440",
     height: totalHeight,
-    fill: "#1c252d"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: bed(0, aboutHeight * .17, 0, 16, .4),
-    fill: "#202d37"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: bed(aboutHeight * .17, aboutHeight * .36, 16, 26, .7),
-    fill: "#26333d"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: bed(aboutHeight * .36, aboutHeight * .56, 26, 20, 1.1),
-    fill: "#1d2c35"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: bed(aboutHeight * .56, aboutHeight * .79, 20, 35, 1.5),
-    fill: "#29343a"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: below(aboutHeight * .79, 35, 1.8),
-    fill: "#252b34"
-  }), [.10, .17, .26, .36, .47, .56, .67, .79].map((fraction, i) => /*#__PURE__*/React.createElement("path", {
+    fill: "#070a0c"
+  }), sedimentColors.map((fill, i) => /*#__PURE__*/React.createElement("path", {
     key: i,
-    d: trace(aboutHeight * fraction, 9 + i * 2.8, .4 + i * .25),
-    fill: "none",
-    stroke: i % 3 === 1 ? '#9baeb4' : '#6f8993',
-    strokeOpacity: i % 3 === 1 ? '.24' : '.16',
-    strokeWidth: "1.2"
+    d: bed(aboutHeight * sedimentLevels[i], aboutHeight * sedimentLevels[i + 1], sedimentBends[i], sedimentBends[i + 1], .4 + i * .3),
+    fill: fill
   })), /*#__PURE__*/React.createElement("path", {
+    d: below(aboutHeight * .84, 36, 3.4),
+    fill: "#30343a"
+  }), sedimentLevels.slice(1).map((fraction, i) => /*#__PURE__*/React.createElement("path", {
+    key: i,
+    d: trace(aboutHeight * fraction, sedimentBends[i + 1], .7 + i * .3),
+    fill: "none",
+    stroke: i % 3 === 0 ? '#c4c2b4' : '#8da6aa',
+    strokeOpacity: i % 3 === 0 ? '.37' : '.22',
+    strokeWidth: i % 3 === 0 ? 1.8 : 1.1
+  })), [.009, .018, .028, .038, .048, .060, .074].map((fraction, i) => /*#__PURE__*/React.createElement("path", {
+    key: i,
+    d: trace(aboutHeight * fraction, 2 + i, .25 + i * .12),
+    fill: "none",
+    stroke: "#879a9a",
+    strokeOpacity: .13 + i * .02,
+    strokeWidth: ".8"
+  })), [.20, .23, .37, .39, .54, .57, .69, .72].map((fraction, i) => /*#__PURE__*/React.createElement("path", {
+    key: i,
+    d: trace(aboutHeight * fraction, 10 + i * 1.4, 1.1 + i * .19),
+    fill: "none",
+    stroke: "#aec0bd",
+    strokeOpacity: ".12",
+    strokeWidth: ".8"
+  })), /*#__PURE__*/React.createElement("rect", {
+    y: aboutHeight * .1,
+    width: "1440",
+    height: aboutHeight * .78,
+    fill: "url(#descent-lamina)",
+    opacity: ".7"
+  }), /*#__PURE__*/React.createElement("path", {
     d: `M1190 ${aboutHeight * .94}C1200 ${aboutHeight * .73} 1280 ${aboutHeight * .51} 1350 ${aboutHeight * .55}C1420 ${aboutHeight * .58} 1450 ${aboutHeight * .81} 1480 ${aboutHeight * .96}Z`,
     fill: "#aab4b0",
     fillOpacity: ".18",
@@ -3946,8 +3988,9 @@ const GeologicalDescent = ({
     strokeOpacity: ".25",
     strokeWidth: "2"
   }), /*#__PURE__*/React.createElement("rect", {
+    y: aboutHeight * .08,
     width: "1440",
-    height: aboutHeight,
+    height: aboutHeight * .92,
     fill: "url(#descent-grain)"
   }), faultRoots.map((x, i) => /*#__PURE__*/React.createElement("path", {
     key: i,
@@ -3958,29 +4001,35 @@ const GeologicalDescent = ({
     strokeWidth: "2"
   })), /*#__PURE__*/React.createElement("path", {
     d: below(basementTop, 44, 2.1),
-    fill: "#1b2130"
+    fill: "#202936"
   }), /*#__PURE__*/React.createElement("path", {
     d: trace(basementTop, 44, 2.1),
     fill: "none",
-    stroke: "#a7a9a4",
-    strokeOpacity: ".46",
+    stroke: "#b9b6a8",
+    strokeOpacity: ".57",
     strokeWidth: "3"
   }), /*#__PURE__*/React.createElement("path", {
-    d: bed(aboutHeight + researchHeight * .12, aboutHeight + researchHeight * .38, 29, 48, .9),
-    fill: "#25283b"
+    d: bed(aboutHeight + researchHeight * .15, aboutHeight + researchHeight * .30, 29, 38, .9),
+    fill: "#2c3744"
   }), /*#__PURE__*/React.createElement("path", {
-    d: bed(aboutHeight + researchHeight * .38, aboutHeight + researchHeight * .67, 48, 33, 1.3),
-    fill: "#2b2b3e"
+    d: bed(aboutHeight + researchHeight * .30, aboutHeight + researchHeight * .43, 38, 48, 1.2),
+    fill: "#3b3d49"
   }), /*#__PURE__*/React.createElement("path", {
-    d: below(aboutHeight + researchHeight * .67, 33, 1.7),
-    fill: "#252734"
-  }), [.06, .15, .25, .38, .49, .57, .67, .78].map((fraction, i) => /*#__PURE__*/React.createElement("path", {
+    d: bed(aboutHeight + researchHeight * .43, aboutHeight + researchHeight * .58, 48, 37, 1.5),
+    fill: "#2d3442"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: bed(aboutHeight + researchHeight * .58, aboutHeight + researchHeight * .70, 37, 32, 1.8),
+    fill: "#383943"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: below(aboutHeight + researchHeight * .70, 32, 2.1),
+    fill: "#292d39"
+  }), [.10, .15, .22, .30, .36, .43, .51, .58, .64, .70, .78].map((fraction, i) => /*#__PURE__*/React.createElement("path", {
     key: i,
-    d: trace(aboutHeight + researchHeight * fraction, 16 + i % 3 * 12, .8 + i * .27),
+    d: trace(aboutHeight + researchHeight * fraction, 20 + i % 4 * 9, .8 + i * .29),
     fill: "none",
-    stroke: "#b4b5c1",
-    strokeOpacity: i % 3 === 0 ? '.22' : '.12',
-    strokeWidth: i % 3 === 0 ? 2 : 1
+    stroke: i % 4 === 2 ? '#d0c6b8' : '#a9b5bf',
+    strokeOpacity: i % 4 === 2 ? '.31' : '.18',
+    strokeWidth: i % 4 === 2 ? 2 : 1
   })), /*#__PURE__*/React.createElement("path", {
     d: `M45 ${aboutHeight + 90}C70 ${aboutHeight + researchHeight * .3} 130 ${aboutHeight + researchHeight * .47} 210 ${aboutHeight + researchHeight * .72}`,
     fill: "none",
@@ -4004,21 +4053,30 @@ const GeologicalDescent = ({
   }), /*#__PURE__*/React.createElement("path", {
     d: trace(mantleTop, 31, 1.4),
     fill: "none",
-    stroke: "#b78e78",
-    strokeOpacity: ".52",
+    stroke: "#b99a80",
+    strokeOpacity: ".6",
     strokeWidth: "3"
-  }), [.16, .35, .56, .76].map((fraction, i) => /*#__PURE__*/React.createElement("path", {
+  }), /*#__PURE__*/React.createElement("path", {
+    d: bed(mantleTop + contactHeight * .13, mantleTop + contactHeight * .31, 17, 28, .9),
+    fill: "#3a3631"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: bed(mantleTop + contactHeight * .31, mantleTop + contactHeight * .55, 28, 24, 1.2),
+    fill: "#403932"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: below(mantleTop + contactHeight * .55, 24, 1.5),
+    fill: "#382f2d"
+  }), [.10, .24, .37, .49, .64, .79].map((fraction, i) => /*#__PURE__*/React.createElement("path", {
     key: i,
-    d: trace(aboutHeight + researchHeight + contactHeight * fraction, 15 + i * 6, 1.8 + i * .34),
+    d: trace(aboutHeight + researchHeight + contactHeight * fraction, 15 + i * 4, 1.8 + i * .34),
     fill: "none",
-    stroke: "#b98773",
-    strokeOpacity: i === 0 ? '.25' : '.14',
-    strokeWidth: "1.5"
+    stroke: i % 2 ? '#b4a789' : '#b98773',
+    strokeOpacity: i % 2 ? '.26' : '.18',
+    strokeWidth: "1.3"
   })), /*#__PURE__*/React.createElement("rect", {
     y: aboutHeight + researchHeight,
     width: "1440",
     height: contactHeight + footerHeight,
-    fill: "url(#descent-grain)"
+    fill: "url(#descent-peridotite)"
   })), children);
 };
 Object.assign(window, {
@@ -4121,11 +4179,7 @@ const AboutSection = ({
     strataTheme: "sedimentary"
   }, /*#__PURE__*/React.createElement("div", {
     className: "dossier-masthead"
-  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
-    className: "strata-marker-eyebrow"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "strata-marker-dot"
-  }), "STRATA // SEDIMENTARY BASIN \xB7 DEPTH: 2.4 KM"), /*#__PURE__*/React.createElement("h2", {
+  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("h2", {
     className: "dossier-headline"
   }, "Research & background"), /*#__PURE__*/React.createElement("p", {
     className: "dossier-subtitle"
@@ -4383,11 +4437,7 @@ const PublicationsList = () => {
     strataTheme: "crystalline"
   }, /*#__PURE__*/React.createElement("div", {
     className: "pub-terminal-header"
-  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
-    className: "pub-strata-eyebrow"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "pub-strata-dot"
-  }), "STRATA // CRYSTALLINE BASEMENT \xB7 DEPTH: 5.2 KM \xB7 T: 145\xB0C \xB7 FRACTURED GRANITE"), /*#__PURE__*/React.createElement("h2", {
+  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("h2", {
     className: "dossier-headline"
   }, "Interactive Publication Terminal"), /*#__PURE__*/React.createElement("p", {
     className: "dossier-subtitle"
@@ -4546,11 +4596,7 @@ const ContactSection = () => {
     strataTheme: "mantle"
   }, /*#__PURE__*/React.createElement("div", {
     className: "collab-terminal-header"
-  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
-    className: "collab-strata-eyebrow"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "collab-strata-dot"
-  }), "STRATA // UPPER MANTLE & MOHO \xB7 DEPTH: 15\u201335 KM \xB7 DUCTILE PERIDOTITE"), /*#__PURE__*/React.createElement("h2", {
+  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("h2", {
     className: "dossier-headline"
   }, "Collaboration Terminal & Academic Office"), /*#__PURE__*/React.createElement("p", {
     className: "dossier-subtitle"
@@ -4736,174 +4782,10 @@ const ContactSection = () => {
     }
   }, p.meta))))))));
 };
-
-/* =====================================================
-   StratigraphicDepthHUD — Floating Geological Column Navigator
-   ===================================================== */
-const HUD_SECTIONS = [{
-  id: 'home',
-  label: 'Surface',
-  depth: '0.0 km',
-  stratum: 'Wellhead & Horizon',
-  color: '#64ffda'
-}, {
-  id: 'about',
-  label: 'Dossier',
-  depth: '2.4 km',
-  stratum: 'Sedimentary Basin',
-  color: '#38bdf8'
-}, {
-  id: 'publications',
-  label: 'Research',
-  depth: '5.2 km',
-  stratum: 'Crystalline Basement',
-  color: '#a855f7'
-}, {
-  id: 'contact',
-  label: 'Office',
-  depth: '35 km',
-  stratum: 'Moho & Upper Mantle',
-  color: '#f97316'
-}];
-const StratigraphicDepthHUD = ({
-  onNavigate,
-  activeSection
-}) => {
-  const [hoveredTick, setHoveredTick] = useState(null);
-  const sections = HUD_SECTIONS;
-  const activeSectionIndex = Math.max(0, sections.findIndex(s => s.id === activeSection));
-  const handleClick = id => {
-    if (onNavigate) onNavigate(id);else if (window.__onNavigate) window.__onNavigate(id);
-  };
-  return /*#__PURE__*/React.createElement("aside", {
-    className: "stratigraphic-hud-container",
-    "aria-label": "Section navigator"
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: '14px 10px',
-      borderRadius: 20,
-      background: 'linear-gradient(180deg, rgba(19,13,28,0.92) 0%, rgba(15,20,38,0.95) 100%)',
-      border: '1px solid rgba(255,255,255,0.15)',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.20)',
-      backdropFilter: 'blur(16px)',
-      WebkitBackdropFilter: 'blur(16px)',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 8.5,
-      fontWeight: 700,
-      letterSpacing: '0.14em',
-      color: 'rgba(255,255,255,0.60)',
-      textTransform: 'uppercase',
-      fontFamily: 'ui-monospace, monospace',
-      textAlign: 'center',
-      lineHeight: 1.2
-    }
-  }, "STRATA"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'relative',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: 18,
-      padding: '6px 0'
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      top: 6,
-      bottom: 6,
-      width: 2,
-      background: 'linear-gradient(180deg, #64ffda 0%, #38bdf8 30%, #a855f7 65%, #f97316 100%)',
-      opacity: 0.35,
-      borderRadius: 1
-    }
-  }), sections.map((s, idx) => {
-    const isActive = activeSectionIndex === idx;
-    const isHover = hoveredTick === idx;
-    return /*#__PURE__*/React.createElement("div", {
-      key: s.id,
-      style: {
-        position: 'relative',
-        cursor: 'pointer',
-        padding: '2px 0'
-      },
-      onMouseEnter: () => setHoveredTick(idx),
-      onMouseLeave: () => setHoveredTick(null),
-      onClick: () => handleClick(s.id)
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: isActive ? 14 : 9,
-        height: isActive ? 14 : 9,
-        borderRadius: '50%',
-        backgroundColor: s.color,
-        boxShadow: isActive ? `0 0 14px ${s.color}, inset 0 0 4px #fff` : `0 0 4px ${s.color}`,
-        border: isActive ? '2px solid #fff' : '1.5px solid rgba(255,255,255,0.4)',
-        transition: 'all 0.25s cubic-bezier(0.23, 1, 0.32, 1)',
-        transform: isHover ? 'scale(1.35)' : 'scale(1)'
-      }
-    }), (isHover || isActive) && /*#__PURE__*/React.createElement("div", {
-      style: {
-        position: 'absolute',
-        right: 26,
-        top: '50%',
-        transform: 'translateY(-50%)',
-        background: 'rgba(14,10,22,0.96)',
-        border: `1px solid ${s.color}`,
-        borderRadius: 10,
-        padding: '8px 12px',
-        whiteSpace: 'nowrap',
-        boxShadow: `0 4px 20px rgba(0,0,0,0.6), 0 0 12px ${s.color}33`,
-        backdropFilter: 'blur(12px)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 3,
-        pointerEvents: 'none',
-        zIndex: 1000
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 10
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        fontWeight: 700,
-        color: s.color,
-        fontFamily: 'ui-monospace, monospace'
-      }
-    }, s.label), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 10,
-        fontWeight: 700,
-        color: '#fff',
-        background: `${s.color}25`,
-        border: `1px solid ${s.color}55`,
-        padding: '1px 6px',
-        borderRadius: 4,
-        fontFamily: 'ui-monospace, monospace'
-      }
-    }, s.depth)), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 9.5,
-        color: 'rgba(255,255,255,0.65)',
-        fontFamily: 'ui-monospace, monospace'
-      }
-    }, s.stratum)));
-  }))));
-};
 Object.assign(window, {
   AboutSection,
   PublicationsList,
-  ContactSection,
-  StratigraphicDepthHUD
+  ContactSection
 });
 
 // File: CVPage.jsx
@@ -5549,10 +5431,7 @@ const App = () => {
   }, /*#__PURE__*/React.createElement(Header, {
     active: currentNav,
     onNavigate: onNavigate
-  }), screen === 'home' ? /*#__PURE__*/React.createElement("main", null, /*#__PURE__*/React.createElement(StratigraphicDepthHUD, {
-    onNavigate: onNavigate,
-    activeSection: activeSection
-  }), /*#__PURE__*/React.createElement(SubsurfaceHero, {
+  }), screen === 'home' ? /*#__PURE__*/React.createElement("main", null, /*#__PURE__*/React.createElement(SubsurfaceHero, {
     onNavigate: onNavigate
   }), /*#__PURE__*/React.createElement(GeologicalDescent, null, /*#__PURE__*/React.createElement("div", {
     id: "about"

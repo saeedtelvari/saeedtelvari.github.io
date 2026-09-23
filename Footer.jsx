@@ -26,23 +26,6 @@ const Footer = ({ onNavigate, geological = false }) => {
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 24,
       }}>
         <div>
-          {geological && <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <span style={{
-              width: 8, height: 8, borderRadius: '50%',
-              backgroundColor: '#c9a38d',
-              display: 'inline-block',
-            }} />
-            <span style={{
-              fontSize: 11,
-              fontFamily: 'ui-monospace, Menlo, Monaco, monospace',
-              letterSpacing: '0.12em',
-              color: '#c9a38d',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-            }}>
-              Upper mantle · continuing below 35 km
-            </span>
-          </div>}
           <p style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.90)', fontWeight: 500 }}>
             &copy; 2024–2026 Sa&rsquo;eed Telvari. All rights reserved.
           </p>
@@ -90,10 +73,10 @@ const Footer = ({ onNavigate, geological = false }) => {
               textTransform: 'uppercase',
               transition: 'transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background 160ms ease, border-color 160ms ease',
             }}
-            title="Ascend back to surface wellhead"
+            title="Back to top"
           >
             <i className="fas fa-arrow-up" style={{ fontSize: 10 }}></i>
-            Ascend to Surface // 0.0 km
+            Back to top
           </button>
         </div>
       </div>

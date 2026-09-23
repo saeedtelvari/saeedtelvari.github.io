@@ -98,10 +98,6 @@ const AboutSection = ({ onNavigate }) => {
     <SectionPanel strataTheme="sedimentary">
       <div className="dossier-masthead">
         <Reveal>
-          <div className="strata-marker-eyebrow">
-            <span className="strata-marker-dot"></span>
-            STRATA // SEDIMENTARY BASIN &middot; DEPTH: 2.4 KM
-          </div>
           <h2 className="dossier-headline">Research &amp; background</h2>
           <p className="dossier-subtitle">
             Reservoir simulation, geological CO&#8322; storage and scientific machine learning.
@@ -349,10 +345,6 @@ const PublicationsList = () => {
     <SectionPanel strataTheme="crystalline">
       <div className="pub-terminal-header">
         <Reveal>
-          <div className="pub-strata-eyebrow">
-            <span className="pub-strata-dot"></span>
-            STRATA // CRYSTALLINE BASEMENT &middot; DEPTH: 5.2 KM &middot; T: 145&deg;C &middot; FRACTURED GRANITE
-          </div>
           <h2 className="dossier-headline">Interactive Publication Terminal</h2>
           <p className="dossier-subtitle">
             Peer-reviewed journal articles, conference proceedings, and open preprints spanning reduced-order Vertical Equilibrium, 3D micro-CT characterization, and machine-learning upscaling.
@@ -528,10 +520,6 @@ const ContactSection = () => {
     <SectionPanel strataTheme="mantle">
       <div className="collab-terminal-header">
         <Reveal>
-          <div className="collab-strata-eyebrow">
-            <span className="collab-strata-dot"></span>
-            STRATA // UPPER MANTLE &amp; MOHO &middot; DEPTH: 15–35 KM &middot; DUCTILE PERIDOTITE
-          </div>
           <h2 className="dossier-headline">Collaboration Terminal &amp; Academic Office</h2>
           <p className="dossier-subtitle">
             I am always open to discussions regarding computational reservoir simulation collaborations, industrial CCUS storage assessments, and scientific seminar invitations.
@@ -672,143 +660,4 @@ const ContactSection = () => {
   );
 };
 
-/* =====================================================
-   StratigraphicDepthHUD — Floating Geological Column Navigator
-   ===================================================== */
-const HUD_SECTIONS = [
-  { id: 'home',         label: 'Surface',  depth: '0.0 km', stratum: 'Wellhead & Horizon',      color: '#64ffda' },
-  { id: 'about',        label: 'Dossier',  depth: '2.4 km', stratum: 'Sedimentary Basin',       color: '#38bdf8' },
-  { id: 'publications', label: 'Research', depth: '5.2 km', stratum: 'Crystalline Basement',   color: '#a855f7' },
-  { id: 'contact',      label: 'Office',   depth: '35 km',  stratum: 'Moho & Upper Mantle',     color: '#f97316' },
-];
-
-const StratigraphicDepthHUD = ({ onNavigate, activeSection }) => {
-  const [hoveredTick, setHoveredTick] = useState(null);
-
-  const sections = HUD_SECTIONS;
-  const activeSectionIndex = Math.max(0, sections.findIndex(s => s.id === activeSection));
-
-  const handleClick = (id) => {
-    if (onNavigate) onNavigate(id);
-    else if (window.__onNavigate) window.__onNavigate(id);
-  };
-
-  return (
-    <aside className="stratigraphic-hud-container" aria-label="Section navigator">
-      <div style={{
-        padding: '14px 10px',
-        borderRadius: 20,
-        background: 'linear-gradient(180deg, rgba(19,13,28,0.92) 0%, rgba(15,20,38,0.95) 100%)',
-        border: '1px solid rgba(255,255,255,0.15)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.20)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 12,
-      }}>
-        <div style={{
-          fontSize: 8.5,
-          fontWeight: 700,
-          letterSpacing: '0.14em',
-          color: 'rgba(255,255,255,0.60)',
-          textTransform: 'uppercase',
-          fontFamily: 'ui-monospace, monospace',
-          textAlign: 'center',
-          lineHeight: 1.2,
-        }}>
-          STRATA
-        </div>
-
-        {/* Vertical Navigation Track */}
-        <div style={{
-          position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 18,
-          padding: '6px 0',
-        }}>
-          {/* Track Line */}
-          <div style={{
-            position: 'absolute',
-            top: 6,
-            bottom: 6,
-            width: 2,
-            background: 'linear-gradient(180deg, #64ffda 0%, #38bdf8 30%, #a855f7 65%, #f97316 100%)',
-            opacity: 0.35,
-            borderRadius: 1,
-          }} />
-
-          {sections.map((s, idx) => {
-            const isActive = activeSectionIndex === idx;
-            const isHover = hoveredTick === idx;
-
-            return (
-              <div
-                key={s.id}
-                style={{ position: 'relative', cursor: 'pointer', padding: '2px 0' }}
-                onMouseEnter={() => setHoveredTick(idx)}
-                onMouseLeave={() => setHoveredTick(null)}
-                onClick={() => handleClick(s.id)}
-              >
-                {/* Tick node */}
-                <div style={{
-                  width: isActive ? 14 : 9,
-                  height: isActive ? 14 : 9,
-                  borderRadius: '50%',
-                  backgroundColor: s.color,
-                  boxShadow: isActive ? `0 0 14px ${s.color}, inset 0 0 4px #fff` : `0 0 4px ${s.color}`,
-                  border: isActive ? '2px solid #fff' : '1.5px solid rgba(255,255,255,0.4)',
-                  transition: 'all 0.25s cubic-bezier(0.23, 1, 0.32, 1)',
-                  transform: isHover ? 'scale(1.35)' : 'scale(1)',
-                }} />
-
-                {/* Section Depth Tooltip */}
-                {(isHover || isActive) && (
-                  <div style={{
-                    position: 'absolute',
-                    right: 26,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'rgba(14,10,22,0.96)',
-                    border: `1px solid ${s.color}`,
-                    borderRadius: 10,
-                    padding: '8px 12px',
-                    whiteSpace: 'nowrap',
-                    boxShadow: `0 4px 20px rgba(0,0,0,0.6), 0 0 12px ${s.color}33`,
-                    backdropFilter: 'blur(12px)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 3,
-                    pointerEvents: 'none',
-                    zIndex: 1000,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: s.color, fontFamily: 'ui-monospace, monospace' }}>
-                        {s.label}
-                      </span>
-                      <span style={{
-                        fontSize: 10, fontWeight: 700, color: '#fff',
-                        background: `${s.color}25`, border: `1px solid ${s.color}55`,
-                        padding: '1px 6px', borderRadius: 4, fontFamily: 'ui-monospace, monospace',
-                      }}>
-                        {s.depth}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.65)', fontFamily: 'ui-monospace, monospace' }}>
-                      {s.stratum}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </aside>
-  );
-};
-
-Object.assign(window, { AboutSection, PublicationsList, ContactSection, StratigraphicDepthHUD });
+Object.assign(window, { AboutSection, PublicationsList, ContactSection });
