@@ -3957,7 +3957,7 @@ const HeroName = ({
         title.setAttribute('data-lit', '');
         contours.forEach(contour => {
           const depth = Number(contour.dataset.depth);
-          contour.style.transform = `translate3d(${depth * (0.75 + dx * 0.35)}px, ${depth * (0.5 + dy * 0.3)}px, 0) scale(${1 + depth * 0.008})`;
+          contour.style.transform = `translate3d(${depth * (0.3 + dx * 0.05)}px, ${depth * (0.2 + dy * 0.04)}px, 0)`;
         });
         words.forEach(word => {
           const bounds = word.getBoundingClientRect();

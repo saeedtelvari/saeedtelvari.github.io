@@ -42,6 +42,17 @@ test('name interaction stays bounded and stops for touch, reduced motion, scroll
   assert.equal(title['data-lit'], true);
   assert.equal(word.style['--name-light-x'], '95%');
   const depthMovement = +contour.style.transform.match(/translate3d\(([-\d.]+)px/)[1];
+  assert.ok(depthMovement <= 3 && !contour.style.transform.includes('scale('),
+    'hover keeps the outermost contour close to the letters without scaling a duplicate word');
+  for (const x of [1, 599]) {
+    for (const y of [37, 227]) {
+      move(x, y);
+      frame();
+      const offset = contour.style.transform.match(/translate3d\(([-\d.]+)px, ([-\d.]+)px/);
+      assert.ok(Math.abs(+offset[1]) <= 3 && Math.abs(+offset[2]) <= 2,
+        'contour offsets stay bounded at every edge of the hover area');
+    }
+  }
   move(120);
   frame();
   assert.ok(+contour.style.transform.match(/translate3d\(([-\d.]+)px/)[1] < depthMovement,

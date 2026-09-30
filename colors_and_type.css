@@ -1254,6 +1254,8 @@ body:has(#app-loader) .hero-name-contour {
 .hero-name {
   display: inline-block;
   margin: 0;
+  /* Paint the fill on the ink only: the global h1 gradient fills outline copies too. */
+  background: none;
   font-family: 'Montserrat', sans-serif;
   font-weight: 700;
   font-size: clamp(36px, 6vw, 64px);
@@ -1266,15 +1268,21 @@ body:has(#app-loader) .hero-name-contour {
   --name-delay: 80ms;
   display: inline-block;
   position: relative;
+  isolation: isolate;
   vertical-align: top;
 }
 
 .hero-name-word:last-child { --name-delay: 160ms; }
+.hero-name[data-name-style="contour"] .hero-name-word:last-child {
+  /* First word: 80ms delay + 1900ms core, then a 120ms pause. */
+  --name-delay: 2100ms;
+}
 .hero-name[data-name-style="moonlight"] .hero-name-word { overflow: hidden; }
 
 .hero-name-ink {
   display: inline-block;
   position: relative;
+  z-index: 1;
   padding-bottom: 0.12em;
   margin-bottom: -0.12em;
   background: linear-gradient(160deg, #f4f7fa 15%, #bacbdc 85%);
@@ -1341,6 +1349,7 @@ body:has(#app-loader) .hero-name-contour {
 .hero-name-contours {
   position: absolute;
   inset: 0;
+  z-index: 0;
   pointer-events: none;
 }
 
@@ -1351,8 +1360,7 @@ body:has(#app-loader) .hero-name-contour {
   -webkit-text-fill-color: transparent;
   -webkit-text-stroke: 0.45px currentColor;
   opacity: calc(.18 - var(--contour-depth) * .018);
-  transform: translate(calc(var(--contour-depth) * .75px), calc(var(--contour-depth) * .5px)) scale(calc(1 + var(--contour-depth) * .008));
-  transform-origin: 50% 65%;
+  transform: translate(calc(var(--contour-depth) * .3px), calc(var(--contour-depth) * .2px));
   transition: transform 240ms var(--ease-emil-out), opacity 200ms ease;
   animation: heroContourTrace 1450ms var(--ease-emil-out) calc(var(--name-delay) + var(--contour-depth) * 65ms) backwards;
 }
@@ -1378,7 +1386,8 @@ body:has(#app-loader) .hero-name-contour {
 }
 
 @keyframes heroContourCore {
-  0%, 20% { opacity: .85; clip-path: inset(0 0 0 0); }
+  0% { opacity: 0; clip-path: inset(0 0 0 0); }
+  5%, 20% { opacity: .85; clip-path: inset(0 0 0 0); }
   100% { opacity: .09; clip-path: inset(0 0 0 0); }
 }
 
@@ -1390,8 +1399,8 @@ body:has(#app-loader) .hero-name-contour {
 
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   .hero-name[data-lit] .hero-name-ink::after { opacity: .65; }
-  .hero-name[data-lit] .hero-name-contour { opacity: calc(.42 - var(--contour-depth) * .035); }
-  .hero-name[data-lit] .hero-name-contour::after { opacity: .8; }
+  .hero-name[data-lit] .hero-name-contour { opacity: calc(.25 - var(--contour-depth) * .025); }
+  .hero-name[data-lit] .hero-name-contour::after { opacity: .45; }
 }
 
 .hero-name-preview {
