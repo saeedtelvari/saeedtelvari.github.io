@@ -4,14 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-test('cutaway beds share contacts, retain fault offsets, resize, and clean up visibility observers', () => {
+test('uneven cutaway beds share contacts, keep local faults small, resize, and clean up observers', () => {
   const root = path.join(__dirname, '..');
   const bundle = fs.readFileSync(path.join(root, 'bundle.js'), 'utf8');
   const code = bundle.slice(bundle.indexOf('// File: GeologicalDescent.jsx'), bundle.indexOf('// File: HomeSections.jsx'));
   assert.ok(code.includes('const GeologicalDescent'), 'build the current source before testing');
-  const cases = [[1100, 1500, 850, 240], [2600, 1900, 1200, 350], [1000, 600, 800, 200]]
-    .flatMap(heights => [[-.2, .2], [.2, -.2]].map(slopes => ({ heights, slopes })));
-  for (const { heights, slopes } of cases) {
+  const cases = [[1100, 1500, 850, 240], [2600, 1900, 1200, 350], [1000, 600, 800, 200]];
+  for (const heights of cases) {
     const nodes = [], observers = [];
     const sections = heights.map(offsetHeight => ({ offsetHeight }));
     const motion = { dataset: {} };
@@ -29,7 +28,6 @@ test('cutaway beds share contacts, retain fault offsets, resize, and clean up vi
     const context = {
       ...types,
       window: {},
-      currentGeology: { faults: [{ xPercent: 22, dipSlope: slopes[0] }, { xPercent: 52, dipSlope: slopes[1] }] },
       ResizeObserver: makeObserver, IntersectionObserver: makeObserver,
       React: {
         Fragment: 'fragment', Children: { map: (children, fn) => children.map(fn) },
@@ -49,7 +47,7 @@ test('cutaway beds share contacts, retain fault offsets, resize, and clean up vi
     };
     vm.runInNewContext(code + '\nGeologicalDescent({ children: [AboutSection, PublicationsList, ContactSection, Footer].map(type => ({ type })) });', context);
     const beds = nodes.filter(node => node.props['data-bed'] !== undefined);
-    assert.equal(beds.length, 15);
+    assert.equal(beds.length, 41);
     const points = d => [...d.matchAll(/[ML](-?[\d.]+) (-?[\d.]+)/g)].map(match => [+match[1], +match[2]]);
     const split = d => {
       const all = points(d);
@@ -70,10 +68,19 @@ test('cutaway beds share contacts, retain fault offsets, resize, and clean up vi
     for (const x of new Set([...Array.from({ length: 181 }, (_, i) => i * 8), ...contacts.flatMap(line => line.map(point => point[0]))])) {
       for (let i = 1; i < contacts.length; i++) assert.ok(sample(contacts[i], x) > sample(contacts[i - 1], x), 'beds must stay ordered after resizing');
     }
-    assert.ok(contacts.some(line => line.some((p, i) => i && p[0] - line[i - 1][0] < 1 && Math.abs(p[1] - line[i - 1][1]) > 12)), 'faults must displace the beds');
+    assert.ok(contacts.some(line => line.some((p, i) => i && p[0] - line[i - 1][0] < 1 && Math.abs(p[1] - line[i - 1][1]) > 3)), 'small faults must still displace the beds');
+    const faults = nodes.filter(node => node.props['data-fault'] !== undefined);
+    assert.ok(faults.length >= 18, 'the wider view needs numerous local fault splays');
+    for (const fault of faults) {
+      const line = points(fault.props.d);
+      assert.ok(line.at(-1)[1] - line[0][1] < 300, 'fault splays must end within a few beds');
+      assert.ok(Math.abs(line.at(-1)[0] - line[0][0]) > 50, 'faults must be inclined');
+      assert.ok(+fault.props.strokeWidth < 2, 'faults must not read as heavy black stripes');
+    }
+    assert.equal(nodes.filter(node => node.props['data-fractures'] !== undefined).length, beds.length, 'each interval needs a fine fracture network');
     assert.equal(nodes.find(node => node.props.className === 'geological-descent-art').props.viewBox, `0 0 1440 ${heights.reduce((a, b) => a + b)}`);
     const cleanup = effect();
-    assert.equal(texture.width, 1440 * 1440 / (heights[0] > 2000 ? 360 : 1280), 'texture aspect ratios must survive mobile scaling');
+    assert.equal(texture.width, 840 * 1440 / (heights[0] > 2000 ? 360 : 1280), 'smaller texture grains must retain their aspect ratio on mobile');
     assert.equal(updated, heights, 'unchanged measurements must not trigger another render');
     observers[1].callback([{ target: motion, isIntersecting: true }]);
     assert.equal(motion.dataset.visible, 'true');
