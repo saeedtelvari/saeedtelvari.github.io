@@ -3924,189 +3924,275 @@ const Annotation = () => /*#__PURE__*/React.createElement("div", {
 /* =====================================================
    IDENTITY — sits firmly inside the sky region
    ===================================================== */
+const HeroName = ({
+  variant
+}) => {
+  const titleRef = useRef(null);
+  useEffect(() => {
+    const title = titleRef.current;
+    const hero = title.closest('#home');
+    const words = [...title.querySelectorAll('.hero-name-ink')];
+    const motion = window.matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)');
+    let frame;
+    const reset = () => {
+      window.cancelAnimationFrame(frame);
+      title.style.transform = '';
+      title.removeAttribute('data-lit');
+    };
+    const move = event => {
+      if (!motion.matches || event.pointerType !== 'mouse') return;
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const rect = title.getBoundingClientRect();
+        if (!rect.width || !rect.height) return reset();
+        const x = (event.clientX - rect.left) / rect.width;
+        const y = (event.clientY - rect.top) / rect.height;
+        const near = x > -0.25 && x < 1.25 && y > -1 && y < 2;
+        if (!near) return reset();
+        const dx = Math.max(-1, Math.min(1, (x - 0.5) * 2)) * 4;
+        const dy = Math.max(-1, Math.min(1, (y - 0.5) * 2)) * 3;
+        title.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+        title.setAttribute('data-lit', '');
+        words.forEach(word => {
+          const bounds = word.getBoundingClientRect();
+          word.style.setProperty('--name-light-x', `${(event.clientX - bounds.left) / bounds.width * 100}%`);
+        });
+      });
+    };
+    hero.addEventListener('pointermove', move, {
+      passive: true
+    });
+    hero.addEventListener('pointerleave', reset);
+    window.addEventListener('scroll', reset, {
+      passive: true
+    });
+    motion.addEventListener('change', reset);
+    return () => {
+      reset();
+      hero.removeEventListener('pointermove', move);
+      hero.removeEventListener('pointerleave', reset);
+      window.removeEventListener('scroll', reset);
+      motion.removeEventListener('change', reset);
+    };
+  }, []);
+  return /*#__PURE__*/React.createElement("h1", {
+    ref: titleRef,
+    className: "hero-name",
+    "data-name-style": variant,
+    "aria-label": "Sa\u2019eed Telvari"
+  }, ['Sa\u2019eed', 'Telvari'].map((word, index) => /*#__PURE__*/React.createElement(React.Fragment, {
+    key: word
+  }, index > 0 && ' ', /*#__PURE__*/React.createElement("span", {
+    className: "hero-name-word",
+    "data-word": word,
+    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "hero-name-ink",
+    "data-word": word
+  }, word)))));
+};
 const Identity = ({
   onNavigate
-}) => /*#__PURE__*/React.createElement("div", {
-  className: "hero-identity-container"
-}, /*#__PURE__*/React.createElement("div", {
-  className: "hero-intro-role hero-reveal",
-  style: {
-    fontSize: 11.5,
-    letterSpacing: '0.20em',
-    textTransform: 'uppercase',
-    color: '#64ffda',
-    fontWeight: 600,
-    marginBottom: 14,
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 10
-  }
-}, /*#__PURE__*/React.createElement("span", {
-  style: {
-    width: 6,
-    height: 6,
-    borderRadius: '50%',
-    background: '#64ffda',
-    boxShadow: '0 0 10px rgba(100,255,218,0.8)'
-  }
-}), "Ph.D. Candidate \xB7 Heriot-Watt University"), /*#__PURE__*/React.createElement("h1", {
-  style: {
-    margin: 0,
-    fontFamily: "'Montserrat', sans-serif",
-    fontWeight: 700,
-    fontSize: 'clamp(36px, 6vw, 64px)',
-    lineHeight: 1.02,
-    letterSpacing: '-0.02em'
-  }
-}, /*#__PURE__*/React.createElement("span", {
-  className: "hero-title-word hero-reveal"
-}, "Sa\u2019eed"), ' ', /*#__PURE__*/React.createElement("span", {
-  className: "hero-title-word hero-reveal"
-}, "Telvari")), /*#__PURE__*/React.createElement("p", {
-  className: "hero-summary hero-reveal",
-  style: {
-    margin: '18px 0 0',
-    maxWidth: 540,
-    fontSize: 16,
-    lineHeight: 1.6,
-    color: 'rgba(255,255,255,0.82)'
-  }
-}, "Building ", /*#__PURE__*/React.createElement("strong", {
-  className: "hero-highlight",
-  style: {
-    color: '#64ffda',
-    fontWeight: 600
-  }
-}, "Vertical Equilibrium models"), " for simulating ", /*#__PURE__*/React.createElement("strong", {
-  className: "hero-highlight",
-  style: {
-    color: '#64ffda',
-    fontWeight: 600
-  }
-}, "CO", /*#__PURE__*/React.createElement("sub", null, "2"), " storage"), " in depleted gas reservoirs", /*#__PURE__*/React.createElement("span", {
-  className: "hero-detail"
-}, " \u2014 the cross-section below is essentially the thing I simulate.")), /*#__PURE__*/React.createElement("div", {
-  className: "hero-actions hero-reveal",
-  style: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 14,
-    marginTop: 24,
-    flexWrap: 'wrap'
-  }
-}, /*#__PURE__*/React.createElement("div", {
-  className: "hero-socials",
-  style: {
-    display: 'flex',
-    gap: 10
-  }
-}, /*#__PURE__*/React.createElement(BrandSocial, {
-  label: "LinkedIn profile",
-  icon: "fa-brands fa-linkedin-in",
-  tint: "#0a66c2",
-  url: "https://www.linkedin.com/in/stelvari/"
-}), /*#__PURE__*/React.createElement(BrandSocial, {
-  label: "GitHub profile",
-  icon: "fa-brands fa-github",
-  tint: "#22272e",
-  url: "https://github.com/saeedtelvari"
-}), /*#__PURE__*/React.createElement(BrandSocial, {
-  label: "Google Scholar profile",
-  icon: "fa-solid fa-graduation-cap",
-  tint: "#4285f4",
-  url: "https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330"
-}), /*#__PURE__*/React.createElement(BrandSocial, {
-  label: "Email Sa'eed Telvari",
-  icon: "fa-solid fa-envelope",
-  tint: "#ea4335",
-  url: "mailto:st4014@hw.ac.uk"
-})), /*#__PURE__*/React.createElement("div", {
-  className: "hero-actions-divider",
-  style: {
-    height: 22,
-    width: 1,
-    background: 'rgba(255,255,255,0.18)'
-  }
-}), /*#__PURE__*/React.createElement("a", {
-  className: "hero-cta-primary",
-  href: "./simulator.html",
-  onClick: e => {
-    e.preventDefault();
-    if (onNavigate) onNavigate('simulator');else window.location.href = './simulator.html';
-  },
-  style: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '11px 20px',
-    borderRadius: 14,
-    background: 'linear-gradient(135deg, #0dfca2, #159a80)',
-    border: '1px solid rgba(255,255,255,0.45)',
-    color: '#10251f',
-    fontFamily: "'Montserrat', sans-serif",
-    fontWeight: 700,
-    fontSize: 13.5,
-    textDecoration: 'none',
-    boxShadow: '0 7px 22px rgba(13,252,162,0.28)'
-  }
-}, /*#__PURE__*/React.createElement("i", {
-  className: "fa-solid fa-play"
-}), " Try VE Simulator"), /*#__PURE__*/React.createElement("a", {
-  className: "hero-cta-secondary",
-  href: "#cv",
-  onClick: e => {
-    e.preventDefault();
-    if (onNavigate) onNavigate('cv');else if (window.__onNavigate) window.__onNavigate('cv');
-  },
-  style: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '11px 20px',
-    borderRadius: 14,
-    background: 'linear-gradient(135deg, rgba(78,205,196,0.90), rgba(78,205,196,0.55))',
-    border: '1px solid rgba(168,237,234,0.60)',
-    color: '#fff',
-    fontFamily: "'Montserrat', sans-serif",
-    fontWeight: 600,
-    fontSize: 13.5,
-    textDecoration: 'none',
-    cursor: 'pointer',
-    boxShadow: '0 6px 18px rgba(78,205,196,0.30), inset 0 1px 0 rgba(255,255,255,0.40)',
-    transition: 'all 0.3s ease'
-  }
-}, /*#__PURE__*/React.createElement("i", {
-  className: "fa-solid fa-file-lines"
-}), " View CV"), /*#__PURE__*/React.createElement("a", {
-  className: "hero-cta-tertiary",
-  href: "#contact",
-  onClick: e => {
-    e.preventDefault();
-    if (onNavigate) onNavigate('contact');else if (window.__onNavigate) window.__onNavigate('contact');else {
-      const el = document.getElementById('contact');
-      if (el) el.scrollIntoView({
-        behavior: 'smooth'
-      });
+}) => {
+  const preview = new URLSearchParams(window.location.search).get('name-preview');
+  const [variant, setVariant] = useState(preview === 'contour' ? 'contour' : 'moonlight');
+  const [replay, setReplay] = useState(0);
+  const nameStyle = preview ? variant : 'moonlight';
+  const changePreview = (event, next) => {
+    event.preventDefault();
+    const url = new URL(window.location.href);
+    url.searchParams.set('name-preview', next);
+    window.history.replaceState(window.history.state, '', url);
+    setVariant(next);
+    setReplay(count => count + 1);
+  };
+  return /*#__PURE__*/React.createElement(React.Fragment, null, preview && /*#__PURE__*/React.createElement("nav", {
+    className: "hero-name-preview",
+    "aria-label": "Name animation preview"
+  }, ['moonlight', 'contour'].map(option => /*#__PURE__*/React.createElement("a", {
+    key: option,
+    href: `./index.html?name-preview=${option}`,
+    "aria-current": variant === option ? 'page' : undefined,
+    onClick: event => changePreview(event, option)
+  }, option === 'moonlight' ? '1 · Moonlight' : '4 · Contours')), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setReplay(count => count + 1),
+    "aria-label": "Replay name animation"
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-redo",
+    "aria-hidden": "true"
+  }), " Replay")), /*#__PURE__*/React.createElement("div", {
+    key: `${nameStyle}:${replay}`,
+    className: "hero-identity-container"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "hero-intro-role hero-reveal",
+    style: {
+      fontSize: 11.5,
+      letterSpacing: '0.20em',
+      textTransform: 'uppercase',
+      color: '#64ffda',
+      fontWeight: 600,
+      marginBottom: 14,
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 10
     }
-  },
-  style: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '11px 20px',
-    borderRadius: 14,
-    background: 'linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0.08))',
-    border: '1px solid rgba(255,255,255,0.30)',
-    color: '#fff',
-    fontFamily: "'Montserrat', sans-serif",
-    fontWeight: 500,
-    fontSize: 13.5,
-    textDecoration: 'none',
-    cursor: 'pointer',
-    boxShadow: '0 4px 14px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.30)',
-    transition: 'all 0.3s ease'
-  }
-}, "Get in touch")));
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 6,
+      height: 6,
+      borderRadius: '50%',
+      background: '#64ffda',
+      boxShadow: '0 0 10px rgba(100,255,218,0.8)'
+    }
+  }), "Ph.D. Candidate \xB7 Heriot-Watt University"), /*#__PURE__*/React.createElement(HeroName, {
+    variant: nameStyle
+  }), /*#__PURE__*/React.createElement("p", {
+    className: "hero-summary hero-reveal",
+    style: {
+      margin: '18px 0 0',
+      maxWidth: 540,
+      fontSize: 16,
+      lineHeight: 1.6,
+      color: 'rgba(255,255,255,0.82)'
+    }
+  }, "Building ", /*#__PURE__*/React.createElement("strong", {
+    className: "hero-highlight",
+    style: {
+      color: '#64ffda',
+      fontWeight: 600
+    }
+  }, "Vertical Equilibrium models"), " for simulating ", /*#__PURE__*/React.createElement("strong", {
+    className: "hero-highlight",
+    style: {
+      color: '#64ffda',
+      fontWeight: 600
+    }
+  }, "CO", /*#__PURE__*/React.createElement("sub", null, "2"), " storage"), " in depleted gas reservoirs", /*#__PURE__*/React.createElement("span", {
+    className: "hero-detail"
+  }, " \u2014 the cross-section below is essentially the thing I simulate.")), /*#__PURE__*/React.createElement("div", {
+    className: "hero-actions hero-reveal",
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 14,
+      marginTop: 24,
+      flexWrap: 'wrap'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "hero-socials",
+    style: {
+      display: 'flex',
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement(BrandSocial, {
+    label: "LinkedIn profile",
+    icon: "fa-brands fa-linkedin-in",
+    tint: "#0a66c2",
+    url: "https://www.linkedin.com/in/stelvari/"
+  }), /*#__PURE__*/React.createElement(BrandSocial, {
+    label: "GitHub profile",
+    icon: "fa-brands fa-github",
+    tint: "#22272e",
+    url: "https://github.com/saeedtelvari"
+  }), /*#__PURE__*/React.createElement(BrandSocial, {
+    label: "Google Scholar profile",
+    icon: "fa-solid fa-graduation-cap",
+    tint: "#4285f4",
+    url: "https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330"
+  }), /*#__PURE__*/React.createElement(BrandSocial, {
+    label: "Email Sa'eed Telvari",
+    icon: "fa-solid fa-envelope",
+    tint: "#ea4335",
+    url: "mailto:st4014@hw.ac.uk"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "hero-actions-divider",
+    style: {
+      height: 22,
+      width: 1,
+      background: 'rgba(255,255,255,0.18)'
+    }
+  }), /*#__PURE__*/React.createElement("a", {
+    className: "hero-cta-primary",
+    href: "./simulator.html",
+    onClick: e => {
+      e.preventDefault();
+      if (onNavigate) onNavigate('simulator');else window.location.href = './simulator.html';
+    },
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '11px 20px',
+      borderRadius: 14,
+      background: 'linear-gradient(135deg, #0dfca2, #159a80)',
+      border: '1px solid rgba(255,255,255,0.45)',
+      color: '#10251f',
+      fontFamily: "'Montserrat', sans-serif",
+      fontWeight: 700,
+      fontSize: 13.5,
+      textDecoration: 'none',
+      boxShadow: '0 7px 22px rgba(13,252,162,0.28)'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fa-solid fa-play"
+  }), " Try VE Simulator"), /*#__PURE__*/React.createElement("a", {
+    className: "hero-cta-secondary",
+    href: "#cv",
+    onClick: e => {
+      e.preventDefault();
+      if (onNavigate) onNavigate('cv');else if (window.__onNavigate) window.__onNavigate('cv');
+    },
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '11px 20px',
+      borderRadius: 14,
+      background: 'linear-gradient(135deg, rgba(78,205,196,0.90), rgba(78,205,196,0.55))',
+      border: '1px solid rgba(168,237,234,0.60)',
+      color: '#fff',
+      fontFamily: "'Montserrat', sans-serif",
+      fontWeight: 600,
+      fontSize: 13.5,
+      textDecoration: 'none',
+      cursor: 'pointer',
+      boxShadow: '0 6px 18px rgba(78,205,196,0.30), inset 0 1px 0 rgba(255,255,255,0.40)',
+      transition: 'all 0.3s ease'
+    }
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fa-solid fa-file-lines"
+  }), " View CV"), /*#__PURE__*/React.createElement("a", {
+    className: "hero-cta-tertiary",
+    href: "#contact",
+    onClick: e => {
+      e.preventDefault();
+      if (onNavigate) onNavigate('contact');else if (window.__onNavigate) window.__onNavigate('contact');else {
+        const el = document.getElementById('contact');
+        if (el) el.scrollIntoView({
+          behavior: 'smooth'
+        });
+      }
+    },
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '11px 20px',
+      borderRadius: 14,
+      background: 'linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0.08))',
+      border: '1px solid rgba(255,255,255,0.30)',
+      color: '#fff',
+      fontFamily: "'Montserrat', sans-serif",
+      fontWeight: 500,
+      fontSize: 13.5,
+      textDecoration: 'none',
+      cursor: 'pointer',
+      boxShadow: '0 4px 14px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.30)',
+      transition: 'all 0.3s ease'
+    }
+  }, "Get in touch"))));
+};
 const BrandSocial = ({
   label,
   icon,

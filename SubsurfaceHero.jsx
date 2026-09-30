@@ -1983,8 +1983,96 @@ const Annotation = () => (
 /* =====================================================
    IDENTITY — sits firmly inside the sky region
    ===================================================== */
-const Identity = ({ onNavigate }) => (
-  <div className="hero-identity-container">
+const HeroName = ({ variant }) => {
+  const titleRef = useRef(null);
+  useEffect(() => {
+    const title = titleRef.current;
+    const hero = title.closest('#home');
+    const words = [...title.querySelectorAll('.hero-name-ink')];
+    const motion = window.matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)');
+    let frame;
+    const reset = () => {
+      window.cancelAnimationFrame(frame);
+      title.style.transform = '';
+      title.removeAttribute('data-lit');
+    };
+    const move = event => {
+      if (!motion.matches || event.pointerType !== 'mouse') return;
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const rect = title.getBoundingClientRect();
+        if (!rect.width || !rect.height) return reset();
+        const x = (event.clientX - rect.left) / rect.width;
+        const y = (event.clientY - rect.top) / rect.height;
+        const near = x > -0.25 && x < 1.25 && y > -1 && y < 2;
+        if (!near) return reset();
+        const dx = Math.max(-1, Math.min(1, (x - 0.5) * 2)) * 4;
+        const dy = Math.max(-1, Math.min(1, (y - 0.5) * 2)) * 3;
+        title.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+        title.setAttribute('data-lit', '');
+        words.forEach(word => {
+          const bounds = word.getBoundingClientRect();
+          word.style.setProperty('--name-light-x', `${(event.clientX - bounds.left) / bounds.width * 100}%`);
+        });
+      });
+    };
+    hero.addEventListener('pointermove', move, { passive: true });
+    hero.addEventListener('pointerleave', reset);
+    window.addEventListener('scroll', reset, { passive: true });
+    motion.addEventListener('change', reset);
+    return () => {
+      reset();
+      hero.removeEventListener('pointermove', move);
+      hero.removeEventListener('pointerleave', reset);
+      window.removeEventListener('scroll', reset);
+      motion.removeEventListener('change', reset);
+    };
+  }, []);
+
+  return (
+    <h1 ref={titleRef} className="hero-name" data-name-style={variant} aria-label="Sa’eed Telvari">
+      {['Sa\u2019eed', 'Telvari'].map((word, index) => (
+        <React.Fragment key={word}>
+          {index > 0 && ' '}
+          <span className="hero-name-word" data-word={word} aria-hidden="true">
+            <span className="hero-name-ink" data-word={word}>{word}</span>
+          </span>
+        </React.Fragment>
+      ))}
+    </h1>
+  );
+};
+
+const Identity = ({ onNavigate }) => {
+  const preview = new URLSearchParams(window.location.search).get('name-preview');
+  const [variant, setVariant] = useState(preview === 'contour' ? 'contour' : 'moonlight');
+  const [replay, setReplay] = useState(0);
+  const nameStyle = preview ? variant : 'moonlight';
+  const changePreview = (event, next) => {
+    event.preventDefault();
+    const url = new URL(window.location.href);
+    url.searchParams.set('name-preview', next);
+    window.history.replaceState(window.history.state, '', url);
+    setVariant(next);
+    setReplay(count => count + 1);
+  };
+  return (
+  <React.Fragment>
+  {preview && (
+    <nav className="hero-name-preview" aria-label="Name animation preview">
+      {['moonlight', 'contour'].map(option => (
+        <a key={option} href={`./index.html?name-preview=${option}`}
+          aria-current={variant === option ? 'page' : undefined}
+          onClick={event => changePreview(event, option)}>
+          {option === 'moonlight' ? '1 · Moonlight' : '4 · Contours'}
+        </a>
+      ))}
+      <button type="button" onClick={() => setReplay(count => count + 1)} aria-label="Replay name animation">
+        <i className="fas fa-redo" aria-hidden="true" /> Replay
+      </button>
+    </nav>
+  )}
+  <div key={`${nameStyle}:${replay}`} className="hero-identity-container">
     <div className="hero-intro-role hero-reveal" style={{
       fontSize: 11.5, letterSpacing: '0.20em', textTransform: 'uppercase',
       color: '#64ffda', fontWeight: 600, marginBottom: 14,
@@ -1994,14 +2082,7 @@ const Identity = ({ onNavigate }) => (
       Ph.D. Candidate · Heriot-Watt University
     </div>
 
-    <h1 style={{
-      margin: 0,
-      fontFamily: "'Montserrat', sans-serif",
-      fontWeight: 700,
-      fontSize: 'clamp(36px, 6vw, 64px)',
-      lineHeight: 1.02,
-      letterSpacing: '-0.02em',
-    }}><span className="hero-title-word hero-reveal">Sa&rsquo;eed</span>{' '}<span className="hero-title-word hero-reveal">Telvari</span></h1>
+    <HeroName variant={nameStyle} />
 
     <p className="hero-summary hero-reveal" style={{
       margin: '18px 0 0',
@@ -2084,7 +2165,9 @@ const Identity = ({ onNavigate }) => (
       </a>
     </div>
   </div>
-);
+  </React.Fragment>
+  );
+};
 
 const BrandSocial = ({ label, icon, tint, url }) => {
   const [hover, setHover] = useState(false);
