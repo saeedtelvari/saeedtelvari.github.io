@@ -1274,8 +1274,8 @@ body:has(#app-loader) .hero-name-contour {
 
 .hero-name-word:last-child { --name-delay: 160ms; }
 .hero-name[data-name-style="contour"] .hero-name-word:last-child {
-  /* First word: 80ms delay + 1900ms core, then a 120ms pause. */
-  --name-delay: 2100ms;
+  /* First word finishes at 1780ms; the next starts 20ms later. */
+  --name-delay: 1800ms;
 }
 .hero-name[data-name-style="moonlight"] .hero-name-word { overflow: hidden; }
 
@@ -1343,7 +1343,7 @@ body:has(#app-loader) .hero-name-contour {
   -webkit-text-stroke: 0.55px currentColor;
   pointer-events: none;
   opacity: .09;
-  animation: heroContourCore 1900ms var(--ease-emil-out) var(--name-delay) both;
+  animation: heroContourCore 1700ms var(--ease-emil-out) var(--name-delay) both;
 }
 
 .hero-name-contours {
@@ -1362,7 +1362,7 @@ body:has(#app-loader) .hero-name-contour {
   opacity: calc(.18 - var(--contour-depth) * .018);
   transform: translate(calc(var(--contour-depth) * .3px), calc(var(--contour-depth) * .2px));
   transition: transform 240ms var(--ease-emil-out), opacity 200ms ease;
-  animation: heroContourTrace 1450ms var(--ease-emil-out) calc(var(--name-delay) + var(--contour-depth) * 65ms) backwards;
+  animation: heroContourTrace 1250ms var(--ease-emil-out) calc(var(--name-delay) + var(--contour-depth) * 65ms) backwards;
 }
 
 .hero-name-contour:nth-child(even) { color: #719baa; }
