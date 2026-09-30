@@ -44,29 +44,59 @@ const GeologicalDescent = ({ children }) => {
   const levels = [0];
   weights.forEach(weight => levels.push(levels[levels.length - 1] + weight / weightTotal * basementLevel));
   levels.push(total);
-  // Positive, laterally varying thicknesses form wedges without crossing contacts.
+  const smooth = value => { const t = Math.max(0, Math.min(1, value)); return t * t * t * (10 + t * (6 * t - 15)); };
+  // Three sandstone deposits taper out; the remaining succession stays continuous.
+  const pinch = (bed, x) => bed === 6 ? smooth((x - 180) / 640)
+    : bed === 18 ? smooth((1120 - x) / 700)
+    : bed === 37 ? smooth((x - 120) / 400) * smooth((1360 - x) / 400) : 1;
   const columnProfiles = new Map();
   const baseBoundary = (i, x) => {
     if (i === 0) return 0;
     if (i === levels.length - 1) return total;
     if (columnProfiles.has(x)) return columnProfiles.get(x)[i];
-    const thicknesses = weights.map((weight, n) => weight * Math.max(.12,
-      1 + .34 * Math.sin(x / 360 + n * .72) + .12 * Math.cos(x / 210 - n * .46)));
+    const thicknesses = weights.map((weight, n) => weight * pinch(n, x) *
+      (1 + .24 * Math.sin(x / 440 + n * .72) + .1 * Math.cos(x / 280 - n * .46)));
     const thicknessTotal = thicknesses.reduce((sum, weight) => sum + weight, 0);
     const erosion = 32 * Math.sin(x / 310 + .8) + 12 * Math.sin(x / 110);
     const fold = 36 * Math.sin(x / 510 + .45) + 12 * Math.cos(x / 230);
     let cumulative = 0;
     const column = [0, ...thicknesses.map((weight, n) => {
       cumulative += weight;
-      const fraction = .2 * cumulative / thicknessTotal + .8 * levels[n + 1] / basementLevel;
+      const fraction = cumulative / thicknessTotal;
       return fraction * (basementLevel + erosion) + Math.sin(Math.PI * fraction) * fold;
     }), total];
     columnProfiles.set(x, column);
     return column[i];
   };
-  const boundaryY = baseBoundary;
-  // One shared smooth contact bounds both adjoining beds.
-  const profiles = levels.map((_, i) => Array.from({ length: 121 }, (_, n) => [n * 12, boundaryY(i, n * 12)]));
+  // Two small faults offset a few beds and die out before the adjacent succession.
+  const structuralFaults = [{ top: 10, bottom: 14, x: 260, slope: .62, throw: 12 },
+    { top: 24, bottom: 29, x: 1160, slope: -.55, throw: -10 }].map(fault => {
+    const y = baseBoundary(fault.top, fault.x);
+    return { ...fault, y, length: baseBoundary(fault.bottom, fault.x) - y };
+  });
+  const faultX = (fault, y) => fault.x + (y - fault.y - fault.length / 2) * fault.slope;
+  const boundaryY = (i, x) => {
+    const y = baseBoundary(i, x);
+    return y + structuralFaults.reduce((offset, fault) => {
+      const t = (y - fault.y) / fault.length;
+      return offset + (t > 0 && t < 1 && x > faultX(fault, y) ? fault.throw * Math.sin(Math.PI * t) : 0);
+    }, 0);
+  };
+  // Both adjoining beds use the same contact, including exact fault steps.
+  const profiles = levels.map((_, i) => {
+    const points = Array.from({ length: 121 }, (_, n) => [n * 12, boundaryY(i, n * 12)]);
+    structuralFaults.forEach(fault => {
+      let left = 0, right = 1440;
+      for (let n = 0; n < 24; n++) {
+        const x = (left + right) / 2;
+        if (x < faultX(fault, baseBoundary(i, x))) left = x; else right = x;
+      }
+      const x = (left + right) / 2, y = baseBoundary(i, x);
+      if (y > fault.y && y < fault.y + fault.length)
+        points.push([x, boundaryY(i, x - .001)], [x, boundaryY(i, x + .001)]);
+    });
+    return points.sort((a, b) => a[0] - b[0]);
+  });
   const trace = points => 'M' + points.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L');
   const beds = profiles.slice(0, -1).map((points, i) => trace(points) + 'L' +
     [...profiles[i + 1]].reverse().map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L') + 'Z');
@@ -86,7 +116,6 @@ const GeologicalDescent = ({ children }) => {
     return { bed, x, y: top + height * .08 + random(seed + 2) * Math.max(0, height * .84 - length),
       length, slope: (n % 3 ? .64 : -.56), throw: n % 2 ? -7 : 7 };
   }));
-  const faultX = (fault, y) => fault.x + (y - fault.y - fault.length / 2) * fault.slope;
 
   return (
     <div ref={rootRef} className="geological-descent">
@@ -129,17 +158,17 @@ const GeologicalDescent = ({ children }) => {
             <rect width="160" height="160" filter="url(#descent-mineral-grain)" />
           </pattern>
           <linearGradient id="descent-bridge" x1="0" y1="0" x2="0" y2="1">
-            <stop stopColor="#070a0c" /><stop offset="1" stopColor="#070a0c" stopOpacity="0" />
+            <stop stopColor="#263038" /><stop offset="1" stopColor="#263038" stopOpacity="0" />
           </linearGradient>
           <linearGradient id="descent-reading-veil">
-            <stop stopColor="#080e12" stopOpacity=".12" /><stop offset=".2" stopColor="#080e12" stopOpacity=".32" />
-            <stop offset=".8" stopColor="#080e12" stopOpacity=".32" /><stop offset="1" stopColor="#080e12" stopOpacity=".12" />
+            <stop stopColor="#13212b" stopOpacity=".3" /><stop offset=".2" stopColor="#13212b" stopOpacity=".48" />
+            <stop offset=".8" stopColor="#13212b" stopOpacity=".48" /><stop offset="1" stopColor="#13212b" stopOpacity=".3" />
           </linearGradient>
         </defs>
         <rect width="1440" height={total} fill="#151b1f" />
         {materials.map((material, i) => (
           <g key={i}>
-            <path data-bed={i} d={beds[i]} fill={colors[material]} />
+            <path data-bed={i} data-pinch-out={[6, 18, 37].includes(i) ? true : undefined} d={beds[i]} fill={colors[material]} />
             <path className="descent-rock" data-material={material} d={beds[i]} fill={`url(#descent-rock-${material})`} />
             <path d={beds[i]} fill={colors[material]} opacity={.08 + random(i + 210) * .08} />
             <path d={beds[i]} fill="url(#descent-grain)" opacity={material === 'sandstone' || material === 'siltstone' ? '.09' : '.04'} />
@@ -189,6 +218,9 @@ const GeologicalDescent = ({ children }) => {
             <path d={line} transform="translate(1.5 0)" fill="none" stroke="#b0a58e" strokeOpacity=".23" strokeWidth=".6" />
           </g>;
         })}
+        {structuralFaults.map((fault, i) => <path key={i} data-structural-fault={i}
+          d={`M${faultX(fault, fault.y)} ${fault.y}l${fault.slope * fault.length} ${fault.length}`}
+          fill="none" stroke="#b3aaa0" strokeOpacity=".28" strokeWidth=".8" />)}
         {[sandstoneBed, lowerSandstone].map((bed, n) => (
           <g key={bed} className="descent-motion" data-visible="false" clipPath={`url(#descent-bed-${bed})`}>
             {[38, 1240].map(x => <React.Fragment key={x}>
@@ -199,7 +231,7 @@ const GeologicalDescent = ({ children }) => {
           </g>
         ))}
         <rect width="1440" height={total} fill="url(#descent-reading-veil)" />
-        <rect width="1440" height="100" fill="url(#descent-bridge)" />
+        <rect width="1440" height="240" fill="url(#descent-bridge)" />
       </svg>
       {children}
     </div>

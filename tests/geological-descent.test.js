@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-test('smooth beds share continuous materials, concentrate faults by rock, and resize cleanly', () => {
+test('pinch-outs and local fault offsets share contacts and resize without crossing beds', () => {
   const root = path.join(__dirname, '..');
   const bundle = fs.readFileSync(path.join(root, 'bundle.js'), 'utf8');
   const code = bundle.slice(bundle.indexOf('// File: GeologicalDescent.jsx'), bundle.indexOf('// File: HomeSections.jsx'));
@@ -66,11 +66,31 @@ test('smooth beds share continuous materials, concentrate faults by rock, and re
       return a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]);
     };
     for (const x of new Set([...Array.from({ length: 181 }, (_, i) => i * 8), ...contacts.flatMap(line => line.map(point => point[0]))])) {
-      for (let i = 1; i < contacts.length; i++) assert.ok(sample(contacts[i], x) > sample(contacts[i - 1], x), 'beds must stay ordered after resizing');
+      for (let i = 1; i < contacts.length; i++) assert.ok(sample(contacts[i], x) >= sample(contacts[i - 1], x) - .01, 'beds must stay ordered after resizing, including zero-thickness pinch-outs');
     }
+    const pinchBeds = beds.filter(node => node.props['data-pinch-out']);
+    assert.equal(pinchBeds.length, 3, 'only three deposits should pinch out');
+    for (const bed of pinchBeds) {
+      const [top, bottom] = split(bed.props.d);
+      const thicknesses = top.map(([x, y]) => sample(bottom, x) - y);
+      assert.ok(thicknesses.some(height => height === 0), 'a pinch-out must truly disappear');
+      assert.ok(Math.max(...thicknesses) > 20, 'a taper must open into a visible deposit');
+    }
+    let steps = 0;
     for (const line of contacts) {
-      for (let i = 1; i < line.length - 1; i++) assert.ok(Math.abs(line[i - 1][1] - 2 * line[i][1] + line[i + 1][1]) < 1, 'contacts must not have small angular kinks');
+      for (let i = 1; i < line.length; i++) if (line[i][0] === line[i - 1][0]) {
+        const throwSize = Math.abs(line[i][1] - line[i - 1][1]);
+        assert.ok(throwSize <= 12.1, 'structural offsets must remain small');
+        if (throwSize > .1) steps++;
+      }
+      for (let i = 1; i < line.length - 1; i++) {
+        if (line[i][0] - line[i - 1][0] !== 12 || line[i + 1][0] - line[i][0] !== 12) continue;
+        assert.ok(Math.abs(line[i - 1][1] - 2 * line[i][1] + line[i + 1][1]) < 1.2 * heights.reduce((sum, height) => sum + height) / 3690,
+          'contact curvature must remain smooth as the page grows taller');
+      }
     }
+    assert.ok(steps >= 5, 'small faults must displace contacts rather than just draw lines');
+    assert.equal(nodes.filter(node => node.props['data-structural-fault'] !== undefined).length, 2);
     const faults = nodes.filter(node => node.props['data-fault'] !== undefined);
     assert.ok(faults.length >= 18, 'the wider view needs numerous local fault splays');
     for (const fault of faults) {
@@ -104,4 +124,9 @@ test('smooth beds share continuous materials, concentrate faults by rock, and re
   for (const material of ['shale', 'sandstone', 'limestone', 'basement', 'siltstone', 'dolomite']) {
     assert.ok(fs.statSync(path.join(root, `assets/geology-${material}.webp`)).size > 0, 'all referenced material textures must exist');
   }
+  const hero = fs.readFileSync(path.join(root, 'SubsurfaceHero.jsx'), 'utf8');
+  assert.match(hero, /clipPath id="hero-lower-rock"><path d=\{AQUIFER_PATH\}/, 'new hero textures must be clipped below the reservoir');
+  assert.match(hero, /id="hero-lower-texture-mask" maskUnits="userSpaceOnUse" x="0" y="0"/, 'the texture mask must cover the entire lower rock without default negative offsets');
+  assert.match(hero, /id="hero-descent-bridge"[\s\S]*?<stop stopColor="#263038"/, 'both sides must meet in the same slate colour');
+  assert.match(code, /id: "descent-bridge"[\s\S]*?stopColor: "#263038"/);
 });

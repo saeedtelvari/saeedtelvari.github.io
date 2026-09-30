@@ -16,3 +16,7 @@ Each material uses the following common prompt, with its subject description ins
 | `assets/geology-dolomite.webp` | Pale desaturated beige grey dolostone with fine interlocking carbonate crystals, tiny scattered vugs and soft diffuse mineral mottling, a little more granular than limestone. |
 
 The renderer blends each photograph with a half-tile offset at its edges, so bitmap borders cannot form rectangular seams. All beds of a material share the same texture origin. Fault and joint overlays are separate from the photographs and concentrated in selected carbonate beds and granite.
+
+The succession includes three sandstone pinch-outs, gradual lateral thickness changes, and two small faults that offset only a few beds. The basement retains a gently eroded upper contact. These are illustrative features, rather than a reconstruction of one field: the [BGS central North Sea report](https://webapps.bgs.ac.uk/Memoirs/docs/B01846.html) describes sandstone pinch-outs, variable sediment thickness, and faults that terminate within particular units; [USGS](https://apps.usgs.gov/thesaurus/term-simple.php?code=1198&thcode=2) defines unconformities as contacts involving erosion of older rocks before younger sediment is deposited.
+
+Only the hero's rock below the reservoir shares the new shale texture and slate transition. Reservoir geometry, cap rock, surface scene, and simulation calculations remain unchanged.

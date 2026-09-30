@@ -1381,8 +1381,18 @@ const Subsurface = ({ h, faults, geology }) => {
           </linearGradient>
           <linearGradient id="grad-sediment" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#30323c"/>
-            <stop offset="55%" stopColor="#262d35"/>
-            <stop offset="100%" stopColor="#1c252d"/>
+            <stop offset="55%" stopColor="#353e42"/>
+            <stop offset="100%" stopColor="#303637"/>
+          </linearGradient>
+          <clipPath id="hero-lower-rock"><path d={AQUIFER_PATH}/></clipPath>
+          <linearGradient id="hero-lower-texture" x1="0" y1="280" x2="0" y2="580" gradientUnits="userSpaceOnUse">
+            <stop stopColor="white" stopOpacity="0"/><stop offset="1" stopColor="white" stopOpacity=".65"/>
+          </linearGradient>
+          <mask id="hero-lower-texture-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="580">
+            <rect width="1000" height="580" fill="url(#hero-lower-texture)"/>
+          </mask>
+          <linearGradient id="hero-descent-bridge" x1="0" y1="490" x2="0" y2="580" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#263038" stopOpacity="0"/><stop offset="1" stopColor="#263038"/>
           </linearGradient>
         </defs>
 
@@ -1406,8 +1416,14 @@ const Subsurface = ({ h, faults, geology }) => {
         
         {/* Realistic Aquifer strata layers with zero diagonal slant */}
         {g.aquiferLayerOffsets.map((offset, i) => (
-          <path key={i} d={getStrataPath(flts, 1.0, g.reservoirThickness + offset, 580, true, g)} fill={`rgba(0,0,0,${0.20 + i * 0.15})`}/>
+          <path key={i} d={getStrataPath(flts, 1.0, g.reservoirThickness + offset, 580, true, g)}
+            fill={['#424a4c', '#383f40', '#303637'][i]} opacity=".65"/>
         ))}
+
+        <g clipPath="url(#hero-lower-rock)">
+          <rect width="1000" height="580" fill="url(#descent-rock-shale)" mask="url(#hero-lower-texture-mask)"/>
+          <rect width="1000" height="580" fill="url(#hero-descent-bridge)"/>
+        </g>
 
         <GeologyTexture faults={flts} geology={g}/>
 
