@@ -1988,13 +1988,15 @@ const HeroName = ({ variant }) => {
   useEffect(() => {
     const title = titleRef.current;
     const hero = title.closest('#home');
-    const words = [...title.querySelectorAll('.hero-name-ink')];
+    const words = [...title.querySelectorAll('.hero-name-word')];
+    const contours = [...title.querySelectorAll('.hero-name-contour')];
     const motion = window.matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)');
     let frame;
     const reset = () => {
       window.cancelAnimationFrame(frame);
       title.style.transform = '';
       title.removeAttribute('data-lit');
+      contours.forEach(contour => contour.style.transform = '');
     };
     const move = event => {
       if (!motion.matches || event.pointerType !== 'mouse') return;
@@ -2010,6 +2012,10 @@ const HeroName = ({ variant }) => {
         const dy = Math.max(-1, Math.min(1, (y - 0.5) * 2)) * 3;
         title.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
         title.setAttribute('data-lit', '');
+        contours.forEach(contour => {
+          const depth = Number(contour.dataset.depth);
+          contour.style.transform = `translate3d(${depth * (0.75 + dx * 0.35)}px, ${depth * (0.5 + dy * 0.3)}px, 0) scale(${1 + depth * 0.008})`;
+        });
         words.forEach(word => {
           const bounds = word.getBoundingClientRect();
           word.style.setProperty('--name-light-x', `${(event.clientX - bounds.left) / bounds.width * 100}%`);
@@ -2035,6 +2041,14 @@ const HeroName = ({ variant }) => {
         <React.Fragment key={word}>
           {index > 0 && ' '}
           <span className="hero-name-word" data-word={word} aria-hidden="true">
+            {variant === 'contour' && (
+              <span className="hero-name-contours">
+                {[1, 2, 3, 4, 5, 6].map(depth => (
+                  <span key={depth} className="hero-name-contour" data-depth={depth} data-word={word}
+                    style={{ '--contour-depth': depth }}>{word}</span>
+                ))}
+              </span>
+            )}
             <span className="hero-name-ink" data-word={word}>{word}</span>
           </span>
         </React.Fragment>
@@ -2045,9 +2059,9 @@ const HeroName = ({ variant }) => {
 
 const Identity = ({ onNavigate }) => {
   const preview = new URLSearchParams(window.location.search).get('name-preview');
-  const [variant, setVariant] = useState(preview === 'contour' ? 'contour' : 'moonlight');
+  const [variant, setVariant] = useState(preview === 'moonlight' ? 'moonlight' : 'contour');
   const [replay, setReplay] = useState(0);
-  const nameStyle = preview ? variant : 'moonlight';
+  const nameStyle = preview ? variant : 'contour';
   const changePreview = (event, next) => {
     event.preventDefault();
     const url = new URL(window.location.href);
@@ -2072,7 +2086,7 @@ const Identity = ({ onNavigate }) => {
       </button>
     </nav>
   )}
-  <div key={`${nameStyle}:${replay}`} className="hero-identity-container">
+  <div key={`${nameStyle}:${replay}`} className="hero-identity-container" data-name-style={nameStyle}>
     <div className="hero-intro-role hero-reveal" style={{
       fontSize: 11.5, letterSpacing: '0.20em', textTransform: 'uppercase',
       color: '#64ffda', fontWeight: 600, marginBottom: 14,

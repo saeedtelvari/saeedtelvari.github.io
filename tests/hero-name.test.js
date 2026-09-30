@@ -16,15 +16,17 @@ test('name interaction stays bounded and stops for touch, reduced motion, scroll
   };
   const bounds = { left: 100, top: 100, width: 400, height: 64 };
   const word = { getBoundingClientRect: () => bounds, style: { setProperty(name, value) { this[name] = value; } } };
+  const contour = { dataset: { depth: '6' }, style: {} };
   const title = {
-    style: {}, closest: () => events, querySelectorAll: () => [word],
+    style: {}, closest: () => events,
+    querySelectorAll: selector => selector === '.hero-name-word' ? [word] : [contour],
     getBoundingClientRect: () => bounds,
     setAttribute(name) { this[name] = true; },
     removeAttribute(name) { delete this[name]; },
   };
   const motion = { matches: true, ...events };
   let effect, frame;
-  vm.runInNewContext(bundle.slice(start, end) + '\nHeroName({ variant: "moonlight" });', {
+  vm.runInNewContext(bundle.slice(start, end) + '\nHeroName({ variant: "contour" });', {
     useRef: () => ({ current: title }), useEffect: fn => { effect = fn; },
     React: { createElement: () => ({}) },
     window: { ...events, matchMedia: () => motion,
@@ -39,8 +41,14 @@ test('name interaction stays bounded and stops for touch, reduced motion, scroll
   assert.ok(Math.abs(+displacement[1]) <= 4 && Math.abs(+displacement[2]) <= 3);
   assert.equal(title['data-lit'], true);
   assert.equal(word.style['--name-light-x'], '95%');
+  const depthMovement = +contour.style.transform.match(/translate3d\(([-\d.]+)px/)[1];
+  move(120);
+  frame();
+  assert.ok(+contour.style.transform.match(/translate3d\(([-\d.]+)px/)[1] < depthMovement,
+    'contour depth follows the pointer in both directions');
   listeners.get('scroll')();
   assert.equal(title.style.transform, '');
+  assert.equal(contour.style.transform, '');
   assert.equal(title['data-lit'], undefined);
   move(300, 132, 'touch');
   assert.equal(frame, null);
