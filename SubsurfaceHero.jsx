@@ -919,12 +919,50 @@ const Sky = () => {
           <stop stopColor="#a5bcd3" stopOpacity="0" /><stop offset=".62" stopColor="#a5bcd3" stopOpacity=".16" /><stop offset="1" stopColor="#a5bcd3" stopOpacity="0" />
         </linearGradient>
         <filter id="highland-soft"><feGaussianBlur stdDeviation="5" /></filter>
+        <path id="highland-ridge" d="M0 138L80 123L155 130L228 112L292 119L357 90L403 96L457 70L489 74L540 41L568 53L600 48L647 77L693 61L738 80L804 50L846 27L880 44L912 40L950 73L1014 91L1060 81L1131 97L1201 61L1240 69L1290 46L1336 73L1390 64L1440 88V180H0Z" />
+        <clipPath id="highland-ridge-clip"><use href="#highland-ridge" /></clipPath>
+        <filter id="highland-rock-grain" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency=".18 .32" numOctaves="2" seed="18" />
+          <feColorMatrix type="saturate" values="0" />
+          <feComposite in2="SourceGraphic" operator="in" />
+        </filter>
       </defs>
-      <path d="M0 138L80 123L155 130L228 112L292 119L357 90L403 96L457 70L489 74L540 41L568 53L600 48L647 77L693 61L738 80L804 50L846 27L880 44L912 40L950 73L1014 91L1060 81L1131 97L1201 61L1240 69L1290 46L1336 73L1390 64L1440 88V180H0Z" fill="url(#highland-distant)" />
-      <path d="M490 74L540 41L568 53L600 48M804 50L846 27L880 44L912 40M1240 69L1290 46L1336 73" fill="none" stroke="#8fa5b8" strokeOpacity=".3" />
+      <use href="#highland-ridge" fill="url(#highland-distant)" />
+      <g clipPath="url(#highland-ridge-clip)">
+        <path d="M540 41L517 76L489 104L453 121L499 96L533 82L560 111L594 125L568 53Z
+          M846 27L825 61L792 89L747 112L795 96L830 80L866 116L902 126L880 44Z
+          M1290 46L1265 75L1238 104L1197 130L1260 109L1294 91L1333 123L1357 129L1336 73Z" fill="#111e2b" opacity=".64" />
+        <path d="M543 43L533 60L547 56L555 68L568 53M850 29L838 49L852 43L866 58L878 45M1292 49L1284 64L1298 60L1308 74L1317 66"
+          fill="none" stroke="#a0b1ba" strokeWidth="1.1" strokeOpacity=".34" />
+        <path d="M536 66l-14 27 -28 17m48 -31l17 30 16 12m267 -63l-15 32 -21 15m47 -39l19 30 22 16m395 -33l-22 24 -16 8"
+          fill="none" stroke="#718594" strokeWidth=".8" strokeOpacity=".25" />
+        <rect width="1440" height="180" filter="url(#highland-rock-grain)" opacity=".075" />
+      </g>
       <path d="M0 155Q120 120 220 147T402 118L476 106L528 112L585 91L638 109L694 102L761 126L837 108L910 125L991 110L1057 126L1140 112L1210 126L1290 98L1351 104L1440 128V180H0Z" fill="url(#highland-near)" />
+      <path d="M466 116Q523 125 584 102M743 140Q821 121 889 136M1071 141Q1131 127 1198 140M1223 132Q1291 113 1357 120"
+        fill="none" stroke="#536c78" strokeWidth=".8" strokeOpacity=".24" />
       <path d="M360 139Q620 112 871 133T1470 128" stroke="url(#highland-mist)" strokeWidth="20" fill="none" filter="url(#highland-soft)" />
+      <path d="M453 158Q513 151 578 156L670 160Q574 168 467 162Z" fill="#7897a5" opacity=".16" />
+      <path d="M477 159h58m17 2h62m-102 2h22" stroke="#9cb5c1" strokeWidth=".6" opacity=".25" />
       <path d="M0 171Q142 164 264 173T490 165T730 171T958 167T1220 170T1440 164V180H0Z" fill="#0a151b" />
+      {/* A narrow gravel track and irregular vegetation give the field site context. */}
+      <path d="M626 149Q686 151 718 159T842 170Q900 174 949 180H970Q911 170 849 166T728 155Q684 147 626 149Z" fill="#45504e" opacity=".42" />
+      <path d="M666 151Q723 158 766 161M812 168Q878 172 919 176" stroke="#9ba69a" strokeWidth=".7" strokeOpacity=".21" fill="none" />
+      {[38, 57, 82, 104, 142, 167, 529, 552, 576, 700, 719].map((x, i) => {
+        const y = 165 + Math.sin(i * 2.1) * 4, h = 11 + i % 4 * 4;
+        return <g key={x} opacity={i < 6 ? '.8' : '.65'}>
+          <path d={`M${x} ${y}v${-h}`} stroke="#233b3b" strokeWidth="1" />
+          <path d={`M${x} ${y - h}l${-h * .3} ${h * .42}h${h * .15}l${-h * .24} ${h * .37}h${h * .78}l${-h * .24} ${-h * .37}h${h * .15}Z`}
+            fill={i % 2 ? '#17302f' : '#112627'} />
+          <path d={`M${x + 1} ${y - h + 3}l${h * .2} ${h * .3}`} stroke="#627f76" strokeWidth=".7" strokeOpacity=".3" />
+        </g>;
+      })}
+      <path d="M7 177l18 -3 15 2 19 -2 17 3 22 -1 15 3m31 -1l17 -3 22 1 17 -2 13 3 18 -1" stroke="#667568" strokeOpacity=".25" strokeWidth="2" fill="none" />
+      {Array.from({ length: 54 }, (_, i) => {
+        const x = (i * 137.51 + 43) % 1440, y = 175 + i % 4;
+        return <path key={i} d={`M${x} ${y}l-2 ${-3 - i % 4}m2 ${3 + i % 4}l3 -4`}
+          stroke="#53685c" strokeWidth=".7" opacity={.24 + i % 3 * .08} />;
+      })}
       <path d="M720 173L735 168L759 174M1115 172L1130 164L1151 172M1268 173L1280 167L1294 172" fill="#21333a" stroke="#48605e" strokeOpacity=".3" />
       <path d="M607 172l-3 -10m3 10l4 -7m566 8l-3 -13m3 13l5 -8m173 6l-2 -11m2 11l4 -5" stroke="#527067" strokeWidth="1" opacity=".65" />
     </svg>
@@ -944,50 +982,119 @@ const Sky = () => {
 // Decorative equipment stays anchored to the same surface and well as the live model.
 const SurfaceSite = ({ geology, isPlaying }) => (
   <div className="hero-surface-site" aria-hidden="true" style={{ left: `${geology.wellXPct}%` }}>
-    <svg viewBox="0 0 420 130" width="420" height="130" fill="none">
+    <svg viewBox="-140 0 540 160" width="100%" height="100%" fill="none">
       <defs>
-        <linearGradient id="site-steel" x1="0" y1="0" x2="0" y2="1">
-          <stop stopColor="#344a53" /><stop offset="1" stopColor="#15252e" />
+        <linearGradient id="site-wall" x1="0" y1="0" x2="1" y2="1">
+          <stop stopColor="#43535a" /><stop offset="1" stopColor="#25363d" />
         </linearGradient>
         <radialGradient id="site-lamplight">
-          <stop stopColor="#ffd99b" stopOpacity=".24" /><stop offset="1" stopColor="#ffd99b" stopOpacity="0" />
+          <stop stopColor="#dec99d" stopOpacity=".2" /><stop offset="1" stopColor="#dec99d" stopOpacity="0" />
         </radialGradient>
-        <linearGradient id="site-pipe-steel" x1="0" y1="0" x2="0" y2="1">
-          <stop stopColor="#91aaa4" /><stop offset=".4" stopColor="#536b70" /><stop offset="1" stopColor="#263c43" />
+        <linearGradient id="site-metal" x1="0" y1="0" x2="0" y2="1">
+          <stop stopColor="#98abae" /><stop offset=".3" stopColor="#597078" /><stop offset=".65" stopColor="#334850" /><stop offset="1" stopColor="#17272e" />
         </linearGradient>
-        <path id="site-feed-route" d="M244 106H202Q196 106 196 112V116Q196 122 190 122H58Q52 122 52 116V109Q52 103 46 103H34" />
+        <linearGradient id="site-roof" x1="0" y1="0" x2="1" y2="1">
+          <stop stopColor="#6f8188" /><stop offset=".35" stopColor="#425961" /><stop offset="1" stopColor="#293c45" />
+        </linearGradient>
+        <linearGradient id="site-pad" x1="0" y1="0" x2="0" y2="1">
+          <stop stopColor="#52605c" /><stop offset="1" stopColor="#263732" />
+        </linearGradient>
+        <linearGradient id="site-window" x1="0" y1="0" x2="1" y2="1">
+          <stop stopColor="#d3c09a" /><stop offset="1" stopColor="#89754e" />
+        </linearGradient>
+        <linearGradient id="site-worklight" x1="0" y1="0" x2="0" y2="1">
+          <stop stopColor="#e2d3ac" stopOpacity=".12" /><stop offset="1" stopColor="#e2d3ac" stopOpacity="0" />
+        </linearGradient>
+        <path id="site-feed-route" d="M289 118H252Q246 118 246 124V130Q246 136 240 136H95Q87 136 87 128V120Q87 114 81 114H60" />
+        <clipPath id="site-gravel-clip"><path d="M-124 153L-94 140L335 137L396 153L385 160H-131Z" /></clipPath>
       </defs>
-      <ellipse cx="130" cy="120" rx="78" ry="10" fill="url(#site-lamplight)" />
-      <ellipse cx="329" cy="120" rx="59" ry="10" fill="url(#site-lamplight)" />
-      <path d="M76 130L112 112H179L232 130" fill="#283637" opacity=".5" />
-      <path d="M91 116V56L103 48H166L178 56V116Z" fill="url(#site-steel)" stroke="#66817f" strokeOpacity=".4" />
-      <path d="M87 57L102 46H168L182 57" stroke="#75918b" strokeWidth="2" />
-      <path d="M104 63H130V83H104Z" fill="#e3bd7d" fillOpacity=".8" />
-      <path d="M117 63V83M104 73H130" stroke="#34484c" />
-      <path d="M147 64H166V116H147Z" fill="#14252d" stroke="#638078" strokeOpacity=".5" />
-      <circle cx="162" cy="101" r="1" fill="#c6cfba" />
-      <path d="M96 110H141M96 105H141" stroke="#66817f" strokeOpacity=".25" />
-      <path d="M204 118V101H279V118M219 99V88H238V99M243 99V90H263V99" stroke="#5e7779" strokeWidth="3" />
-      <rect x="208" y="100" width="66" height="14" rx="3" fill="url(#site-steel)" stroke="#758f89" strokeOpacity=".45" />
-      <path d="M211 105H271M228 100V114M253 100V114" stroke="#7e9b93" strokeOpacity=".35" />
-      <path d="M315 120V47H300M301 49L295 52" stroke="#78918c" strokeWidth="2" />
-      <ellipse cx="296" cy="87" rx="35" ry="43" fill="url(#site-lamplight)" />
-      <path d="M289 52H302" stroke="#f5cf91" strokeWidth="3" strokeLinecap="round" />
-      <path d="M335 119V91M361 119V91M387 119V91M334 98H405M334 111H405" stroke="#526c68" strokeWidth="1.2" />
-      {/* The compact feed line passes below the windows and into the well's wing valve. */}
-      <path d="M82 122V128M183 122V128M76 129H88M177 129H189" stroke="#667c78" strokeWidth="2" />
-      <use href="#site-feed-route" stroke="#09171d" strokeWidth="7" />
-      <use href="#site-feed-route" stroke="url(#site-pipe-steel)" strokeWidth="4.5" />
-      <use className="hero-feed-flow" href="#site-feed-route" stroke="#8dd8bc" strokeWidth="1.2" style={{ animationPlayState: isPlaying ? 'running' : 'paused' }} />
+      {/* A shallow gravel plane, contact shadows, and sparse wet highlights ground the equipment. */}
+      <path d="M-124 153L-94 140L335 137L396 153L385 160H-131Z" fill="url(#site-pad)" />
+      <g clipPath="url(#site-gravel-clip)">
+        {Array.from({ length: 100 }, (_, i) => <path key={i}
+          d={`M${-132 + (i * 97.37) % 535} ${139 + i * 7.31 % 22}l${1 + i % 3} -.4`}
+          stroke={i % 3 ? '#8b9485' : '#131f22'} strokeWidth=".6" opacity={i % 3 ? '.25' : '.5'} />)}
+        <path d="M-70 151l124 -1m54 5l55 -1m80 -7l96 -1m-152 11l28 -1" stroke="#a0afaa" strokeOpacity=".15" strokeWidth=".8" />
+      </g>
+      <path d="M-124 153L-94 140L335 137L396 153" stroke="#7c8b80" strokeOpacity=".3" strokeWidth=".6" />
+      <ellipse cx="172" cy="148" rx="62" ry="8" fill="#09171a" opacity=".6" />
+      <ellipse cx="292" cy="143" rx="45" ry="4" fill="#09171a" opacity=".6" />
+      <ellipse cx="49" cy="156" rx="28" ry="3" fill="#07161a" opacity=".7" />
+      {/* Small remote monitoring point to the left of the well. */}
+      <path d="M-92 147h37l-5 4h-37Z" fill="#3b4c49" />
+      <path d="M-78 147V99m0 8h13m-1 -4v7m-12 -6l-7 -3m7 3l8 -3" stroke="#7b9090" strokeWidth="1.1" />
+      <circle cx="-78" cy="97" r="1.6" fill="#93a7a1" />
+      <path d="M-95 121l22 -3 7 13 -23 3Z" fill="#213946" stroke="#6c8489" strokeWidth=".7" />
+      <path d="M-89 121l6 12m1 -13l6 12m1 -13l6 12m-22 -7l20 -2" stroke="#a0b2b1" strokeWidth=".5" strokeOpacity=".28" />
+      <path d="M-83 135v12" stroke="#5f7778" strokeWidth="1.4" />
+      <rect x="-61" y="131" width="12" height="15" rx="1" fill="#33484c" stroke="#7a8d85" strokeWidth=".5" />
+      <path d="M-58 135h6m-6 3h6" stroke="#11272d" />
+      {/* Fence and feed line sit behind the shelter; the doorway remains clear. */}
+      <g stroke="#7b8e87" strokeOpacity=".38" strokeWidth=".8">
+        <path d="M258 135V100M291 138V103M326 141V106M361 144V109M395 147V112M258 104L395 116M258 127L395 139" />
+        {[267, 276, 303, 312, 338, 347, 372, 381].map(x => <path key={x} d={`M${x} ${104 + (x - 258) * .087}l0 23`} strokeOpacity=".2" />)}
+      </g>
+      <path d="M95 138v11m-5 0h10m144 -13v10m-5 0h10" stroke="#657b76" strokeWidth="1.5" />
+      <use href="#site-feed-route" stroke="#0e2027" strokeWidth="6" />
+      <use href="#site-feed-route" stroke="url(#site-metal)" strokeWidth="3.8" />
+      <use className="hero-feed-flow" href="#site-feed-route" stroke="#a7c5ba" strokeWidth=".6" style={{ animationPlayState: isPlaying ? 'running' : 'paused' }} />
+      <path d="M101 132v8m4 -8v8m136 -12v8m4 -8v8" stroke="#a1b0a7" strokeWidth=".6" opacity=".55" />
+      {/* Three-quarter shelter: moonlit roof, shaded side, siding, plinth, and entry steps. */}
+      <path d="M126 145H210L234 134V140L210 151H126Z" fill="#182b2e" stroke="#73857b" strokeOpacity=".35" strokeWidth=".6" />
+      <path d="M128 76L165 54L208 76V145H128Z" fill="url(#site-wall)" />
+      <path d="M208 76L232 65V134L208 145Z" fill="#1a2d35" stroke="#62757a" strokeOpacity=".35" strokeWidth=".6" />
+      <path d="M122 78L165 52L190 41L148 66Z" fill="#263d47" />
+      <path d="M165 52L211 78L238 65L190 41Z" fill="url(#site-roof)" stroke="#809397" strokeOpacity=".65" strokeWidth=".7" />
+      {[0, 1, 2, 3, 4, 5].map(i => <path key={i} d={`M${168 + i * 4} ${52 - i * 1.7}l43 24`}
+        stroke="#a7b6b5" strokeWidth=".6" strokeOpacity=".23" />)}
+      <path d="M121 79L165 54L210 79L238 66M210 79V145M128 145H208" stroke="#93a5a3" strokeOpacity=".45" strokeWidth=".8" />
+      <g stroke="#99aaa3" strokeWidth=".55" strokeOpacity=".15">
+        {[84, 91, 98, 105, 112, 119, 126, 133, 140].map(y => <path key={y} d={`M130 ${y}H206M212 ${y - 2}l18 -8`} />)}
+      </g>
+      <path d="M134 89H163V113H134Z" fill="#172b33" stroke="#9aa79b" strokeWidth=".7" />
+      <path d="M137 92H160V110H137Z" fill="url(#site-window)" opacity=".86" />
+      <path d="M148 92V110M137 101H160M133 114H165" stroke="#405254" strokeWidth="1" />
+      <path d="M137 93H159" stroke="#edddbd" strokeWidth=".5" opacity=".6" />
+      <path d="M177 91H201V145H177Z" fill="#122831" stroke="#758881" strokeWidth=".7" />
+      <path d="M180 94H198V137H180Z" stroke="#566d70" strokeOpacity=".45" strokeWidth=".6" />
+      <rect x="183" y="98" width="11" height="9" fill="#38515a" stroke="#718781" strokeWidth=".5" />
+      <path d="M195 121h3" stroke="#abb8a8" strokeWidth="1" />
+      <path d="M175 145H202L205 149H173Z" fill="#6b7970" /><path d="M173 149H205V152H171V155H208" stroke="#52675f" strokeWidth="2" />
+      <path d="M214 90l13 -6v15l-13 6Z" fill="#0d222a" stroke="#647b7a" strokeWidth=".5" />
+      <path d="M216 94l9 -4m-9 7l9 -4m-9 7l9 -4" stroke="#62797c" strokeWidth=".7" />
+      <path d="M231 74V134l-6 3" stroke="#7b8c88" strokeWidth="1" strokeOpacity=".6" />
+      <ellipse cx="148" cy="146" rx="39" ry="10" fill="url(#site-lamplight)" />
+      {/* Compact process skid with pressure vessel, end caps, valves, and control cabinet. */}
+      <path d="M259 137H328L336 140H265Z" fill="#4b625f" stroke="#7b9187" strokeWidth=".6" />
+      <path d="M267 135V127m50 9v-9M262 118H327" stroke="#587277" strokeWidth="2" />
+      <rect x="268" y="112" width="55" height="14" rx="6" fill="url(#site-metal)" stroke="#96aaa7" strokeWidth=".65" />
+      <ellipse cx="272" cy="119" rx="4" ry="6" fill="#4a6068" stroke="#9aadaa" strokeWidth=".6" />
+      <path d="M284 113V126M307 113V126" stroke="#a5b3ac" strokeWidth="1" strokeOpacity=".45" />
+      <path d="M284 112V104h9m12 8v-10h9" stroke="#718b88" strokeWidth="2" />
+      <path d="M289 101v6m21 -8v6" stroke="#a1b2a6" strokeWidth="1" />
+      <circle cx="302" cy="109" r="3" fill="#1a3039" stroke="#9baea8" strokeWidth=".6" />
+      <path d="M302 109l1 -1.5" stroke="#c5d0bb" strokeWidth=".7" />
+      <path d="M332 109l13 -3v29l-13 3Z" fill="#243c43" stroke="#738b82" strokeWidth=".65" />
+      <path d="M335 114l7 -1.5m-7 4.5l7 -1.5m-7 4.5l7 -1.5" stroke="#526d70" strokeWidth=".6" />
+      {/* Shielded warm worklight; the beam stays on the pad. */}
+      <path d="M359 147V58h-17" stroke="#869a97" strokeWidth="1.8" />
+      <path d="M348 60L320 147H379Z" fill="url(#site-worklight)" />
+      <path d="M337 58h16l-2 3h-13Z" fill="#263f47" stroke="#9aada5" strokeWidth=".6" />
+      <path d="M339 61h11" stroke="#dfcea4" strokeWidth="1.3" />
+      <ellipse cx="349" cy="146" rx="43" ry="8" fill="url(#site-lamplight)" />
       <g className="hero-wellhead">
-        <rect x="7" y="126" width="34" height="4" rx="1" fill="#40545a" stroke="#7c9390" strokeWidth=".6" />
-        <path d="M24 88V126M12 103H34" stroke="url(#site-pipe-steel)" strokeWidth="5" />
-        <rect x="18" y="112" width="12" height="8" rx="1.5" fill="#243941" stroke="#819b94" strokeWidth=".8" />
-        <rect x="18" y="98" width="12" height="9" rx="1.5" fill="#243941" stroke="#819b94" strokeWidth=".8" />
-        <path d="M18 116H11M11 113V119M33 100V106M21 90H27" stroke="#a0b4a9" strokeWidth="1.2" strokeLinecap="round" />
-        <circle cx="24" cy="85" r="3.5" fill="#182c35" stroke="#91aaa4" strokeWidth=".8" />
-        <path d="M24 85L26 83" stroke="#c2d5bf" strokeWidth=".8" />
-        <circle cx="24" cy="102.5" r="1.1" fill="#8dd8bc" />
+        <rect x="27" y="156" width="42" height="4" rx="1" fill="#354c50" stroke="#8b9e97" strokeWidth=".7" />
+        <path d="M48 107V157M33 119H61" stroke="url(#site-metal)" strokeWidth="5" />
+        <path d="M41 145H55M41 138H55M41 129H55M41 110H55" stroke="#8da19b" strokeWidth="1.5" />
+        <rect x="42" y="132" width="12" height="9" rx="1" fill="#304b54" stroke="#91a6a0" strokeWidth=".65" />
+        <rect x="42" y="114" width="12" height="9" rx="1" fill="#304b54" stroke="#91a6a0" strokeWidth=".65" />
+        <path d="M42 137H35m0 -3v6M60 114v8M45 109H51" stroke="#b1bdb0" strokeWidth="1" />
+        <circle cx="33" cy="119" r="4" stroke="#899f96" strokeWidth=".9" />
+        <path d="M29 119h8m-4 -4v8" stroke="#718a82" strokeWidth=".7" />
+        <circle cx="48" cy="104" r="4" fill="#152e38" stroke="#9bafa8" strokeWidth=".7" />
+        <path d="M46 106l3 -3" stroke="#c3d1bf" strokeWidth=".8" />
+        <circle data-site-status="true" cx="51" cy="136" r="1" fill={isPlaying ? '#a6c5ab' : '#647b79'} />
+        <path d="M32 159h3m27 0h3" stroke="#a6b4a6" strokeWidth="1" />
       </g>
     </svg>
   </div>

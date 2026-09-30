@@ -1300,22 +1300,21 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 
 .hero-surface-site {
   position: absolute;
-  top: calc(var(--hero-surface) - 130px);
-  width: 420px;
-  height: 130px;
-  transform: translateX(-24px);
-  transform-origin: 24px bottom;
+  bottom: calc(100% - var(--hero-surface));
+  width: min(540px, 42vw);
+  aspect-ratio: 540 / 160;
+  /* The well is at x=48 in a viewBox starting at -140: 188/540. */
+  transform: translateX(-34.814815%);
   z-index: 5;
   pointer-events: none;
 }
+
+.hero-surface-site > svg { display: block; }
 
 @media (max-width: 860px) {
   .hero-scene { --hero-surface: max(42vh, 430px); }
   .hero-moon { left: auto; right: 24px; top: 26%; width: 28px; }
   .hero-landscape { height: 85px; }
-  .hero-surface-site {
-    transform: translateX(-24px) scale(.65);
-  }
 }
 
 .hero-identity-container {
@@ -1421,15 +1420,6 @@ body:has(#app-loader) .hero-reveal {
   bottom: 195px;
   width: 320px;
   z-index: 10;
-}
-@media (max-width: 860px) {
-  .hero-annotation-box {
-    position: relative !important;
-    left: auto !important;
-    bottom: auto !important;
-    width: auto !important;
-    margin: 16px 20px 0 !important;
-  }
 }
 
 /* =====================================================
