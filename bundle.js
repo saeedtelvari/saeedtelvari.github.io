@@ -1144,7 +1144,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = HeroGeolog
 
 // File: SubsurfaceHero.jsx
 // SubsurfaceHero.jsx — landing hero as a CO2 storage cross-section.
-// Strict layout: sky (top 42vh) holds the identity, subsurface (58vh) holds
+// Sky holds the identity; one shared surface boundary keeps the subsurface aligned.
 // the cross-section. They never overlap.
 
 // [destructured React]
@@ -1715,6 +1715,7 @@ const SubsurfaceHero = ({
   }, [isPlaying, speed, history]);
   return /*#__PURE__*/React.createElement("section", {
     id: "home",
+    className: "hero-scene",
     style: {
       position: 'relative',
       height: '100vh',
@@ -1728,13 +1729,11 @@ const SubsurfaceHero = ({
     h: currentH,
     faults: faults,
     geology: geology
+  }), /*#__PURE__*/React.createElement(SurfaceSite, {
+    geology: geology,
+    isPlaying: isPlaying
   }), /*#__PURE__*/React.createElement(Horizon, null), /*#__PURE__*/React.createElement(Identity, {
     onNavigate: onNavigate
-  }), /*#__PURE__*/React.createElement(Wellhead, {
-    geology: geology
-  }), /*#__PURE__*/React.createElement(GasFeedAnimation, {
-    isPlaying: isPlaying,
-    geology: geology
   }), /*#__PURE__*/React.createElement(DepthAxis, null), /*#__PURE__*/React.createElement(Well, {
     faults: faults,
     geology: geology
@@ -1924,149 +1923,554 @@ const SimulationController = ({
 };
 
 /* =====================================================
-   Sky — moonlit cloud banks and sparse stars over the same cool geological palette.
+   Sky — moonlight and drifting clouds above a Highland field site.
    ===================================================== */
-const Sky = () => useMemo(() => /*#__PURE__*/React.createElement("div", {
-  "data-layer": "sky",
+const Sky = () => {
+  const skyRef = useRef(null);
+  useEffect(() => {
+    const sky = skyRef.current;
+    const hero = sky.closest('#home');
+    const starsLayer = sky.querySelector('.hero-stars');
+    const stars = [...starsLayer.children];
+    const motion = window.matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)');
+    let frame;
+    const reset = () => {
+      window.cancelAnimationFrame(frame);
+      stars.forEach(star => star.style.setProperty('--star-near', '0'));
+    };
+    const move = event => {
+      if (!motion.matches || event.pointerType !== 'mouse') return;
+      const rect = sky.getBoundingClientRect();
+      const x = event.clientX - rect.left,
+        y = event.clientY - rect.top;
+      if (!rect.width || !rect.height || x < 0 || x > rect.width || y < 0 || y > rect.height) {
+        reset();
+        return;
+      }
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        stars.forEach(star => {
+          const sx = parseFloat(star.style.left) / 100 * rect.width;
+          const sy = parseFloat(star.style.top) / 100 * rect.height;
+          const proximity = Math.max(0, 1 - Math.hypot(x - sx, y - sy) / 90);
+          star.style.setProperty('--star-near', proximity.toFixed(3));
+        });
+      });
+    };
+    hero.addEventListener('pointermove', move, {
+      passive: true
+    });
+    hero.addEventListener('pointerleave', reset);
+    window.addEventListener('scroll', reset, {
+      passive: true
+    });
+    motion.addEventListener('change', reset);
+    return () => {
+      reset();
+      hero.removeEventListener('pointermove', move);
+      hero.removeEventListener('pointerleave', reset);
+      window.removeEventListener('scroll', reset);
+      motion.removeEventListener('change', reset);
+    };
+  }, []);
+  return useMemo(() => /*#__PURE__*/React.createElement("div", {
+    ref: skyRef,
+    "data-layer": "sky",
+    "aria-hidden": "true",
+    style: {
+      position: 'absolute',
+      inset: '0 0 auto',
+      height: 'var(--hero-surface)',
+      overflow: 'hidden',
+      pointerEvents: 'none',
+      background: 'linear-gradient(180deg, #070d1a 0%, #111e32 58%, #253449 100%)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      inset: 0,
+      background: 'radial-gradient(ellipse at 82% 28%, rgba(159,183,209,0.1), transparent 52%)'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "hero-stars"
+  }, Array.from({
+    length: 108
+  }, (_, i) => /*#__PURE__*/React.createElement("span", {
+    key: i,
+    className: `hero-star${i % 7 === 0 ? ' hero-star-twinkle' : ''}`,
+    style: {
+      left: `${(i * 61.803 + 3) % 100}%`,
+      top: `${10 + i * i * 17.31 % 67}%`,
+      width: i % 11 === 0 ? 2 : 1.25,
+      height: i % 11 === 0 ? 2 : 1.25,
+      '--star-base': 0.32 + i % 5 * 0.08,
+      '--star-period': `${6 + i % 5}s`,
+      '--star-delay': `${-i * .73}s`,
+      boxShadow: i % 11 === 0 ? '0 0 5px rgba(176,206,238,0.35)' : 'none'
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "hero-moon"
+  }, /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 64 64",
+    width: "100%",
+    height: "100%"
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("radialGradient", {
+    id: "moon-disc",
+    cx: ".35",
+    cy: ".3",
+    r: ".75"
+  }, /*#__PURE__*/React.createElement("stop", {
+    stopColor: "#edf0e5"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: ".7",
+    stopColor: "#c8d1cf"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "1",
+    stopColor: "#97a8b6"
+  })), /*#__PURE__*/React.createElement("filter", {
+    id: "moon-soft"
+  }, /*#__PURE__*/React.createElement("feGaussianBlur", {
+    stdDeviation: ".6"
+  }))), /*#__PURE__*/React.createElement("circle", {
+    cx: "32",
+    cy: "32",
+    r: "29",
+    fill: "url(#moon-disc)",
+    filter: "url(#moon-soft)"
+  }), /*#__PURE__*/React.createElement("g", {
+    fill: "#697f91",
+    opacity: ".15",
+    filter: "url(#moon-soft)"
+  }, /*#__PURE__*/React.createElement("ellipse", {
+    cx: "22",
+    cy: "23",
+    rx: "7",
+    ry: "9"
+  }), /*#__PURE__*/React.createElement("ellipse", {
+    cx: "37",
+    cy: "41",
+    rx: "9",
+    ry: "7"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "43",
+    cy: "22",
+    r: "4"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "20",
+    cy: "42",
+    r: "3"
+  })))), /*#__PURE__*/React.createElement("div", {
+    className: "hero-night-clouds",
+    style: {
+      position: 'absolute',
+      inset: 0,
+      opacity: .55
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 1000 420",
+    preserveAspectRatio: "none",
+    width: "104%",
+    height: "100%",
+    style: {
+      marginLeft: '-2%'
+    }
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+    id: "night-cloud-lit",
+    x1: "0",
+    y1: "0",
+    x2: "0.2",
+    y2: "1"
+  }, /*#__PURE__*/React.createElement("stop", {
+    stopColor: "#a1b6cd",
+    stopOpacity: "0.45"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "25%",
+    stopColor: "#536780",
+    stopOpacity: "0.60"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "65%",
+    stopColor: "#23324a",
+    stopOpacity: "0.88"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: "#152137",
+    stopOpacity: "0"
+  })), /*#__PURE__*/React.createElement("linearGradient", {
+    id: "night-cloud-shadow",
+    x1: "0",
+    y1: "0",
+    x2: "0",
+    y2: "1"
+  }, /*#__PURE__*/React.createElement("stop", {
+    stopColor: "#34415d",
+    stopOpacity: "0.72"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "30%",
+    stopColor: "#131d31",
+    stopOpacity: "0.94"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: "#101b2c",
+    stopOpacity: "0"
+  })), /*#__PURE__*/React.createElement("filter", {
+    id: "night-cloud-texture",
+    x: "-10%",
+    y: "-30%",
+    width: "120%",
+    height: "160%",
+    colorInterpolationFilters: "sRGB"
+  }, /*#__PURE__*/React.createElement("feTurbulence", {
+    type: "fractalNoise",
+    baseFrequency: "0.009 0.025",
+    numOctaves: "3",
+    seed: "12",
+    result: "cloud-noise"
+  }), /*#__PURE__*/React.createElement("feColorMatrix", {
+    in: "cloud-noise",
+    type: "matrix",
+    values: "0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  3 0 0 0 -1",
+    result: "cloud-density"
+  }), /*#__PURE__*/React.createElement("feDisplacementMap", {
+    in: "SourceGraphic",
+    in2: "cloud-noise",
+    scale: "38",
+    xChannelSelector: "R",
+    yChannelSelector: "G"
+  }), /*#__PURE__*/React.createElement("feGaussianBlur", {
+    stdDeviation: "6"
+  }), /*#__PURE__*/React.createElement("feComposite", {
+    in2: "cloud-density",
+    operator: "in"
+  }), /*#__PURE__*/React.createElement("feGaussianBlur", {
+    stdDeviation: "1"
+  }))), /*#__PURE__*/React.createElement("g", {
+    filter: "url(#night-cloud-texture)"
+  }, /*#__PURE__*/React.createElement("g", {
+    fill: "url(#night-cloud-lit)"
+  }, /*#__PURE__*/React.createElement("path", {
+    opacity: "0.55",
+    d: "M 390 144 C 445 130 471 147 511 125 C 537 111 563 122 594 110 C 631 92 661 109 687 90 C 729 66 755 91 798 77 C 859 62 882 98 936 84 L 1100 81 L 1100 226 C 916 223 858 185 715 203 C 596 213 496 171 390 185 Z"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M 557 215 C 603 188 625 207 650 187 C 677 165 699 182 722 159 C 741 143 764 163 782 149 C 816 121 839 147 864 136 C 887 126 917 155 943 140 C 991 114 1041 138 1100 118 L 1100 314 C 1023 294 960 317 885 284 C 787 252 723 284 651 250 C 611 235 585 240 557 248 Z"
+  }), /*#__PURE__*/React.createElement("path", {
+    opacity: "0.46",
+    d: "M 150 300 C 219 278 257 292 294 275 C 330 258 364 285 400 261 C 431 240 463 263 492 247 C 529 226 555 253 600 241 C 654 226 684 259 725 245 L 832 279 L 901 365 C 690 337 637 355 484 328 C 347 315 259 340 150 332 Z"
+  })), /*#__PURE__*/React.createElement("g", {
+    fill: "url(#night-cloud-shadow)"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M 731 256 C 778 228 808 250 831 225 C 854 206 877 223 901 203 C 929 176 956 207 983 190 C 1022 174 1055 194 1100 181 L 1100 408 L 833 390 C 815 328 778 301 731 295 Z"
+  }), /*#__PURE__*/React.createElement("path", {
+    opacity: "0.75",
+    d: "M -80 343 C 4 322 43 341 87 317 C 128 293 157 323 202 304 C 244 280 283 308 320 292 C 362 273 387 311 435 298 L 561 372 L 628 432 L -80 432 Z"
+  }))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      inset: 0,
+      background: 'linear-gradient(90deg, rgba(8,14,28,0.94) 0%, rgba(8,14,28,0.72) 29%, rgba(8,14,28,0.15) 58%, transparent 78%)'
+    }
+  }), /*#__PURE__*/React.createElement("svg", {
+    className: "hero-landscape",
+    viewBox: "0 0 1440 180",
+    preserveAspectRatio: "none"
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+    id: "highland-distant",
+    x1: "0",
+    y1: "0",
+    x2: "0",
+    y2: "1"
+  }, /*#__PURE__*/React.createElement("stop", {
+    stopColor: "#2e4053"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "1",
+    stopColor: "#152333"
+  })), /*#__PURE__*/React.createElement("linearGradient", {
+    id: "highland-near",
+    x1: "0",
+    y1: "0",
+    x2: "0",
+    y2: "1"
+  }, /*#__PURE__*/React.createElement("stop", {
+    stopColor: "#172b3b"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "1",
+    stopColor: "#0b171f"
+  })), /*#__PURE__*/React.createElement("linearGradient", {
+    id: "highland-mist",
+    x1: "0",
+    y1: "0",
+    x2: "1",
+    y2: "0"
+  }, /*#__PURE__*/React.createElement("stop", {
+    stopColor: "#a5bcd3",
+    stopOpacity: "0"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: ".62",
+    stopColor: "#a5bcd3",
+    stopOpacity: ".16"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "1",
+    stopColor: "#a5bcd3",
+    stopOpacity: "0"
+  })), /*#__PURE__*/React.createElement("filter", {
+    id: "highland-soft"
+  }, /*#__PURE__*/React.createElement("feGaussianBlur", {
+    stdDeviation: "5"
+  }))), /*#__PURE__*/React.createElement("path", {
+    d: "M0 138L80 123L155 130L228 112L292 119L357 90L403 96L457 70L489 74L540 41L568 53L600 48L647 77L693 61L738 80L804 50L846 27L880 44L912 40L950 73L1014 91L1060 81L1131 97L1201 61L1240 69L1290 46L1336 73L1390 64L1440 88V180H0Z",
+    fill: "url(#highland-distant)"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M490 74L540 41L568 53L600 48M804 50L846 27L880 44L912 40M1240 69L1290 46L1336 73",
+    fill: "none",
+    stroke: "#8fa5b8",
+    strokeOpacity: ".3"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M0 155Q120 120 220 147T402 118L476 106L528 112L585 91L638 109L694 102L761 126L837 108L910 125L991 110L1057 126L1140 112L1210 126L1290 98L1351 104L1440 128V180H0Z",
+    fill: "url(#highland-near)"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M360 139Q620 112 871 133T1470 128",
+    stroke: "url(#highland-mist)",
+    strokeWidth: "20",
+    fill: "none",
+    filter: "url(#highland-soft)"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M0 171Q142 164 264 173T490 165T730 171T958 167T1220 170T1440 164V180H0Z",
+    fill: "#0a151b"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M720 173L735 168L759 174M1115 172L1130 164L1151 172M1268 173L1280 167L1294 172",
+    fill: "#21333a",
+    stroke: "#48605e",
+    strokeOpacity: ".3"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M607 172l-3 -10m3 10l4 -7m566 8l-3 -13m3 13l5 -8m173 6l-2 -11m2 11l4 -5",
+    stroke: "#527067",
+    strokeWidth: "1",
+    opacity: ".65"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "hero-rain"
+  }, Array.from({
+    length: 64
+  }, (_, i) => /*#__PURE__*/React.createElement("span", {
+    key: i,
+    className: "hero-rain-drop",
+    style: {
+      left: `${(i * 61.803 + 9) % 100}%`,
+      '--rain-speed': `${.8 + i % 5 * .12}s`,
+      '--rain-phase': `${-i * .13}s`,
+      '--rain-length': `${14 + i % 6 * 3}px`,
+      '--rain-alpha': .13 + i % 4 * .04
+    }
+  })))), []);
+};
+
+// Decorative equipment stays anchored to the same surface and well as the live model.
+const SurfaceSite = ({
+  geology,
+  isPlaying
+}) => /*#__PURE__*/React.createElement("div", {
+  className: "hero-surface-site",
   "aria-hidden": "true",
   style: {
-    position: 'absolute',
-    inset: '0 0 auto',
-    height: '42vh',
-    overflow: 'hidden',
-    pointerEvents: 'none',
-    background: 'linear-gradient(180deg, #090f20 0%, #131b30 56%, #1a253b 84%, #172737 100%)'
-  }
-}, /*#__PURE__*/React.createElement("div", {
-  style: {
-    position: 'absolute',
-    inset: 0,
-    background: 'radial-gradient(ellipse at 79% 30%, rgba(142,170,207,0.18), transparent 34%), radial-gradient(ellipse at 70% 105%, rgba(83,131,151,0.12), transparent 55%)'
-  }
-}), Array.from({
-  length: 52
-}, (_, i) => /*#__PURE__*/React.createElement("span", {
-  key: i,
-  style: {
-    position: 'absolute',
-    left: `${(i * 61.803 + 3) % 100}%`,
-    top: `${5 + i * i * 17.31 % 67}%`,
-    width: i % 11 === 0 ? 2 : 1.25,
-    height: i % 11 === 0 ? 2 : 1.25,
-    borderRadius: '50%',
-    background: '#c7dbed',
-    opacity: 0.26 + i % 5 * 0.08,
-    boxShadow: i % 11 === 0 ? '0 0 5px rgba(176,206,238,0.35)' : 'none'
-  }
-})), /*#__PURE__*/React.createElement("div", {
-  className: "hero-night-clouds",
-  style: {
-    position: 'absolute',
-    inset: 0
+    left: `${geology.wellXPct}%`
   }
 }, /*#__PURE__*/React.createElement("svg", {
-  viewBox: "0 0 1000 420",
-  preserveAspectRatio: "none",
-  width: "104%",
-  height: "100%",
-  style: {
-    marginLeft: '-2%'
-  }
+  viewBox: "0 0 420 130",
+  width: "420",
+  height: "130",
+  fill: "none"
 }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
-  id: "night-cloud-lit",
-  x1: "0",
-  y1: "0",
-  x2: "0.2",
-  y2: "1"
-}, /*#__PURE__*/React.createElement("stop", {
-  stopColor: "#8496b5",
-  stopOpacity: "0.60"
-}), /*#__PURE__*/React.createElement("stop", {
-  offset: "25%",
-  stopColor: "#425772",
-  stopOpacity: "0.70"
-}), /*#__PURE__*/React.createElement("stop", {
-  offset: "65%",
-  stopColor: "#23324a",
-  stopOpacity: "0.88"
-}), /*#__PURE__*/React.createElement("stop", {
-  offset: "100%",
-  stopColor: "#152137",
-  stopOpacity: "0"
-})), /*#__PURE__*/React.createElement("linearGradient", {
-  id: "night-cloud-shadow",
+  id: "site-steel",
   x1: "0",
   y1: "0",
   x2: "0",
   y2: "1"
 }, /*#__PURE__*/React.createElement("stop", {
-  stopColor: "#34415d",
-  stopOpacity: "0.72"
+  stopColor: "#344a53"
 }), /*#__PURE__*/React.createElement("stop", {
-  offset: "30%",
-  stopColor: "#131d31",
-  stopOpacity: "0.94"
+  offset: "1",
+  stopColor: "#15252e"
+})), /*#__PURE__*/React.createElement("radialGradient", {
+  id: "site-lamplight"
+}, /*#__PURE__*/React.createElement("stop", {
+  stopColor: "#ffd99b",
+  stopOpacity: ".24"
 }), /*#__PURE__*/React.createElement("stop", {
-  offset: "100%",
-  stopColor: "#101b2c",
+  offset: "1",
+  stopColor: "#ffd99b",
   stopOpacity: "0"
-})), /*#__PURE__*/React.createElement("filter", {
-  id: "night-cloud-texture",
-  x: "-10%",
-  y: "-30%",
-  width: "120%",
-  height: "160%",
-  colorInterpolationFilters: "sRGB"
-}, /*#__PURE__*/React.createElement("feTurbulence", {
-  type: "fractalNoise",
-  baseFrequency: "0.009 0.025",
-  numOctaves: "3",
-  seed: "12",
-  result: "cloud-noise"
-}), /*#__PURE__*/React.createElement("feColorMatrix", {
-  in: "cloud-noise",
-  type: "matrix",
-  values: "0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  3 0 0 0 -1",
-  result: "cloud-density"
-}), /*#__PURE__*/React.createElement("feDisplacementMap", {
-  in: "SourceGraphic",
-  in2: "cloud-noise",
-  scale: "38",
-  xChannelSelector: "R",
-  yChannelSelector: "G"
-}), /*#__PURE__*/React.createElement("feGaussianBlur", {
-  stdDeviation: "6"
-}), /*#__PURE__*/React.createElement("feComposite", {
-  in2: "cloud-density",
-  operator: "in"
-}), /*#__PURE__*/React.createElement("feGaussianBlur", {
-  stdDeviation: "1"
-}))), /*#__PURE__*/React.createElement("g", {
-  filter: "url(#night-cloud-texture)"
-}, /*#__PURE__*/React.createElement("g", {
-  fill: "url(#night-cloud-lit)"
-}, /*#__PURE__*/React.createElement("path", {
-  opacity: "0.55",
-  d: "M 390 144 C 445 130 471 147 511 125 C 537 111 563 122 594 110 C 631 92 661 109 687 90 C 729 66 755 91 798 77 C 859 62 882 98 936 84 L 1100 81 L 1100 226 C 916 223 858 185 715 203 C 596 213 496 171 390 185 Z"
+})), /*#__PURE__*/React.createElement("linearGradient", {
+  id: "site-pipe-steel",
+  x1: "0",
+  y1: "0",
+  x2: "0",
+  y2: "1"
+}, /*#__PURE__*/React.createElement("stop", {
+  stopColor: "#91aaa4"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: ".4",
+  stopColor: "#536b70"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: "1",
+  stopColor: "#263c43"
+})), /*#__PURE__*/React.createElement("path", {
+  id: "site-feed-route",
+  d: "M244 106H202Q196 106 196 112V116Q196 122 190 122H58Q52 122 52 116V109Q52 103 46 103H34"
+})), /*#__PURE__*/React.createElement("ellipse", {
+  cx: "130",
+  cy: "120",
+  rx: "78",
+  ry: "10",
+  fill: "url(#site-lamplight)"
+}), /*#__PURE__*/React.createElement("ellipse", {
+  cx: "329",
+  cy: "120",
+  rx: "59",
+  ry: "10",
+  fill: "url(#site-lamplight)"
 }), /*#__PURE__*/React.createElement("path", {
-  d: "M 557 215 C 603 188 625 207 650 187 C 677 165 699 182 722 159 C 741 143 764 163 782 149 C 816 121 839 147 864 136 C 887 126 917 155 943 140 C 991 114 1041 138 1100 118 L 1100 314 C 1023 294 960 317 885 284 C 787 252 723 284 651 250 C 611 235 585 240 557 248 Z"
+  d: "M76 130L112 112H179L232 130",
+  fill: "#283637",
+  opacity: ".5"
 }), /*#__PURE__*/React.createElement("path", {
-  opacity: "0.46",
-  d: "M 150 300 C 219 278 257 292 294 275 C 330 258 364 285 400 261 C 431 240 463 263 492 247 C 529 226 555 253 600 241 C 654 226 684 259 725 245 L 832 279 L 901 365 C 690 337 637 355 484 328 C 347 315 259 340 150 332 Z"
-})), /*#__PURE__*/React.createElement("g", {
-  fill: "url(#night-cloud-shadow)"
-}, /*#__PURE__*/React.createElement("path", {
-  d: "M 731 256 C 778 228 808 250 831 225 C 854 206 877 223 901 203 C 929 176 956 207 983 190 C 1022 174 1055 194 1100 181 L 1100 408 L 833 390 C 815 328 778 301 731 295 Z"
+  d: "M91 116V56L103 48H166L178 56V116Z",
+  fill: "url(#site-steel)",
+  stroke: "#66817f",
+  strokeOpacity: ".4"
 }), /*#__PURE__*/React.createElement("path", {
-  opacity: "0.75",
-  d: "M -80 343 C 4 322 43 341 87 317 C 128 293 157 323 202 304 C 244 280 283 308 320 292 C 362 273 387 311 435 298 L 561 372 L 628 432 L -80 432 Z"
-}))))), /*#__PURE__*/React.createElement("div", {
+  d: "M87 57L102 46H168L182 57",
+  stroke: "#75918b",
+  strokeWidth: "2"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M104 63H130V83H104Z",
+  fill: "#e3bd7d",
+  fillOpacity: ".8"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M117 63V83M104 73H130",
+  stroke: "#34484c"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M147 64H166V116H147Z",
+  fill: "#14252d",
+  stroke: "#638078",
+  strokeOpacity: ".5"
+}), /*#__PURE__*/React.createElement("circle", {
+  cx: "162",
+  cy: "101",
+  r: "1",
+  fill: "#c6cfba"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M96 110H141M96 105H141",
+  stroke: "#66817f",
+  strokeOpacity: ".25"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M204 118V101H279V118M219 99V88H238V99M243 99V90H263V99",
+  stroke: "#5e7779",
+  strokeWidth: "3"
+}), /*#__PURE__*/React.createElement("rect", {
+  x: "208",
+  y: "100",
+  width: "66",
+  height: "14",
+  rx: "3",
+  fill: "url(#site-steel)",
+  stroke: "#758f89",
+  strokeOpacity: ".45"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M211 105H271M228 100V114M253 100V114",
+  stroke: "#7e9b93",
+  strokeOpacity: ".35"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M315 120V47H300M301 49L295 52",
+  stroke: "#78918c",
+  strokeWidth: "2"
+}), /*#__PURE__*/React.createElement("ellipse", {
+  cx: "296",
+  cy: "87",
+  rx: "35",
+  ry: "43",
+  fill: "url(#site-lamplight)"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M289 52H302",
+  stroke: "#f5cf91",
+  strokeWidth: "3",
+  strokeLinecap: "round"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M335 119V91M361 119V91M387 119V91M334 98H405M334 111H405",
+  stroke: "#526c68",
+  strokeWidth: "1.2"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M82 122V128M183 122V128M76 129H88M177 129H189",
+  stroke: "#667c78",
+  strokeWidth: "2"
+}), /*#__PURE__*/React.createElement("use", {
+  href: "#site-feed-route",
+  stroke: "#09171d",
+  strokeWidth: "7"
+}), /*#__PURE__*/React.createElement("use", {
+  href: "#site-feed-route",
+  stroke: "url(#site-pipe-steel)",
+  strokeWidth: "4.5"
+}), /*#__PURE__*/React.createElement("use", {
+  className: "hero-feed-flow",
+  href: "#site-feed-route",
+  stroke: "#8dd8bc",
+  strokeWidth: "1.2",
   style: {
-    position: 'absolute',
-    inset: 0,
-    background: 'linear-gradient(90deg, rgba(11,15,29,0.88) 0%, rgba(13,17,32,0.65) 32%, transparent 68%), linear-gradient(0deg, rgba(14,26,39,0.65), transparent 20%)'
+    animationPlayState: isPlaying ? 'running' : 'paused'
   }
-})), []);
+}), /*#__PURE__*/React.createElement("g", {
+  className: "hero-wellhead"
+}, /*#__PURE__*/React.createElement("rect", {
+  x: "7",
+  y: "126",
+  width: "34",
+  height: "4",
+  rx: "1",
+  fill: "#40545a",
+  stroke: "#7c9390",
+  strokeWidth: ".6"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M24 88V126M12 103H34",
+  stroke: "url(#site-pipe-steel)",
+  strokeWidth: "5"
+}), /*#__PURE__*/React.createElement("rect", {
+  x: "18",
+  y: "112",
+  width: "12",
+  height: "8",
+  rx: "1.5",
+  fill: "#243941",
+  stroke: "#819b94",
+  strokeWidth: ".8"
+}), /*#__PURE__*/React.createElement("rect", {
+  x: "18",
+  y: "98",
+  width: "12",
+  height: "9",
+  rx: "1.5",
+  fill: "#243941",
+  stroke: "#819b94",
+  strokeWidth: ".8"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M18 116H11M11 113V119M33 100V106M21 90H27",
+  stroke: "#a0b4a9",
+  strokeWidth: "1.2",
+  strokeLinecap: "round"
+}), /*#__PURE__*/React.createElement("circle", {
+  cx: "24",
+  cy: "85",
+  r: "3.5",
+  fill: "#182c35",
+  stroke: "#91aaa4",
+  strokeWidth: ".8"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M24 85L26 83",
+  stroke: "#c2d5bf",
+  strokeWidth: ".8"
+}), /*#__PURE__*/React.createElement("circle", {
+  cx: "24",
+  cy: "102.5",
+  r: "1.1",
+  fill: "#8dd8bc"
+}))));
 
 /* =====================================================
    Horizon — dashed mint line at 42vh
@@ -2076,26 +2480,14 @@ const Horizon = () => /*#__PURE__*/React.createElement("div", {
     position: 'absolute',
     left: 0,
     right: 0,
-    top: '42vh',
+    top: 'var(--hero-surface)',
     height: 0,
     borderTop: '1px dashed rgba(100,255,218,0.55)',
     boxShadow: '0 0 8px rgba(100,255,218,0.30)',
     zIndex: 4,
     pointerEvents: 'none'
   }
-}, /*#__PURE__*/React.createElement("span", {
-  style: {
-    position: 'absolute',
-    right: 28,
-    top: -22,
-    fontSize: 10,
-    letterSpacing: '0.20em',
-    textTransform: 'uppercase',
-    color: 'rgba(100,255,218,0.85)',
-    fontWeight: 600,
-    fontFamily: 'ui-monospace, Menlo, monospace'
-  }
-}, "Surface \xB7 0\xA0m"));
+});
 
 /* =====================================================
    Subsurface — SVG cross-section with anticline cap rock,
@@ -2371,16 +2763,16 @@ const GeologyTexture = ({
 // Depth axis — clean ticks on the left margin
 const DepthAxis = () => {
   const ticks = [{
-    top: '42vh',
+    depth: 0,
     label: '0 m'
   }, {
-    top: '54vh',
+    depth: 120,
     label: '–1200 m'
   }, {
-    top: '70vh',
+    depth: 280,
     label: '–1800 m'
   }, {
-    top: '88vh',
+    depth: 460,
     label: '–2400 m'
   }];
   return /*#__PURE__*/React.createElement("div", {
@@ -2398,7 +2790,7 @@ const DepthAxis = () => {
     key: i,
     style: {
       position: 'absolute',
-      top: t.top,
+      top: `calc(var(--hero-surface) + var(--hero-depth) * ${t.depth / 580})`,
       left: 0,
       transform: 'translateY(-50%)'
     }
@@ -2424,201 +2816,6 @@ const DepthAxis = () => {
     }
   }, t.label)))));
 };
-
-// Overland CO2 Supercritical Pipeline with elevated supports and directional chevron flow
-const GasFeedAnimation = ({
-  isPlaying,
-  geology
-}) => {
-  const g = geology || currentGeology;
-  const wellX = g.wellXPct;
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      top: 'calc(42vh - 36px)',
-      height: 36,
-      pointerEvents: 'none',
-      zIndex: 5
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      left: `calc(${wellX}% + 33px)`,
-      right: 0,
-      height: 36
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      left: 16,
-      top: -16,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 7,
-      fontSize: 9.5,
-      fontFamily: "'JetBrains Mono', ui-monospace, Menlo, monospace",
-      color: '#0dfca2',
-      letterSpacing: '0.12em',
-      textTransform: 'uppercase',
-      fontWeight: 600,
-      textShadow: '0 1px 4px rgba(0,0,0,0.9)',
-      whiteSpace: 'nowrap'
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      width: 6,
-      height: 6,
-      borderRadius: '50%',
-      background: '#0dfca2',
-      boxShadow: '0 0 8px #0dfca2',
-      display: 'inline-block'
-    }
-  }), /*#__PURE__*/React.createElement("span", null, "CO\u2082 TRANSMISSION PIPELINE \xB7 110 BAR \xB7 SUPERCRITICAL")), /*#__PURE__*/React.createElement("svg", {
-    width: "100%",
-    height: "36",
-    style: {
-      overflow: 'visible'
-    },
-    preserveAspectRatio: "none"
-  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
-    id: "pipe-steel",
-    x1: "0%",
-    y1: "0%",
-    x2: "0%",
-    y2: "100%"
-  }, /*#__PURE__*/React.createElement("stop", {
-    offset: "0%",
-    stopColor: "#475569"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "18%",
-    stopColor: "#94a3b8"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "42%",
-    stopColor: "#334155"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "75%",
-    stopColor: "#1e293b"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "100%",
-    stopColor: "#0f172a"
-  })), /*#__PURE__*/React.createElement("linearGradient", {
-    id: "sc-fluid-core",
-    x1: "0%",
-    y1: "0%",
-    x2: "0%",
-    y2: "100%"
-  }, /*#__PURE__*/React.createElement("stop", {
-    offset: "0%",
-    stopColor: "#a7f3d0"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "45%",
-    stopColor: "#0dfca2"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "100%",
-    stopColor: "#059669"
-  })), /*#__PURE__*/React.createElement("pattern", {
-    id: "chevron-flow-pattern",
-    width: "32",
-    height: "10",
-    patternUnits: "userSpaceOnUse"
-  }, /*#__PURE__*/React.createElement("path", {
-    d: "M 12 2 L 6 5 L 12 8 M 24 2 L 18 5 L 24 8",
-    fill: "none",
-    stroke: "#ffffff",
-    strokeWidth: "1.3",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    opacity: "0.85"
-  }))), [60, 220, 380, 540, 700, 860, 1020, 1180].map(xPos => /*#__PURE__*/React.createElement("g", {
-    key: `pipe-support-${xPos}`
-  }, /*#__PURE__*/React.createElement("rect", {
-    x: xPos - 2,
-    y: "13",
-    width: "4",
-    height: "21",
-    fill: "#334155",
-    stroke: "#1e293b",
-    strokeWidth: "0.5"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: `M ${xPos - 6} 13 Q ${xPos} 15 ${xPos + 6} 13`,
-    stroke: "#64748b",
-    strokeWidth: "1.6",
-    fill: "none"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: xPos - 8,
-    y: "32",
-    width: "16",
-    height: "4",
-    rx: "1",
-    fill: "#1e293b",
-    stroke: "#475569",
-    strokeWidth: "0.7"
-  }))), /*#__PURE__*/React.createElement("rect", {
-    x: "0",
-    y: "1",
-    width: "100%",
-    height: "12",
-    rx: "2.5",
-    fill: "url(#pipe-steel)",
-    stroke: "rgba(255,255,255,0.22)",
-    strokeWidth: "0.8",
-    style: {
-      filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.5))'
-    }
-  }), [140, 300, 460, 620, 780, 940, 1100].map(xPos => /*#__PURE__*/React.createElement("g", {
-    key: `flange-collar-${xPos}`
-  }, /*#__PURE__*/React.createElement("rect", {
-    x: xPos - 2.5,
-    y: "0",
-    width: "5",
-    height: "14",
-    rx: "1",
-    fill: "#475569",
-    stroke: "#94a3b8",
-    strokeWidth: "0.7"
-  }), /*#__PURE__*/React.createElement("circle", {
-    cx: xPos,
-    cy: "2.5",
-    r: "0.8",
-    fill: "#e2e8f0"
-  }), /*#__PURE__*/React.createElement("circle", {
-    cx: xPos,
-    cy: "11.5",
-    r: "0.8",
-    fill: "#e2e8f0"
-  }))), /*#__PURE__*/React.createElement("rect", {
-    x: "0",
-    y: "4.5",
-    width: "100%",
-    height: "5",
-    rx: "1.5",
-    fill: "url(#sc-fluid-core)",
-    opacity: "0.9",
-    style: {
-      filter: 'drop-shadow(0 0 6px rgba(13,252,162,0.7))'
-    }
-  }), /*#__PURE__*/React.createElement("g", {
-    style: {
-      animation: 'pipelineChevron 1.4s linear infinite',
-      animationPlayState: isPlaying ? 'running' : 'paused'
-    }
-  }, /*#__PURE__*/React.createElement("rect", {
-    x: "-64",
-    y: "3.5",
-    width: "calc(100% + 128px)",
-    height: "7",
-    fill: "url(#chevron-flow-pattern)"
-  })), /*#__PURE__*/React.createElement("line", {
-    x1: "0",
-    y1: "2",
-    x2: "100%",
-    y2: "2",
-    stroke: "rgba(255,255,255,0.55)",
-    strokeWidth: "0.75"
-  }))));
-};
 const Subsurface = ({
   h,
   faults,
@@ -2635,9 +2832,9 @@ const Subsurface = ({
       position: 'absolute',
       left: 0,
       right: 0,
-      top: '42vh',
+      top: 'var(--hero-surface)',
       width: '100%',
-      height: '58vh',
+      height: 'var(--hero-depth)',
       pointerEvents: 'none'
     },
     viewBox: "0 0 1000 580",
@@ -2739,16 +2936,16 @@ const Subsurface = ({
     stroke: "rgba(255,255,255,0.12)",
     strokeWidth: "0.6"
   })), [{
-    top: 'calc(42vh + 8px)',
+    top: 'calc(var(--hero-surface) + 8px)',
     label: 'Cap rock'
   }, {
-    top: `${42 + (capRockY(980, flts, null, 0.4, g) + layerThicknessAt(980, 0.4, flts, null, g) / 2) * 0.1}vh`,
+    top: `calc(var(--hero-surface) + var(--hero-depth) * ${(capRockY(980, flts, null, 0.4, g) + layerThicknessAt(980, 0.4, flts, null, g) / 2) / 580})`,
     label: 'Upper reservoir'
   }, {
-    top: `${42 + (capRockY(980, flts, null, 1, g) + layerThicknessAt(980, 1, flts, null, g) / 2) * 0.1}vh`,
+    top: `calc(var(--hero-surface) + var(--hero-depth) * ${(capRockY(980, flts, null, 1, g) + layerThicknessAt(980, 1, flts, null, g) / 2) / 580})`,
     label: 'Reservoir'
   }, {
-    top: `${42 + (stratumY(980, flts, null, 1, g.reservoirThickness, g) + 580) * 0.05}vh`,
+    top: `calc(var(--hero-surface) + var(--hero-depth) * ${(stratumY(980, flts, null, 1, g.reservoirThickness, g) + 580) / 1160})`,
     label: 'Aquifer'
   }].map((s, i) => /*#__PURE__*/React.createElement("span", {
     key: i,
@@ -2769,261 +2966,6 @@ const Subsurface = ({
   }, s.label)));
 };
 
-// Wellhead — Precision technical SVG Christmas Tree vector assembly
-const Wellhead = ({
-  geology
-}) => {
-  const g = geology || currentGeology;
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'absolute',
-      left: `${g.wellXPct}%`,
-      top: 'calc(42vh - 46px)',
-      width: 72,
-      height: 46,
-      transform: 'translateX(-50%)',
-      zIndex: 5,
-      pointerEvents: 'none'
-    }
-  }, /*#__PURE__*/React.createElement("svg", {
-    viewBox: "0 0 72 46",
-    width: "72",
-    height: "46",
-    fill: "none",
-    xmlns: "http://www.w3.org/2000/svg",
-    style: {
-      overflow: 'visible',
-      filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.65))'
-    }
-  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
-    id: "wh-metal-grad",
-    x1: "0%",
-    y1: "0%",
-    x2: "100%",
-    y2: "0%"
-  }, /*#__PURE__*/React.createElement("stop", {
-    offset: "0%",
-    stopColor: "#1e293b"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "45%",
-    stopColor: "#334155"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "55%",
-    stopColor: "#475569"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "100%",
-    stopColor: "#0f172a"
-  })), /*#__PURE__*/React.createElement("linearGradient", {
-    id: "wh-flange-grad",
-    x1: "0%",
-    y1: "0%",
-    x2: "0%",
-    y2: "100%"
-  }, /*#__PURE__*/React.createElement("stop", {
-    offset: "0%",
-    stopColor: "#475569"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "100%",
-    stopColor: "#1e293b"
-  }))), /*#__PURE__*/React.createElement("rect", {
-    x: "23",
-    y: "41",
-    width: "26",
-    height: "5",
-    rx: "1",
-    fill: "url(#wh-flange-grad)",
-    stroke: "rgba(255,255,255,0.25)",
-    strokeWidth: "0.7"
-  }), /*#__PURE__*/React.createElement("circle", {
-    cx: "26",
-    cy: "43.5",
-    r: "0.9",
-    fill: "#94a3b8"
-  }), /*#__PURE__*/React.createElement("circle", {
-    cx: "31",
-    cy: "43.5",
-    r: "0.9",
-    fill: "#94a3b8"
-  }), /*#__PURE__*/React.createElement("circle", {
-    cx: "41",
-    cy: "43.5",
-    r: "0.9",
-    fill: "#94a3b8"
-  }), /*#__PURE__*/React.createElement("circle", {
-    cx: "46",
-    cy: "43.5",
-    r: "0.9",
-    fill: "#94a3b8"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "32.5",
-    y: "12",
-    width: "7",
-    height: "29",
-    fill: "url(#wh-metal-grad)",
-    stroke: "rgba(255,255,255,0.15)",
-    strokeWidth: "0.6"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "27",
-    y: "32",
-    width: "18",
-    height: "7",
-    rx: "1.5",
-    fill: "#0f172a",
-    stroke: "rgba(100,255,218,0.45)",
-    strokeWidth: "0.8"
-  }), /*#__PURE__*/React.createElement("line", {
-    x1: "27",
-    y1: "35.5",
-    x2: "20",
-    y2: "35.5",
-    stroke: "#94a3b8",
-    strokeWidth: "1.2"
-  }), /*#__PURE__*/React.createElement("line", {
-    x1: "20",
-    y1: "31.5",
-    x2: "20",
-    y2: "39.5",
-    stroke: "#cbd5e1",
-    strokeWidth: "1.8",
-    strokeLinecap: "round"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "27",
-    y: "23",
-    width: "18",
-    height: "7",
-    rx: "1.5",
-    fill: "#0f172a",
-    stroke: "rgba(100,255,218,0.45)",
-    strokeWidth: "0.8"
-  }), /*#__PURE__*/React.createElement("line", {
-    x1: "45",
-    y1: "26.5",
-    x2: "52",
-    y2: "26.5",
-    stroke: "#94a3b8",
-    strokeWidth: "1.2"
-  }), /*#__PURE__*/React.createElement("line", {
-    x1: "52",
-    y1: "22.5",
-    x2: "52",
-    y2: "30.5",
-    stroke: "#cbd5e1",
-    strokeWidth: "1.8",
-    strokeLinecap: "round"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "26",
-    y: "13",
-    width: "20",
-    height: "8",
-    rx: "1.5",
-    fill: "#0b1322",
-    stroke: "#64ffda",
-    strokeWidth: "1"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "13",
-    y: "15",
-    width: "13",
-    height: "4",
-    fill: "url(#wh-metal-grad)",
-    stroke: "rgba(255,255,255,0.18)",
-    strokeWidth: "0.6"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "10",
-    y: "14",
-    width: "3",
-    height: "6",
-    rx: "0.8",
-    fill: "#475569",
-    stroke: "#94a3b8",
-    strokeWidth: "0.6"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "46",
-    y: "15",
-    width: "24",
-    height: "4",
-    fill: "url(#wh-metal-grad)",
-    stroke: "rgba(255,255,255,0.18)",
-    strokeWidth: "0.6"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "54",
-    y: "13.5",
-    width: "7",
-    height: "7",
-    rx: "1",
-    fill: "#0f172a",
-    stroke: "rgba(100,255,218,0.6)",
-    strokeWidth: "0.8"
-  }), /*#__PURE__*/React.createElement("line", {
-    x1: "57.5",
-    y1: "13.5",
-    x2: "57.5",
-    y2: "7.5",
-    stroke: "#94a3b8",
-    strokeWidth: "1.2"
-  }), /*#__PURE__*/React.createElement("line", {
-    x1: "53.5",
-    y1: "7.5",
-    x2: "61.5",
-    y2: "7.5",
-    stroke: "#cbd5e1",
-    strokeWidth: "1.8",
-    strokeLinecap: "round"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "29",
-    y: "6",
-    width: "14",
-    height: "6",
-    rx: "1",
-    fill: "#0f172a",
-    stroke: "rgba(255,255,255,0.25)",
-    strokeWidth: "0.7"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "30.5",
-    y: "3.5",
-    width: "11",
-    height: "2.5",
-    rx: "0.8",
-    fill: "#334155",
-    stroke: "#64ffda",
-    strokeWidth: "0.6"
-  }), /*#__PURE__*/React.createElement("line", {
-    x1: "36",
-    y1: "3.5",
-    x2: "36",
-    y2: "1",
-    stroke: "#94a3b8",
-    strokeWidth: "1"
-  }), /*#__PURE__*/React.createElement("circle", {
-    cx: "36",
-    cy: "-2.5",
-    r: "3.2",
-    fill: "#0f172a",
-    stroke: "#64ffda",
-    strokeWidth: "0.8"
-  }), /*#__PURE__*/React.createElement("line", {
-    x1: "36",
-    y1: "-2.5",
-    x2: "37.8",
-    y2: "-4",
-    stroke: "#0dfca2",
-    strokeWidth: "0.7",
-    strokeLinecap: "round"
-  }), /*#__PURE__*/React.createElement("circle", {
-    cx: "36",
-    cy: "17",
-    r: "1.4",
-    fill: "#0dfca2",
-    style: {
-      filter: 'drop-shadow(0 0 4px #0dfca2)'
-    }
-  }, /*#__PURE__*/React.createElement("animate", {
-    attributeName: "opacity",
-    values: "0.35;1;0.35",
-    dur: "1.8s",
-    repeatCount: "indefinite"
-  }))));
-};
-
 // Well — vertical tubing from horizon down through reservoir
 // Dynamic height constraints ensure it never extends below the reservoir bottom perforations
 const Well = ({
@@ -3033,12 +2975,12 @@ const Well = ({
   const g = geology || currentGeology;
   const flts = faults || g.faults;
   const yBotVal = stratumY(g.wellX, flts, null, 1.0, g.reservoirThickness, g) - 20;
-  const heightVh = `${yBotVal * 0.1}vh`;
+  const heightVh = `calc(var(--hero-depth) * ${yBotVal / 580})`;
   return /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'absolute',
       left: `${g.wellXPct}%`,
-      top: '42vh',
+      top: 'var(--hero-surface)',
       width: 10,
       height: heightVh,
       transform: 'translateX(-50%)',
@@ -3128,9 +3070,9 @@ const Streamlines = ({
     style: {
       position: 'absolute',
       left: 0,
-      top: '42vh',
+      top: 'var(--hero-surface)',
       width: '100%',
-      height: '58vh',
+      height: 'var(--hero-depth)',
       zIndex: 2,
       pointerEvents: 'none'
     },
@@ -3256,9 +3198,9 @@ const Plume = ({
       position: 'absolute',
       left: 0,
       right: 0,
-      top: '42vh',
+      top: 'var(--hero-surface)',
       width: '100%',
-      height: '58vh',
+      height: 'var(--hero-depth)',
       zIndex: 4,
       pointerEvents: 'none',
       overflow: 'visible'
@@ -3498,7 +3440,7 @@ const Plume = ({
     style: {
       position: 'absolute',
       left: '22%',
-      top: `${42 + (capRockY(220, flts, null, 1, g) + layerThicknessAt(220, 1, flts, null, g) * 0.7) * 0.1}vh`,
+      top: `calc(var(--hero-surface) + var(--hero-depth) * ${(capRockY(220, flts, null, 1, g) + layerThicknessAt(220, 1, flts, null, g) * 0.7) / 580})`,
       transform: 'translate(-50%, -50%)',
       fontFamily: "'Montserrat', sans-serif",
       fontWeight: 600,
@@ -3551,6 +3493,7 @@ const Identity = ({
 }) => /*#__PURE__*/React.createElement("div", {
   className: "hero-identity-container"
 }, /*#__PURE__*/React.createElement("div", {
+  className: "hero-intro-role hero-reveal",
   style: {
     fontSize: 11.5,
     letterSpacing: '0.20em',
@@ -3577,14 +3520,14 @@ const Identity = ({
     fontWeight: 700,
     fontSize: 'clamp(36px, 6vw, 64px)',
     lineHeight: 1.02,
-    letterSpacing: '-0.02em',
-    background: 'linear-gradient(135deg, #ffffff 0%, #d6f8f3 50%, #7ee8e2 100%)',
-    WebkitBackgroundClip: 'text',
-    backgroundClip: 'text',
-    WebkitTextFillColor: 'transparent'
+    letterSpacing: '-0.02em'
   }
-}, "Sa\u2019eed Telvari"), /*#__PURE__*/React.createElement("p", {
-  className: "hero-summary",
+}, /*#__PURE__*/React.createElement("span", {
+  className: "hero-title-word hero-reveal"
+}, "Sa\u2019eed"), ' ', /*#__PURE__*/React.createElement("span", {
+  className: "hero-title-word hero-reveal"
+}, "Telvari")), /*#__PURE__*/React.createElement("p", {
+  className: "hero-summary hero-reveal",
   style: {
     margin: '18px 0 0',
     maxWidth: 540,
@@ -3593,11 +3536,13 @@ const Identity = ({
     color: 'rgba(255,255,255,0.82)'
   }
 }, "Building ", /*#__PURE__*/React.createElement("strong", {
+  className: "hero-highlight",
   style: {
     color: '#64ffda',
     fontWeight: 600
   }
 }, "Vertical Equilibrium models"), " for simulating ", /*#__PURE__*/React.createElement("strong", {
+  className: "hero-highlight",
   style: {
     color: '#64ffda',
     fontWeight: 600
@@ -3605,7 +3550,7 @@ const Identity = ({
 }, "CO", /*#__PURE__*/React.createElement("sub", null, "2"), " storage"), " in depleted gas reservoirs", /*#__PURE__*/React.createElement("span", {
   className: "hero-detail"
 }, " \u2014 the cross-section below is essentially the thing I simulate.")), /*#__PURE__*/React.createElement("div", {
-  className: "hero-actions",
+  className: "hero-actions hero-reveal",
   style: {
     display: 'flex',
     alignItems: 'center',

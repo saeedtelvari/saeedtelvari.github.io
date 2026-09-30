@@ -1052,6 +1052,163 @@ code, kbd, .mono {
   }
 }
 
+.hero-scene {
+  --hero-surface: max(42vh, 480px);
+  --hero-depth: calc(max(100vh, 720px) - var(--hero-surface));
+}
+
+.hero-stars {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.hero-star {
+  position: absolute;
+  border-radius: 50%;
+  opacity: calc(var(--star-base) + var(--star-near, 0) * .55);
+  transition: opacity 600ms var(--ease-emil-out);
+}
+
+.hero-star::before,
+.hero-star::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #c7dbed;
+}
+
+.hero-star::after {
+  inset: -3px;
+  background: #dbe8f4;
+  filter: blur(3px);
+  opacity: var(--star-near, 0);
+  transition: opacity 600ms var(--ease-emil-out);
+}
+
+.hero-star-twinkle::before {
+  animation: starTwinkle var(--star-period) var(--ease-emil-in-out) var(--star-delay) infinite alternate;
+}
+
+@keyframes starTwinkle {
+  from { opacity: .4; }
+  to { opacity: 1; }
+}
+
+.hero-moon {
+  position: absolute;
+  left: 82%;
+  top: 28%;
+  width: clamp(28px, 2.5vw, 38px);
+  aspect-ratio: 1;
+}
+
+.hero-moon::before {
+  content: '';
+  position: absolute;
+  inset: -220%;
+  background: radial-gradient(circle, rgba(187, 207, 224, .12), rgba(187, 207, 224, .04) 30%, transparent 65%);
+}
+
+.hero-night-clouds > svg {
+  animation: nightCloudDrift 70s linear infinite alternate;
+}
+
+@keyframes nightCloudDrift {
+  from { transform: translateX(-16px); }
+  to { transform: translateX(16px); }
+}
+
+.hero-rain {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, .2), #000 65%);
+  animation: rainArrival 3s var(--ease-emil-out) 12s both;
+}
+
+body:has(#app-loader) .hero-rain,
+body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
+
+.hero-rain-drop {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  opacity: var(--rain-alpha);
+  animation: rainFall var(--rain-speed) linear var(--rain-phase) infinite;
+}
+
+.hero-rain-drop::before {
+  content: '';
+  position: absolute;
+  width: 1px;
+  height: var(--rain-length);
+  background: linear-gradient(transparent, #abc9df 75%, transparent);
+  transform: rotate(9deg);
+}
+
+.hero-rain::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 70px;
+  background: linear-gradient(0deg, rgba(157, 184, 204, .1), transparent);
+}
+
+@keyframes rainArrival {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes rainFall {
+  from { transform: translate(16px, -6%); }
+  to { transform: translate(-72px, 100%); }
+}
+
+@media (max-width: 600px) {
+  .hero-rain-drop:nth-child(n + 33) { display: none; }
+}
+
+.hero-feed-flow {
+  animation: feedPulse 3.2s var(--ease-emil-in-out) infinite alternate;
+}
+
+@keyframes feedPulse {
+  from { opacity: .12; }
+  to { opacity: .6; }
+}
+
+.hero-landscape {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: clamp(100px, 16vh, 180px);
+}
+
+.hero-surface-site {
+  position: absolute;
+  top: calc(var(--hero-surface) - 130px);
+  width: 420px;
+  height: 130px;
+  transform: translateX(-24px);
+  transform-origin: 24px bottom;
+  z-index: 5;
+  pointer-events: none;
+}
+
+@media (max-width: 860px) {
+  .hero-scene { --hero-surface: max(42vh, 430px); }
+  .hero-moon { left: auto; right: 24px; top: 26%; width: 28px; }
+  .hero-landscape { height: 85px; }
+  .hero-surface-site {
+    transform: translateX(-24px) scale(.65);
+  }
+}
+
 .hero-identity-container {
   position: absolute;
   left: 6%;
@@ -1059,6 +1216,54 @@ code, kbd, .mono {
   max-width: 620px;
   z-index: 7;
 }
+
+.hero-reveal {
+  animation: heroTextReveal 700ms var(--ease-emil-out) both;
+}
+
+/* Keep the entrance visible instead of spending it behind the loading screen. */
+body:has(#app-loader) .hero-reveal {
+  animation-play-state: paused;
+}
+
+.hero-title-word {
+  display: inline-block;
+  background: linear-gradient(135deg, #f4f7fa, #aec4d7);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation-delay: 80ms;
+}
+
+.hero-title-word:last-child { animation-delay: 160ms; }
+.hero-summary.hero-reveal { animation-delay: 240ms; }
+.hero-actions.hero-reveal { animation-delay: 320ms; }
+.hero-actions:focus-within { animation: none; }
+
+@keyframes heroTextReveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hero-highlight { position: relative; }
+.hero-highlight::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 1px;
+  background: currentColor;
+  opacity: .55;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 200ms var(--ease-emil-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hero-highlight:hover::after { transform: scaleX(1); }
+}
+
 @media (max-width: 860px) {
   .hero-identity-container {
     position: relative !important;
@@ -1136,6 +1341,13 @@ a:focus:not(:focus-visible) {
    For users with vestibular or motion sensitivities.
    ===================================================== */
 @media (prefers-reduced-motion: reduce) {
+  .hero-rain { display: none !important; }
+  .hero-reveal,
+  .hero-rain,
+  .hero-rain-drop,
+  .hero-night-clouds > svg,
+  .hero-star-twinkle::before,
+  .hero-feed-flow { animation: none !important; }
   *,
   *::before,
   *::after {
@@ -1543,11 +1755,15 @@ a:focus:not(:focus-visible) {
 
 @media (max-width: 960px) {
   .collab-console-grid {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: minmax(0, 1fr) !important;
     gap: 20px !important;
   }
 }
 @media (max-width: 600px) {
+  .email-copy-action-box {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
   .verified-profiles-grid {
     grid-template-columns: 1fr !important;
     gap: 10px !important;
