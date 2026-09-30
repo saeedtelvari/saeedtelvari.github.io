@@ -4648,18 +4648,22 @@ Object.assign(window, {
    ===================================================== */
 const RECENT_ACTIVITIES = [{
   date: 'September 2026',
+  month: '2026-09',
   venue: 'InterPore UK Chapter Conference',
   desc: 'Gave an oral presentation on compositional VE modelling for CO₂ storage and co-chaired a multiphase-flow session.'
 }, {
   date: 'May 2026',
+  month: '2026-05',
   venue: 'InterPore 2026',
   desc: 'Gave an oral presentation on VE modelling of CO₂ migration in depleted reservoirs.'
 }, {
   date: 'March 2026',
+  month: '2026-03',
   venue: 'MATLAB/MRST workshop series',
   desc: 'Co-organised the series and led a hands-on session building a flow simulator with MRST.'
 }, {
   date: 'October 2025',
+  month: '2025-10',
   venue: 'EAGE GET 2025',
   desc: 'Presented a poster on three-phase VE simulation of CO₂, methane and brine flow.'
 }];
@@ -4671,26 +4675,20 @@ const RecentActivity = () => {
     className: "recent-activity-panel"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "activity-panel-title"
-  }, "Recent activity"), /*#__PURE__*/React.createElement("div", {
-    className: "activity-track"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "activity-conduit"
-  }), items.map((item, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
+  }, "Recent activity"), /*#__PURE__*/React.createElement("ol", {
+    className: "activity-track",
+    role: "list"
+  }, items.map(item => /*#__PURE__*/React.createElement("li", {
+    key: item.month,
     className: "activity-entry"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "activity-node-dot"
-  }), /*#__PURE__*/React.createElement("div", {
     className: "activity-entry-content"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "activity-meta-line"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "activity-date"
-  }, item.date), /*#__PURE__*/React.createElement("span", {
-    className: "activity-bullet"
-  }, "\xB7"), /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("time", {
+    className: "activity-date",
+    dateTime: item.month
+  }, item.date), /*#__PURE__*/React.createElement("h4", {
     className: "activity-venue"
-  }, item.venue)), /*#__PURE__*/React.createElement("p", {
+  }, item.venue), /*#__PURE__*/React.createElement("p", {
     className: "activity-desc"
   }, item.desc))))), RECENT_ACTIVITIES.length > initialCount && /*#__PURE__*/React.createElement("button", {
     type: "button",
@@ -4742,31 +4740,19 @@ const AboutSection = ({
     className: "affiliation-secondary"
   }, "Institute of GeoEnergy Engineering, Edinburgh"))), /*#__PURE__*/React.createElement("div", {
     className: "about-lead-copy"
-  }, /*#__PURE__*/React.createElement("p", null, "I\u2019m a PhD researcher in petroleum engineering, working on computational models for CO\u2082 storage in depleted gas reservoirs. My research focuses on Vertical Equilibrium (VE) methods, which simplify the vertical description of fluid flow to reduce the computational cost of reservoir simulation."), /*#__PURE__*/React.createElement("p", null, "I\u2019m interested in understanding which physical processes a model needs to represent, where simplifying assumptions are appropriate, and when more detailed simulation is necessary.")), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("p", null, "I\u2019m a PhD researcher in petroleum engineering, developing computational models for ", /*#__PURE__*/React.createElement("strong", null, "CO\u2082 storage in depleted gas reservoirs"), ". I focus on ", /*#__PURE__*/React.createElement("strong", null, "Vertical Equilibrium (VE) methods"), ", which simplify the vertical description of fluid flow to reduce simulation cost."), /*#__PURE__*/React.createElement("p", null, "I\u2019m interested in which physical processes a model needs to represent, where simplifications are appropriate, and when more detailed simulation is needed.")), /*#__PURE__*/React.createElement("div", {
     className: "about-actions-strip"
   }, /*#__PURE__*/React.createElement("a", {
     href: "./simulator.html",
     onClick: e => handleNav('simulator', e),
     className: "btn-sim-prominent pressable",
     title: "Launch interactive Vertical Equilibrium simulator"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "btn-sim-pulse-dot"
-  }), /*#__PURE__*/React.createElement("i", {
+  }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-play",
     style: {
       fontSize: 10
     }
   }), /*#__PURE__*/React.createElement("span", null, "Try the VE simulator")), /*#__PURE__*/React.createElement("a", {
-    href: "#publications",
-    onClick: e => handleNav('publications', e),
-    className: "btn-text-action pressable"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-search",
-    style: {
-      fontSize: 11,
-      color: '#64ffda'
-    }
-  }), /*#__PURE__*/React.createElement("span", null, "Explore my research")), /*#__PURE__*/React.createElement("a", {
     href: "#publications",
     onClick: e => handleNav('publications', e),
     className: "btn-text-action pressable"
@@ -4788,9 +4774,9 @@ const AboutSection = ({
     className: "about-block-title"
   }, "Current research"), /*#__PURE__*/React.createElement("p", {
     className: "about-body-text"
-  }, "Depleted gas reservoirs still contain natural gas and water. This makes modelling injected CO\u2082 more involved than treating the reservoir as an empty storage space."), /*#__PURE__*/React.createElement("p", {
+  }, "Depleted gas reservoirs still contain ", /*#__PURE__*/React.createElement("strong", null, "natural gas and water"), ", so modelling injected CO\u2082 is more complex than treating them as empty storage space."), /*#__PURE__*/React.createElement("p", {
     className: "about-body-text"
-  }, "I develop VE models to describe the movement of CO\u2082 in these settings and compare them with three-dimensional compositional simulations. The aim is to understand how well reduced-order models capture gas migration, where their assumptions break down, and how they can support studies that require many simulation runs."))), /*#__PURE__*/React.createElement(Reveal, {
+  }, "I develop VE models of CO\u2082 movement and compare them with ", /*#__PURE__*/React.createElement("strong", null, "three-dimensional compositional simulations"), ". I assess how well these reduced-order models capture gas migration, where their assumptions break down, and how they can support studies requiring many simulation runs."))), /*#__PURE__*/React.createElement(Reveal, {
     delay: "reveal-delay-2"
   }, /*#__PURE__*/React.createElement("div", {
     className: "about-block"
@@ -4798,9 +4784,9 @@ const AboutSection = ({
     className: "about-block-title"
   }, "Academic background"), /*#__PURE__*/React.createElement("p", {
     className: "about-body-text"
-  }, "I completed my B.Sc. and M.Sc. in Petroleum Engineering at Amirkabir University of Technology. My master\u2019s research focused on machine-learning-assisted fracture permeability upscaling, including the use of three-dimensional convolutional neural networks."), /*#__PURE__*/React.createElement("p", {
+  }, "I earned my B.Sc. and M.Sc. in Petroleum Engineering at ", /*#__PURE__*/React.createElement("strong", null, "Amirkabir University of Technology"), ". My master\u2019s research explored machine-learning-assisted ", /*#__PURE__*/React.createElement("strong", null, "fracture permeability upscaling"), " using three-dimensional convolutional neural networks."), /*#__PURE__*/React.createElement("p", {
     className: "about-body-text"
-  }, "That work forms part of my broader interest in combining physics-based simulation with data-driven methods for subsurface modelling."))), /*#__PURE__*/React.createElement(Reveal, {
+  }, "This work informs my broader interest in combining physics-based simulation with data-driven methods for subsurface modelling."))), /*#__PURE__*/React.createElement(Reveal, {
     delay: "reveal-delay-3"
   }, /*#__PURE__*/React.createElement("div", {
     className: "about-methods-compact"
@@ -4813,34 +4799,34 @@ const AboutSection = ({
     className: "methods-entry"
   }, /*#__PURE__*/React.createElement("span", {
     className: "methods-category"
-  }, "Modelling:"), /*#__PURE__*/React.createElement("span", {
+  }, "Modelling"), /*#__PURE__*/React.createElement("span", {
     className: "methods-content"
-  }, "Vertical Equilibrium ", /*#__PURE__*/React.createElement("span", {
+  }, "Vertical Equilibrium", /*#__PURE__*/React.createElement("span", {
     className: "method-dot"
-  }, "\xB7"), " Multiphase flow ", /*#__PURE__*/React.createElement("span", {
+  }, "\xA0\xB7"), " Multiphase flow", /*#__PURE__*/React.createElement("span", {
     className: "method-dot"
-  }, "\xB7"), " Compositional simulation ", /*#__PURE__*/React.createElement("span", {
+  }, "\xA0\xB7"), " Compositional simulation", /*#__PURE__*/React.createElement("span", {
     className: "method-dot"
-  }, "\xB7"), " Permeability upscaling ", /*#__PURE__*/React.createElement("span", {
+  }, "\xA0\xB7"), " Permeability upscaling", /*#__PURE__*/React.createElement("span", {
     className: "method-dot"
-  }, "\xB7"), " Scientific machine learning")), /*#__PURE__*/React.createElement("div", {
+  }, "\xA0\xB7"), " Scientific machine learning")), /*#__PURE__*/React.createElement("div", {
     className: "methods-entry",
     style: {
       marginTop: 10
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "methods-category"
-  }, "Programming & simulation:"), /*#__PURE__*/React.createElement("span", {
+  }, "Programming & simulation"), /*#__PURE__*/React.createElement("span", {
     className: "methods-content"
-  }, "MATLAB ", /*#__PURE__*/React.createElement("span", {
+  }, "MATLAB", /*#__PURE__*/React.createElement("span", {
     className: "method-dot"
-  }, "\xB7"), " Python ", /*#__PURE__*/React.createElement("span", {
+  }, "\xA0\xB7"), " Python", /*#__PURE__*/React.createElement("span", {
     className: "method-dot"
-  }, "\xB7"), " Julia ", /*#__PURE__*/React.createElement("span", {
+  }, "\xA0\xB7"), " Julia", /*#__PURE__*/React.createElement("span", {
     className: "method-dot"
-  }, "\xB7"), " MRST ", /*#__PURE__*/React.createElement("span", {
+  }, "\xA0\xB7"), " MRST", /*#__PURE__*/React.createElement("span", {
     className: "method-dot"
-  }, "\xB7"), " JutulDarcy"))))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Reveal, {
+  }, "\xA0\xB7"), " JutulDarcy"))))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Reveal, {
     delay: "reveal-delay-1"
   }, /*#__PURE__*/React.createElement(RecentActivity, null)))));
 };
@@ -4982,9 +4968,9 @@ const PublicationsList = () => {
     className: "pub-terminal-header"
   }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("h2", {
     className: "dossier-headline"
-  }, "Interactive Publication Terminal"), /*#__PURE__*/React.createElement("p", {
+  }, "Publications"), /*#__PURE__*/React.createElement("p", {
     className: "dossier-subtitle"
-  }, "Peer-reviewed journal articles, conference proceedings, and open preprints spanning reduced-order Vertical Equilibrium, 3D micro-CT characterization, and machine-learning upscaling."))), /*#__PURE__*/React.createElement(Reveal, {
+  }, "Peer-reviewed articles, conference proceedings and open preprints on reduced-order Vertical Equilibrium, 3D micro-CT characterisation and machine-learning upscaling."))), /*#__PURE__*/React.createElement(Reveal, {
     delay: "reveal-delay-1"
   }, /*#__PURE__*/React.createElement("div", {
     className: "pub-filter-bar",
@@ -5021,11 +5007,7 @@ const PublicationsList = () => {
   }, /*#__PURE__*/React.createElement("span", {
     className: `pub-badge-pill ${p.badgeClass}`
   }, p.badgeLabel), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11.5,
-      fontFamily: 'ui-monospace, monospace',
-      color: 'rgba(255,255,255,0.50)'
-    }
+    className: "pub-doi"
   }, "DOI: ", p.doi)), /*#__PURE__*/React.createElement("h3", {
     className: "pub-card-title"
   }, p.title), /*#__PURE__*/React.createElement("p", {
@@ -5036,13 +5018,13 @@ const PublicationsList = () => {
     className: "pub-key-contribution"
   }, /*#__PURE__*/React.createElement("div", {
     className: "pub-key-contribution-label"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-lightbulb"
-  }), " Key Contribution"), /*#__PURE__*/React.createElement("p", {
+  }, "Key contribution"), /*#__PURE__*/React.createElement("p", {
     className: "pub-key-contribution-text"
-  }, p.keyContribution)), /*#__PURE__*/React.createElement("p", {
+  }, p.keyContribution)), /*#__PURE__*/React.createElement("details", {
+    className: "pub-abstract"
+  }, /*#__PURE__*/React.createElement("summary", null, "Read abstract"), /*#__PURE__*/React.createElement("p", {
     className: "pub-abstract-text"
-  }, p.abstract), /*#__PURE__*/React.createElement("div", {
+  }, p.abstract)), /*#__PURE__*/React.createElement("div", {
     className: "pub-actions-bar"
   }, p.link && /*#__PURE__*/React.createElement("a", {
     href: p.link,
@@ -5054,7 +5036,7 @@ const PublicationsList = () => {
     style: {
       fontSize: 11
     }
-  }), "View Publication / DOI"), /*#__PURE__*/React.createElement("button", {
+  }), "Read publication"), /*#__PURE__*/React.createElement("button", {
     className: "btn-cite-copy",
     onClick: () => handleCopyBibtex(p),
     "aria-label": `Copy BibTeX citation for ${p.title}`
@@ -5079,7 +5061,7 @@ const PublicationsList = () => {
     style: {
       fontSize: 11
     }
-  }), /*#__PURE__*/React.createElement("span", null, showAll ? 'Show Fewer Publications' : `View More Publications (${filteredPubs.length - 2} remaining)`))));
+  }), /*#__PURE__*/React.createElement("span", null, showAll ? 'Show fewer publications' : `View more publications (${filteredPubs.length - 2} remaining)`))));
 };
 
 /* =====================================================
@@ -5139,152 +5121,37 @@ const ContactSection = () => {
     className: "collab-terminal-header"
   }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("h2", {
     className: "dossier-headline"
-  }, "Collaboration Terminal & Academic Office"), /*#__PURE__*/React.createElement("p", {
+  }, "Contact & collaboration"), /*#__PURE__*/React.createElement("p", {
     className: "dossier-subtitle"
-  }, "I am always open to discussions regarding computational reservoir simulation collaborations, industrial CCUS storage assessments, and scientific seminar invitations."))), /*#__PURE__*/React.createElement("div", {
+  }, "Open to collaborations in computational reservoir simulation and industrial CCUS storage assessment, and invitations to scientific seminars."))), /*#__PURE__*/React.createElement("div", {
     className: "collab-console-grid"
   }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
     className: "collab-hero-tile"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10,
-      marginBottom: 16
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      background: 'rgba(249, 115, 22, 0.15)',
-      border: '1px solid rgba(249, 115, 22, 0.35)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: '#f97316',
-      fontSize: 16
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-paper-plane"
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
-    style: {
-      fontSize: 17,
-      color: '#fff',
-      fontWeight: 700,
-      margin: 0
-    }
-  }, "Direct Academic Communication"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11.5,
-      color: 'rgba(255,255,255,0.60)',
-      fontFamily: 'ui-monospace, monospace'
-    }
-  }, "PRIMARY DESK \xB7 INSTITUTIONAL EMAIL"))), /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 14,
-      color: 'rgba(255,255,255,0.80)',
-      lineHeight: 1.6,
-      margin: '0 0 20px'
-    }
-  }, "For preprints, research inquiries, or code questions on Vertical Equilibrium models, feel free to reach out directly:"), /*#__PURE__*/React.createElement("div", {
-    className: "email-copy-action-box pressable",
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    className: "contact-card-title"
+  }, "Get in touch"), /*#__PURE__*/React.createElement("p", {
+    className: "contact-card-copy"
+  }, "For preprints, research enquiries or questions about Vertical Equilibrium code, reach me at my institutional email."), /*#__PURE__*/React.createElement("div", {
+    className: "email-copy-action-box"
+  }, /*#__PURE__*/React.createElement("a", {
+    className: "contact-email",
+    href: "mailto:st4014@hw.ac.uk"
+  }, "st4014@hw.ac.uk"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn-cite-copy",
     onClick: copyEmail,
-    title: "Click to copy email address",
-    role: "button",
-    tabIndex: 0,
-    onKeyDown: e => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        copyEmail();
-      }
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 12
-    }
+    "aria-label": "Copy email address"
   }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-envelope",
-    style: {
-      fontSize: 20,
-      color: '#64ffda'
-    }
-  }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: 'rgba(255,255,255,0.55)',
-      fontFamily: 'ui-monospace, monospace'
-    }
-  }, "INSTITUTIONAL ADDRESS"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 16,
-      color: '#fff',
-      fontWeight: 700,
-      fontFamily: 'ui-monospace, monospace'
-    }
-  }, "st4014@hw.ac.uk"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8
-    }
-  }, copiedEmail ? /*#__PURE__*/React.createElement("span", {
-    style: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 6,
-      fontSize: 12,
-      fontWeight: 700,
-      color: '#64ffda',
-      background: 'rgba(100, 255, 218, 0.15)',
-      padding: '4px 10px',
-      borderRadius: 6,
-      border: '1px solid rgba(100, 255, 218, 0.30)',
-      fontFamily: 'ui-monospace, monospace'
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-check"
-  }), " COPIED!") : /*#__PURE__*/React.createElement("span", {
-    style: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 6,
-      fontSize: 12,
-      color: 'rgba(255,255,255,0.65)',
-      background: 'rgba(255,255,255,0.06)',
-      padding: '4px 10px',
-      borderRadius: 6,
-      border: '1px solid rgba(255,255,255,0.10)',
-      fontFamily: 'ui-monospace, monospace'
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "far fa-copy"
-  }), " COPY"), /*#__PURE__*/React.createElement("a", {
-    href: "mailto:st4014@hw.ac.uk",
-    onClick: e => e.stopPropagation(),
-    style: {
-      width: 32,
-      height: 32,
-      borderRadius: 6,
-      background: 'rgba(255,255,255,0.08)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: '#fff',
-      fontSize: 12,
-      textDecoration: 'none'
-    },
-    title: "Open mail app"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-external-link-alt"
-  }))))), /*#__PURE__*/React.createElement("div", {
+    className: copiedEmail ? 'fas fa-check' : 'far fa-copy',
+    "aria-hidden": "true"
+  }), /*#__PURE__*/React.createElement("span", {
+    "aria-live": "polite"
+  }, copiedEmail ? 'Copied' : 'Copy')))), /*#__PURE__*/React.createElement("div", {
     className: "office-telemetry-pill"
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-map-marker-alt",
     style: {
-      color: '#f97316'
+      color: '#a8d1c8'
     }
   }), /*#__PURE__*/React.createElement("span", null, "Institute of GeoEnergy Engineering \xB7 Heriot-Watt University, Edinburgh, UK"), /*#__PURE__*/React.createElement("span", {
     className: "office-time-clock"
@@ -5317,9 +5184,9 @@ const ContactSection = () => {
     }
   }, p.label), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 11.5,
-      color: 'rgba(255,255,255,0.65)',
-      lineHeight: 1.35
+      fontSize: 13,
+      color: '#c8d0d6',
+      lineHeight: 1.6
     }
   }, p.meta))))))));
 };

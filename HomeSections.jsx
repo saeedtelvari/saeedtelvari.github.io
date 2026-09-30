@@ -8,21 +8,25 @@ const { useState } = React;
 const RECENT_ACTIVITIES = [
   {
     date: 'September 2026',
+    month: '2026-09',
     venue: 'InterPore UK Chapter Conference',
     desc: 'Gave an oral presentation on compositional VE modelling for CO₂ storage and co-chaired a multiphase-flow session.',
   },
   {
     date: 'May 2026',
+    month: '2026-05',
     venue: 'InterPore 2026',
     desc: 'Gave an oral presentation on VE modelling of CO₂ migration in depleted reservoirs.',
   },
   {
     date: 'March 2026',
+    month: '2026-03',
     venue: 'MATLAB/MRST workshop series',
     desc: 'Co-organised the series and led a hands-on session building a flow simulator with MRST.',
   },
   {
     date: 'October 2025',
+    month: '2025-10',
     venue: 'EAGE GET 2025',
     desc: 'Presented a poster on three-phase VE simulation of CO₂, methane and brine flow.',
   },
@@ -37,22 +41,17 @@ const RecentActivity = () => {
     <div className="recent-activity-panel">
       <h3 className="activity-panel-title">Recent activity</h3>
 
-      <div className="activity-track">
-        <div className="activity-conduit" />
-        {items.map((item, i) => (
-          <div key={i} className="activity-entry">
-            <div className="activity-node-dot" />
+      <ol className="activity-track" role="list">
+        {items.map(item => (
+          <li key={item.month} className="activity-entry">
             <div className="activity-entry-content">
-              <div className="activity-meta-line">
-                <span className="activity-date">{item.date}</span>
-                <span className="activity-bullet">&middot;</span>
-                <span className="activity-venue">{item.venue}</span>
-              </div>
+              <time className="activity-date" dateTime={item.month}>{item.date}</time>
+              <h4 className="activity-venue">{item.venue}</h4>
               <p className="activity-desc">{item.desc}</p>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
+      </ol>
 
       {RECENT_ACTIVITIES.length > initialCount && (
         <button
@@ -108,10 +107,10 @@ const AboutSection = ({ onNavigate }) => {
 
           <div className="about-lead-copy">
             <p>
-              I’m a PhD researcher in petroleum engineering, working on computational models for CO&#8322; storage in depleted gas reservoirs. My research focuses on Vertical Equilibrium (VE) methods, which simplify the vertical description of fluid flow to reduce the computational cost of reservoir simulation.
+              I’m a PhD researcher in petroleum engineering, developing computational models for <strong>CO&#8322; storage in depleted gas reservoirs</strong>. I focus on <strong>Vertical Equilibrium (VE) methods</strong>, which simplify the vertical description of fluid flow to reduce simulation cost.
             </p>
             <p>
-              I’m interested in understanding which physical processes a model needs to represent, where simplifying assumptions are appropriate, and when more detailed simulation is necessary.
+              I’m interested in which physical processes a model needs to represent, where simplifications are appropriate, and when more detailed simulation is needed.
             </p>
           </div>
 
@@ -123,18 +122,8 @@ const AboutSection = ({ onNavigate }) => {
               className="btn-sim-prominent pressable"
               title="Launch interactive Vertical Equilibrium simulator"
             >
-              <span className="btn-sim-pulse-dot"></span>
               <i className="fas fa-play" style={{ fontSize: 10 }}></i>
               <span>Try the VE simulator</span>
-            </a>
-
-            <a
-              href="#publications"
-              onClick={(e) => handleNav('publications', e)}
-              className="btn-text-action pressable"
-            >
-              <i className="fas fa-search" style={{ fontSize: 11, color: '#64ffda' }}></i>
-              <span>Explore my research</span>
             </a>
 
             <a
@@ -157,10 +146,10 @@ const AboutSection = ({ onNavigate }) => {
             <div className="about-block">
               <h4 className="about-block-title">Current research</h4>
               <p className="about-body-text">
-                Depleted gas reservoirs still contain natural gas and water. This makes modelling injected CO&#8322; more involved than treating the reservoir as an empty storage space.
+                Depleted gas reservoirs still contain <strong>natural gas and water</strong>, so modelling injected CO&#8322; is more complex than treating them as empty storage space.
               </p>
               <p className="about-body-text">
-                I develop VE models to describe the movement of CO&#8322; in these settings and compare them with three-dimensional compositional simulations. The aim is to understand how well reduced-order models capture gas migration, where their assumptions break down, and how they can support studies that require many simulation runs.
+                I develop VE models of CO&#8322; movement and compare them with <strong>three-dimensional compositional simulations</strong>. I assess how well these reduced-order models capture gas migration, where their assumptions break down, and how they can support studies requiring many simulation runs.
               </p>
             </div>
           </Reveal>
@@ -169,10 +158,10 @@ const AboutSection = ({ onNavigate }) => {
             <div className="about-block">
               <h4 className="about-block-title">Academic background</h4>
               <p className="about-body-text">
-                I completed my B.Sc. and M.Sc. in Petroleum Engineering at Amirkabir University of Technology. My master’s research focused on machine-learning-assisted fracture permeability upscaling, including the use of three-dimensional convolutional neural networks.
+                I earned my B.Sc. and M.Sc. in Petroleum Engineering at <strong>Amirkabir University of Technology</strong>. My master’s research explored machine-learning-assisted <strong>fracture permeability upscaling</strong> using three-dimensional convolutional neural networks.
               </p>
               <p className="about-body-text">
-                That work forms part of my broader interest in combining physics-based simulation with data-driven methods for subsurface modelling.
+                This work informs my broader interest in combining physics-based simulation with data-driven methods for subsurface modelling.
               </p>
             </div>
           </Reveal>
@@ -182,15 +171,15 @@ const AboutSection = ({ onNavigate }) => {
             <div className="about-methods-compact">
               <h4 className="about-block-title" style={{ marginBottom: 12 }}>Methods &amp; tools</h4>
               <div className="methods-entry">
-                <span className="methods-category">Modelling:</span>
+                <span className="methods-category">Modelling</span>
                 <span className="methods-content">
-                  Vertical Equilibrium <span className="method-dot">&middot;</span> Multiphase flow <span className="method-dot">&middot;</span> Compositional simulation <span className="method-dot">&middot;</span> Permeability upscaling <span className="method-dot">&middot;</span> Scientific machine learning
+                  Vertical Equilibrium<span className="method-dot">&nbsp;&middot;</span> Multiphase flow<span className="method-dot">&nbsp;&middot;</span> Compositional simulation<span className="method-dot">&nbsp;&middot;</span> Permeability upscaling<span className="method-dot">&nbsp;&middot;</span> Scientific machine learning
                 </span>
               </div>
               <div className="methods-entry" style={{ marginTop: 10 }}>
-                <span className="methods-category">Programming &amp; simulation:</span>
+                <span className="methods-category">Programming &amp; simulation</span>
                 <span className="methods-content">
-                  MATLAB <span className="method-dot">&middot;</span> Python <span className="method-dot">&middot;</span> Julia <span className="method-dot">&middot;</span> MRST <span className="method-dot">&middot;</span> JutulDarcy
+                  MATLAB<span className="method-dot">&nbsp;&middot;</span> Python<span className="method-dot">&nbsp;&middot;</span> Julia<span className="method-dot">&nbsp;&middot;</span> MRST<span className="method-dot">&nbsp;&middot;</span> JutulDarcy
                 </span>
               </div>
             </div>
@@ -335,9 +324,9 @@ const PublicationsList = () => {
     <SectionPanel>
       <div className="pub-terminal-header">
         <Reveal>
-          <h2 className="dossier-headline">Interactive Publication Terminal</h2>
+          <h2 className="dossier-headline">Publications</h2>
           <p className="dossier-subtitle">
-            Peer-reviewed journal articles, conference proceedings, and open preprints spanning reduced-order Vertical Equilibrium, 3D micro-CT characterization, and machine-learning upscaling.
+            Peer-reviewed articles, conference proceedings and open preprints on reduced-order Vertical Equilibrium, 3D micro-CT characterisation and machine-learning upscaling.
           </p>
         </Reveal>
       </div>
@@ -374,11 +363,7 @@ const PublicationsList = () => {
             <div className="pub-card-elevated">
               <div className="pub-card-top">
                 <span className={`pub-badge-pill ${p.badgeClass}`}>{p.badgeLabel}</span>
-                <span style={{
-                  fontSize: 11.5,
-                  fontFamily: 'ui-monospace, monospace',
-                  color: 'rgba(255,255,255,0.50)',
-                }}>
+                <span className="pub-doi">
                   DOI: {p.doi}
                 </span>
               </div>
@@ -390,19 +375,22 @@ const PublicationsList = () => {
               {/* High-Contrast Key Contribution Callout */}
               <div className="pub-key-contribution">
                 <div className="pub-key-contribution-label">
-                  <i className="fas fa-lightbulb"></i> Key Contribution
+                  Key contribution
                 </div>
                 <p className="pub-key-contribution-text">{p.keyContribution}</p>
               </div>
 
-              <p className="pub-abstract-text">{p.abstract}</p>
+              <details className="pub-abstract">
+                <summary>Read abstract</summary>
+                <p className="pub-abstract-text">{p.abstract}</p>
+              </details>
 
               {/* Action Utility Bar: View DOI & Copy BibTeX */}
               <div className="pub-actions-bar">
                 {p.link && (
                   <a href={p.link} target="_blank" rel="noreferrer" className="btn-doi-view">
                     <i className="fas fa-external-link-alt" style={{ fontSize: 11 }}></i>
-                    View Publication / DOI
+                    Read publication
                   </a>
                 )}
 
@@ -436,7 +424,7 @@ const PublicationsList = () => {
             aria-expanded={showAll}
           >
             <i className={`fas ${showAll ? 'fa-chevron-up' : 'fa-chevron-down'}`} style={{ fontSize: 11 }}></i>
-            <span>{showAll ? 'Show Fewer Publications' : `View More Publications (${filteredPubs.length - 2} remaining)`}</span>
+            <span>{showAll ? 'Show fewer publications' : `View more publications (${filteredPubs.length - 2} remaining)`}</span>
           </button>
         </div>
       )}
@@ -510,9 +498,9 @@ const ContactSection = () => {
     <SectionPanel>
       <div className="collab-terminal-header">
         <Reveal>
-          <h2 className="dossier-headline">Collaboration Terminal &amp; Academic Office</h2>
+          <h2 className="dossier-headline">Contact &amp; collaboration</h2>
           <p className="dossier-subtitle">
-            I am always open to discussions regarding computational reservoir simulation collaborations, industrial CCUS storage assessments, and scientific seminar invitations.
+            Open to collaborations in computational reservoir simulation and industrial CCUS storage assessment, and invitations to scientific seminars.
           </p>
         </Reveal>
       </div>
@@ -522,95 +510,22 @@ const ContactSection = () => {
         <Reveal>
           <div className="collab-hero-tile">
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 10,
-                  background: 'rgba(249, 115, 22, 0.15)',
-                  border: '1px solid rgba(249, 115, 22, 0.35)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#f97316', fontSize: 16,
-                }}>
-                  <i className="fas fa-paper-plane"></i>
-                </div>
-                <div>
-                  <h3 style={{ fontSize: 17, color: '#fff', fontWeight: 700, margin: 0 }}>
-                    Direct Academic Communication
-                  </h3>
-                  <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.60)', fontFamily: 'ui-monospace, monospace' }}>
-                    PRIMARY DESK &middot; INSTITUTIONAL EMAIL
-                  </span>
-                </div>
-              </div>
-
-              <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.80)', lineHeight: 1.6, margin: '0 0 20px' }}>
-                For preprints, research inquiries, or code questions on Vertical Equilibrium models, feel free to reach out directly:
+              <h3 className="contact-card-title">Get in touch</h3>
+              <p className="contact-card-copy">
+                For preprints, research enquiries or questions about Vertical Equilibrium code, reach me at my institutional email.
               </p>
-
-              {/* 1-Click Email Copy Tile */}
-              <div
-                className="email-copy-action-box pressable"
-                onClick={copyEmail}
-                title="Click to copy email address"
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copyEmail(); } }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <i className="fas fa-envelope" style={{ fontSize: 20, color: '#64ffda' }}></i>
-                  <div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontFamily: 'ui-monospace, monospace' }}>
-                      INSTITUTIONAL ADDRESS
-                    </div>
-                    <div style={{ fontSize: 16, color: '#fff', fontWeight: 700, fontFamily: 'ui-monospace, monospace' }}>
-                      st4014@hw.ac.uk
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {copiedEmail ? (
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      fontSize: 12, fontWeight: 700, color: '#64ffda',
-                      background: 'rgba(100, 255, 218, 0.15)',
-                      padding: '4px 10px', borderRadius: 6,
-                      border: '1px solid rgba(100, 255, 218, 0.30)',
-                      fontFamily: 'ui-monospace, monospace',
-                    }}>
-                      <i className="fas fa-check"></i> COPIED!
-                    </span>
-                  ) : (
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      fontSize: 12, color: 'rgba(255,255,255,0.65)',
-                      background: 'rgba(255,255,255,0.06)',
-                      padding: '4px 10px', borderRadius: 6,
-                      border: '1px solid rgba(255,255,255,0.10)',
-                      fontFamily: 'ui-monospace, monospace',
-                    }}>
-                      <i className="far fa-copy"></i> COPY
-                    </span>
-                  )}
-                  <a
-                    href="mailto:st4014@hw.ac.uk"
-                    onClick={(e) => e.stopPropagation()}
-                    style={{
-                      width: 32, height: 32, borderRadius: 6,
-                      background: 'rgba(255,255,255,0.08)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#fff', fontSize: 12, textDecoration: 'none',
-                    }}
-                    title="Open mail app"
-                  >
-                    <i className="fas fa-external-link-alt"></i>
-                  </a>
-                </div>
+              <div className="email-copy-action-box">
+                <a className="contact-email" href="mailto:st4014@hw.ac.uk">st4014@hw.ac.uk</a>
+                <button type="button" className="btn-cite-copy" onClick={copyEmail} aria-label="Copy email address">
+                  <i className={copiedEmail ? 'fas fa-check' : 'far fa-copy'} aria-hidden="true" />
+                  <span aria-live="polite">{copiedEmail ? 'Copied' : 'Copy'}</span>
+                </button>
               </div>
             </div>
 
             {/* Office Telemetry Badge */}
             <div className="office-telemetry-pill">
-              <i className="fas fa-map-marker-alt" style={{ color: '#f97316' }}></i>
+              <i className="fas fa-map-marker-alt" style={{ color: '#a8d1c8' }}></i>
               <span>Institute of GeoEnergy Engineering &middot; Heriot-Watt University, Edinburgh, UK</span>
               <span className="office-time-clock">
                 <i className="far fa-clock"></i> {localTime || '10:00'} UK Time
@@ -637,7 +552,7 @@ const ContactSection = () => {
                   <div style={{ fontSize: 14.5, fontWeight: 700, color: '#fff', margin: '0 0 2px' }}>
                     {p.label}
                   </div>
-                  <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.65)', lineHeight: 1.35 }}>
+                  <div style={{ fontSize: 13, color: '#c8d0d6', lineHeight: 1.6 }}>
                     {p.meta}
                   </div>
                 </div>
