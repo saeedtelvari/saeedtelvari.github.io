@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-test('uneven cutaway beds share contacts, keep local faults small, resize, and clean up observers', () => {
+test('smooth beds share continuous materials, concentrate faults by rock, and resize cleanly', () => {
   const root = path.join(__dirname, '..');
   const bundle = fs.readFileSync(path.join(root, 'bundle.js'), 'utf8');
   const code = bundle.slice(bundle.indexOf('// File: GeologicalDescent.jsx'), bundle.indexOf('// File: HomeSections.jsx'));
@@ -68,19 +68,30 @@ test('uneven cutaway beds share contacts, keep local faults small, resize, and c
     for (const x of new Set([...Array.from({ length: 181 }, (_, i) => i * 8), ...contacts.flatMap(line => line.map(point => point[0]))])) {
       for (let i = 1; i < contacts.length; i++) assert.ok(sample(contacts[i], x) > sample(contacts[i - 1], x), 'beds must stay ordered after resizing');
     }
-    assert.ok(contacts.some(line => line.some((p, i) => i && p[0] - line[i - 1][0] < 1 && Math.abs(p[1] - line[i - 1][1]) > 3)), 'small faults must still displace the beds');
+    for (const line of contacts) {
+      for (let i = 1; i < line.length - 1; i++) assert.ok(Math.abs(line[i - 1][1] - 2 * line[i][1] + line[i + 1][1]) < 1, 'contacts must not have small angular kinks');
+    }
     const faults = nodes.filter(node => node.props['data-fault'] !== undefined);
     assert.ok(faults.length >= 18, 'the wider view needs numerous local fault splays');
     for (const fault of faults) {
       const line = points(fault.props.d);
       assert.ok(line.at(-1)[1] - line[0][1] < 300, 'fault splays must end within a few beds');
-      assert.ok(Math.abs(line.at(-1)[0] - line[0][0]) > 50, 'faults must be inclined');
+      assert.ok(Math.abs(line.at(-1)[0] - line[0][0]) > (line.at(-1)[1] - line[0][1]) * .4, 'faults must be inclined at any size');
       assert.ok(+fault.props.strokeWidth < 2, 'faults must not read as heavy black stripes');
+      assert.ok(['basement', 'limestone', 'dolomite'].includes(fault.props['data-fault-material']), 'faults belong only in selected brittle rock units');
     }
-    assert.equal(nodes.filter(node => node.props['data-fractures'] !== undefined).length, beds.length, 'each interval needs a fine fracture network');
+    assert.ok(faults.filter(node => node.props['data-fault-material'] === 'basement').length > faults.length / 2, 'most fault splays must be in granite');
+    const fractures = nodes.filter(node => node.props['data-fractures'] !== undefined);
+    assert.equal(fractures.length, beds.length);
+    for (const node of fractures.filter(node => node.props['data-material'] === 'shale')) assert.equal(node.props['data-fracture-count'], 0, 'shale must remain sparsely fractured');
+    assert.ok(fractures.find(node => node.props['data-material'] === 'basement').props['data-fracture-count'] >= 150, 'granite needs a dense joint network');
+    const materials = nodes.filter(node => node.props.className === 'descent-material');
+    assert.equal(materials.length, 6, 'beds must reuse six shared material origins instead of resetting every interval');
+    assert.equal(nodes.filter(node => node.type === 'details' || node.props.className === 'descent-sensor').length, 0, 'inspection and monitoring graphics must be removed');
     assert.equal(nodes.find(node => node.props.className === 'geological-descent-art').props.viewBox, `0 0 1440 ${heights.reduce((a, b) => a + b)}`);
     const cleanup = effect();
-    assert.equal(texture.width, 840 * 1440 / (heights[0] > 2000 ? 360 : 1280), 'smaller texture grains must retain their aspect ratio on mobile');
+    assert.equal(pattern.width, 840 * 1440 / (heights[0] > 2000 ? 360 : 1280), 'smaller texture grains must retain their aspect ratio on mobile');
+    assert.equal(texture.transform, `scale(${1440 / (heights[0] > 2000 ? 360 : 1280)} 1)`, 'texture blending and mineral scale must resize together');
     assert.equal(updated, heights, 'unchanged measurements must not trigger another render');
     observers[1].callback([{ target: motion, isIntersecting: true }]);
     assert.equal(motion.dataset.visible, 'true');
@@ -89,7 +100,8 @@ test('uneven cutaway beds share contacts, keep local faults small, resize, and c
     cleanup();
     assert.ok(observers.every(observer => observer.disconnected));
   }
-  for (const material of ['shale', 'sandstone', 'limestone', 'basement']) {
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'colors_and_type.css'), 'utf8'), /descent-inspection|descent-sensor/, 'remove unused inspection and monitoring styles');
+  for (const material of ['shale', 'sandstone', 'limestone', 'basement', 'siltstone', 'dolomite']) {
     assert.ok(fs.statSync(path.join(root, `assets/geology-${material}.webp`)).size > 0, 'all referenced material textures must exist');
   }
 });
