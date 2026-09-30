@@ -327,7 +327,6 @@ const Divider = () => /*#__PURE__*/React.createElement("hr", {
    ===================================================== */
 const SectionPanel = ({
   children,
-  strataTheme = 'sedimentary',
   style = {}
 }) => {
   return /*#__PURE__*/React.createElement("section", {
@@ -345,7 +344,7 @@ const SectionPanel = ({
       position: 'relative',
       maxWidth: 1000,
       margin: '0 auto',
-      background: strataTheme === 'mantle' ? 'rgba(26,24,30,0.62)' : 'rgba(16,24,35,0.58)',
+      background: 'rgba(14,20,25,0.9)',
       backdropFilter: 'blur(3px)',
       WebkitBackdropFilter: 'blur(3px)',
       border: '1px solid rgba(198,210,211,0.15)',
@@ -3742,7 +3741,7 @@ Object.assign(window, {
 });
 
 // File: GeologicalDescent.jsx
-// One cross-section behind the home content, from the hero's aquifer to the footer.
+// A continuous material cutaway, from the hero's aquifer to crystalline basement.
 const GeologicalDescent = ({
   children
 }) => {
@@ -3753,276 +3752,306 @@ const GeologicalDescent = ({
     const measure = () => {
       const next = sections.map(section => Math.round(section.offsetHeight));
       setHeights(previous => next.some((height, i) => height !== previous[i]) ? next : previous);
+      // Compensate for the SVG's horizontal scaling so mineral grains stay round.
+      const width = rootRef.current.clientWidth;
+      if (width) rootRef.current.querySelectorAll('.descent-material').forEach(pattern => {
+        const tileWidth = 1440 * 1440 / width;
+        pattern.setAttribute('width', tileWidth);
+        pattern.querySelector('image').setAttribute('width', tileWidth);
+      });
     };
-    const observer = new ResizeObserver(measure);
-    sections.forEach(section => observer.observe(section));
+    const sizes = new ResizeObserver(measure);
+    sections.forEach(section => sizes.observe(section));
+    sizes.observe(rootRef.current);
     measure();
-    return () => observer.disconnect();
+    const visibility = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        entry.target.dataset.visible = String(entry.isIntersecting);
+      });
+    });
+    rootRef.current.querySelectorAll('.descent-motion').forEach(element => visibility.observe(element));
+    return () => {
+      sizes.disconnect();
+      visibility.disconnect();
+    };
   }, []);
-  const [aboutHeight, researchHeight, contactHeight, footerHeight] = heights;
-  const basementTop = aboutHeight + 75;
-  const mantleTop = aboutHeight + researchHeight + 65;
-  const totalHeight = aboutHeight + researchHeight + contactHeight + footerHeight;
-  const sedimentLevels = [0, .05, .12, .24, .30, .42, .50, .60, .65, .75, .84];
-  const sedimentBends = [0, 8, 14, 22, 17, 26, 19, 29, 23, 31, 36];
-  const sedimentColors = ['url(#descent-aquifer-bridge)', '#19282f', '#263840', '#35454a', '#343d40', '#2b3b40', '#424643', '#303a3e', '#494840', '#33383c'];
-  const points = (y, amplitude = 0, phase = 0) => Array.from({
-    length: 41
-  }, (_, i) => {
-    const x = i * 36;
-    const bend = Math.sin(x / 185 + phase) + 0.32 * Math.sin(x / 61 + phase * 0.7);
-    return [x, y + amplitude * bend];
+  const [about, research, contact, footer] = heights;
+  const total = about + research + contact + footer;
+  const levels = [0, about * .10, about * .27, about * .34, about * .48, about * .54, about * .76, about * .91, about + research * .13, about + research * .34, about + research * .40, about + research * .63, about + research * .84, about + research + contact * .18, about + research + contact * .52, total];
+  const materials = ['shale', 'sandstone', 'shale', 'limestone', 'shale', 'sandstone', 'shale', 'sandstone', 'limestone', 'shale', 'limestone', 'sandstone', 'shale', 'limestone', 'basement'];
+  const colors = {
+    shale: '#23272a',
+    sandstone: '#716557',
+    limestone: '#73766e',
+    basement: '#35424a'
+  };
+  const throwLimit = Math.min(...levels.slice(1).map((y, i) => y - levels[i])) * .65;
+  const faults = currentGeology.faults.map((fault, i) => ({
+    root: (fault.xPercent * 10 + fault.dipSlope * 580) * 1.44,
+    direction: Math.sign(fault.dipSlope),
+    throw: Math.min(i % 2 ? 38 : 44, throwLimit) * (i % 2 ? -1 : 1)
+  }));
+  const faultX = (fault, y) => fault.root + fault.direction * 26 * (1 - Math.exp(-y / 900));
+  const boundaryY = (i, x) => {
+    if (i === 0) return 0;
+    if (i === levels.length - 1) return total;
+    const y = levels[i];
+    const roughness = 2.2 * Math.sin(x * .027 + i * .9) + 1.1 * Math.sin(x * .081 + i);
+    const dip = (x - 720) * .018 + 15 * Math.sin(x / 600 + .7);
+    const offset = faults.reduce((sum, fault) => sum + (x > faultX(fault, y) ? fault.throw : 0), 0);
+    return y + Math.min(1, y / 160) * (dip + roughness + offset);
+  };
+  // Sample both sides of each fault so the same contacts bound adjoining beds.
+  const profiles = levels.map((y, i) => {
+    const xs = [...Array.from({
+      length: 61
+    }, (_, n) => n * 24), ...faults.flatMap(fault => [faultX(fault, y) - .4, faultX(fault, y) + .4])].filter(x => x >= 0 && x <= 1440).sort((a, b) => a - b);
+    return xs.map(x => [x, boundaryY(i, x)]);
   });
-  const trace = (y, amplitude, phase) => 'M' + points(y, amplitude, phase).map(([x, py]) => `${x} ${py.toFixed(1)}`).join('L');
-  const bed = (top, bottom, topBend, bottomBend, phase = 0) => trace(top, topBend, phase) + 'L' + points(bottom, bottomBend, phase + 0.3).reverse().map(([x, y]) => `${x} ${y.toFixed(1)}`).join('L') + 'Z';
-  const below = (y, bend, phase) => trace(y, bend, phase) + `L1440 ${totalHeight}L0 ${totalHeight}Z`;
-  const faultRoots = currentGeology.faults.map(fault => (fault.xPercent * 10 + fault.dipSlope * 580) * 1.44);
+  const trace = points => 'M' + points.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L');
+  const beds = profiles.slice(0, -1).map((points, i) => trace(points) + 'L' + [...profiles[i + 1]].reverse().map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L') + 'Z');
+  const middle = (i, x) => (boundaryY(i, x) + boundaryY(i + 1, x)) / 2;
+  const veinY = middle(8, 1310);
+  const lensY = middle(6, 1260);
+  const sensorY = about + research * .72;
+  const inspections = [{
+    before: AboutSection,
+    rock: 'sandstone',
+    label: 'Sandstone',
+    title: 'Grains, beds & fluid pathways',
+    text: 'Cemented sand grains and tilted cross-bedding give this interval its texture. The blue traces illustrate a fluid pathway through the bed.',
+    y: middle(1, 1330),
+    compact: 28,
+    image: 'sandstone'
+  }, {
+    before: PublicationsList,
+    rock: 'limestone',
+    label: 'Limestone',
+    title: 'Shell fragments & calcite veins',
+    text: 'Small fossil fragments sit within the carbonate matrix. Pale calcite veins record fractures that were filled by minerals.',
+    y: middle(8, 1330),
+    compact: about + 28,
+    image: 'limestone'
+  }, {
+    before: ContactSection,
+    rock: 'fault',
+    label: 'Monitoring',
+    title: 'Faults & downhole monitoring',
+    text: 'Beds are displaced across the fault zones. A small instrument in the observation borehole gives an occasional status pulse.',
+    y: sensorY,
+    compact: about + research - 70,
+    image: 'shale'
+  }, {
+    before: Footer,
+    rock: 'basement',
+    label: 'Basement',
+    title: 'Crystalline basement',
+    text: 'The sedimentary sequence ends at an irregular eroded surface. Beneath it, interlocking minerals and quartz veins form the crystalline basement.',
+    y: about + research + contact * .73,
+    compact: about + research + contact + 14,
+    image: 'basement'
+  }];
   return /*#__PURE__*/React.createElement("div", {
     ref: rootRef,
     className: "geological-descent"
   }, /*#__PURE__*/React.createElement("svg", {
     className: "geological-descent-art",
-    viewBox: `0 0 1440 ${totalHeight}`,
+    viewBox: `0 0 1440 ${total}`,
     preserveAspectRatio: "none",
     "aria-hidden": "true"
-  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("pattern", {
-    id: "descent-grain",
-    width: "83",
-    height: "57",
+  }, /*#__PURE__*/React.createElement("defs", null, materials.map((material, i) => /*#__PURE__*/React.createElement(React.Fragment, {
+    key: i
+  }, /*#__PURE__*/React.createElement("pattern", {
+    className: "descent-material",
+    id: `descent-rock-${i}`,
+    width: "1440",
+    height: "1440",
+    x: "0",
+    y: levels[i] - i * 137 % 850,
     patternUnits: "userSpaceOnUse"
-  }, /*#__PURE__*/React.createElement("circle", {
-    cx: "12",
-    cy: "11",
-    r: "1",
-    fill: "#c3d4d8",
-    opacity: ".16"
-  }), /*#__PURE__*/React.createElement("circle", {
-    cx: "64",
-    cy: "39",
-    r: ".7",
-    fill: "#c3d4d8",
-    opacity: ".15"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M29 33l8 -1M67 8l5 1M9 49l4 -1",
-    stroke: "#b5c8cb",
-    strokeWidth: ".7",
-    opacity: ".16"
-  })), /*#__PURE__*/React.createElement("pattern", {
-    id: "descent-lamina",
-    width: "110",
-    height: "28",
-    patternUnits: "userSpaceOnUse"
+  }, /*#__PURE__*/React.createElement("image", {
+    href: `./assets/geology-${material}.webp`,
+    width: "1440",
+    height: "1440",
+    preserveAspectRatio: "none"
+  })), /*#__PURE__*/React.createElement("clipPath", {
+    id: `descent-bed-${i}`
   }, /*#__PURE__*/React.createElement("path", {
-    d: "M0 5Q30 2 58 5T110 4M0 19Q35 22 65 18T110 19",
-    fill: "none",
-    stroke: "#c0c9c5",
-    strokeOpacity: ".13",
-    strokeWidth: ".7"
-  })), /*#__PURE__*/React.createElement("pattern", {
-    id: "descent-foliation",
-    width: "110",
-    height: "45",
-    patternUnits: "userSpaceOnUse",
-    patternTransform: "rotate(-13)"
-  }, /*#__PURE__*/React.createElement("path", {
-    d: "M0 9h110M0 28h110",
-    stroke: "#adb3c6",
-    strokeWidth: ".8",
-    opacity: ".12"
-  })), /*#__PURE__*/React.createElement("pattern", {
-    id: "descent-peridotite",
-    width: "72",
-    height: "62",
-    patternUnits: "userSpaceOnUse"
-  }, /*#__PURE__*/React.createElement("ellipse", {
-    cx: "13",
-    cy: "17",
-    rx: "6",
-    ry: "3",
-    fill: "#9d9b75",
-    opacity: ".11"
-  }), /*#__PURE__*/React.createElement("ellipse", {
-    cx: "52",
-    cy: "43",
-    rx: "3",
-    ry: "5",
-    fill: "#b08d74",
-    opacity: ".11"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M31 7l5 3m-11 39l7 -2",
-    stroke: "#c2ab92",
-    strokeOpacity: ".12",
-    strokeWidth: "1"
-  })), /*#__PURE__*/React.createElement("linearGradient", {
-    id: "descent-heat",
+    d: beds[i]
+  })))), /*#__PURE__*/React.createElement("linearGradient", {
+    id: "descent-bridge",
     x1: "0",
     y1: "0",
     x2: "0",
     y2: "1"
   }, /*#__PURE__*/React.createElement("stop", {
-    offset: "0",
-    stopColor: "#302c2b"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "1",
-    stopColor: "#3b302d"
-  })), /*#__PURE__*/React.createElement("linearGradient", {
-    id: "descent-aquifer-bridge",
-    gradientUnits: "userSpaceOnUse",
-    x1: "0",
-    y1: "0",
-    x2: "0",
-    y2: aboutHeight * .05
-  }, /*#__PURE__*/React.createElement("stop", {
-    offset: "0",
     stopColor: "#070a0c"
   }), /*#__PURE__*/React.createElement("stop", {
-    offset: ".52",
-    stopColor: "#111b20"
+    offset: "1",
+    stopColor: "#070a0c",
+    stopOpacity: "0"
+  })), /*#__PURE__*/React.createElement("linearGradient", {
+    id: "descent-reading-veil"
+  }, /*#__PURE__*/React.createElement("stop", {
+    stopColor: "#080e12",
+    stopOpacity: ".12"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: ".2",
+    stopColor: "#080e12",
+    stopOpacity: ".32"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: ".8",
+    stopColor: "#080e12",
+    stopOpacity: ".32"
   }), /*#__PURE__*/React.createElement("stop", {
     offset: "1",
-    stopColor: "#19282f"
+    stopColor: "#080e12",
+    stopOpacity: ".12"
   }))), /*#__PURE__*/React.createElement("rect", {
     width: "1440",
-    height: totalHeight,
-    fill: "#070a0c"
-  }), sedimentColors.map((fill, i) => /*#__PURE__*/React.createElement("path", {
-    key: i,
-    d: bed(aboutHeight * sedimentLevels[i], aboutHeight * sedimentLevels[i + 1], sedimentBends[i], sedimentBends[i + 1], .4 + i * .3),
-    fill: fill
-  })), /*#__PURE__*/React.createElement("path", {
-    d: below(aboutHeight * .84, 36, 3.4),
-    fill: "#30343a"
-  }), sedimentLevels.slice(1).map((fraction, i) => /*#__PURE__*/React.createElement("path", {
-    key: i,
-    d: trace(aboutHeight * fraction, sedimentBends[i + 1], .7 + i * .3),
-    fill: "none",
-    stroke: i % 3 === 0 ? '#c4c2b4' : '#8da6aa',
-    strokeOpacity: i % 3 === 0 ? '.37' : '.22',
-    strokeWidth: i % 3 === 0 ? 1.8 : 1.1
-  })), [.009, .018, .028, .038, .048, .060, .074].map((fraction, i) => /*#__PURE__*/React.createElement("path", {
-    key: i,
-    d: trace(aboutHeight * fraction, 2 + i, .25 + i * .12),
-    fill: "none",
-    stroke: "#879a9a",
-    strokeOpacity: .13 + i * .02,
-    strokeWidth: ".8"
-  })), [.20, .23, .37, .39, .54, .57, .69, .72].map((fraction, i) => /*#__PURE__*/React.createElement("path", {
-    key: i,
-    d: trace(aboutHeight * fraction, 10 + i * 1.4, 1.1 + i * .19),
-    fill: "none",
-    stroke: "#aec0bd",
-    strokeOpacity: ".12",
-    strokeWidth: ".8"
-  })), /*#__PURE__*/React.createElement("rect", {
-    y: aboutHeight * .1,
-    width: "1440",
-    height: aboutHeight * .78,
-    fill: "url(#descent-lamina)",
-    opacity: ".7"
+    height: total,
+    fill: "#151b1f"
+  }), materials.map((material, i) => /*#__PURE__*/React.createElement("g", {
+    key: i
+  }, /*#__PURE__*/React.createElement("path", {
+    "data-bed": i,
+    d: beds[i],
+    fill: colors[material]
   }), /*#__PURE__*/React.createElement("path", {
-    d: `M1190 ${aboutHeight * .94}C1200 ${aboutHeight * .73} 1280 ${aboutHeight * .51} 1350 ${aboutHeight * .55}C1420 ${aboutHeight * .58} 1450 ${aboutHeight * .81} 1480 ${aboutHeight * .96}Z`,
-    fill: "#aab4b0",
-    fillOpacity: ".18",
-    stroke: "#c2c6b5",
+    className: "descent-rock",
+    "data-material": material,
+    d: beds[i],
+    fill: `url(#descent-rock-${i})`
+  }))), profiles.slice(1, -1).map((points, i) => /*#__PURE__*/React.createElement("path", {
+    key: i,
+    "data-contact": i + 1,
+    d: trace(points),
+    fill: "none",
+    stroke: i === 13 ? '#c1baaa' : '#b4ae9d',
+    strokeOpacity: i === 13 ? '.45' : '.18',
+    strokeWidth: i === 13 ? 2 : 1
+  })), /*#__PURE__*/React.createElement("g", {
+    clipPath: "url(#descent-bed-6)"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: `M1020 ${lensY}Q1180 ${lensY - 34} 1440 ${lensY - 10}L1440 ${lensY + 16}Q1190 ${lensY + 26} 1020 ${lensY}Z`,
+    fill: "url(#descent-rock-5)",
+    opacity: ".55"
+  })), /*#__PURE__*/React.createElement("g", {
+    className: "descent-vein",
+    clipPath: "url(#descent-bed-8)",
+    fill: "none",
+    stroke: "#c2c1ac",
     strokeOpacity: ".42",
-    strokeWidth: "2"
+    strokeWidth: "1.6"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: `M1280 ${veinY - 66}l14 23 -9 19 26 22 -4 27 33 25 -8 28M1311 ${veinY - 2}l30 -16 12 -25M1307 ${veinY + 25}l-26 9 -18 -7`
+  })), faults.map((fault, i) => {
+    const line = trace(Array.from({
+      length: 31
+    }, (_, n) => {
+      const y = levels[14] * n / 30;
+      return [faultX(fault, y), y];
+    }));
+    return /*#__PURE__*/React.createElement("g", {
+      key: i,
+      className: "descent-fault"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: line,
+      fill: "none",
+      stroke: "#141917",
+      strokeOpacity: ".7",
+      strokeWidth: "10"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: line,
+      fill: "none",
+      stroke: "#a19784",
+      strokeOpacity: ".3",
+      strokeWidth: "1.3"
+    }));
   }), /*#__PURE__*/React.createElement("path", {
-    d: `M1235 ${aboutHeight * .91}C1260 ${aboutHeight * .71} 1305 ${aboutHeight * .60} 1350 ${aboutHeight * .63}`,
+    d: `M84 ${about + research * .48}V${about + research + contact * .18}`,
     fill: "none",
-    stroke: "#d0d0be",
-    strokeOpacity: ".25",
-    strokeWidth: "2"
+    stroke: "#0a1013",
+    strokeWidth: "6"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: `M84 ${about + research * .48}V${about + research + contact * .18}`,
+    fill: "none",
+    stroke: "#859295",
+    strokeOpacity: ".38",
+    strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("g", {
+    className: "descent-motion",
+    "data-visible": "false"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: "79",
+    y: sensorY - 9,
+    width: "10",
+    height: "18",
+    rx: "1",
+    fill: "#293438",
+    stroke: "#99a8a5",
+    strokeWidth: ".7"
+  }), /*#__PURE__*/React.createElement("circle", {
+    className: "descent-sensor",
+    cx: "84",
+    cy: sensorY,
+    r: "2",
+    fill: "#d2b27c"
+  })), [1, 11].map((bed, n) => /*#__PURE__*/React.createElement("g", {
+    key: bed,
+    className: "descent-motion",
+    "data-visible": "false",
+    clipPath: `url(#descent-bed-${bed})`
+  }, [38, 1240].map(x => /*#__PURE__*/React.createElement(React.Fragment, {
+    key: x
+  }, /*#__PURE__*/React.createElement("path", {
+    d: `M${x} ${middle(bed, x)}l108 -4`,
+    fill: "none",
+    stroke: "#aac5ca",
+    strokeOpacity: ".12",
+    strokeWidth: "1"
+  }), [0, 1, 2].map(i => /*#__PURE__*/React.createElement("ellipse", {
+    key: i,
+    className: "descent-flow",
+    cx: x,
+    cy: middle(bed, x),
+    rx: "3",
+    ry: "1.1",
+    fill: "#bad4d8",
+    style: {
+      animationDelay: `${-i * 1.1 - n * 9}s`
+    }
+  })))))), /*#__PURE__*/React.createElement("rect", {
+    width: "1440",
+    height: total,
+    fill: "url(#descent-reading-veil)"
   }), /*#__PURE__*/React.createElement("rect", {
-    y: aboutHeight * .08,
     width: "1440",
-    height: aboutHeight * .92,
-    fill: "url(#descent-grain)"
-  }), faultRoots.map((x, i) => /*#__PURE__*/React.createElement("path", {
-    key: i,
-    d: `M${x.toFixed(1)} 0C${(x + 26).toFixed(1)} ${aboutHeight * .19} ${(x + 55).toFixed(1)} ${aboutHeight * .38} ${(x + 42).toFixed(1)} ${aboutHeight * .57}`,
-    fill: "none",
-    stroke: "#9ab0b4",
-    strokeOpacity: ".18",
-    strokeWidth: "2"
-  })), /*#__PURE__*/React.createElement("path", {
-    d: below(basementTop, 44, 2.1),
-    fill: "#202936"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: trace(basementTop, 44, 2.1),
-    fill: "none",
-    stroke: "#b9b6a8",
-    strokeOpacity: ".57",
-    strokeWidth: "3"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: bed(aboutHeight + researchHeight * .15, aboutHeight + researchHeight * .30, 29, 38, .9),
-    fill: "#2c3744"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: bed(aboutHeight + researchHeight * .30, aboutHeight + researchHeight * .43, 38, 48, 1.2),
-    fill: "#3b3d49"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: bed(aboutHeight + researchHeight * .43, aboutHeight + researchHeight * .58, 48, 37, 1.5),
-    fill: "#2d3442"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: bed(aboutHeight + researchHeight * .58, aboutHeight + researchHeight * .70, 37, 32, 1.8),
-    fill: "#383943"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: below(aboutHeight + researchHeight * .70, 32, 2.1),
-    fill: "#292d39"
-  }), [.10, .15, .22, .30, .36, .43, .51, .58, .64, .70, .78].map((fraction, i) => /*#__PURE__*/React.createElement("path", {
-    key: i,
-    d: trace(aboutHeight + researchHeight * fraction, 20 + i % 4 * 9, .8 + i * .29),
-    fill: "none",
-    stroke: i % 4 === 2 ? '#d0c6b8' : '#a9b5bf',
-    strokeOpacity: i % 4 === 2 ? '.31' : '.18',
-    strokeWidth: i % 4 === 2 ? 2 : 1
-  })), /*#__PURE__*/React.createElement("path", {
-    d: `M45 ${aboutHeight + 90}C70 ${aboutHeight + researchHeight * .3} 130 ${aboutHeight + researchHeight * .47} 210 ${aboutHeight + researchHeight * .72}`,
-    fill: "none",
-    stroke: "#c8d0ce",
-    strokeOpacity: ".28",
-    strokeWidth: "5"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: `M1390 ${aboutHeight + researchHeight * .1}C1340 ${aboutHeight + researchHeight * .32} 1380 ${aboutHeight + researchHeight * .52} 1220 ${aboutHeight + researchHeight * .76}`,
-    fill: "none",
-    stroke: "#c8d0ce",
-    strokeOpacity: ".22",
-    strokeWidth: "3"
-  }), /*#__PURE__*/React.createElement("rect", {
-    y: aboutHeight,
-    width: "1440",
-    height: researchHeight,
-    fill: "url(#descent-foliation)"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: below(mantleTop, 31, 1.4),
-    fill: "url(#descent-heat)"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: trace(mantleTop, 31, 1.4),
-    fill: "none",
-    stroke: "#b99a80",
-    strokeOpacity: ".6",
-    strokeWidth: "3"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: bed(mantleTop + contactHeight * .13, mantleTop + contactHeight * .31, 17, 28, .9),
-    fill: "#3a3631"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: bed(mantleTop + contactHeight * .31, mantleTop + contactHeight * .55, 28, 24, 1.2),
-    fill: "#403932"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: below(mantleTop + contactHeight * .55, 24, 1.5),
-    fill: "#382f2d"
-  }), [.10, .24, .37, .49, .64, .79].map((fraction, i) => /*#__PURE__*/React.createElement("path", {
-    key: i,
-    d: trace(aboutHeight + researchHeight + contactHeight * fraction, 15 + i * 4, 1.8 + i * .34),
-    fill: "none",
-    stroke: i % 2 ? '#b4a789' : '#b98773',
-    strokeOpacity: i % 2 ? '.26' : '.18',
-    strokeWidth: "1.3"
-  })), /*#__PURE__*/React.createElement("rect", {
-    y: aboutHeight + researchHeight,
-    width: "1440",
-    height: contactHeight + footerHeight,
-    fill: "url(#descent-peridotite)"
-  })), children);
+    height: "100",
+    fill: "url(#descent-bridge)"
+  })), React.Children.map(children, child => /*#__PURE__*/React.createElement(React.Fragment, null, inspections.filter(item => item.before === child?.type).map(item => /*#__PURE__*/React.createElement("details", {
+    key: item.rock,
+    className: "descent-inspection",
+    "data-rock": item.rock,
+    style: {
+      '--inspection-y': `${item.y}px`,
+      '--inspection-compact-y': `${item.compact}px`
+    }
+  }, /*#__PURE__*/React.createElement("summary", {
+    "aria-label": `Inspect ${item.label.toLowerCase()}`
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "descent-inspection-target",
+    "aria-hidden": "true"
+  }, "+"), /*#__PURE__*/React.createElement("span", null, item.label)), /*#__PURE__*/React.createElement("div", {
+    className: "descent-inspection-card"
+  }, /*#__PURE__*/React.createElement("img", {
+    src: `./assets/geology-${item.image}.webp`,
+    alt: "",
+    loading: "lazy",
+    decoding: "async",
+    width: "260",
+    height: "72"
+  }), /*#__PURE__*/React.createElement("strong", null, item.title), /*#__PURE__*/React.createElement("p", null, item.text)))), child)));
 };
 Object.assign(window, {
   GeologicalDescent
@@ -4112,9 +4141,7 @@ const AboutSection = ({
       });
     }
   };
-  return /*#__PURE__*/React.createElement(SectionPanel, {
-    strataTheme: "sedimentary"
-  }, /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement(SectionPanel, null, /*#__PURE__*/React.createElement("div", {
     className: "dossier-masthead"
   }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("h2", {
     className: "dossier-headline"
@@ -4370,9 +4397,7 @@ const PublicationsList = () => {
       }).catch(() => {});
     }
   };
-  return /*#__PURE__*/React.createElement(SectionPanel, {
-    strataTheme: "crystalline"
-  }, /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement(SectionPanel, null, /*#__PURE__*/React.createElement("div", {
     className: "pub-terminal-header"
   }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("h2", {
     className: "dossier-headline"
@@ -4529,9 +4554,7 @@ const ContactSection = () => {
       }).catch(() => {});
     }
   };
-  return /*#__PURE__*/React.createElement(SectionPanel, {
-    strataTheme: "mantle"
-  }, /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement(SectionPanel, null, /*#__PURE__*/React.createElement("div", {
     className: "collab-terminal-header"
   }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("h2", {
     className: "dossier-headline"

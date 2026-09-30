@@ -389,6 +389,115 @@ code, kbd, .mono {
   z-index: -1;
 }
 
+.descent-rock {
+  opacity: .7;
+  transition: opacity 200ms ease;
+}
+
+.geological-descent:has(.descent-inspection[data-rock="sandstone"][open]) .descent-rock[data-material="sandstone"],
+.geological-descent:has(.descent-inspection[data-rock="limestone"][open]) .descent-rock[data-material="limestone"],
+.geological-descent:has(.descent-inspection[data-rock="basement"][open]) .descent-rock[data-material="basement"] { opacity: .95; }
+
+.descent-flow {
+  opacity: 0;
+  animation: descentFluid 18s linear infinite;
+}
+
+@keyframes descentFluid {
+  0%, 28%, 100% { opacity: 0; }
+  7%, 20% { opacity: .65; }
+  0% { transform: translate(0, 0); }
+  27%, 100% { transform: translate(108px, -4px); }
+}
+
+.descent-sensor { animation: descentSensor 16s var(--ease-emil-in-out) infinite; }
+
+@keyframes descentSensor {
+  0%, 20%, 100% { opacity: .2; }
+  10% { opacity: .9; }
+}
+
+.descent-motion[data-visible="false"] .descent-flow,
+.descent-motion[data-visible="false"] .descent-sensor { animation-play-state: paused; }
+
+.descent-inspection {
+  position: absolute;
+  top: var(--inspection-y);
+  right: max(24px, calc((100% - 1000px) / 2 - 112px));
+  z-index: 11;
+  color: #d0d3c9;
+  font-family: var(--font-prose);
+  font-size: 12px;
+}
+
+.descent-inspection summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.descent-inspection summary::-webkit-details-marker { display: none; }
+.descent-inspection summary:focus-visible { outline: 2px solid #c4d9d9; outline-offset: 5px; border-radius: 3px; }
+
+.descent-inspection-target {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(199, 211, 205, .48);
+  border-radius: 50%;
+  background: rgba(14, 21, 25, .5);
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.descent-inspection[open] .descent-inspection-target { color: #fff; border-color: #c1d4d1; }
+
+.descent-inspection::before {
+  content: '';
+  position: absolute;
+  inset: -90px 0 -90px -120px;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle, rgba(221, 226, 211, .13), transparent 65%);
+  transition: opacity 200ms ease;
+}
+
+.descent-inspection:focus-within::before { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .descent-inspection:hover::before { opacity: 1; }
+}
+
+.descent-inspection-card {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  width: 280px;
+  max-width: calc(100vw - 48px);
+  padding: 14px;
+  border: 1px solid rgba(199, 211, 205, .25);
+  border-radius: 8px;
+  background: #11191e;
+  box-shadow: 0 10px 30px rgba(5, 10, 14, .35);
+}
+
+.descent-inspection-card img { display: block; width: 100%; height: 72px; object-fit: cover; margin-bottom: 14px; border-radius: 3px; }
+.descent-inspection-card strong { display: block; font-size: 15px; line-height: 1.4; color: #edf0e7; }
+.descent-inspection-card p { margin: 8px 0 0; font-size: 13px; line-height: 1.65; color: #c6cfcf; }
+.descent-inspection[data-rock="basement"] .descent-inspection-card { top: auto; bottom: 44px; }
+
+@media (max-width: 1260px) {
+  .descent-inspection { top: var(--inspection-compact-y); right: 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .descent-flow, .descent-sensor { animation: none !important; transform: none; opacity: .25; }
+}
+
 .about-lead {
   font-family: var(--font-prose);
   font-size: 18px;

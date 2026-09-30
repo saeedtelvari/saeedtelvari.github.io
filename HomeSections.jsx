@@ -85,7 +85,7 @@ const AboutSection = ({ onNavigate }) => {
   };
 
   return (
-    <SectionPanel strataTheme="sedimentary">
+    <SectionPanel>
       <div className="dossier-masthead">
         <Reveal>
           <h2 className="dossier-headline">Research &amp; background</h2>
@@ -332,7 +332,7 @@ const PublicationsList = () => {
   };
 
   return (
-    <SectionPanel strataTheme="crystalline">
+    <SectionPanel>
       <div className="pub-terminal-header">
         <Reveal>
           <h2 className="dossier-headline">Interactive Publication Terminal</h2>
@@ -507,7 +507,7 @@ const ContactSection = () => {
   };
 
   return (
-    <SectionPanel strataTheme="mantle">
+    <SectionPanel>
       <div className="collab-terminal-header">
         <Reveal>
           <h2 className="dossier-headline">Collaboration Terminal &amp; Academic Office</h2>

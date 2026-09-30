@@ -275,7 +275,7 @@ const Divider = () => (
 /* =====================================================
    Section panel — large rounded glass with geological stratigraphy
    ===================================================== */
-const SectionPanel = ({ children, strataTheme = 'sedimentary', style = {} }) => {
+const SectionPanel = ({ children, style = {} }) => {
   return (
     <section className="section-panel" style={{
       position: 'relative',
@@ -287,7 +287,7 @@ const SectionPanel = ({ children, strataTheme = 'sedimentary', style = {} }) => 
       <div className="section-panel-content" style={{
         position: 'relative',
         maxWidth: 1000, margin: '0 auto',
-        background: strataTheme === 'mantle' ? 'rgba(26,24,30,0.62)' : 'rgba(16,24,35,0.58)',
+        background: 'rgba(14,20,25,0.9)',
         backdropFilter: 'blur(3px)',
         WebkitBackdropFilter: 'blur(3px)',
         border: '1px solid rgba(198,210,211,0.15)',
