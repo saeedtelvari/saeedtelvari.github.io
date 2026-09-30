@@ -20,7 +20,7 @@ self.onmessage = ({ data }) => {
   const n = 201, dt = 0.02;
   const primaryMax = Array.from({ length: n }, (_, i) => layerThicknessAt(i * 5, 1, g.faults, i, g) / 15);
   const secondaryMax = Array.from({ length: n }, (_, i) => layerThicknessAt(i * 5, 0.4, g.faults, i, g) / 15);
-  // Geometry is static for all 10,010 substeps; evaluate it only once.
+  // Geometry is static throughout migration; evaluate it only once.
   const faces = depth => Array.from({ length: n - 1 }, (_, i) => [
     capRockY(i * 5, g.faults, i, depth, g) / 15,
     capRockY((i + 1) * 5, g.faults, i + 1, depth, g) / 15,
@@ -42,7 +42,7 @@ self.onmessage = ({ data }) => {
   const history = [];
   const faultFlow = g.faults.map(() => 0);
 
-  for (let frame = 0; frame <= 1000; frame++) {
+  for (let frame = 0; frame <= data.totalYears; frame++) {
     history.push({ h: h.slice(), hMax: hMax.slice(), h2: h2.slice(), h2Max: h2Max.slice(), faultFlow: faultFlow.slice() });
     faultFlow.fill(0);
     for (let step = 0; step < 10; step++) {

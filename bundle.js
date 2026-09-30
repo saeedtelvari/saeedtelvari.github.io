@@ -1147,6 +1147,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = HeroGeolog
 // the cross-section. They never overlap.
 
 // [destructured React]
+const HERO_SIMULATION_YEARS = 2000;
 
 /* =====================================================
    Physical Cap Rock & VE Numerical PDE Solver
@@ -1301,7 +1302,6 @@ const precomputeSimulation = (faults = currentGeology.faults, geo = currentGeolo
 
   let h2 = new Array(N).fill(0); // secondary reservoir plume
   let h2Max = new Array(N).fill(0);
-  const totalFrames = 1000; // 1000 years of simulation and long-term post-migration trapping
   const substeps = 10;
   const dt = 0.020;
   const K = g.K; // Permeability
@@ -1329,7 +1329,7 @@ const precomputeSimulation = (faults = currentGeology.faults, geo = currentGeolo
     if (k > 0 && k < N) balanceFaultContact(heights, k - 1, k, left, right, limits[k - 1], limits[k]);
   });
   const faultFlow = flts.map(() => 0);
-  for (let frame = 0; frame <= totalFrames; frame++) {
+  for (let frame = 0; frame <= HERO_SIMULATION_YEARS; frame++) {
     history.push({
       h: [...h],
       hMax: [...hMax],
@@ -1681,11 +1681,12 @@ const SubsurfaceHero = ({
       const fallback = setTimeout(() => setHistory(precomputeSimulation(faults, geology)), 0);
       return () => clearTimeout(fallback);
     }
-    const worker = new Worker('./hero-simulation-worker.js?v=6');
+    const worker = new Worker('./hero-simulation-worker.js?v=7');
     worker.onmessage = event => setHistory(event.data.history);
     worker.onerror = () => setHistory(precomputeSimulation(faults, geology));
     worker.postMessage({
-      geology
+      geology,
+      totalYears: HERO_SIMULATION_YEARS
     });
     return () => worker.terminate();
   }, [faults, geology]);
@@ -1704,10 +1705,10 @@ const SubsurfaceHero = ({
     if (!isPlaying || !history) return;
     const interval = setInterval(() => {
       setTime(t => {
-        if (t >= 1000) {
+        if (t >= HERO_SIMULATION_YEARS) {
           return 0; // smooth loop back to Year 0
         }
-        return Math.min(1000, t + 2.5 * speed);
+        return Math.min(HERO_SIMULATION_YEARS, t + 2.5 * speed);
       });
     }, 50);
     return () => clearInterval(interval);
@@ -1826,7 +1827,7 @@ const SimulationController = ({
       color: '#64ffda',
       fontWeight: 600
     }
-  }, "Year ", Math.round(time), " / 1000")), /*#__PURE__*/React.createElement("div", {
+  }, "Year ", Math.round(time), " / ", HERO_SIMULATION_YEARS)), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -1859,7 +1860,7 @@ const SimulationController = ({
   })), /*#__PURE__*/React.createElement("input", {
     type: "range",
     min: "0",
-    max: "1000",
+    max: HERO_SIMULATION_YEARS,
     step: "1",
     value: time,
     "aria-label": "Simulation year",

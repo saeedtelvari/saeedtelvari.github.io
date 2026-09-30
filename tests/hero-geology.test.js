@@ -34,7 +34,7 @@ test('varied hero layers stay ordered and both solvers respect their thickness',
   math.random = () => ((seed = (1664525 * seed + 1013904223) >>> 0) / 2 ** 32);
   const source = fs.readFileSync(require.resolve('../SubsurfaceHero.jsx'), 'utf8');
   const api = new Function('React', 'Math', 'HeroGeology', source.slice(0, source.indexOf('const SubsurfaceHero =')) +
-    '\nreturn { generateRandomGeology, capRockY, stratumY, getColumnPath, precomputeSimulation };')({}, math, HeroGeology);
+    '\nreturn { HERO_SIMULATION_YEARS, generateRandomGeology, capRockY, stratumY, getColumnPath, precomputeSimulation };')({}, math, HeroGeology);
   const geologies = Array.from({ length: 100 }, () => api.generateRandomGeology());
   const thicknesses = geologies.map(g => g.reservoirThickness);
   assert.ok(Math.max(...thicknesses) - Math.min(...thicknesses) > 130, 'reloads must produce visibly different beds');
@@ -83,10 +83,12 @@ test('varied hero layers stay ordered and both solvers respect their thickness',
   const worker = { postMessage: result => { workerHistory = result.history; } };
   new Function('self', 'importScripts', 'HeroGeology', fs.readFileSync(require.resolve('../hero-simulation-worker.js'), 'utf8'))(
     worker, () => {}, countedGeometry);
-  worker.onmessage({ data: { geology: g } });
+  worker.onmessage({ data: { geology: g, totalYears: api.HERO_SIMULATION_YEARS } });
   assert.ok(profileCalls <= 840, 'static face profiles must be cached across all time steps');
   const fallback = api.precomputeSimulation(g.faults, g);
-  assert.equal(workerHistory.length, 1001);
+  assert.equal(api.HERO_SIMULATION_YEARS, 2000);
+  assert.equal(workerHistory.length, 2001, 'both solvers must include year 2000');
+  assert.equal(fallback.length, 2001);
   assert.ok(workerHistory[0].faultFlow.every(flow => flow === 0), 'no leaking before injection');
   let leakingAtThreshold = false;
   for (let frame = 0; frame < workerHistory.length; frame++) {
@@ -116,5 +118,11 @@ test('varied hero layers stay ordered and both solvers respect their thickness',
     }
   }
   assert.ok(workerHistory[320].h.some(h => h > 0), 'injection still produces a visible plume');
+  const gas = frame => frame.h.reduce((sum, h) => sum + h, 0) +
+    frame.h2.reduce((sum, h) => sum + h, 0) / 1.5; // Undo the upper-layer leakage height scale.
+  const injectedGas = gas(workerHistory[321]);
+  for (const frame of workerHistory.slice(322)) {
+    assert.ok(gas(frame) <= injectedGas + 1e-8, 'extended migration must not inject more gas');
+  }
   assert.ok(leakingAtThreshold, 'record leakage even when draining reduces the saved height to the entry threshold');
 });
