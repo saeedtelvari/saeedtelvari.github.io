@@ -4,7 +4,7 @@ const Footer = ({ onNavigate }) => {
     { id: 'home',         label: 'Home' },
     { id: 'about',        label: 'About' },
     { id: 'publications', label: 'Research' },
-    { id: 'simulator',    label: 'VE Simulator' },
+    { id: 'simulator',    label: 'CO₂ Simulator' },
     { id: 'cv',           label: 'CV' },
   ];
 

@@ -120,10 +120,10 @@ const GuidePage = ({ isEmbedded = false }) => {
       {/* Title block */}
       <div>
         <div style={{ fontSize: 11, letterSpacing: '0.20em', textTransform: 'uppercase', color: '#64ffda', fontWeight: 600, marginBottom: 6 }}>
-          Saline Aquifer Physics & Simulation
+          How the simulator works
         </div>
         <h2 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 38px)', fontFamily: "'Montserrat', sans-serif", fontWeight: 700 }}>
-          PDE Methodology & Constitutive Models Guide
+          Model & Equations
         </h2>
         <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.65)', fontSize: 13.5, maxWidth: 780 }}>
           This reference documents the model running in the simulator: sharp-interface vertical equilibrium in SI units, residual-trapping hysteresis, faults with juxtaposition seals and up-fault leakage, spill-point trap analysis and convective dissolution — plus its known limitations.
@@ -142,13 +142,13 @@ const GuidePage = ({ isEmbedded = false }) => {
             Saline aquifer CO₂ storage formations are typically thin, lateral sandstone layers with high aspect ratios where the reservoir length is far greater than the vertical thickness (<span className="variable">H</span> &ll; <span className="variable">L</span>). In such geometries, buoyancy forces drive rapid vertical segregation on a timescale much faster than regional horizontal migration (<span className="variable">t</span><span className="subscript">vert</span> &ll; <span className="variable">t</span><span className="subscript">horiz</span>). Supercritical CO₂ quickly floats to the caprock ceiling, while denser brine water settles below.
           </p>
           <p className="math-text">
-            The **Vertical Equilibrium (VE) approximation** assumes that fluids segregate instantly along the vertical coordinate and remain in hydrostatic balance:
+            The <strong>Vertical Equilibrium (VE) approximation</strong> assumes that fluids segregate instantly along the vertical coordinate and remain in hydrostatic balance:
           </p>
           <div className="equation-block">
             <span className="fraction"><span className="numerator">&part; <span className="variable">P</span></span><span className="denominator">&part; <span className="variable">z</span></span></span> = - &rho;(<span className="variable">z</span>) <span className="variable">g</span> &emsp;&rArr;&emsp; <span className="variable">P</span>(<span className="variable">x</span>, <span className="variable">z</span>, <span className="variable">t</span>) = <span className="variable">P</span><span className="subscript">top</span>(<span className="variable">x</span>, <span className="variable">t</span>) + &int;<span className="superscript"><span className="variable">z</span></span><span className="subscript">0</span> &rho;(<span className="variable">z'</span>) <span className="variable">g</span> <span className="variable">dz'</span>
           </div>
           <p className="math-text">
-            This simplifies 3D multi-phase Navier-Stokes equations into a 1D vertically-integrated height-averaged transport PDE, reducing computational cost by orders of magnitude while rigorously preserving mass balance and migration dynamics.
+            This reduces the 3D two-phase Darcy flow equations to a 1D vertically integrated transport equation for the plume thickness, cutting the computational cost by orders of magnitude while keeping mass balance and the large-scale migration dynamics.
           </p>
         </div>
 

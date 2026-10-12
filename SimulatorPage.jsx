@@ -844,11 +844,11 @@ const SimulatorPage = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 20 }}>
         <div>
           <div style={{ fontSize: 11, letterSpacing: '0.20em', textTransform: 'uppercase', color: '#64ffda', fontWeight: 600, marginBottom: 6 }}>
-            Interactive Numerical PDE Sandbox
+            Vertical equilibrium model · runs in your browser
           </div>
           <h2 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 38px)', fontFamily: "'Montserrat', sans-serif", fontWeight: 700, display: 'flex', alignItems: 'center', gap: 15 }}>
-            VE Gravity Tongue Simulator
-            <button 
+            CO₂ Storage Simulator
+            <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               style={{
                 background: sidebarOpen ? 'rgba(100, 255, 218, 0.25)' : 'rgba(100, 255, 218, 0.1)',
@@ -870,13 +870,13 @@ const SimulatorPage = () => {
             </button>
           </h2>
           <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.65)', fontSize: 13.5, maxWidth: 680 }}>
-            Sharp-interface Vertical Equilibrium CO₂ storage model in SI units: viscous push from the injector plus buoyant migration, residual-trapping hysteresis, faults with up-fault leakage, spill-point traps and convective dissolution. Mass balance is exact to round-off.
+            Inject CO₂ into a saline aquifer and follow where it goes: the plume spreads from the well, rises along the caprock, fills structural traps, leaves residual CO₂ behind, dissolves into the brine and can leak up faults. All quantities are in real units and every tonne injected is accounted for.
           </p>
         </div>
         
         {/* Preset Button Bar */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', padding: '10px 14px', borderRadius: 14, backdropFilter: 'blur(8px)' }}>
-          <span style={{ fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>Synthetic Reservoir Cases</span>
+          <span style={{ fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>Scenarios</span>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {[
               { id: 'default', label: 'Default Case', icon: 'fa-project-diagram' },
@@ -938,7 +938,7 @@ const SimulatorPage = () => {
                     outline: 'none'
                   }}
                 >
-                  <i className="fas fa-project-diagram" style={{ marginRight: 6 }} /> 2D Simulator
+                  <i className="fas fa-project-diagram" style={{ marginRight: 6 }} /> Cross-section
                 </button>
                 <button 
                   onClick={() => setActiveSubTab('uq')}
@@ -957,7 +957,7 @@ const SimulatorPage = () => {
                     outline: 'none'
                   }}
                 >
-                  <i className="fas fa-chart-bar" style={{ marginRight: 6 }} /> Sensitivity & UQ
+                  <i className="fas fa-chart-bar" style={{ marginRight: 6 }} /> Uncertainty
                 </button>
                 <button 
                   onClick={() => setActiveSubTab('guide')}
@@ -976,16 +976,16 @@ const SimulatorPage = () => {
                     outline: 'none'
                   }}
                 >
-                  <i className="fas fa-book" style={{ marginRight: 6 }} /> PDE Methodology Guide
+                  <i className="fas fa-book" style={{ marginRight: 6 }} /> Model & equations
                 </button>
               </div>
               <div style={{ paddingRight: 8 }}>
                 {activeSubTab === 'profile' ? (
                   <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Year {simTime} / 1000</span>
                 ) : activeSubTab === 'uq' ? (
-                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Monte Carlo Analysis</span>
+                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Monte Carlo runs</span>
                 ) : (
-                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Methodology Guide</span>
+                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Equations & limitations</span>
                 )}
               </div>
             </div>
@@ -1128,7 +1128,7 @@ const SimulatorPage = () => {
                   padding: 16
                 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Uncertainty Ranges</span>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Uncertainty ranges</span>
                     <Slider label="Permeability (K) range" val={`\u00B1${Math.round(kUncertainty*100)}%`} min="0.10" max="0.80" step="0.05" value={kUncertainty} onChange={v => setKUncertainty(parseFloat(v))} />
                     <Slider label="Residual Trap (Sgr) range" val={`\u00B1${Math.round(sgrUncertainty*100)}%`} min="0.10" max="0.80" step="0.05" value={sgrUncertainty} onChange={v => setSgrUncertainty(parseFloat(v))} />
                     {faultCount > 0 && (
@@ -1137,10 +1137,10 @@ const SimulatorPage = () => {
                   </div>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                     <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Simulation Settings</span>
+                     <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Batch settings</span>
                      
                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                       <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)' }}>Monte Carlo Realizations:</span>
+                       <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)' }}>Number of runs:</span>
                        <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
                          {[25, 50, 100].map(cnt => (
                            <button
@@ -1165,7 +1165,7 @@ const SimulatorPage = () => {
                      </div>
 
                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                       <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)' }}>Target Storage Metric:</span>
+                       <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)' }}>Outcome to analyse:</span>
                        <select 
                          value={uqTargetMetric} 
                          onChange={e => setUqTargetMetric(e.target.value)}
@@ -1248,7 +1248,7 @@ const SimulatorPage = () => {
                       
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>
-                          Parameter Correlation Coefficients (Pearson r)
+                          Which inputs matter (Pearson r)
                         </span>
                         {renderUQSensitivity(sensitivityData)}
                       </div>
@@ -1264,7 +1264,7 @@ const SimulatorPage = () => {
                       flexDirection: 'column',
                       gap: 8
                     }}>
-                      <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Probabilistic Risk Models</span>
+                      <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Representative runs</span>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                         {uqBands.map(b => (
                           <div key={b.key} style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -1300,9 +1300,9 @@ const SimulatorPage = () => {
                      textAlign: 'center'
                    }}>
                      <i className="fas fa-calculator" style={{ fontSize: 36, color: 'rgba(255,255,255,0.15)', marginBottom: 15 }} />
-                     <h4 style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>Uncalculated Probability Space</h4>
+                     <h4 style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>No results yet</h4>
                      <p style={{ margin: '6px 0 0', fontSize: 11.5, color: 'rgba(255,255,255,0.45)', maxWidth: 380 }}>
-                       Configure parameter uncertainties above and run the batch simulator to generate risk distributions and sensitivity analyses.
+                       Set the ± ranges above and run a batch to see the spread of outcomes and which inputs drive them.
                      </p>
                    </div>
                  )}
