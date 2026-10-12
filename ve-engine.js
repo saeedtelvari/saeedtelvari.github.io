@@ -253,6 +253,7 @@
     const R = [new Float64Array(nx), new Float64Array(nx)];     // dV/dt from fluxes, sources, leakage (m/s)
     const O = [new Float64Array(nx), new Float64Array(nx)];     // outgoing volume rate, fluxes + leakage (m/s)
     const U = new Float64Array(nx + 1), U0 = new Float64Array(nx + 1);
+    const leakIn = new Float64Array(nx);                         // leak inflow per upper-layer cell (m/s)
     const Dcap = m.layers.map(L => p.phi * L.H * C_S);
     const dtMin = YEAR / MAX_SUB;
     s.flags = {};
@@ -288,6 +289,8 @@
       // up-fault leakage from the lower layer into the upper layer
       let leakVolRate = 0;                                       // m²/s per unit slab width
       const pg = p.dRho * G;
+      const leaks = [];
+      leakIn.fill(0);
       for (const f of m.faults) {
         if (f.cond === 0) continue;
         for (let side = 0; side < 2; side++) {
@@ -296,24 +299,40 @@
           const v = f.cond * ((pg * hi - f.Pth_kPa * KPA) / p.C + pg);
           const rate = v * WF / dx;
           const j = clamp(f.upperFace - 1 + side, 0, nx - 1);
-          R[0][i] -= rate; O[0][i] += rate; R[1][j] += rate;
+          R[0][i] -= rate; O[0][i] += rate; R[1][j] += rate; leakIn[j] += rate;
           leakVolRate += v * WF;
+          leaks.push({ i, j, rate });
         }
       }
 
       // adaptive dt
-      let dt = tEnd - tSec;
-      if (injecting) dt = Math.min(dt, m.tInjEnd - tSec);
+      let dtEvent = tEnd - tSec;                                 // next event: end of interval or injection stop
+      if (injecting) dtEvent = Math.min(dtEvent, m.tInjEnd - tSec);
+      let dt = dtEvent;
       if (c > 0) dt = Math.min(dt, 0.5 * b * dx / c);
       if (d > 0) dt = Math.min(dt, 0.45 * dx * dx / d);
       for (let l = 0; l < 2; l++) {
         const cap = a * m.layers[l].H, V = s.layers[l].V;
         for (let i = 0; i < nx; i++) {
           if (O[l][i] > 0) dt = Math.min(dt, 0.5 * b * h[l][i] / O[l][i]);
-          if (R[l][i] > 0) dt = Math.min(dt, 0.9 * Math.max(0, cap - V[i]) / R[l][i]);
+          // leak inflow is trimmed to capacity below, so only lateral/source inflow limits dt here
+          const inflow = l === 1 ? R[1][i] - leakIn[i] : R[0][i];
+          if (inflow > 0 && V[i] < cap) dt = Math.min(dt, 0.9 * (cap - V[i]) / inflow);
         }
       }
-      if (dt < dtMin && tEnd - tSec > dtMin) { dt = dtMin; s.flags.dtFloor = true; }
+      // Hard cap: every substep advances ≥ min(dtMin, next event) → at most MAX_SUB (+ events) substeps per year
+      const dtFloor = Math.min(dtMin, dtEvent);
+      if (dt < dtFloor) { dt = dtFloor; s.flags.dtFloor = true; }
+
+      // A full receiving column takes no more: CO2 that would overfill it stays in the lower cell
+      const cap1 = a * m.layers[1].H, V1 = s.layers[1].V;
+      for (const lk of leaks) {
+        const excess = V1[lk.j] + R[1][lk.j] * dt - cap1;
+        if (excess <= 0) continue;
+        const cut = Math.min(lk.rate, excess / dt);
+        R[1][lk.j] -= cut; R[0][lk.i] += cut;
+        leakVolRate -= cut * dx;
+      }
 
       // apply
       for (let l = 0; l < 2; l++) {

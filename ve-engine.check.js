@@ -184,4 +184,24 @@ test('14 extreme inputs (10 mD, 5 Mt/yr): finite state, exact balance', () => {
   console.log(`    flags ${JSON.stringify(dg.flags)}  substeps/yr ${s.substepsLastYear.toFixed(0)}  maxV ${Math.max(...s.layers[0].V).toFixed(2)} (cap ${(m.a * m.p.H).toFixed(2)})`);
 });
 
+test('15 hard substep cap: a column filling to capacity cannot stall the clock (leakyFault, 200-yr injection)', () => {
+  const m = VE.createModel({ ...VE.PRESETS.leakyFault, injYears: 200 });
+  let s = VE.initState(m);
+  for (let y = 1; y <= 80; y++) {
+    let n = 0;   // watchdog: an unbounded substep loop fails here instead of hanging the check
+    s = run(m, s, 1, { onSubstep: () => { if (++n > 5001) throw new Error(`year ${y}: more than 5000 substeps`); } });
+  }
+  assert(Math.abs(VE.diagnose(m, s).balanceError) < 1e-9);
+});
+
+test('16 up-fault leakage stops when the receiving upper column is full (no overfill)', () => {
+  const m = VE.createModel({ ...VE.PRESETS.leakyFault, injYears: 200 });
+  let s = VE.initState(m);
+  let overfill = 0;
+  const cap1 = m.a * m.layers[1].H;
+  s = run(m, s, 80, { onSubstep: st => { for (const v of st.layers[1].V) overfill = Math.max(overfill, v - cap1); } });
+  assert(overfill <= 1e-9, `upper column overfilled by ${overfill} m`);
+  assert(!s.flags.overflow, 'overflow guard fired');
+});
+
 console.log(`\n${passed} checks passed`);

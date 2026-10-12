@@ -136,7 +136,9 @@ const SimulatorPage = () => {
   };
   const resetSimulation = () => resetTo(modelRef.current); // also used as an onClick handler: ignores its argument
 
-  useEffect(() => { resetTo(modelRef.current); }, [params.nx]);
+  // Grid size reshapes the state arrays; slab width and Δρ (ρ_g) convert stored volume to kg, so changing
+  // them with CO₂ in place would break the mass balance — all three restart the run
+  useEffect(() => { resetTo(modelRef.current); }, [params.nx, params.W, params.dRho]);
 
   const applyPreset = name => {
     const p = cloneSimParams(VE.PRESETS[name]);
@@ -1343,7 +1345,7 @@ const SimulatorPage = () => {
                   <Slider label="Porosity φ" val={params.phi.toFixed(2)} min="0.05" max="0.35" step="0.01" value={params.phi} onChange={v => setP('phi', parseFloat(v))} />
                   <Slider label="Residual brine S_wr" val={params.Swr.toFixed(2)} min="0.05" max="0.4" step="0.01" value={params.Swr} onChange={v => setP('Swr', parseFloat(v))} />
                   <Slider label="Residual CO₂ S_gr" val={params.Sgr.toFixed(2)} min="0" max="0.4" step="0.01" value={params.Sgr} onChange={v => setP('Sgr', parseFloat(v))} />
-                  <Slider label="Density contrast Δρ" val={`${params.dRho} kg/m³`} min="100" max="600" step="10" value={params.dRho} onChange={v => setP('dRho', parseFloat(v))} />
+                  <Slider label="Density contrast Δρ (resets)" val={`${params.dRho} kg/m³`} min="100" max="600" step="10" value={params.dRho} onChange={v => setP('dRho', parseFloat(v))} />
                   <Slider label="Mobility ratio M" val={params.M.toFixed(1)} min="1" max="20" step="0.5" value={params.M} onChange={v => setP('M', parseFloat(v))} />
                 </ControlGroup>
 
@@ -1365,7 +1367,7 @@ const SimulatorPage = () => {
                   <Slider label="Injection rate" val={`${params.Q_Mtpa} Mt/yr`} min="0" max="5" step="0.1" value={params.Q_Mtpa} onChange={v => setP('Q_Mtpa', parseFloat(v))} />
                   <Slider label="Injection period" val={`${params.injYears} yr`} min="5" max="200" step="5" value={params.injYears} onChange={v => setP('injYears', parseFloat(v))} />
                   <Slider label="Well position" val={`${Math.round(params.wellFrac * 100)}%`} min="0.1" max="0.9" step="0.05" value={params.wellFrac} onChange={v => setP('wellFrac', parseFloat(v))} />
-                  <Slider label="Slab width W" val={`${(params.W / 1000).toFixed(1)} km`} min="1000" max="20000" step="500" value={params.W} onChange={v => setP('W', parseFloat(v))} />
+                  <Slider label="Slab width W (resets)" val={`${(params.W / 1000).toFixed(1)} km`} min="1000" max="20000" step="500" value={params.W} onChange={v => setP('W', parseFloat(v))} />
                   <Slider label="Grid cells (resets)" val={params.nx} min="50" max="300" step="10" value={params.nx} onChange={v => setP('nx', parseInt(v, 10))} />
                   <Slider label="Dissolution rate" val={`${params.dissMult.toFixed(1)}×`} min="0" max="3" step="0.1" value={params.dissMult} onChange={v => setP('dissMult', parseFloat(v))} />
                 </ControlGroup>
