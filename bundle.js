@@ -3,6 +3,700 @@
 var { useState, useEffect, useMemo, useRef, useCallback } = React;
 
 // ==========================================
+// File: ve-engine.js
+// ==========================================
+// ve-engine.js — Vertical Equilibrium (VE) CO2 storage engine. Pure functions, no DOM/React.
+// Spec: docs/superpowers/specs/2026-10-12-ve-engine-design.md
+(function () {
+  'use strict';
+
+  const G = 9.81;
+  const MD = 9.869233e-16; // m² per millidarcy
+  const CP = 1e-3; // Pa·s per centipoise
+  const KPA = 1e3; // Pa per kPa
+  const YEAR = 365.25 * 86400; // s
+  const MT = 1e9; // kg per megatonne
+  const ALPHA_D = 0.017; // convective dissolution prefactor (Pau et al. 2010)
+  const DRHO_S = 10; // kg/m³ density increase of CO2-saturated brine
+  const C_S = 50; // kg/m³ CO2 solubility in brine
+  const WF = 1; // m, fault-zone width for up-fault leakage
+  const MAX_SUB = 5000; // substeps per simulated year before dt is floored
+
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  function deepFreeze(o) {
+    Object.values(o).forEach(v => {
+      if (v && typeof v === 'object') deepFreeze(v);
+    });
+    return Object.freeze(o);
+  }
+  const FAULT_A = {
+    xFrac: 0.28,
+    throw_m: 15,
+    Trock: 1,
+    Pth_kPa: 20,
+    kf_mD: 5,
+    sealed: false,
+    dipSlope: -0.22
+  };
+  const FAULT_B = {
+    xFrac: 0.48,
+    throw_m: -12,
+    Trock: 0.8,
+    Pth_kPa: 30,
+    kf_mD: 5,
+    sealed: false,
+    dipSlope: 0.25
+  };
+  const FAULT_C = {
+    xFrac: 0.62,
+    throw_m: 10,
+    Trock: 1,
+    Pth_kPa: 25,
+    kf_mD: 5,
+    sealed: false,
+    dipSlope: -0.2
+  };
+  const DEFAULT_PARAMS = deepFreeze({
+    L: 20000,
+    nx: 200,
+    W: 5000,
+    H: 50,
+    C: 30,
+    H2: 30,
+    z0: 1000,
+    dipPct: 0.5,
+    foldAmp: 20,
+    foldCount: 2,
+    k_mD: 500,
+    phi: 0.25,
+    Swr: 0.2,
+    Sgr: 0.25,
+    krgStar: 0.6,
+    rhoW: 1050,
+    dRho: 350,
+    muW_cP: 0.5,
+    M: 5,
+    Q_Mtpa: 1,
+    injYears: 30,
+    wellFrac: 0.7,
+    fringeOn: true,
+    Pe_kPa: 5,
+    dissMult: 1,
+    faults: [FAULT_A, FAULT_B]
+  });
+  function withDefaults(over) {
+    return Object.assign(clone(DEFAULT_PARAMS), clone(over || {}));
+  }
+  const PRESETS = deepFreeze({
+    default: withDefaults({}),
+    dome: withDefaults({
+      dipPct: 0.1,
+      foldAmp: 45,
+      foldCount: 1.5,
+      faults: []
+    }),
+    faultedTrap: withDefaults({
+      dipPct: 1.5,
+      foldAmp: 5,
+      foldCount: 1,
+      faults: [{
+        ...FAULT_A,
+        xFrac: 0.4,
+        throw_m: 60,
+        Pth_kPa: 200,
+        kf_mD: 1
+      }]
+    }),
+    dipping: withDefaults({
+      dipPct: -2,
+      foldAmp: 5,
+      foldCount: 1,
+      faults: [],
+      Sgr: 0.3,
+      dissMult: 2,
+      wellFrac: 0.2
+    }),
+    leakyFault: withDefaults({
+      wellFrac: 0.35,
+      faults: [{
+        ...FAULT_A,
+        Pth_kPa: 10,
+        kf_mD: 200
+      }, FAULT_B]
+    })
+  });
+
+  // ---------------------------------------------------------------- geometry
+
+  // 1D spill-point trap analysis on cell-centre caprock depths. mult[f] === 0 marks a barrier face
+  // (face f sits between cells f-1 and f). Returns [{ crest, lo, hi, spill }] with spill = Infinity
+  // for compartments closed by barriers on both sides.
+  // ponytail: traps are independent, no merging of nested traps on overfill (co2lab trap tree = upgrade).
+  function findTraps(zt, mult) {
+    const n = zt.length,
+      traps = [];
+    const walk = (start, dir) => {
+      for (let i = start;;) {
+        const j = i + dir;
+        if (j < 0 || j >= n) return zt[i]; // domain edge: spills at edge depth
+        if (mult[dir < 0 ? i : j] === 0) return Infinity; // barrier: never spills this way
+        if (zt[j] < zt[i]) return zt[i]; // turns shallower: saddle
+        i = j;
+      }
+    };
+    for (let a = 0; a < n;) {
+      let b = a;
+      while (b + 1 < n && mult[b + 1] > 0 && zt[b + 1] === zt[a]) b++;
+      const leftUp = a > 0 && (mult[a] === 0 || zt[a - 1] > zt[a]);
+      const rightUp = b < n - 1 && (mult[b + 1] === 0 || zt[b + 1] > zt[b]);
+      if (leftUp && rightUp) {
+        const spill = Math.min(walk(a, -1), walk(b, 1));
+        let lo = a,
+          hi = b;
+        while (lo > 0 && mult[lo] > 0 && zt[lo - 1] < spill) lo--;
+        while (hi < n - 1 && mult[hi + 1] > 0 && zt[hi + 1] < spill) hi++;
+        traps.push({
+          crest: a,
+          lo,
+          hi,
+          spill
+        });
+      }
+      a = b + 1;
+    }
+    return traps;
+  }
+  function createModel(params) {
+    const p = withDefaults(params);
+    if (p.Swr + p.Sgr >= 0.9) throw new Error('VE: Swr + Sgr must be < 0.9');
+    const nx = Math.round(p.nx),
+      dx = p.L / nx;
+    const rhoG = p.rhoW - p.dRho;
+    const muW = p.muW_cP * CP,
+      muG = p.krgStar * muW / p.M;
+    const k = p.k_mD * MD;
+    const xc = new Float64Array(nx),
+      base = new Float64Array(nx);
+    for (let i = 0; i < nx; i++) {
+      const x = (i + 0.5) * dx;
+      xc[i] = x;
+      base[i] = p.z0 + p.dipPct / 100 * x - p.foldAmp * Math.sin(2 * Math.PI * p.foldCount * x / p.L);
+    }
+
+    // lift = how far above the lower caprock this layer's top sits; the fault plane shifts by dipSlope·lift
+    const buildLayer = (H, lift) => {
+      const zt = base.map(z => z - lift);
+      const mult = new Float64Array(nx + 1).fill(1);
+      const faultFaces = p.faults.map(f => {
+        const face = clamp(Math.round((f.xFrac * p.L - f.dipSlope * lift) / dx), 1, nx - 1);
+        for (let i = face; i < nx; i++) zt[i] += f.throw_m;
+        const jux = Math.max(0, H - Math.abs(f.throw_m)) / H;
+        mult[face] *= f.sealed ? 0 : jux * f.Trock;
+        return face;
+      });
+      const traps = findTraps(zt, mult).map(t => {
+        let cap = 0;
+        for (let i = t.lo; i <= t.hi; i++) cap += Math.min(H, t.spill - zt[i]);
+        return {
+          ...t,
+          capacity: cap * p.phi * (1 - p.Swr) * dx * p.W * rhoG
+        };
+      }).filter(t => t.capacity > 0);
+      return {
+        H,
+        zt,
+        mult,
+        faultFaces,
+        traps
+      };
+    };
+    const layers = [buildLayer(p.H, 0), buildLayer(p.H2, p.C + p.H2)];
+    const faults = p.faults.map((f, fi) => ({
+      ...f,
+      lowerFace: layers[0].faultFaces[fi],
+      upperFace: layers[1].faultFaces[fi],
+      hth: f.Pth_kPa * KPA / (p.dRho * G),
+      cond: f.sealed ? 0 : f.kf_mD * MD * p.krgStar / muG
+    }));
+    const Qkg = p.Q_Mtpa * MT / YEAR;
+    const model = {
+      p,
+      nx,
+      dx,
+      xc,
+      rhoG,
+      muG,
+      muW,
+      k,
+      layers,
+      faults,
+      lamG: p.krgStar / muG,
+      lamW: 1 / muW,
+      kdg: k * p.dRho * G,
+      well: clamp(Math.floor(p.wellFrac * nx), 0, nx - 1),
+      Qkg,
+      q: Qkg / (rhoG * p.W),
+      tInjEnd: p.injYears * YEAR,
+      Fd: p.dissMult * ALPHA_D * k * DRHO_S * G * C_S / muW,
+      hc: p.Pe_kPa * KPA / (p.dRho * G),
+      a: p.phi * (1 - p.Swr),
+      r: p.phi * p.Sgr,
+      b: p.phi * (1 - p.Swr - p.Sgr)
+    };
+    // Purely geometric: column transmissivities are always > 0, so only zero-multiplier faces can seal the well in
+    model.injectionBlocked = splitInjection(model, new Float64Array(nx)) === null;
+    return model;
+  }
+
+  // ---------------------------------------------------------------- state
+
+  function initState(m) {
+    const mk = () => new Float64Array(m.nx);
+    return {
+      t: 0,
+      injected: 0,
+      exited: 0,
+      leakedCum: 0,
+      substepsLastYear: 0,
+      flags: {},
+      layers: [0, 1].map(() => ({
+        V: mk(),
+        hmax: mk(),
+        D: mk()
+      }))
+    };
+  }
+  function cloneState(s) {
+    return {
+      ...s,
+      flags: {
+        ...s.flags
+      },
+      layers: s.layers.map(L => ({
+        V: Float64Array.from(L.V),
+        hmax: Float64Array.from(L.hmax),
+        D: Float64Array.from(L.D)
+      }))
+    };
+  }
+
+  // V = φ[(1−Swr)h + Sgr(hmax−h)] → h (writes h, may update hmax). Returns true if a column overflowed H.
+  function invert(m, H, V, hmax, h) {
+    const {
+      a,
+      r,
+      b
+    } = m;
+    let overflow = false;
+    for (let i = 0; i < V.length; i++) {
+      const v = V[i];
+      if (v <= 0) {
+        h[i] = 0;
+        hmax[i] = 0;
+        continue;
+      }
+      if (v >= a * hmax[i]) {
+        h[i] = v / a;
+        hmax[i] = h[i];
+      } else {
+        const hi = (v - r * hmax[i]) / b;
+        if (hi >= 0) h[i] = hi;else {
+          h[i] = 0;
+          hmax[i] = r > 0 ? v / r : 0;
+        }
+      }
+      if (h[i] > H) {
+        h[i] = H;
+        hmax[i] = Math.min(hmax[i], H);
+        overflow = true;
+      }
+    }
+    return overflow;
+  }
+
+  // ---------------------------------------------------------------- fluxes
+
+  // Face fluxes of CO2 per unit slab width (m²/s). Face f sits between cells f-1 and f; faces 0 and nx
+  // are the open lateral boundaries (ghost cell: same h, linearly extrapolated zt, no CO2 inflow).
+  // Returns wave-speed and diffusivity bounds for the time-step limiter.
+  function fluxes(m, L, h, U, F) {
+    const {
+        nx,
+        dx,
+        lamG,
+        lamW,
+        kdg,
+        b
+      } = m,
+      H = L.H,
+      zt = L.zt,
+      mult = L.mult;
+    const lmax = Math.max(lamG, lamW),
+      fpmax = lmax / (H * Math.min(lamG, lamW));
+    let c = 0,
+      d = 0;
+    for (let f = 0; f <= nx; f++) {
+      const hL = f > 0 ? h[f - 1] : h[0];
+      const hR = f < nx ? h[f] : h[nx - 1];
+      const zL = f > 0 ? zt[f - 1] : 2 * zt[0] - zt[1];
+      const zR = f < nx ? zt[f] : 2 * zt[nx - 1] - zt[nx - 2];
+      const dPhi = zL + hL - (zR + hR); // > 0: CO2 moves left → right
+      let grav = 0,
+        cf = 0;
+      if (mult[f] > 0 && dPhi !== 0) {
+        // counter-current upwinding (Brenier & Jaffré 1991): CO2 mobility from its upstream side,
+        // brine mobility from the opposite side
+        const hg = dPhi > 0 ? hL : hR,
+          hw = dPhi > 0 ? hR : hL;
+        const mg = lamG * hg,
+          mw = lamW * (H - hw);
+        const gm = mg + mw > 0 ? mg * mw / (mg + mw) : 0;
+        grav = gm * kdg * mult[f] * dPhi / dx;
+        d = Math.max(d, gm * kdg * mult[f] / b);
+        cf += lmax * kdg * mult[f] * Math.abs(dPhi) / dx;
+      }
+      let visc = 0;
+      const u = U[f];
+      if (u !== 0) {
+        const hu = u > 0 ? hL : hR,
+          mg = lamG * hu,
+          mw = lamW * (H - hu);
+        visc = mg / (mg + mw) * u;
+        cf += Math.abs(u) * fpmax;
+      }
+      let flux = visc + grav;
+      if (f === 0 && flux > 0) flux = 0;
+      if (f === nx && flux < 0) flux = 0;
+      F[f] = flux;
+      if (cf > c) c = cf;
+    }
+    return {
+      c,
+      d
+    };
+  }
+
+  // Split of the injection rate between left and right by column flow resistance (open hydrostatic ends).
+  // ponytail: net buoyancy-driven total flux ignored; full 1D pressure solve is the upgrade.
+  function splitInjection(m, h) {
+    const {
+        nx,
+        dx,
+        k,
+        lamG,
+        lamW,
+        well
+      } = m,
+      L = m.layers[0],
+      H = L.H;
+    const tau = i => k * (lamG * h[i] + lamW * (H - h[i]));
+    const side = (f0, f1) => {
+      let R = 0;
+      for (let f = f0; f <= f1; f++) {
+        if (L.mult[f] === 0) return Infinity;
+        const t1 = tau(f - 1),
+          t2 = tau(f);
+        R += dx * (t1 + t2) / (2 * t1 * t2) / L.mult[f];
+      }
+      return R;
+    };
+    const RL = side(1, well),
+      RR = side(well + 1, nx - 1);
+    if (RL === Infinity && RR === Infinity) return null;
+    if (RL === Infinity) return {
+      L: 0,
+      R: 1
+    };
+    if (RR === Infinity) return {
+      L: 1,
+      R: 0
+    };
+    return RL + RR > 0 ? {
+      L: RR / (RL + RR),
+      R: RL / (RL + RR)
+    } : {
+      L: 0.5,
+      R: 0.5
+    };
+  }
+
+  // ---------------------------------------------------------------- time stepping
+
+  function advance(m, s0, years, opts) {
+    const s = cloneState(s0);
+    const {
+      nx,
+      dx,
+      p,
+      a,
+      b,
+      rhoG
+    } = m;
+    const onSubstep = opts && opts.onSubstep;
+    const h = [new Float64Array(nx), new Float64Array(nx)];
+    const F = [new Float64Array(nx + 1), new Float64Array(nx + 1)];
+    const R = [new Float64Array(nx), new Float64Array(nx)]; // dV/dt from fluxes, sources, leakage (m/s)
+    const O = [new Float64Array(nx), new Float64Array(nx)]; // outgoing volume rate, fluxes + leakage (m/s)
+    const U = new Float64Array(nx + 1),
+      U0 = new Float64Array(nx + 1);
+    const leakIn = new Float64Array(nx); // leak inflow per upper-layer cell (m/s)
+    const Dcap = m.layers.map(L => p.phi * L.H * C_S);
+    const dtMin = YEAR / MAX_SUB;
+    s.flags = {};
+    for (let l = 0; l < 2; l++) invert(m, m.layers[l].H, s.layers[l].V, s.layers[l].hmax, h[l]);
+    let tSec = s0.t * YEAR,
+      steps = 0;
+    const tEnd = tSec + years * YEAR;
+    while (tEnd - tSec > 1e-3) {
+      const injecting = m.Qkg > 0 && tSec < m.tInjEnd - 1e-3;
+      let split = null;
+      U.fill(0);
+      if (injecting) {
+        split = splitInjection(m, h[0]);
+        if (!split) s.flags.injectionBlocked = true;else {
+          for (let f = 0; f <= m.well; f++) U[f] = -m.q * split.L;
+          for (let f = m.well + 1; f <= nx; f++) U[f] = m.q * split.R;
+        }
+      }
+      let c = 0,
+        d = 0;
+      for (let l = 0; l < 2; l++) {
+        const st = fluxes(m, m.layers[l], h[l], l === 0 ? U : U0, F[l]);
+        c = Math.max(c, st.c);
+        d = Math.max(d, st.d);
+        const Fl = F[l],
+          Rl = R[l],
+          Ol = O[l];
+        for (let i = 0; i < nx; i++) {
+          Rl[i] = (Fl[i] - Fl[i + 1]) / dx;
+          Ol[i] = (Fl[i] < 0 ? -Fl[i] : 0) / dx + (Fl[i + 1] > 0 ? Fl[i + 1] : 0) / dx;
+        }
+      }
+      if (split) R[0][m.well] += m.q / dx;
+
+      // up-fault leakage from the lower layer into the upper layer
+      let leakVolRate = 0; // m²/s per unit slab width
+      const pg = p.dRho * G;
+      const leaks = [];
+      leakIn.fill(0);
+      for (const f of m.faults) {
+        if (f.cond === 0) continue;
+        for (let side = 0; side < 2; side++) {
+          const i = f.lowerFace - 1 + side,
+            hi = h[0][i];
+          if (hi <= f.hth) continue;
+          const v = f.cond * ((pg * hi - f.Pth_kPa * KPA) / p.C + pg);
+          const rate = v * WF / dx;
+          const j = clamp(f.upperFace - 1 + side, 0, nx - 1);
+          R[0][i] -= rate;
+          O[0][i] += rate;
+          R[1][j] += rate;
+          leakIn[j] += rate;
+          leakVolRate += v * WF;
+          leaks.push({
+            i,
+            j,
+            rate
+          });
+        }
+      }
+
+      // adaptive dt
+      let dtEvent = tEnd - tSec; // next event: end of interval or injection stop
+      if (injecting) dtEvent = Math.min(dtEvent, m.tInjEnd - tSec);
+      let dt = dtEvent;
+      if (c > 0) dt = Math.min(dt, 0.5 * b * dx / c);
+      if (d > 0) dt = Math.min(dt, 0.45 * dx * dx / d);
+      for (let l = 0; l < 2; l++) {
+        const cap = a * m.layers[l].H,
+          V = s.layers[l].V;
+        for (let i = 0; i < nx; i++) {
+          if (O[l][i] > 0) dt = Math.min(dt, 0.5 * b * h[l][i] / O[l][i]);
+          // leak inflow is trimmed to capacity below, so only lateral/source inflow limits dt here
+          const inflow = l === 1 ? R[1][i] - leakIn[i] : R[0][i];
+          if (inflow > 0 && V[i] < cap) dt = Math.min(dt, 0.9 * (cap - V[i]) / inflow);
+        }
+      }
+      // Hard cap: every substep advances ≥ min(dtMin, next event) → at most MAX_SUB (+ events) substeps per year
+      const dtFloor = Math.min(dtMin, dtEvent);
+      if (dt < dtFloor) {
+        dt = dtFloor;
+        s.flags.dtFloor = true;
+      }
+
+      // A full receiving column takes no more: CO2 that would overfill it stays in the lower cell
+      const cap1 = a * m.layers[1].H,
+        V1 = s.layers[1].V;
+      for (const lk of leaks) {
+        const excess = V1[lk.j] + R[1][lk.j] * dt - cap1;
+        if (excess <= 0) continue;
+        const cut = Math.min(lk.rate, excess / dt);
+        R[1][lk.j] -= cut;
+        R[0][lk.i] += cut;
+        leakVolRate -= cut * dx;
+      }
+
+      // apply
+      for (let l = 0; l < 2; l++) {
+        const S = s.layers[l],
+          Rl = R[l],
+          hl = h[l];
+        for (let i = 0; i < nx; i++) {
+          S.V[i] += Rl[i] * dt;
+          if (m.Fd > 0 && hl[i] > 0) {
+            // capped at half the removable volume: fluxes take ≤ ½·b·h (dt limit) + this ≤ ½·b·h → V stays ≥ 0
+            const dm = Math.min(m.Fd * dt, Dcap[l] - S.D[i], 0.5 * b * hl[i] * rhoG);
+            if (dm > 0) {
+              S.D[i] += dm;
+              S.V[i] -= dm / rhoG;
+            }
+          }
+        }
+        s.exited += (Math.max(0, -F[l][0]) + Math.max(0, F[l][nx])) * dt * p.W * rhoG;
+      }
+      if (split) s.injected += m.Qkg * dt;
+      s.leakedCum += leakVolRate * dt * p.W * rhoG;
+      tSec += dt;
+      steps++;
+      for (let l = 0; l < 2; l++) {
+        if (invert(m, m.layers[l].H, s.layers[l].V, s.layers[l].hmax, h[l])) s.flags.overflow = true;
+      }
+      if (onSubstep) onSubstep(s, dt, h);
+    }
+    s.t = s0.t + years;
+    s.substepsLastYear = years > 0 ? steps / years : 0;
+    return s;
+  }
+
+  // ---------------------------------------------------------------- diagnostics
+
+  function diagnose(m, s) {
+    const {
+        nx,
+        dx,
+        p,
+        a,
+        rhoG
+      } = m,
+      cell = dx * p.W;
+    let stored = 0;
+    const layers = m.layers.map((L, l) => {
+      const S = s.layers[l],
+        h = new Float64Array(nx),
+        hmax = Float64Array.from(S.hmax);
+      invert(m, L.H, S.V, hmax, h);
+      let vol = 0,
+        mob = 0,
+        dis = 0;
+      for (let i = 0; i < nx; i++) {
+        vol += S.V[i];
+        mob += a * h[i];
+        dis += S.D[i];
+      }
+      const total = vol * cell * rhoG,
+        mobile = mob * cell * rhoG,
+        dissolved = dis * cell;
+      const traps = L.traps.map(t => {
+        let st = 0;
+        for (let i = t.lo; i <= t.hi; i++) st += Math.min(h[i], t.spill - L.zt[i], L.H);
+        st *= a * cell * rhoG;
+        return {
+          ...t,
+          structural: st,
+          fill: st / t.capacity
+        };
+      });
+      const structural = traps.reduce((acc, t) => acc + t.structural, 0);
+      stored += total + dissolved;
+      return {
+        structural,
+        migrating: Math.max(0, mobile - structural),
+        residual: total - mobile,
+        dissolved,
+        total: total + dissolved,
+        h,
+        hmax,
+        traps
+      };
+    });
+    return {
+      layers,
+      injected: s.injected,
+      exited: s.exited,
+      leakedCum: s.leakedCum,
+      balanceError: (s.injected - stored - s.exited) / Math.max(s.injected, 1),
+      flags: {
+        ...s.flags
+      }
+    };
+  }
+
+  // Depth of the free-water level below the caprock for sharp-interface thickness h, volume-preserving
+  // Brooks–Corey (λ = 2) capillary fringe: ∫Sg = (1−Swr)·h  ⇒  (h' − hc)²/h' = h.
+  function fringeBase(m, h) {
+    if (!m.p.fringeOn || h <= 0) return h;
+    const hc = m.hc;
+    return (2 * hc + h + Math.sqrt(h * h + 4 * hc * h)) / 2;
+  }
+
+  // Saturation profile Sg(z), z measured down from the caprock, for rendering. Same CO2 volume as the
+  // sharp-interface column. ponytail: fringe is display-only; flow uses the sharp interface.
+  function columnProfile(m, s, l, i, n) {
+    n = n || 50;
+    const L = m.layers[l],
+      S = s.layers[l],
+      p = m.p;
+    const h1 = new Float64Array(1),
+      hm = Float64Array.of(S.hmax[i]);
+    invert(m, L.H, S.V.subarray(i, i + 1), hm, h1);
+    const h = h1[0],
+      hf = fringeBase(m, h),
+      resBot = hf + (hm[0] - h);
+    const zMax = Math.min(L.H, Math.max(hf, resBot));
+    const out = [];
+    for (let k = 0; k <= n; k++) {
+      const z = zMax * k / n;
+      let Sg = 0;
+      if (z < hf) {
+        if (!p.fringeOn) Sg = 1 - p.Swr;else {
+          const y = hf - z;
+          Sg = y > m.hc ? (1 - p.Swr) * (1 - (m.hc / y) ** 2) : 0;
+        }
+      } else if (z < resBot) Sg = p.Sgr;
+      out.push({
+        z,
+        Sg
+      });
+    }
+    return out;
+  }
+  const VE = {
+    createModel,
+    initState,
+    cloneState,
+    advance,
+    diagnose,
+    columnProfile,
+    fringeBase,
+    withDefaults,
+    findTraps,
+    DEFAULT_PARAMS,
+    PRESETS,
+    FAULT_TEMPLATES: deepFreeze([FAULT_A, FAULT_B, FAULT_C]),
+    units: {
+      G,
+      MD,
+      CP,
+      KPA,
+      YEAR,
+      MT
+    }
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = VE;else (typeof window !== 'undefined' ? window : globalThis).VE = VE;
+})();
+
+// ==========================================
 // File: Primitives.jsx
 // ==========================================
 // [destructured React]
@@ -1484,7 +2178,7 @@ const Header = ({
     label: 'Research'
   }, {
     id: 'simulator',
-    label: 'VE Simulator'
+    label: 'CO₂ Simulator'
   }, {
     id: 'cv',
     label: 'CV'
@@ -1848,7 +2542,7 @@ const Footer = ({
     label: 'Research'
   }, {
     id: 'simulator',
-    label: 'VE Simulator'
+    label: 'CO₂ Simulator'
   }, {
     id: 'cv',
     label: 'CV'
@@ -3966,7 +4660,7 @@ const Annotation = () => /*#__PURE__*/React.createElement("div", {
     color: '#64ffda',
     textShadow: '0 0 8px rgba(100,255,218,0.3)'
   }
-}, "orders of magnitude"), " faster than full 3D."));
+}, "up to 100\xD7 faster"), " than full 3D simulation."));
 
 /* =====================================================
    IDENTITY — sits firmly inside the sky region
@@ -3995,7 +4689,7 @@ const Identity = ({
     background: '#64ffda',
     boxShadow: '0 0 10px rgba(100,255,218,0.8)'
   }
-}), "Ph.D. Candidate \xB7 Heriot-Watt University"), /*#__PURE__*/React.createElement("h1", {
+}), "PhD Candidate \xB7 Heriot-Watt University"), /*#__PURE__*/React.createElement("h1", {
   style: {
     margin: 0,
     fontFamily: "'Montserrat', sans-serif",
@@ -4026,7 +4720,7 @@ const Identity = ({
     color: '#64ffda',
     fontWeight: 600
   }
-}, "CO", /*#__PURE__*/React.createElement("sub", null, "2"), " storage"), " in depleted gas reservoirs \u2014 the cross-section below is essentially the thing I simulate."), /*#__PURE__*/React.createElement("div", {
+}, "CO", /*#__PURE__*/React.createElement("sub", null, "2"), " storage"), " in depleted gas reservoirs. The cross-section below is a live, simplified VE simulation."), /*#__PURE__*/React.createElement("div", {
   style: {
     display: 'flex',
     alignItems: 'center',
@@ -4195,35 +4889,45 @@ Object.assign(window, {
    About + Recent Activity (merged)
    ===================================================== */
 const NEWS = [{
+  month: 'Sep',
+  year: '2026',
+  title: 'Talk and session co-chair at InterPore UK',
+  body: 'Gave an oral talk, \u2018A Compositional Vertical Equilibrium Model for CO\u2082 Storage in Depleted Gas Reservoirs\u2019, and co-chaired the Multiphase Phenomena session at the 9th InterPore UK Chapter Conference in Edinburgh.'
+}, {
+  month: 'Sep',
+  year: '2026',
+  title: 'Approved as MSc demonstrator',
+  body: 'Approved to demonstrate on two MSc Petroleum Engineering courses at Heriot-Watt, Formation Evaluation and Production Technology, from November 2026.'
+}, {
+  month: 'Aug',
+  year: '2026',
+  title: 'MuPSI industrial case study',
+  body: 'Built Vertical Equilibrium models of depleted gas fields for an industrial case study in the MuPSI CO\u2082 storage project, and presented the results to project partners.'
+}, {
+  month: 'Jun',
+  year: '2026',
+  title: 'EAGE Energy\u2013AI Nexus Hackathon',
+  body: 'Developed a Python AI agent to manage and optimise an energy grid under growing AI demand, as part of a team at the EAGE Annual 2026 hackathon in Aberdeen.'
+}, {
   month: 'May',
   year: '2026',
-  title: 'Presented at InterPore 2026',
-  body: 'Presented research on Vertical Equilibrium models for CO\u2082 storage at the InterPore 2026 Annual Meeting.'
+  title: 'Talk at InterPore2026; preprint online',
+  body: 'Gave an oral talk, \u2018Vertical-Equilibrium Modelling of CO\u2082 Migration in Depleted Reservoirs\u2019, at InterPore2026 in Nantes, and posted a preprint of the VE model paper on EarthArXiv.'
+}, {
+  month: 'Mar',
+  year: '2026',
+  title: 'Led MRST rapid-prototyping workshop',
+  body: 'Guided Heriot-Watt PhD students and postdocs through building a single-phase flow simulator from scratch in MRST, as lead instructor in the SET-IT MATLAB/MRST workshop series.'
+}, {
+  month: 'Feb',
+  year: '2026',
+  title: 'Invited seminar and SPE bursary',
+  body: 'Gave an invited talk at the IGE GeoEnergy Seminar Series at Heriot-Watt, and received a \u00a31,000 SPE Aberdeen Section Student Bursary.'
 }, {
   month: 'Oct',
   year: '2025',
-  title: 'Poster Presentation at EAGE GET 2025',
-  body: 'Presented an extended abstract on "Three-Phase VE Simulation of CO\u2082\u2013Methane\u2013Brine Flow in Reservoirs" at the Sixth EAGE Global Energy Transition Conference.'
-}, {
-  month: 'Sep',
-  year: '2025',
-  title: 'Presented at InterPore UK 2025',
-  body: 'Delivered a presentation on Vertical Equilibrium flow models at the InterPore UK 2025 Chapter Meeting.'
-}, {
-  month: 'Sep',
-  year: '2024',
-  title: 'Started PhD at Heriot-Watt University',
-  body: 'Began doctoral research on Vertical Equilibrium Models for CO\u2082 storage.'
-}, {
-  month: 'Aug',
-  year: '2024',
-  title: 'M.Sc. Thesis Defense',
-  body: 'Successfully defended thesis on "Machine Learning Methods in Upscaling Fine-scale Discrete Fracture Models" with distinction. GPA: 3.65/4.'
-}, {
-  month: 'May',
-  year: '2023',
-  title: 'Paper Published in Advances in Water Resources',
-  body: 'First-author publication on 3D CNN prediction of two-phase flow properties accepted in a top-tier journal.'
+  title: 'Poster at EAGE GET 2025',
+  body: 'Presented a poster and extended abstract, \u2018Three-Phase VE Simulation of CO\u2082\u2013Methane\u2013Brine Flow in Reservoirs\u2019, at the Sixth EAGE Global Energy Transition Conference in Rotterdam.'
 }];
 const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
   strataTheme: "sedimentary"
@@ -4300,7 +5004,7 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
     color: '#64ffda',
     fontWeight: 600
   }
-}, "Sa'eed Telvari"), ", a PhD candidate in Petroleum Engineering at Heriot-Watt University. My research bridges the gap between computational efficiency and physical accuracy in subsurface flow simulation.")), /*#__PURE__*/React.createElement(Reveal, {
+}, "Sa'eed Telvari"), ", a PhD candidate in Petroleum Engineering at Heriot-Watt University. I study how injected CO", /*#__PURE__*/React.createElement("sub", null, "2"), " migrates through depleted gas reservoirs, and how to simulate it quickly at field scale.")), /*#__PURE__*/React.createElement(Reveal, {
   delay: "reveal-delay-2"
 }, /*#__PURE__*/React.createElement("p", {
   style: {
@@ -4308,7 +5012,7 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
     lineHeight: 1.8,
     color: 'rgba(255,255,255,0.85)'
   }
-}, "I completed both my B.Sc. and M.Sc. in Petroleum Engineering with a focus on reservoir simulation and machine learning applications. Based on academic excellence, I was granted direct admission for graduate study, ranking within the top 2% in the national entrance exam.")), /*#__PURE__*/React.createElement(Reveal, {
+}, "My main tool is the Vertical Equilibrium (VE) model, which assumes that CO", /*#__PURE__*/React.createElement("sub", null, "2"), ", methane and brine separate vertically under buoyancy. That reduces a 3D reservoir model to 2D and makes it fast enough for screening, uncertainty quantification and optimisation studies. I build these models in MRST, apply them to depleted gas fields in the MuPSI project, and have taught MRST's rapid-prototyping framework to PhD students and postdocs at Heriot-Watt.")), /*#__PURE__*/React.createElement(Reveal, {
   delay: "reveal-delay-3"
 }, /*#__PURE__*/React.createElement("p", {
   style: {
@@ -4316,7 +5020,7 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
     lineHeight: 1.8,
     color: 'rgba(255,255,255,0.85)'
   }
-}, "Currently, I'm developing Vertical Equilibrium (VE) models for simulating CO", /*#__PURE__*/React.createElement("sub", null, "2"), " storage in depleted gas reservoirs \u2014 a key simulation strategy for achieving net-zero emissions.")), /*#__PURE__*/React.createElement("div", {
+}, "I hold a BSc and an MSc in Petroleum Engineering from Amirkabir University of Technology, Tehran, where I focused on reservoir simulation and machine learning for upscaling and digital rock analysis. I was admitted directly to graduate study through the university's Talented Student Office and ranked in the top 2% of the national MSc entrance exam.")), /*#__PURE__*/React.createElement("div", {
   className: "about-badges-grid"
 }, [{
   icon: 'fas fa-graduation-cap',
@@ -4428,28 +5132,28 @@ const AboutSection = () => /*#__PURE__*/React.createElement(SectionPanel, {
    ===================================================== */
 const RESEARCH = [{
   icon: 'fas fa-cloud',
-  title: 'CO\u2082 Storage Modeling',
-  body: 'Efficient numerical models for CO\u2082 injection into depleted reservoirs.'
-}, {
-  icon: 'fas fa-cubes',
-  title: 'Reservoir Simulation',
-  body: 'Eclipse and MRST workflows for fractured, heterogeneous systems.'
-}, {
-  icon: 'fas fa-layer-group',
-  title: 'Upscaling Methods',
-  body: 'ML-enhanced upscaling of fine-scale discrete fracture models.'
-}, {
-  icon: 'fas fa-microscope',
-  title: 'Digital Rock Analysis',
-  body: '3D CNN prediction of petrophysical properties from micro-CT.'
+  title: 'CO\u2082 Storage Modelling',
+  body: 'Vertical Equilibrium models of CO\u2082 injection into depleted gas reservoirs.'
 }, {
   icon: 'fas fa-fire',
   title: 'Depleted Oil/Gas Reservoirs',
-  body: 'Residual gas effects and multi-phase flow under CO\u2082 injection.'
+  body: 'Residual gas effects and multiphase flow under CO\u2082 injection.'
+}, {
+  icon: 'fas fa-cubes',
+  title: 'Reservoir Simulation',
+  body: 'MRST and Eclipse workflows for fractured, heterogeneous systems.'
+}, {
+  icon: 'fas fa-layer-group',
+  title: 'Upscaling Methods',
+  body: 'Machine-learning upscaling of permeability and fine-scale discrete fracture models.'
+}, {
+  icon: 'fas fa-microscope',
+  title: 'Digital Rock Analysis',
+  body: '3D CNN prediction of two-phase flow properties from micro-CT images.'
 }, {
   icon: 'fas fa-brain',
-  title: 'Machine Learning in PE',
-  body: 'Deep learning for reservoir characterization and property prediction.'
+  title: 'Machine Learning in Petroleum Engineering',
+  body: 'Deep learning for reservoir characterisation and property prediction.'
 }];
 const ResearchInterestsStrip = () => /*#__PURE__*/React.createElement("div", {
   style: {
@@ -4510,41 +5214,41 @@ const ResearchInterestsStrip = () => /*#__PURE__*/React.createElement("div", {
   }
 }, r.body)))))));
 const PUBLICATIONS = [{
-  badge: 'preprint',
-  badgeLabel: 'Preprint',
+  badge: 'submitted',
+  badgeLabel: 'Under Review',
   title: 'A Vertical Equilibrium Model for CO\u2082 Migration in Depleted Gas Fields',
   authors: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("strong", {
     style: {
       color: '#64ffda'
     }
-  }, "Telvari, S."), ", Ramachandran, H., Wang, G., & Doster, F. (2025)"),
-  venue: 'EarthArXiv preprint',
-  abstract: 'A reduced-order VE framework that captures the buoyant migration of injected CO\u2082 in depleted gas reservoirs against the cap rock, delivering full-field-scale forecasts orders of magnitude faster than 3D simulation.',
+  }, "Telvari, S."), ", Ramachandran, H., Wang, G., & Doster, F. (2026)"),
+  venue: 'Geoenergy Science and Engineering \u00b7 Preprint on EarthArXiv',
+  abstract: 'A VE model for three-phase CO\u2082\u2013methane\u2013brine flow in depleted gas reservoirs, validated against compositional simulations that include a field-scale case in the Hugin Formation East. It captures first-order CO\u2082 and methane migration with speed-ups of up to 100\u00d7.',
   link: 'https://doi.org/10.31223/X5P49D'
-}, {
-  badge: 'conference',
-  badgeLabel: 'Poster / Extended Abstract',
-  title: 'Three-Phase VE Simulation of CO\u2082\u2013Methane\u2013Brine Flow in Reservoirs',
-  authors: /*#__PURE__*/React.createElement(React.Fragment, null, "Golsanami, N., ", /*#__PURE__*/React.createElement("strong", {
-    style: {
-      color: '#64ffda'
-    }
-  }, "Telvari, S."), ", & Yan, W. (2022)"),
-  venue: 'Sixth EAGE Global Energy Transition Conference & Exhibition (GET 2025) — Poster Presentation',
-  abstract: 'An extended abstract presenting a Vertical Equilibrium (VE) model for simulating three-phase CO\u2082\u2013methane\u2013brine flow in depleted gas reservoirs, enabling efficient large-scale simulation of CO\u2082 storage with residual methane interactions.',
-  link: 'https://doi.org/10.3997/2214-4609.202521145'
 }, {
   badge: 'published',
   badgeLabel: 'Published',
-  title: 'Accelerated Permeability Upscaling: A CNN Approach',
+  title: 'Accelerated Permeability Upscaling: A Convolutional Neural Network Approach',
   authors: /*#__PURE__*/React.createElement(React.Fragment, null, "Sayyafzadeh, M., ", /*#__PURE__*/React.createElement("strong", {
     style: {
       color: '#64ffda'
     }
-  }, "Telvari, S."), ", Guerillot, D., & Sharifi, M. (2024)"),
-  venue: 'SPE Journal, 31(04), 2242',
-  abstract: 'A novel convolutional neural network approach for rapid permeability upscaling in heterogeneous reservoirs, achieving 100-400\u00d7 computational speedup compared to traditional flow-based methods.',
+  }, "Telvari, S."), ", Gu\xE9rillot, D., & Sharifi, M. (2026)"),
+  venue: 'SPE Journal, 31(04), 2242\u20132260',
+  abstract: 'A convolutional neural network that predicts upscaled permeability tensors directly from fine-scale permeability maps, giving a 100\u2013400\u00d7 speed-up over flow-based upscaling.',
   link: 'https://onepetro.org/SJ/article-abstract/31/04/2242/795099/Accelerated-Permeability-Upscaling-A-Convolutional'
+}, {
+  badge: 'conference',
+  badgeLabel: 'Poster / Extended Abstract',
+  title: 'Three-Phase VE Simulation of CO\u2082\u2013Methane\u2013Brine Flow in Reservoirs',
+  authors: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("strong", {
+    style: {
+      color: '#64ffda'
+    }
+  }, "Telvari, S."), ", Ramachandran, H., Wang, G., & Doster, F. (2025)"),
+  venue: 'Sixth EAGE Global Energy Transition Conference & Exhibition (GET 2025), Rotterdam',
+  abstract: 'An extended abstract presenting a Vertical Equilibrium (VE) model for three-phase CO\u2082\u2013methane\u2013brine flow in depleted gas reservoirs, for large-scale simulation of CO\u2082 storage that accounts for residual methane.',
+  link: 'https://doi.org/10.3997/2214-4609.202521145'
 }, {
   badge: 'published',
   badgeLabel: 'Published',
@@ -4555,7 +5259,7 @@ const PUBLICATIONS = [{
     }
   }, "Telvari, S."), ", Sayyafzadeh, M., Siavashi, J., & Sharifi, M. (2023)"),
   venue: 'Advances in Water Resources, 176, 104442',
-  abstract: 'Developed a 3D CNN architecture for predicting relative permeability and capillary pressure curves directly from micro-CT images, eliminating the need for expensive pore-network modeling.',
+  abstract: 'A 3D CNN that predicts relative permeability and capillary pressure curves directly from micro-CT images of sandstone, as a fast alternative to pore-network modelling.',
   link: 'https://doi.org/10.1016/j.advwatres.2023.104442'
 }];
 const PublicationsList = () => /*#__PURE__*/React.createElement(SectionPanel, {
@@ -5047,7 +5751,7 @@ const CVPage = ({
       color: 'rgba(255,255,255,0.70)',
       margin: '0 0 18px'
     }
-  }, "Ph.D. Candidate in Petroleum Engineering"), /*#__PURE__*/React.createElement("div", {
+  }, "PhD Candidate in Petroleum Engineering"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       justifyContent: 'center',
@@ -5117,20 +5821,110 @@ const CVPage = ({
     title: "Education"
   }, /*#__PURE__*/React.createElement(Timeline, {
     items: [{
-      title: 'Ph.D. in Petroleum Engineering',
+      title: 'PhD in Petroleum Engineering',
       date: '2024 – Present',
       inst: 'Heriot-Watt University, Edinburgh, UK',
       details: ['Thesis: Developing Vertical Equilibrium Models for Simulating CO\u2082 Storage in Depleted Gas Reservoirs']
     }, {
-      title: 'M.Sc. in Petroleum Engineering — Reservoir',
+      title: 'MSc in Petroleum Engineering — Reservoir',
       date: '2022 – 2024',
       inst: 'Amirkabir University of Technology, Tehran',
       details: ['GPA: 3.65/4 (17.23/20)', 'Thesis: Machine Learning Methods in Upscaling Fine-scale Discrete Fracture Models']
     }, {
-      title: 'B.Sc. in Petroleum Engineering',
+      title: 'BSc in Petroleum Engineering',
       date: '2018 – 2022',
       inst: 'Amirkabir University of Technology, Tehran',
       details: ['GPA: 17.43/20', 'Thesis: Prediction of two-phase flow properties for digital sandstones using 3D CNNs']
+    }]
+  })), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
+    icon: "fas fa-chalkboard-teacher",
+    title: "Teaching"
+  }, /*#__PURE__*/React.createElement(Timeline, {
+    items: [{
+      title: 'Approved Demonstrator, MSc Petroleum Engineering',
+      date: '2026 – 2027',
+      inst: 'Heriot-Watt University, Edinburgh',
+      details: ['Formation Evaluation labs (Nov 2026); Production Technology PipeSim tutorials (Jan – Feb 2027)']
+    }, {
+      title: 'Co-organiser & Lead Instructor, MATLAB/MRST Workshop Series',
+      date: 'Feb – Apr 2026',
+      inst: 'SET-IT, Heriot-Watt University',
+      details: ['Led &lsquo;Simulator Development with MRST&rsquo;s Rapid Prototyping Framework&rsquo; for IGE PhD students and postdocs']
+    }, {
+      title: 'Teaching Assistant',
+      date: 'During MSc',
+      inst: 'Amirkabir University of Technology, Tehran',
+      details: ['Advanced Naturally Fractured Reservoirs; Advanced Enhanced Oil Recovery (Eclipse and Petrel tutorials)']
+    }]
+  })), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
+    icon: "fas fa-microphone",
+    title: "Conference Presentations"
+  }, /*#__PURE__*/React.createElement(CVList, {
+    items: [{
+      title: 'A Compositional Vertical Equilibrium Model for CO₂ Storage in Depleted Gas Reservoirs',
+      context: 'Oral · 9th InterPore UK Chapter Conference, Edinburgh',
+      date: 'Sep 2026'
+    }, {
+      title: 'Vertical-Equilibrium Modelling of CO₂ Migration in Depleted Reservoirs',
+      context: 'Oral · InterPore2026, 18th Annual Meeting, Nantes',
+      date: 'May 2026'
+    }, {
+      title: 'A Vertical Equilibrium Model for CO₂ Migration in Depleted Gas Fields',
+      context: 'Invited seminar · IGE GeoEnergy Seminar Series, Heriot-Watt University',
+      date: 'Feb 2026'
+    }, {
+      title: 'Three-Phase VE Simulation of CO₂–Methane–Brine Flow in Reservoirs',
+      context: 'Poster · Sixth EAGE Global Energy Transition Conference (GET 2025), Rotterdam',
+      date: 'Oct 2025'
+    }]
+  })), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
+    icon: "fas fa-project-diagram",
+    title: "Research Projects"
+  }, /*#__PURE__*/React.createElement(CVList, {
+    items: [{
+      title: 'MuPSI: Multiscale Pressure-Stress Impacts on fault integrity for multi-site regional CO₂ storage',
+      context: 'Clean Energy Transition Partnership · VE models and a 28-case ensemble for an industrial case study on depleted gas fields, with NORCE, TU Delft and IDAEA-CSIC',
+      date: '2026'
+    }, {
+      title: '3D fault-detection tool for MRST',
+      context: 'Extended a 2D code to 3D; finds fault faces with signed distance fields on Cartesian and unstructured grids; adopted by MuPhi group members'
+    }]
+  })), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
+    icon: "fas fa-hands-helping",
+    title: "Service & Leadership"
+  }, /*#__PURE__*/React.createElement(CVList, {
+    items: [{
+      title: 'Session Co-chair, 9th InterPore UK Chapter Conference',
+      context: 'Session 1: Multiphase Phenomena, with Dr Sarah Perez · Edinburgh',
+      date: 'Sep 2026'
+    }, {
+      title: 'Co-reviewer, <em>Geophysical Research Letters</em>',
+      context: 'Manuscript review with Prof. Florian Doster',
+      date: '2026'
+    }, {
+      title: 'Conference Volunteer, InterPore2026',
+      context: 'Technical session support for minisymposia MS05 and MS08, Nantes',
+      date: 'May 2026'
+    }, {
+      title: 'Webmaster, SPE Heriot-Watt University Student Chapter',
+      context: 'SPE officer certificate of appreciation; the chapter won the 2026 SPE Regional Outstanding Student Chapter Award',
+      date: '2025'
+    }, {
+      title: 'Web Contributor',
+      context: 'SET-IT research community and MuPhi Research Group websites'
+    }]
+  })), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
+    icon: "fas fa-certificate",
+    title: "Professional Training"
+  }, /*#__PURE__*/React.createElement(CVList, {
+    items: [{
+      title: 'SLB Intersect CCS Training',
+      context: 'Five-day course',
+      date: 'Sep 2026'
+    }, {
+      title: 'CMG Carbon Capture Underground Storage Modelling',
+      context: 'Certificate of achievement; CMG CO₂ storage workshop',
+      date: 'Mar 2026'
     }]
   })), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
     icon: "fas fa-tools",
@@ -5145,7 +5939,7 @@ const CVPage = ({
   }), /*#__PURE__*/React.createElement(SkillCategory, {
     icon: "fas fa-industry",
     title: "Industry Software",
-    tags: ['Eclipse', 'MRST', 'Petrel RE', 'Saphir', 'PVTSim']
+    tags: ['Eclipse', 'Intersect', 'CMG', 'MRST', 'Petrel RE', 'PipeSim', 'Saphir', 'PVTSim']
   }), /*#__PURE__*/React.createElement(SkillCategory, {
     icon: "fas fa-cube",
     title: "CFD & Simulation",
@@ -5156,7 +5950,7 @@ const CVPage = ({
     tags: ['Linux', 'Docker', 'Git', 'Jupyter', 'VS Code']
   }))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
     icon: "fas fa-award",
-    title: "Honors & Awards"
+    title: "Honours & Awards"
   }, /*#__PURE__*/React.createElement("ul", {
     style: {
       listStyle: 'none',
@@ -5164,6 +5958,12 @@ const CVPage = ({
       margin: 0
     }
   }, [{
+    icon: 'fas fa-graduation-cap',
+    body: 'James Watt Scholarship, Heriot-Watt University (full PhD funding)'
+  }, {
+    icon: 'fas fa-medal',
+    body: 'SPE Aberdeen Section Student Bursary, £1,000 (2026)'
+  }, {
     icon: 'fas fa-trophy',
     body: 'Ranked within top 2% in Iranian University Entrance Exam for Master\'s degrees'
   }, {
@@ -5177,7 +5977,7 @@ const CVPage = ({
     body: 'Ranked within top 4% among 140,000+ students in undergraduate entrance exam'
   }, {
     icon: 'fas fa-certificate',
-    body: 'Recognized as talented student in NODET entrance exam'
+    body: 'Recognised as talented student in NODET entrance exam'
   }].map((a, i) => /*#__PURE__*/React.createElement("li", {
     key: i,
     style: {
@@ -5311,6 +6111,50 @@ const Timeline = ({
     __html: d
   }
 }))))));
+const CVList = ({
+  items
+}) => /*#__PURE__*/React.createElement("ul", {
+  style: {
+    listStyle: 'none',
+    padding: 0,
+    margin: 0
+  }
+}, items.map((it, i) => /*#__PURE__*/React.createElement("li", {
+  key: i,
+  style: {
+    padding: '12px 0',
+    borderBottom: '1px solid rgba(255,255,255,0.05)'
+  }
+}, /*#__PURE__*/React.createElement("div", {
+  style: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: 8
+  }
+}, /*#__PURE__*/React.createElement("span", {
+  style: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 600
+  },
+  dangerouslySetInnerHTML: {
+    __html: it.title
+  }
+}), it.date && /*#__PURE__*/React.createElement("span", {
+  style: {
+    color: '#4ecdc4',
+    fontSize: 13,
+    fontWeight: 500
+  }
+}, it.date)), /*#__PURE__*/React.createElement("p", {
+  style: {
+    color: 'rgba(255,255,255,0.70)',
+    fontSize: 13.5,
+    margin: '4px 0 0'
+  }
+}, it.context))));
 const SkillCategory = ({
   icon,
   title,
@@ -5495,21 +6339,21 @@ const GuidePage = ({
       fontWeight: 600,
       marginBottom: 6
     }
-  }, "Saline Aquifer Physics & Simulation"), /*#__PURE__*/React.createElement("h2", {
+  }, "How the simulator works"), /*#__PURE__*/React.createElement("h2", {
     style: {
       margin: 0,
       fontSize: 'clamp(28px, 4vw, 38px)',
       fontFamily: "'Montserrat', sans-serif",
       fontWeight: 700
     }
-  }, "PDE Methodology & Constitutive Models Guide"), /*#__PURE__*/React.createElement("p", {
+  }, "Model & Equations"), /*#__PURE__*/React.createElement("p", {
     style: {
       margin: '8px 0 0',
       color: 'rgba(255,255,255,0.65)',
       fontSize: 13.5,
       maxWidth: 780
     }
-  }, "This reference manual details the mathematical foundations, Vertical Equilibrium simplifications, multi-phase constitutive laws (Brooks-Corey capillary pressure and Corey relative permeabilities), and TVD numerical schemes running inside the simulator.")), /*#__PURE__*/React.createElement("div", {
+  }, "This reference documents the model running in the simulator: sharp-interface vertical equilibrium in SI units, residual-trapping hysteresis, faults with juxtaposition seals and up-fault leakage, spill-point trap analysis and convective dissolution \u2014 plus its known limitations.")), /*#__PURE__*/React.createElement("div", {
     className: "guide-grid"
   }, /*#__PURE__*/React.createElement("div", {
     className: "math-card full-width-card"
@@ -5533,7 +6377,7 @@ const GuidePage = ({
     className: "subscript"
   }, "horiz"), "). Supercritical CO\u2082 quickly floats to the caprock ceiling, while denser brine water settles below."), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "The **Vertical Equilibrium (VE) approximation** assumes that fluids segregate instantly along the vertical coordinate and remain in hydrostatic balance:"), /*#__PURE__*/React.createElement("div", {
+  }, "The ", /*#__PURE__*/React.createElement("strong", null, "Vertical Equilibrium (VE) approximation"), " assumes that fluids segregate instantly along the vertical coordinate and remain in hydrostatic balance:"), /*#__PURE__*/React.createElement("div", {
     className: "equation-block"
   }, /*#__PURE__*/React.createElement("span", {
     className: "fraction"
@@ -5579,543 +6423,97 @@ const GuidePage = ({
     className: "variable"
   }, "dz'")), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "This simplifies 3D multi-phase Navier-Stokes equations into a 1D vertically-integrated height-averaged transport PDE, reducing computational cost by orders of magnitude while rigorously preserving mass balance and migration dynamics.")), /*#__PURE__*/React.createElement("div", {
+  }, "This reduces the 3D two-phase Darcy flow equations to a 1D vertically integrated transport equation for the plume thickness, cutting the computational cost by orders of magnitude while keeping mass balance and the large-scale migration dynamics.")), /*#__PURE__*/React.createElement("div", {
     className: "math-card"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "math-header"
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-tint"
-  }), " 2. Multi-Phase Saturation Limits & Sum Rule"), /*#__PURE__*/React.createElement("p", {
+  }), " 2. Sharp Interface & Residual Hysteresis"), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "At every point in the pore space, the pore volume is completely occupied by gas (supercritical CO\u2082) and aqueous brine:"), /*#__PURE__*/React.createElement("div", {
+  }, "Each column holds a mobile CO\u2082 layer of thickness ", /*#__PURE__*/React.createElement("i", null, "h"), " at saturation 1 \u2212 S", /*#__PURE__*/React.createElement("sub", null, "wr"), " beneath the caprock. Where the plume has retreated, the zone between ", /*#__PURE__*/React.createElement("i", null, "h"), " and the historical maximum ", /*#__PURE__*/React.createElement("i", null, "h"), /*#__PURE__*/React.createElement("sub", null, "max"), " keeps residual CO\u2082 at S", /*#__PURE__*/React.createElement("sub", null, "gr"), ". The conserved quantity per unit area is"), /*#__PURE__*/React.createElement("div", {
     className: "equation-block"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "w"), "(", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "z"), ") + ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "g"), "(", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "z"), ") = 1.0"), /*#__PURE__*/React.createElement("p", {
+  }, "V = \u03C6 [ (1 \u2212 S", /*#__PURE__*/React.createElement("sub", null, "wr"), ") h + S", /*#__PURE__*/React.createElement("sub", null, "gr"), " (h", /*#__PURE__*/React.createElement("sub", null, "max"), " \u2212 h) ]"), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "The saturation boundaries are parameterized by critical rock-fluid endpoints:", /*#__PURE__*/React.createElement("br", null), "\u2022 **Connate / Irreducible Water Saturation** (", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "wc"), " = 0.10): Capillary-bound water trapped in micro-pores that cannot be displaced by gas.", /*#__PURE__*/React.createElement("br", null), "\u2022 **Maximum Mobile Gas Saturation** (", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "g,max"), " = 1 - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "wc"), " = 0.90): Peak gas saturation at the caprock ceiling.", /*#__PURE__*/React.createElement("br", null), "\u2022 **Residual Gas Trapping Saturation** (", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "gr"), " = 0.20 \u2013 0.25): Disconnected gas ganglia snapped off during water imbibition.")), /*#__PURE__*/React.createElement("div", {
+  }, "Drainage (V \u2265 \u03C6(1 \u2212 S", /*#__PURE__*/React.createElement("sub", null, "wr"), ") h", /*#__PURE__*/React.createElement("sub", null, "max"), "): h = V / \u03C6(1 \u2212 S", /*#__PURE__*/React.createElement("sub", null, "wr"), ") and h", /*#__PURE__*/React.createElement("sub", null, "max"), " = h. Imbibition: h = (V/\u03C6 \u2212 S", /*#__PURE__*/React.createElement("sub", null, "gr"), " h", /*#__PURE__*/React.createElement("sub", null, "max"), ") / (1 \u2212 S", /*#__PURE__*/React.createElement("sub", null, "wr"), " \u2212 S", /*#__PURE__*/React.createElement("sub", null, "gr"), "). Because V \u2014 not h \u2014 is updated, CO\u2082 mass is conserved to round-off.")), /*#__PURE__*/React.createElement("div", {
     className: "math-card"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "math-header"
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-water"
-  }), " 3. Brooks-Corey Capillary Pressure Model"), /*#__PURE__*/React.createElement("p", {
+  }), " 3. Brooks\u2013Corey Capillary Fringe (display)"), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "Capillary pressure ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "P"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "c"), " governs the diffuse transition zone (capillary fringe) between mobile CO\u2082 and the native brine aquifer using the **Brooks-Corey (1964)** retention law:"), /*#__PURE__*/React.createElement("div", {
+  }, "The entry pressure sets the fringe height; the saturation profile uses Brooks\u2013Corey with \u03BB = 2:"), /*#__PURE__*/React.createElement("div", {
     className: "equation-block"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "P"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "c"), "(", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "w"), ") = ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "P"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "ce"), " \u2022 ", /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, "("), /*#__PURE__*/React.createElement("span", {
-    className: "fraction"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "numerator"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "w"), " - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "wc")), /*#__PURE__*/React.createElement("span", {
-    className: "denominator"
-  }, "1 - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "wc"))), /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, ")"), /*#__PURE__*/React.createElement("span", {
-    className: "superscript"
-  }, "-1/\u03BB")), /*#__PURE__*/React.createElement("p", {
+  }, "h", /*#__PURE__*/React.createElement("sub", null, "c"), " = P", /*#__PURE__*/React.createElement("sub", null, "e"), " / (\u0394\u03C1 g) \u2003 S", /*#__PURE__*/React.createElement("sub", null, "g"), "(y) = (1 \u2212 S", /*#__PURE__*/React.createElement("sub", null, "wr"), ") [ 1 \u2212 (h", /*#__PURE__*/React.createElement("sub", null, "c"), "/y)", /*#__PURE__*/React.createElement("sup", null, "2"), " ], y \u2265 h", /*#__PURE__*/React.createElement("sub", null, "c")), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "Under hydrostatic VE balance, the vertical gas saturation profile is:"), /*#__PURE__*/React.createElement("div", {
-    className: "equation-block"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "g"), "(", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "z"), ") = (1 - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "wc"), ") ", /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, "["), " 1 - ", /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, "("), /*#__PURE__*/React.createElement("span", {
-    className: "fraction"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "numerator"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "P"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "ce")), /*#__PURE__*/React.createElement("span", {
-    className: "denominator"
-  }, "\u0394\u03C1 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "g"), " (", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), " - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "z"), ") + ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "P"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "ce"))), /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, ")"), /*#__PURE__*/React.createElement("span", {
-    className: "superscript"
-  }, "\u03BB"), " ", /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, "]")), /*#__PURE__*/React.createElement("p", {
-    className: "math-text"
-  }, "Where ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "P"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "ce"), " = 5.0 kPa is entry displacement pressure, \u03BB = 2.0 is the pore-size distribution index, and \u0394\u03C1 = \u03C1", /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "brine"), " - \u03C1", /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "CO\u2082"), " is fluid density contrast.")), /*#__PURE__*/React.createElement("div", {
+  }, "y is height above the free-water level h\u2032, chosen so the profile holds the same CO\u2082 as the sharp column: (h\u2032 \u2212 h", /*#__PURE__*/React.createElement("sub", null, "c"), ")\xB2 / h\u2032 = h. The fringe shapes the rendered saturation only; flow uses the sharp interface.")), /*#__PURE__*/React.createElement("div", {
     className: "math-card"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "math-header"
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-chart-line"
-  }), " 4. Corey Relative Permeability Functions"), /*#__PURE__*/React.createElement("p", {
-    className: "math-text"
-  }, "Phase mobilities in the porous sandstone are governed by modified **Corey / Brooks-Corey relative permeabilities**:"), /*#__PURE__*/React.createElement("div", {
+  }), " 4. End-Point Mobilities"), /*#__PURE__*/React.createElement("div", {
     className: "equation-block"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "k"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "rg"), "(", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "g"), ") = ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "k"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "rg"), /*#__PURE__*/React.createElement("span", {
-    className: "superscript"
-  }, "0"), " ", /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, "("), /*#__PURE__*/React.createElement("span", {
-    className: "fraction"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "numerator"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "g"), " - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "gr")), /*#__PURE__*/React.createElement("span", {
-    className: "denominator"
-  }, "1 - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "wc"), " - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "gr"))), /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, ")"), /*#__PURE__*/React.createElement("span", {
-    className: "superscript"
-  }, "n", /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "g"))), /*#__PURE__*/React.createElement("div", {
-    className: "equation-block"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "k"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "rw"), "(", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "w"), ") = ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "k"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "rw"), /*#__PURE__*/React.createElement("span", {
-    className: "superscript"
-  }, "0"), " ", /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, "("), /*#__PURE__*/React.createElement("span", {
-    className: "fraction"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "numerator"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "w"), " - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "wc")), /*#__PURE__*/React.createElement("span", {
-    className: "denominator"
-  }, "1 - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "wc"), " - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "gr"))), /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, ")"), /*#__PURE__*/React.createElement("span", {
-    className: "superscript"
-  }, "n", /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "w"))), /*#__PURE__*/React.createElement("p", {
+  }, "\u03BB", /*#__PURE__*/React.createElement("sub", null, "g"), " = k", /*#__PURE__*/React.createElement("sub", null, "rg"), "* / \u03BC", /*#__PURE__*/React.createElement("sub", null, "g"), " \u2003 \u03BB", /*#__PURE__*/React.createElement("sub", null, "w"), " = 1 / \u03BC", /*#__PURE__*/React.createElement("sub", null, "w"), " \u2003 M = \u03BB", /*#__PURE__*/React.createElement("sub", null, "g"), " / \u03BB", /*#__PURE__*/React.createElement("sub", null, "w")), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "Parameters:", /*#__PURE__*/React.createElement("br", null), "\u2022 Gas Corey exponent: ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "n"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "g"), " = 2.0 (non-wetting phase).", /*#__PURE__*/React.createElement("br", null), "\u2022 Water Corey exponent: ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "n"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "w"), " = 3.0 (wetting phase).", /*#__PURE__*/React.createElement("br", null), "\u2022 Endpoints: ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "k"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "rg"), /*#__PURE__*/React.createElement("span", {
-    className: "superscript"
-  }, "0"), " = 0.85, ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "k"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "rw"), /*#__PURE__*/React.createElement("span", {
-    className: "superscript"
-  }, "0"), " = 1.00.")), /*#__PURE__*/React.createElement("div", {
+  }, "Sharp-interface VE uses end-point mobilities: CO\u2082 at k", /*#__PURE__*/React.createElement("sub", null, "rg"), "* = 0.6 in the plume, brine at k", /*#__PURE__*/React.createElement("sub", null, "rw"), " = 1 below it. \u03BC", /*#__PURE__*/React.createElement("sub", null, "w"), " = 0.5 cP; \u03BC", /*#__PURE__*/React.createElement("sub", null, "g"), " follows from the mobility-ratio control (M = 5 \u2192 0.06 cP).")), /*#__PURE__*/React.createElement("div", {
     className: "math-card"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "math-header"
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-wave-square"
-  }), " 5. 1D Transport PDE & TVD Flux Limiter"), /*#__PURE__*/React.createElement("p", {
-    className: "math-text"
-  }, "The plume column thickness ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), "(", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "x"), ", ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "t"), ") evolves according to the 1D vertically-integrated mass conservation law:"), /*#__PURE__*/React.createElement("div", {
+  }), " 5. Vertically Integrated Transport"), /*#__PURE__*/React.createElement("div", {
     className: "equation-block"
-  }, "\u03C6 ", /*#__PURE__*/React.createElement("span", {
-    className: "fraction"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "numerator"
-  }, "\u2202 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h")), /*#__PURE__*/React.createElement("span", {
-    className: "denominator"
-  }, "\u2202 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "t"))), " +", /*#__PURE__*/React.createElement("span", {
-    className: "fraction"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "numerator"
-  }, "\u2202 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "q")), /*#__PURE__*/React.createElement("span", {
-    className: "denominator"
-  }, "\u2202 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "x"))), " =", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "Q"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "inj"), " - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "Q"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "leak")), /*#__PURE__*/React.createElement("p", {
-    className: "math-text"
-  }, "To prevent non-physical dispersion and odd-even spatial checkerboarding across steep structural fault throws, our solver enforces a **Total Variation Diminishing (TVD)** upwind flux limiter:"), /*#__PURE__*/React.createElement("div", {
+  }, "\u2202V/\u2202t + \u2202F/\u2202x = q", /*#__PURE__*/React.createElement("sub", null, "inj"), " \u2212 q", /*#__PURE__*/React.createElement("sub", null, "leak"), " \u2212 q", /*#__PURE__*/React.createElement("sub", null, "diss"), "/\u03C1", /*#__PURE__*/React.createElement("sub", null, "g")), /*#__PURE__*/React.createElement("div", {
     className: "equation-block"
-  }, "|", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "q"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "i+1/2"), "| \u2264 ", /*#__PURE__*/React.createElement("span", {
-    className: "fraction"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "numerator"
-  }, "0.30 \u2022 \u03C6 \u2022 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "mob,upwind")), /*#__PURE__*/React.createElement("span", {
-    className: "denominator"
-  }, "\u0394", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "t")))), /*#__PURE__*/React.createElement("p", {
+  }, "F = [m", /*#__PURE__*/React.createElement("sub", null, "g"), "/(m", /*#__PURE__*/React.createElement("sub", null, "g"), "+m", /*#__PURE__*/React.createElement("sub", null, "w"), ")] U + [m", /*#__PURE__*/React.createElement("sub", null, "g"), "m", /*#__PURE__*/React.createElement("sub", null, "w"), "/(m", /*#__PURE__*/React.createElement("sub", null, "g"), "+m", /*#__PURE__*/React.createElement("sub", null, "w"), ")] k \u0394\u03C1 g (\u2212\u2202(z", /*#__PURE__*/React.createElement("sub", null, "t"), " + h)/\u2202x)"), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "Integrated across 25 substeps per simulation year (\u0394", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "t"), " = 0.040 yr), guaranteeing strict CFL stability and mass conservation.")), /*#__PURE__*/React.createElement("div", {
+  }, "m", /*#__PURE__*/React.createElement("sub", null, "g"), " = \u03BB", /*#__PURE__*/React.createElement("sub", null, "g"), "h, m", /*#__PURE__*/React.createElement("sub", null, "w"), " = \u03BB", /*#__PURE__*/React.createElement("sub", null, "w"), "(H \u2212 h). The first term is the viscous push of the injector (total flux U, split left/right by flow resistance with open hydrostatic ends) and produces the gravity tongue; the second is buoyant up-dip migration and spreading. The (H \u2212 h) factor shuts gravity flow off as a column fills.")), /*#__PURE__*/React.createElement("div", {
     className: "math-card"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "math-header"
   }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-exchange-alt"
-  }), " 6. Integrated Darcy Fluid Flux & Faults"), /*#__PURE__*/React.createElement("p", {
+    className: "fas fa-calculator"
+  }), " 6. Numerical Scheme"), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "The vertically-integrated Darcy flux ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "q"), " combines regional structural dipping and buoyant hydrostatic spreading:"), /*#__PURE__*/React.createElement("div", {
+  }, "Explicit finite volumes with counter-current upwinding (Brenier & Jaffr\xE9 1991): CO\u2082 mobility from its upstream side, brine mobility from the other. Each substep \u0394t is the minimum of an advective CFL of 0.5, a diffusive limit, a positivity limit (\u2264 50 % of a column's removable CO\u2082 per step), the column capacity and the injection stop time."), /*#__PURE__*/React.createElement("div", {
     className: "equation-block"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "q"), " = - ", /*#__PURE__*/React.createElement("span", {
-    className: "fraction"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "numerator"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "K"), " ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "mob"), " \u0394\u03C1 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "g")), /*#__PURE__*/React.createElement("span", {
-    className: "denominator"
-  }, "\u03BC")), /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, "["), /*#__PURE__*/React.createElement("span", {
-    className: "fraction"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "numerator"
-  }, "\u2202 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "z"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "t")), /*#__PURE__*/React.createElement("span", {
-    className: "denominator"
-  }, "\u2202 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "x"))), " +", /*#__PURE__*/React.createElement("span", {
-    className: "fraction"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "numerator"
-  }, "\u2202 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h")), /*#__PURE__*/React.createElement("span", {
-    className: "denominator"
-  }, "\u2202 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "x"))), /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, "]"), " \u2022 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "T"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "fault")), /*#__PURE__*/React.createElement("p", {
+  }, "\u0394t \u2264 0.5 \u03C6(1 \u2212 S", /*#__PURE__*/React.createElement("sub", null, "wr"), " \u2212 S", /*#__PURE__*/React.createElement("sub", null, "gr"), ") \u0394x / c", /*#__PURE__*/React.createElement("sub", null, "max"), " \u2003 \u0394t \u2264 0.45 \u0394x\xB2 / D", /*#__PURE__*/React.createElement("sub", null, "max")), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "Where:", /*#__PURE__*/React.createElement("br", null), "\u2022 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "K"), " is sandstone permeability.", /*#__PURE__*/React.createElement("br", null), "\u2022 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "z"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "t"), " is the vertical depth profile of the caprock ceiling underside.", /*#__PURE__*/React.createElement("br", null), "\u2022 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "T"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "fault"), " &in; [0, 1] is cross-fault horizontal transmissibility (", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "T"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "fault"), " = 0 for completely sealed barrier faults).")), /*#__PURE__*/React.createElement("div", {
+  }, "A self-check verifies mass balance to 10", /*#__PURE__*/React.createElement("sup", null, "\u221210"), " and the t", /*#__PURE__*/React.createElement("sup", null, "1/3"), " spreading of a gravity current (Huppert & Woods 1995).")), /*#__PURE__*/React.createElement("div", {
+    className: "math-card"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "math-header"
+  }, /*#__PURE__*/React.createElement("i", {
+    className: "fas fa-bolt"
+  }), " 7. Faults: Juxtaposition & Up-Fault Leakage"), /*#__PURE__*/React.createElement("div", {
+    className: "equation-block"
+  }, "T", /*#__PURE__*/React.createElement("sub", null, "face"), " = T", /*#__PURE__*/React.createElement("sub", null, "jux"), " \xB7 T", /*#__PURE__*/React.createElement("sub", null, "rock"), " \u2003 T", /*#__PURE__*/React.createElement("sub", null, "jux"), " = max(0, H \u2212 |throw|) / H"), /*#__PURE__*/React.createElement("div", {
+    className: "equation-block"
+  }, "v", /*#__PURE__*/React.createElement("sub", null, "leak"), " = (k", /*#__PURE__*/React.createElement("sub", null, "f"), " k", /*#__PURE__*/React.createElement("sub", null, "rg"), "*/\u03BC", /*#__PURE__*/React.createElement("sub", null, "g"), ") [ (\u0394\u03C1 g h \u2212 P", /*#__PURE__*/React.createElement("sub", null, "th"), ")/C + \u0394\u03C1 g ] \u2003 for h > h", /*#__PURE__*/React.createElement("sub", null, "th"), " = P", /*#__PURE__*/React.createElement("sub", null, "th"), "/(\u0394\u03C1 g)"), /*#__PURE__*/React.createElement("p", {
+    className: "math-text"
+  }, "Throw \u2265 H puts sand against shale and seals the fault laterally. Leaked CO\u2082 crosses the caprock (thickness C) through a 1 m fault zone into the upper aquifer, which is solved with the same VE equations.")), /*#__PURE__*/React.createElement("div", {
     className: "math-card"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "math-header"
   }, /*#__PURE__*/React.createElement("i", {
     className: "fas fa-lock"
-  }), " 7. Residual Capillary Trapping & Envelope"), /*#__PURE__*/React.createElement("p", {
-    className: "math-text"
-  }, "As the plume migrates updip under buoyancy, trailing-edge water imbibition snaps off CO\u2082 bubbles inside sandstone pores. In VE, the total height is partitioned into immobile trapped and flowing mobile components:"), /*#__PURE__*/React.createElement("div", {
+  }), " 8. Spill-Point Traps & Dissolution"), /*#__PURE__*/React.createElement("div", {
     className: "equation-block"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "trapped"), " = ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "gr"), " \u2022 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "max")), /*#__PURE__*/React.createElement("div", {
+  }, "Capacity = \u03A3 \u03C1", /*#__PURE__*/React.createElement("sub", null, "g"), " \u03C6 (1 \u2212 S", /*#__PURE__*/React.createElement("sub", null, "wr"), ") min(H, z", /*#__PURE__*/React.createElement("sub", null, "spill"), " \u2212 z", /*#__PURE__*/React.createElement("sub", null, "t"), ") \u0394x W"), /*#__PURE__*/React.createElement("div", {
     className: "equation-block"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "mob"), " = max", /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, "("), "0, ", /*#__PURE__*/React.createElement("span", {
-    className: "fraction"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "numerator"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), " - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "gr"), " ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "max")), /*#__PURE__*/React.createElement("span", {
-    className: "denominator"
-  }, "1 - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "S"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "gr"))), /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, ")")), /*#__PURE__*/React.createElement("p", {
+  }, "F", /*#__PURE__*/React.createElement("sub", null, "d"), " = 0.017 k \u0394\u03C1", /*#__PURE__*/React.createElement("sub", null, "s"), " g C", /*#__PURE__*/React.createElement("sub", null, "s"), " / \u03BC", /*#__PURE__*/React.createElement("sub", null, "w")), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "Where ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "max"), "(", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "x"), ") is the historical maximum gas saturation envelope, visualized in the 2D reservoir canvas as the **cyan dashed boundary line**.")), /*#__PURE__*/React.createElement("div", {
+  }, "Spill points come from walking out of each caprock crest to the first saddle, sealing face or domain edge. Convective dissolution (Pau et al. 2010; \u0394\u03C1", /*#__PURE__*/React.createElement("sub", null, "s"), " = 10 kg/m\xB3, C", /*#__PURE__*/React.createElement("sub", null, "s"), " = 50 kg/m\xB3) acts beneath the mobile plume until a column's brine holds \u03C6 H C", /*#__PURE__*/React.createElement("sub", null, "s"), ".")), /*#__PURE__*/React.createElement("div", {
     className: "math-card full-width-card"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "math-header"
   }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-bolt"
-  }), " 8. Capillary Seal Breaching & Fault Conduit Leakage"), /*#__PURE__*/React.createElement("p", {
+    className: "fas fa-exclamation-circle"
+  }), " 9. Known Limitations"), /*#__PURE__*/React.createElement("p", {
     className: "math-text"
-  }, "Fault zones act as structural barrier seals due to clay smearing, creating high capillary entry pressures. For CO\u2082 to breach the seal and escape vertically into overlying strata, the buoyant overpressure must exceed the capillary entry threshold:"), /*#__PURE__*/React.createElement("div", {
-    className: "equation-block"
-  }, "\u0394", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "P"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "buoyancy"), " > ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "P"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "c"), /*#__PURE__*/React.createElement("span", {
-    className: "superscript"
-  }, "entry"), " \u2003\u21D2\u2003 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), " > ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "threshold"), " = ", /*#__PURE__*/React.createElement("span", {
-    className: "fraction"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "numerator"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "P"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "c"), /*#__PURE__*/React.createElement("span", {
-    className: "superscript"
-  }, "entry")), /*#__PURE__*/React.createElement("span", {
-    className: "denominator"
-  }, "\u0394\u03C1 ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "g")))), /*#__PURE__*/React.createElement("p", {
-    className: "math-text"
-  }, "Once the spill height is exceeded, vertical leakage volume rate follows Darcy's conduit law:"), /*#__PURE__*/React.createElement("div", {
-    className: "equation-block"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "Q"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "leak"), " = ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "C"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "leak"), " \u2022 max", /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, "("), "0, ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), " - ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "h"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "threshold"), /*#__PURE__*/React.createElement("span", {
-    className: "parenthesis"
-  }, ")")), /*#__PURE__*/React.createElement("p", {
-    className: "math-text"
-  }, "Where ", /*#__PURE__*/React.createElement("span", {
-    className: "variable"
-  }, "C"), /*#__PURE__*/React.createElement("span", {
-    className: "subscript"
-  }, "leak"), " is the vertical fault zone permeability transmissibility."))));
+  }, "Incompressible fluids \xB7 small-dip approximation (cos \u03B8 \u2248 1) \xB7 brine mobility not reduced in the residual zone \xB7 capillary fringe affects display only \xB7 buoyancy-driven net total flux neglected \xB7 no leakage above the upper aquifer \xB7 no cross-layer juxtaposition \xB7 traps are independent (no spill-merge tree) \xB7 dissolved CO\u2082 is immobile and residual CO\u2082 does not dissolve \xB7 1D VE with no out-of-plane variation."))));
 };
 
 // Bind to window object for Babel execution scope
@@ -6126,729 +6524,347 @@ Object.assign(window, {
 // ==========================================
 // File: SimulatorPage.jsx
 // ==========================================
-// SimulatorPage.jsx — Interactive VE Simulator Page
+// SimulatorPage.jsx — Interactive VE Simulator Page. Physics lives in ve-engine.js (window.VE).
 // [destructured React]
 
-// Main Simulator component
+const VE_HORIZON_YR = 1000;
+const kgToMt = kg => kg / 1e9;
+const cloneSimParams = p => JSON.parse(JSON.stringify(p));
+const SIM_PARAM_LABELS = {
+  nx: 'Grid cells',
+  W: 'Slab width (m)',
+  H: 'Aquifer thickness (m)',
+  dipPct: 'Regional dip (%)',
+  foldAmp: 'Fold amplitude (m)',
+  foldCount: 'Fold count',
+  k_mD: 'Permeability (mD)',
+  phi: 'Porosity',
+  Swr: 'Residual brine S_wr',
+  Sgr: 'Residual CO₂ S_gr',
+  dRho: 'Δρ (kg/m³)',
+  M: 'Mobility ratio M',
+  Q_Mtpa: 'Injection rate (Mt/yr)',
+  injYears: 'Injection period (yr)',
+  wellFrac: 'Well position',
+  fringeOn: 'Capillary fringe',
+  Pe_kPa: 'Entry pressure P_e (kPa)',
+  dissMult: 'Dissolution ×'
+};
+const SIM_FLAG_TEXT = {
+  injectionBlocked: 'Injection blocked: the well is sealed in by faults',
+  dtFloor: 'Time-step floor hit: results approximate',
+  overflow: 'Column overflow guard triggered'
+};
+const MASS_SERIES = [{
+  key: 'injected',
+  label: 'Injected',
+  color: '#ffffff',
+  dash: '3 3'
+}, {
+  key: 'structural',
+  label: 'Structural',
+  color: '#64ffda'
+}, {
+  key: 'migrating',
+  label: 'Migrating',
+  color: '#0dfca2'
+}, {
+  key: 'residual',
+  label: 'Residual',
+  color: '#3ca68e'
+}, {
+  key: 'dissolved',
+  label: 'Dissolved',
+  color: '#4dabf7'
+}, {
+  key: 'upper',
+  label: 'Upper layer',
+  color: '#ffb300'
+}, {
+  key: 'exited',
+  label: 'Exited',
+  color: '#ff6b6b'
+}];
+const SIM_PANEL_STYLE = {
+  background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+  border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 20,
+  padding: '18px 20px',
+  boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
+  backdropFilter: 'blur(12px)'
+};
+const SIM_PANEL_TITLE = {
+  margin: '0 0 14px',
+  fontSize: 14,
+  textTransform: 'uppercase',
+  letterSpacing: '0.12em',
+  color: '#64ffda',
+  fontFamily: "'Montserrat', sans-serif"
+};
+
+// Flat view of params for the Time Machine diff; faults become "Fault A · throw_m" etc.
+const flattenSimParams = p => {
+  const out = {};
+  Object.keys(p).forEach(k => {
+    if (k === 'faults') p.faults.forEach((f, i) => Object.keys(f).forEach(fk => {
+      out[`Fault ${String.fromCharCode(65 + i)} · ${fk}`] = f[fk];
+    }));else out[SIM_PARAM_LABELS[k] || k] = p[k];
+  });
+  out['Active faults'] = p.faults.length;
+  return out;
+};
+const diffSimParams = (a, b) => {
+  const fa = flattenSimParams(a),
+    fb = flattenSimParams(b);
+  const fmt = v => v === undefined ? '—' : typeof v === 'number' ? String(+v.toFixed(4)) : String(v);
+  return Object.keys({
+    ...fa,
+    ...fb
+  }).filter(k => fa[k] !== fb[k]).map(k => ({
+    label: k,
+    original: fmt(fa[k]),
+    current: fmt(fb[k])
+  }));
+};
+
+// Mass categories in Mt (lower layer split by mechanism, upper layer = everything that leaked up)
+const simMassPoint = (d, time) => {
+  const [lo, up] = d.layers;
+  return {
+    time,
+    injected: kgToMt(d.injected),
+    structural: kgToMt(lo.structural),
+    migrating: kgToMt(lo.migrating),
+    residual: kgToMt(lo.residual),
+    dissolved: kgToMt(lo.dissolved),
+    upper: kgToMt(up.total),
+    exited: kgToMt(d.exited)
+  };
+};
 const SimulatorPage = () => {
-  // --- STATE PARAMETERS ---
-  // Physical parameters
-  const [K, setK] = useState(1.70); // Absolute permeability scaling (0.1 to 3.5)
-  const [porosity, setPorosity] = useState(0.25); // Porosity (0.1 to 0.4)
-  const [cellCount, setCellCount] = useState(200); // N cells resolution (50 to 300)
-  const [residualTrapFraction, setResidualTrapFraction] = useState(0.25); // Trapping fraction Sgr (0.0 to 0.40)
+  // --- PARAMETERS → MODEL ---
+  const [params, setParams] = useState(() => VE.withDefaults({}));
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
+  const model = useMemo(() => VE.createModel(params), [params]);
+  const modelRef = useRef(model);
+  modelRef.current = model;
 
-  // Define dx in the outer scope of the component so it is available to all rendering sub-blocks
-  const dx = 1000.0 / cellCount;
-
-  // Topography parameters (Formula sliders)
-  const [dipPercent, setDipPercent] = useState(1.5); // Regional dip in % (-5% to 5%)
-  const [amplitude, setAmplitude] = useState(25); // Anticline wave amplitude (0 to 50px)
-  const [frequency, setFrequency] = useState(2); // Wave frequency multiplier (0.5 to 4)
-  const [faultOffset, setFaultOffset] = useState(1.2); // Fault displacement (0 to 3)
-
-  // Injection parameters
-  const [Q, setQ] = useState(2.30); // Constant injection rate (0.0 to 3.5)
-  const [injLocation, setInjLocation] = useState(70); // Injection cell index % (10% to 90%)
-  const [injDuration, setInjDuration] = useState(240); // Frame count of active injection (50 to 400)
-
-  // Fault parameters
-  const [faultCount, setFaultCount] = useState(2); // Number of faults (0 to 3)
-  const [faults, setFaults] = useState(() => [{
-    xPercent: 28,
-    isSealed: false,
-    thresholdHeight: 0.35,
-    leakRate: 0.14,
-    transmissibility: 1.0,
-    dipSlope: -0.22
-  }, {
-    xPercent: 48,
-    isSealed: false,
-    thresholdHeight: 0.30,
-    leakRate: 0.12,
-    transmissibility: 1.0,
-    dipSlope: 0.25
-  }]);
-
-  // Capillary fringe state
-  const [hasCapillaryFringe, setHasCapillaryFringe] = useState(true);
-  const [fringeScale, setFringeScale] = useState(0.65); // subtle, crisp capillary transition zone thickness (meters)
-  const [entryPressure, setEntryPressure] = useState(15); // entry capillary pressure (kPa)
+  // --- ENGINE STATE: simRef is the play loop's source of truth; sim mirrors it for rendering ---
+  const [sim, setSim] = useState(() => VE.initState(model));
+  const simRef = useRef(sim);
+  const historyRef = useRef([]); // historyRef.current[year] = { state, params }
+  const [massHistory, setMassHistory] = useState([]);
 
   // Simulation run state
   const [isPlaying, setIsPlaying] = useState(false);
   const [isReversing, setIsReversing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [speed, setSpeed] = useState(1); // 1x, 2x, 4x execution speed
-  const [simTime, setSimTime] = useState(0); // simulation timer frame
+  const [speed, setSpeed] = useState(1);
+  const [activeSubTab, setActiveSubTab] = useState('profile'); // 'profile' | 'uq' | 'guide'
 
-  // Tab Navigation state
-  const [activeSubTab, setActiveSubTab] = useState('profile'); // 'profile' (2D reservoir) or 'uq' (Sensitivity & UQ Analysis)
-
-  // SA/UQ uncertainty bounds configuration states (default +/- percentages)
-  const [kUncertainty, setKUncertainty] = useState(0.40); // +/- 40% permeability range
-  const [sgrUncertainty, setSgrUncertainty] = useState(0.40); // +/- 40% Sgr range
-  const [faultThreshUncertainty, setFaultThreshUncertainty] = useState(0.50); // +/- 50% fault threshold range
-
-  // Monte Carlo execution states
-  const [mcRunsCount, setMcRunsCount] = useState(50); // 25, 50, or 100 simulations
-  const [mcResults, setMcResults] = useState(null); // Array of realization runs
+  // SA/UQ configuration (± fractions) and Monte Carlo state
+  const [kUncertainty, setKUncertainty] = useState(0.40);
+  const [sgrUncertainty, setSgrUncertainty] = useState(0.40);
+  const [faultThreshUncertainty, setFaultThreshUncertainty] = useState(0.50);
+  const [mcRunsCount, setMcRunsCount] = useState(50);
+  const [mcResults, setMcResults] = useState(null);
   const [uqRunning, setUqRunning] = useState(false);
   const [uqProgress, setUqProgress] = useState(0);
-  const [uqTargetMetric, setUqTargetMetric] = useState('leaked'); // 'leaked' (CO2 leaked mass) or 'trapped' (trapping efficiency %)
+  const [uqTargetMetric, setUqTargetMetric] = useState('leaked'); // 'leaked' (Mt into upper layer) | 'trapped' (immobilised %)
 
-  // Solver variables (Plume thickness vector, max thickness historical)
-  const [h, setH] = useState(() => new Array(200).fill(0));
-  const [hMax, setHMax] = useState(() => new Array(200).fill(0));
-
-  // Cumulative masses tracking state
-  const [massHistory, setMassHistory] = useState([]); // Array of { time, injected, trapped, mobile, leaked }
-  const [currentMasses, setCurrentMasses] = useState({
-    injected: 0,
-    trapped: 0,
-    mobile: 0,
-    leaked: 0
-  });
-
-  // Reset flag / state synchronizer
-  const stateRef = useRef({
-    h: [],
-    hMax: [],
-    masses: {
-      injected: 0,
-      trapped: 0,
-      mobile: 0,
-      leaked: 0
-    }
-  });
-
-  // Time travel history ref — stores full solver state at each year for back-and-forth scrubbing
-  const historyRef = useRef([]);
-
-  // Initialize solver parameters reference to prevent interval resets on slider modifications
-  const solverParamsRef = useRef(null);
-  solverParamsRef.current = {
-    K,
-    porosity,
-    cellCount,
-    dipPercent,
-    amplitude,
-    frequency,
-    faultOffset,
-    Q,
-    injLocation,
-    injDuration,
-    faultCount,
-    parentDX: dx,
-    faults: JSON.parse(JSON.stringify(faults)),
-    residualTrapFraction
+  const simTime = Math.round(sim.t);
+  const faultCount = params.faults.length;
+  // A grid-size change rebuilds the model one render before the reset effect runs: never diagnose mismatched arrays
+  const simMatches = sim.layers[0].V.length === model.nx;
+  const diag = useMemo(() => VE.diagnose(model, simMatches ? sim : VE.initState(model)), [model, sim, simMatches]);
+  const setP = (key, value) => setParams(p => ({
+    ...p,
+    [key]: value
+  }));
+  const setFault = (idx, key, value) => setParams(p => ({
+    ...p,
+    faults: p.faults.map((f, i) => i === idx ? {
+      ...f,
+      [key]: value
+    } : f)
+  }));
+  const setFaultCount = n => setParams(p => ({
+    ...p,
+    faults: Array.from({
+      length: n
+    }, (_, i) => p.faults[i] || cloneSimParams(VE.FAULT_TEMPLATES[i]))
+  }));
+  const showState = s => {
+    simRef.current = s;
+    setSim(s);
   };
-
-  // Compute mobile and trapped heights dynamically for SVG visualization
-  const {
-    hMobile,
-    hTrapped
-  } = useMemo(() => {
-    const N = h.length;
-    const hMob = new Array(N).fill(0);
-    const hTrap = new Array(N).fill(0);
-    const R = residualTrapFraction;
-    for (let i = 0; i < N; i++) {
-      const H = h[i];
-      const hm = hMax[i];
-      // VE residual trapping model
-      const mobileVal = R < 1.0 ? Math.max(0, (H - R * hm) / (1.0 - R)) : 0;
-      hMob[i] = Math.min(H, mobileVal);
-      hTrap[i] = Math.max(0, H - hMob[i]);
+  const record = s => {
+    const t = Math.round(s.t);
+    historyRef.current[t] = {
+      state: s,
+      params: cloneSimParams(paramsRef.current)
+    };
+    if (t % 5 === 0 || t === 1 || t === VE_HORIZON_YR) {
+      const pt = simMassPoint(VE.diagnose(modelRef.current, s), t);
+      setMassHistory(hist => [...hist.filter(q => q.time < t), pt]);
     }
-    return {
-      hMobile: hMob,
-      hTrapped: hTrap
-    };
-  }, [h, hMax, residualTrapFraction]);
-
-  // Initialize solver vectors when cell count changes
-  useEffect(() => {
-    resetSimulation();
-  }, [cellCount]);
-
-  // Reset simulation function
-  const resetSimulation = () => {
-    const arr = new Array(cellCount).fill(0);
-    setH(arr);
-    setHMax(arr);
-    const initialMasses = {
-      injected: 0,
-      trapped: 0,
-      mobile: 0,
-      leaked: 0
-    };
-    setCurrentMasses(initialMasses);
-    setMassHistory([{
-      time: 0,
-      ...initialMasses
-    }]);
-    setSimTime(0);
+  };
+  const resetTo = m => {
+    const s0 = VE.initState(m);
+    historyRef.current = [{
+      state: s0,
+      params: cloneSimParams(paramsRef.current)
+    }];
+    setMassHistory([simMassPoint(VE.diagnose(m, s0), 0)]);
     setIsPlaying(false);
     setIsReversing(false);
-    stateRef.current = {
-      h: [...arr],
-      hMax: [...arr],
-      masses: {
-        ...initialMasses
-      }
-    };
-    historyRef.current = [{
-      time: 0,
-      h: [...arr],
-      hMax: [...arr],
-      masses: {
-        ...initialMasses
-      },
-      params: JSON.parse(JSON.stringify(solverParamsRef.current))
-    }];
+    showState(s0);
+  };
+  const resetSimulation = () => resetTo(modelRef.current); // also used as an onClick handler: ignores its argument
+
+  // Grid size reshapes the state arrays; slab width and Δρ (ρ_g) convert stored volume to kg, so changing
+  // them with CO₂ in place would break the mass balance — all three restart the run
+  useEffect(() => {
+    resetTo(modelRef.current);
+  }, [params.nx, params.W, params.dRho]);
+  const applyPreset = name => {
+    const p = cloneSimParams(VE.PRESETS[name]);
+    paramsRef.current = p;
+    setParams(p);
+    resetTo(VE.createModel(p));
   };
 
-  // Preset Scenario Handlers
-  const applyPreset = presetName => {
-    resetSimulation();
-    if (presetName === 'dome') {
-      setDipPercent(0.2);
-      setAmplitude(45);
-      setFrequency(1.5);
-      setFaultOffset(0);
-      setK(1.60);
-      setPorosity(0.25);
-      setQ(2.20);
-      setInjDuration(240);
-      setFaultCount(0);
-      setResidualTrapFraction(0.30);
-    } else if (presetName === 'faulted') {
-      setDipPercent(1.8);
-      setAmplitude(15);
-      setFrequency(2);
-      setFaultOffset(1.8);
-      setK(1.80);
-      setPorosity(0.22);
-      setQ(2.00);
-      setInjDuration(200);
-      setFaultCount(2);
-      setFaults([{
-        xPercent: 26,
-        isSealed: false,
-        thresholdHeight: 0.30,
-        leakRate: 0.16,
-        transmissibility: 0.8,
-        dipSlope: -0.22
-      }, {
-        xPercent: 50,
-        isSealed: false,
-        thresholdHeight: 0.45,
-        leakRate: 0.12,
-        transmissibility: 0.5,
-        dipSlope: 0.25
-      }]);
-      setResidualTrapFraction(0.20);
-    } else if (presetName === 'monocline') {
-      setDipPercent(-2.5);
-      setAmplitude(6);
-      setFrequency(0.5);
-      setFaultOffset(0);
-      setK(1.50);
-      setPorosity(0.28);
-      setQ(1.80);
-      setInjDuration(220);
-      setFaultCount(1);
-      setFaults([{
-        xPercent: 32,
-        isSealed: false,
-        thresholdHeight: 0.35,
-        leakRate: 0.14,
-        transmissibility: 0.9,
-        dipSlope: -0.20
-      }]);
-      setResidualTrapFraction(0.25);
-    } else if (presetName === 'default') {
-      setDipPercent(1.5);
-      setAmplitude(25);
-      setFrequency(2);
-      setFaultOffset(1.2);
-      setK(1.70);
-      setPorosity(0.25);
-      setQ(2.30);
-      setInjDuration(240);
-      setFaultCount(2);
-      setFaults([{
-        xPercent: 28,
-        isSealed: false,
-        thresholdHeight: 0.35,
-        leakRate: 0.14,
-        transmissibility: 1.0,
-        dipSlope: -0.22
-      }, {
-        xPercent: 48,
-        isSealed: false,
-        thresholdHeight: 0.30,
-        leakRate: 0.12,
-        transmissibility: 1.0,
-        dipSlope: 0.25
-      }]);
-      setResidualTrapFraction(0.25);
-    }
+  // Advance one simulated year from the live state; false at the horizon or while a resize is pending
+  const stepYear = () => {
+    const m = modelRef.current,
+      s = simRef.current;
+    if (Math.round(s.t) >= VE_HORIZON_YR || s.layers[0].V.length !== m.nx) return false;
+    const next = VE.advance(m, s, 1);
+    record(next);
+    showState(next);
+    return true;
+  };
+  const loadYear = t => {
+    const snap = historyRef.current[t];
+    if (snap) showState(snap.state);
+    return !!snap;
   };
 
-  // Base unperturbed caprock profile
-  const capRockBaseProfile = x => {
-    const dip = 150 + x * (dipPercent / 100.0) * 8.0; // regional dip
-    const wave = -amplitude * Math.sin(x * Math.PI / 1000.0 * frequency * 2);
-    return dip + wave;
-  };
-
-  // Base unperturbed stratum profile for any yOffset
-  const stratumBaseProfile = (x, yOffset = 0) => {
-    return capRockBaseProfile(x) + yOffset;
-  };
-
-  // Computes the exact subpixel intersection (x*, y*) of a sloped fault plane with any geological stratum at depth
-  const getSimStratumFaultIntersection = (f, idx, yOffset = 0) => {
-    const x0 = f.xPercent / 100.0 * 1000.0;
-    const defaultSlope = idx % 2 === 0 ? -0.22 : 0.25;
-    const slope = f.dipSlope !== undefined ? f.dipSlope : defaultSlope;
-    let x = x0;
-    for (let iter = 0; iter < 3; iter++) {
-      const y = stratumBaseProfile(x, yOffset);
-      x = x0 + slope * y;
-    }
-    const y = stratumBaseProfile(x, yOffset);
-    return {
-      x,
-      y,
-      x0,
-      slope
-    };
-  };
-
-  // Computes intersection for caprock specifically (yOffset = 0)
-  const getSimFaultIntersection = (f, idx) => {
-    return getSimStratumFaultIntersection(f, idx, 0);
-  };
-
-  // Computes elevation for any geological stratum displaced along the sloped fault
-  const stratumY = (x, cellIdx = null, yOffset = 0) => {
-    const base = stratumBaseProfile(x, yOffset);
-    let offset = 0;
-    const xRef = cellIdx !== null ? cellIdx * dx + dx / 2.0 : x;
-    for (let idx = 0; idx < faultCount; idx++) {
-      const f = faults[idx];
-      const inter = getSimStratumFaultIntersection(f, idx, yOffset);
-      if (xRef > inter.x) {
-        const direction = idx % 2 === 0 ? 1 : -1;
-        offset += direction * faultOffset * 12;
-      }
-    }
-    return base + offset;
-  };
-
-  // Helper: Caprock Underside Topography Function
-  const capRockY = (x, cellIdx = null) => {
-    return stratumY(x, cellIdx, 0);
-  };
-
-  // --- SOLVER ITERATOR (FORWARD & REVERSE) ---
+  // --- PLAY LOOP (reads refs only, so mid-run slider changes reach the solver) ---
   useEffect(() => {
     if (!isPlaying && !isReversing) return;
-    const interval = setInterval(() => {
+    let owned = simRef.current; // the state this run last produced
+    const id = setInterval(() => {
+      // A reset fired from an effect (grid change) lands before React clears this interval: end the run, don't step it
+      if (simRef.current !== owned) {
+        clearInterval(id);
+        setIsPlaying(false);
+        setIsReversing(false);
+        return;
+      }
       if (isPlaying) {
-        setSimTime(t => {
-          const nextTime = t + 1;
-          if (nextTime > 1000) {
-            setIsPlaying(false);
-            return t;
-          }
-
-          // Run numerical VE solver step using parameters from the ref
-          const result = runSolverStep(stateRef.current.h, stateRef.current.hMax, stateRef.current.masses, nextTime, solverParamsRef.current);
-
-          // Update local React states
-          setH(result.h);
-          setHMax(result.hMax);
-          setCurrentMasses(result.masses);
-
-          // Append to mass history for plotting
-          if (nextTime % 5 === 0 || nextTime === 1 || nextTime === 1000) {
-            setMassHistory(history => {
-              const cleaned = history.filter(item => item.time < nextTime);
-              return [...cleaned, {
-                time: nextTime,
-                ...result.masses
-              }];
-            });
-          }
-
-          // Store back in ref for next iteration
-          stateRef.current = {
-            h: result.h,
-            hMax: result.hMax,
-            masses: result.masses
-          };
-
-          // Cache historical snapshot in historyRef for time scrubbing
-          historyRef.current[nextTime] = {
-            time: nextTime,
-            h: [...result.h],
-            hMax: [...result.hMax],
-            masses: {
-              ...result.masses
-            },
-            params: JSON.parse(JSON.stringify(solverParamsRef.current))
-          };
-          return nextTime;
-        });
-      } else if (isReversing) {
-        setSimTime(t => {
-          const nextTime = t - 1;
-          if (nextTime < 0) {
-            setIsReversing(false);
-            return t;
-          }
-
-          // Load from history
-          const histState = historyRef.current[nextTime];
-          if (histState) {
-            setH(histState.h);
-            setHMax(histState.hMax);
-            setCurrentMasses(histState.masses);
-            stateRef.current = {
-              h: [...histState.h],
-              hMax: [...histState.hMax],
-              masses: {
-                ...histState.masses
-              }
-            };
-          }
-          return nextTime;
-        });
+        if (!stepYear()) setIsPlaying(false);
+      } else if (!loadYear(Math.round(simRef.current.t) - 1)) {
+        setIsReversing(false);
       }
+      owned = simRef.current;
     }, 40 / speed);
-    return () => clearInterval(interval);
+    return () => clearInterval(id);
   }, [isPlaying, isReversing, speed]);
-
-  // Time-Travel Scrubbing Handler (Non-destructive)
-  const handleScrub = targetTime => {
+  const handleScrub = target => {
     setIsPlaying(false);
     setIsReversing(false);
-    const t = Math.max(0, Math.min(historyRef.current.length - 1, targetTime));
-    const histState = historyRef.current[t];
-    if (histState) {
-      setH(histState.h);
-      setHMax(histState.hMax);
-      setCurrentMasses(histState.masses);
-      setSimTime(t);
-
-      // Update solver references
-      stateRef.current = {
-        h: [...histState.h],
-        hMax: [...histState.hMax],
-        masses: {
-          ...histState.masses
-        }
-      };
-    }
+    loadYear(Math.max(0, Math.min(historyRef.current.length - 1, target)));
   };
 
-  // Branching Committer: Slices the future history from target time and locks in new parameters
-  const commitBranch = (targetTime = simTime) => {
+  // Branch: drop the recorded future beyond the viewed year; later steps use the current params
+  const commitBranch = () => {
     setIsPlaying(false);
     setIsReversing(false);
-    const t = Math.max(0, Math.min(historyRef.current.length - 1, targetTime));
-
-    // Truncate history ref after this point
+    const t = Math.round(simRef.current.t);
     historyRef.current = historyRef.current.slice(0, t + 1);
-
-    // Truncate mass history for chart
-    setMassHistory(history => history.filter(item => item.time <= t));
-
-    // Reload state
-    const histState = historyRef.current[t];
-    if (histState) {
-      setH(histState.h);
-      setHMax(histState.hMax);
-      setCurrentMasses(histState.masses);
-      stateRef.current = {
-        h: [...histState.h],
-        hMax: [...histState.hMax],
-        masses: {
-          ...histState.masses
-        }
-      };
-    }
+    setMassHistory(hist => hist.filter(q => q.time <= t));
   };
-
-  // Check differences between current parameters and parameters saved at simTime
-  const getParamDiff = () => {
-    if (simTime >= historyRef.current.length) return [];
-    const histState = historyRef.current[simTime];
-    if (!histState || !histState.params) return [];
-    const histParams = histState.params;
-    const diffs = [];
-    const checkDiff = (key, label, formatHist, formatCurr) => {
-      const vHist = histParams[key];
-      let vCurr;
-      if (key === 'K') vCurr = K;else if (key === 'porosity') vCurr = porosity;else if (key === 'cellCount') vCurr = cellCount;else if (key === 'residualTrapFraction') vCurr = residualTrapFraction;else if (key === 'dipPercent') vCurr = dipPercent;else if (key === 'amplitude') vCurr = amplitude;else if (key === 'frequency') vCurr = frequency;else if (key === 'faultOffset') vCurr = faultOffset;else if (key === 'Q') vCurr = Q;else if (key === 'injLocation') vCurr = injLocation;else if (key === 'injDuration') vCurr = injDuration;else if (key === 'faultCount') vCurr = faultCount;
-      if (key !== 'faults' && Math.abs(vHist - vCurr) > 1e-5) {
-        diffs.push({
-          label,
-          original: formatHist(vHist),
-          current: formatCurr(vCurr)
-        });
-      }
-    };
-    checkDiff('K', 'Permeability (K)', v => `${Math.round(v * 1000)} mD`, v => `${Math.round(v * 1000)} mD`);
-    checkDiff('porosity', 'Porosity (\u03C6)', v => `${Math.round(v * 100)}%`, v => `${Math.round(v * 100)}%`);
-    checkDiff('cellCount', 'Grid Cells (N)', v => v, v => v);
-    checkDiff('residualTrapFraction', 'Residual Trap (Sgr)', v => `${Math.round(v * 100)}%`, v => `${Math.round(v * 100)}%`);
-    checkDiff('dipPercent', 'Regional Dip', v => `${v}%`, v => `${v}%`);
-    checkDiff('amplitude', 'Anticline Height', v => `${v}px`, v => `${v}px`);
-    checkDiff('frequency', 'Anticline Count', v => v, v => v);
-    checkDiff('faultOffset', 'Fault Slip', v => `${v}x`, v => `${v}x`);
-    checkDiff('Q', 'Flow Rate (Q)', v => v, v => v);
-    checkDiff('injLocation', 'Well Location', v => `${v}%`, v => `${v}%`);
-    checkDiff('injDuration', 'Inj. Stop Year', v => `${v}y`, v => `${v}y`);
-    checkDiff('faultCount', 'Active Faults', v => v, v => v);
-    if (histParams.faultCount === faultCount && faultCount > 0 && histParams.faults) {
-      for (let i = 0; i < faultCount; i++) {
-        const fHist = histParams.faults[i];
-        const fCurr = faults[i];
-        if (fHist && fCurr) {
-          const prefix = `Fault ${String.fromCharCode(65 + i)}`;
-          if (fHist.isSealed !== fCurr.isSealed) {
-            diffs.push({
-              label: `${prefix} Seal`,
-              original: fHist.isSealed ? 'Sealed' : 'Leaking',
-              current: fCurr.isSealed ? 'Sealed' : 'Leaking'
-            });
-          }
-          if (Math.abs(fHist.xPercent - fCurr.xPercent) > 1e-5) {
-            diffs.push({
-              label: `${prefix} Position`,
-              original: `${fHist.xPercent}%`,
-              current: `${fCurr.xPercent}%`
-            });
-          }
-          if (Math.abs(fHist.thresholdHeight - fCurr.thresholdHeight) > 1e-5) {
-            diffs.push({
-              label: `${prefix} Threshold`,
-              original: `${fHist.thresholdHeight} m`,
-              current: `${fCurr.thresholdHeight} m`
-            });
-          }
-          if (!fHist.isSealed && !fCurr.isSealed && Math.abs(fHist.leakRate - fCurr.leakRate) > 1e-5) {
-            diffs.push({
-              label: `${prefix} Leak Rate`,
-              original: fHist.leakRate,
-              current: fCurr.leakRate
-            });
-          }
-        }
-      }
-    }
-    return diffs;
-  };
-
-  // Play controls toggles
+  const isPastView = () => Math.round(simRef.current.t) < historyRef.current.length - 1;
   const handlePlayToggle = () => {
-    if (isReversing) {
-      setIsReversing(false);
-    }
-    if (!isPlaying) {
-      if (simTime < historyRef.current.length - 1) {
-        commitBranch();
-      }
-      setIsPlaying(true);
-    } else {
-      setIsPlaying(false);
-    }
-  };
-  const handlePlayReverseToggle = () => {
+    setIsReversing(false);
     if (isPlaying) {
       setIsPlaying(false);
+      return;
     }
-    setIsReversing(!isReversing);
+    if (isPastView()) commitBranch();
+    setIsPlaying(true);
+  };
+  const handlePlayReverseToggle = () => {
+    setIsPlaying(false);
+    setIsReversing(r => !r);
   };
   const stepForward = () => {
     setIsPlaying(false);
     setIsReversing(false);
-    const nextTime = simTime + 1;
-    if (nextTime > 1000) return;
-    if (simTime < historyRef.current.length - 1) {
-      commitBranch();
-    }
-    const result = runSolverStep(stateRef.current.h, stateRef.current.hMax, stateRef.current.masses, nextTime, solverParamsRef.current);
-    setH(result.h);
-    setHMax(result.hMax);
-    setCurrentMasses(result.masses);
-    setSimTime(nextTime);
-    if (nextTime % 5 === 0 || nextTime === 1 || nextTime === 1000) {
-      setMassHistory(history => {
-        const cleaned = history.filter(item => item.time < nextTime);
-        return [...cleaned, {
-          time: nextTime,
-          ...result.masses
-        }];
-      });
-    }
-    stateRef.current = {
-      h: result.h,
-      hMax: result.hMax,
-      masses: result.masses
-    };
-    historyRef.current[nextTime] = {
-      time: nextTime,
-      h: [...result.h],
-      hMax: [...result.hMax],
-      masses: {
-        ...result.masses
-      },
-      params: JSON.parse(JSON.stringify(solverParamsRef.current))
-    };
+    if (isPastView()) commitBranch();
+    stepYear();
   };
   const stepBackward = () => {
     setIsPlaying(false);
     setIsReversing(false);
-    const prevTime = simTime - 1;
-    if (prevTime < 0) return;
-    const histState = historyRef.current[prevTime];
-    if (histState) {
-      setH(histState.h);
-      setHMax(histState.hMax);
-      setCurrentMasses(histState.masses);
-      setSimTime(prevTime);
-      stateRef.current = {
-        h: [...histState.h],
-        hMax: [...histState.hMax],
-        masses: {
-          ...histState.masses
-        }
-      };
-    }
+    loadYear(Math.round(simRef.current.t) - 1);
+  };
+  const getParamDiff = () => {
+    const snap = historyRef.current[simTime];
+    return snap ? diffSimParams(snap.params, params) : [];
   };
 
-  // --- MONTE CARLO UQ/SA ENGINE ---
+  // --- MONTE CARLO UQ/SA ENGINE (uniform ± ranges; chunked to keep the UI responsive) ---
   const runMonteCarloBatch = () => {
     if (uqRunning) return;
     setUqRunning(true);
     setUqProgress(0);
     setMcResults(null);
-    const totalRuns = mcRunsCount;
-    const results = [];
-    const batchSize = 5;
-
-    // Capture nominal parameter values
-    const nominalK = K;
-    const nominalSgr = residualTrapFraction;
-    const nominalFaults = faults.map(f => ({
-      ...f
+    const base = cloneSimParams(params);
+    const uni = (v, frac) => v * (1 - frac + 2 * frac * Math.random());
+    const realizations = Array.from({
+      length: mcRunsCount
+    }, (_, id) => ({
+      id,
+      k_mD: Math.max(1, uni(base.k_mD, kUncertainty)),
+      Sgr: Math.min(0.4, Math.max(0, uni(base.Sgr, sgrUncertainty))),
+      faults: base.faults.map(f => ({
+        ...f,
+        Pth_kPa: Math.max(0.5, uni(f.Pth_kPa, faultThreshUncertainty))
+      }))
     }));
-
-    // Generate parameter sets for each realization (Uniform distribution)
-    const realizations = [];
-    for (let i = 0; i < totalRuns; i++) {
-      // 1. Permeability K
-      const kMin = nominalK * (1.0 - kUncertainty);
-      const kMax = nominalK * (1.0 + kUncertainty);
-      const randK = Math.max(0.1, kMin + Math.random() * (kMax - kMin));
-
-      // 2. Residual Trap Fraction Sgr
-      const sgrMin = nominalSgr * (1.0 - sgrUncertainty);
-      const sgrMax = nominalSgr * (1.0 + sgrUncertainty);
-      const randSgr = Math.max(0.0, Math.min(0.40, sgrMin + Math.random() * (sgrMax - sgrMin)));
-
-      // 3. Fault Capillary Threshold
-      const randFaults = nominalFaults.map(f => {
-        const threshMin = f.thresholdHeight * (1.0 - faultThreshUncertainty);
-        const threshMax = f.thresholdHeight * (1.0 + faultThreshUncertainty);
-        const randThresh = Math.max(0.0, Math.min(2.0, threshMin + Math.random() * (threshMax - threshMin)));
-        return {
-          ...f,
-          thresholdHeight: randThresh
-        };
-      });
-      realizations.push({
-        id: i,
-        K: randK,
-        residualTrapFraction: randSgr,
-        faults: randFaults
-      });
-    }
-
-    // Run chunked simulation loop
-    const runChunk = startIndex => {
-      const endIndex = Math.min(totalRuns, startIndex + batchSize);
-      for (let idx = startIndex; idx < endIndex; idx++) {
-        const r = realizations[idx];
-
-        // Define solver params for this specific run
+    const results = [];
+    const runChunk = start => {
+      const end = Math.min(realizations.length, start + 5);
+      for (let i = start; i < end; i++) {
+        const r = realizations[i];
         const runParams = {
-          K: r.K,
-          porosity: porosity,
-          cellCount: cellCount,
-          dipPercent: dipPercent,
-          amplitude: amplitude,
-          frequency: frequency,
-          faultOffset: faultOffset,
-          Q: Q,
-          injLocation: injLocation,
-          injDuration: injDuration,
-          faultCount: faultCount,
-          parentDX: dx,
-          faults: r.faults,
-          residualTrapFraction: r.residualTrapFraction
+          ...base,
+          k_mD: r.k_mD,
+          Sgr: r.Sgr,
+          faults: r.faults
         };
-
-        // Initialize state vectors for realization
-        let curH = new Array(cellCount).fill(0);
-        let curHMax = new Array(cellCount).fill(0);
-        let curMasses = {
-          injected: 0,
-          trapped: 0,
-          mobile: 0,
-          leaked: 0
-        };
-
-        // Run explicit solver to Year 1000
-        for (let year = 1; year <= 1000; year++) {
-          const res = runSolverStep(curH, curHMax, curMasses, year, runParams);
-          curH = res.h;
-          curHMax = res.hMax;
-          curMasses = res.masses;
-        }
-
-        // Record outcomes
-        const trappingEfficiency = curMasses.injected > 0 ? curMasses.trapped / curMasses.injected * 100 : 0;
-        const leakedFraction = curMasses.injected > 0 ? curMasses.leaked / curMasses.injected * 100 : 0;
+        const m = VE.createModel(runParams);
+        const s = VE.advance(m, VE.initState(m), VE_HORIZON_YR);
+        const d = VE.diagnose(m, s);
+        const immobile = d.layers.reduce((acc, L) => acc + L.residual + L.dissolved, 0);
         results.push({
-          id: idx,
+          id: r.id,
           params: r,
-          finalLeaked: curMasses.leaked,
-          finalTrapped: curMasses.trapped,
-          finalMobile: curMasses.mobile,
-          finalInjected: curMasses.injected,
-          trappingEfficiency,
-          leakedFraction,
-          h: curH,
-          hMax: curHMax
+          runParams,
+          state: s,
+          finalLeaked: kgToMt(d.layers[1].total),
+          trappingEfficiency: d.injected > 0 ? immobile / d.injected * 100 : 0
         });
       }
-      setUqProgress(Math.round(endIndex / totalRuns * 100));
-      if (endIndex < totalRuns) {
-        setTimeout(() => runChunk(endIndex), 25);
-      } else {
+      setUqProgress(Math.round(end / realizations.length * 100));
+      if (end < realizations.length) setTimeout(() => runChunk(end), 25);else {
         setUqRunning(false);
         setMcResults(results);
       }
     };
-
-    // Trigger first chunk
     setTimeout(() => runChunk(0), 10);
   };
 
@@ -6865,34 +6881,61 @@ const SimulatorPage = () => {
     if (M === 0) return 0;
     const meanX = xValues.reduce((a, b) => a + b, 0) / M;
     const meanY = yValues.reduce((a, b) => a + b, 0) / M;
-    let num = 0;
-    let denX = 0;
-    let denY = 0;
+    let num = 0,
+      denX = 0,
+      denY = 0;
     for (let j = 0; j < M; j++) {
-      const dx = xValues[j] - meanX;
-      const dy = yValues[j] - meanY;
-      num += dx * dy;
-      denX += dx * dx;
-      denY += dy * dy;
+      const ex = xValues[j] - meanX;
+      const ey = yValues[j] - meanY;
+      num += ex * ey;
+      denX += ex * ex;
+      denY += ey * ey;
     }
     if (denX === 0 || denY === 0) return 0;
     return num / Math.sqrt(denX * denY);
   };
+  const metricOf = r => uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency;
+  const metricUnit = uqTargetMetric === 'leaked' ? ' Mt' : '%';
+  // Higher leakage is worse; higher immobilisation is better → labels/colours flip with the metric
+  const uqBands = uqTargetMetric === 'leaked' ? [{
+    key: 'p10',
+    label: 'P10 (Low leakage)',
+    color: '#64ffda'
+  }, {
+    key: 'p50',
+    label: 'P50 (Expected)',
+    color: '#ffb300'
+  }, {
+    key: 'p90',
+    label: 'P90 (High leakage)',
+    color: '#ff6b6b'
+  }] : [{
+    key: 'p10',
+    label: 'P10 (Low immobilisation)',
+    color: '#ff6b6b'
+  }, {
+    key: 'p50',
+    label: 'P50 (Expected)',
+    color: '#ffb300'
+  }, {
+    key: 'p90',
+    label: 'P90 (High immobilisation)',
+    color: '#64ffda'
+  }];
 
   // Memoized UQ statistics computations
   const uqData = useMemo(() => {
     if (!mcResults) return null;
-    const vals = mcResults.map(r => uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency);
+    const vals = mcResults.map(metricOf);
     const sorted = [...vals].sort((a, b) => a - b);
     const p10Val = getPercentile(sorted, 10);
     const p50Val = getPercentile(sorted, 50);
     const p90Val = getPercentile(sorted, 90);
     const findClosestRealization = targetVal => {
-      let closest = mcResults[0];
-      let minDiff = Infinity;
+      let closest = mcResults[0],
+        minDiff = Infinity;
       mcResults.forEach(r => {
-        const val = uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency;
-        const diff = Math.abs(val - targetVal);
+        const diff = Math.abs(metricOf(r) - targetVal);
         if (diff < minDiff) {
           minDiff = diff;
           closest = r;
@@ -6900,9 +6943,6 @@ const SimulatorPage = () => {
       });
       return closest;
     };
-    const p10Realization = findClosestRealization(p10Val);
-    const p50Realization = findClosestRealization(p50Val);
-    const p90Realization = findClosestRealization(p90Val);
     const minVal = sorted[0];
     const maxVal = sorted[sorted.length - 1];
     const range = maxVal - minVal || 1.0;
@@ -6910,12 +6950,8 @@ const SimulatorPage = () => {
     const binWidth = range / numBins;
     const bins = new Array(numBins).fill(0);
     vals.forEach(v => {
-      let binIdx = Math.floor((v - minVal) / binWidth);
-      if (binIdx >= numBins) binIdx = numBins - 1;
-      if (binIdx < 0) binIdx = 0;
-      bins[binIdx]++;
+      bins[Math.max(0, Math.min(numBins - 1, Math.floor((v - minVal) / binWidth)))]++;
     });
-    const maxBinCount = Math.max(1, Math.max(...bins));
     return {
       vals,
       sorted,
@@ -6923,117 +6959,64 @@ const SimulatorPage = () => {
       maxVal,
       range,
       bins,
-      maxBinCount,
       binWidth,
+      maxBinCount: Math.max(1, ...bins),
       p10Val,
       p50Val,
       p90Val,
-      p10Realization,
-      p50Realization,
-      p90Realization
+      p10Realization: findClosestRealization(p10Val),
+      p50Realization: findClosestRealization(p50Val),
+      p90Realization: findClosestRealization(p90Val)
     };
   }, [mcResults, uqTargetMetric]);
 
-  // Memoized Sensitivity correlations
+  // Memoized sensitivity correlations
   const sensitivityData = useMemo(() => {
     if (!mcResults) return null;
-    const yVals = mcResults.map(r => uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency);
-    const kVals = mcResults.map(r => r.params.K);
-    const sgrVals = mcResults.map(r => r.params.residualTrapFraction);
-    const faultThreshVals = mcResults.map(r => {
-      const activeFaults = r.params.faults.slice(0, faultCount);
-      if (activeFaults.length === 0) return 0;
-      const sum = activeFaults.reduce((a, b) => a + b.thresholdHeight, 0);
-      return sum / activeFaults.length;
-    });
-    const kCorr = computeCorrelation(kVals, yVals);
-    const sgrCorr = computeCorrelation(sgrVals, yVals);
-    const faultCorr = faultCount > 0 ? computeCorrelation(faultThreshVals, yVals) : 0;
+    const yVals = mcResults.map(metricOf);
+    const kCorr = computeCorrelation(mcResults.map(r => r.params.k_mD), yVals);
+    const sgrCorr = computeCorrelation(mcResults.map(r => r.params.Sgr), yVals);
+    const hasFaults = mcResults[0].params.faults.length > 0;
+    const faultCorr = hasFaults ? computeCorrelation(mcResults.map(r => r.params.faults.reduce((a, f) => a + f.Pth_kPa, 0) / r.params.faults.length), yVals) : 0;
     return [{
-      label: 'Permeability (K)',
+      label: 'Permeability (k)',
       r: kCorr
     }, {
-      label: 'Residual Trapping (Sgr)',
+      label: 'Residual CO₂ (S_gr)',
       r: sgrCorr
-    }, ...(faultCount > 0 ? [{
-      label: 'Fault Seal Height',
+    }, ...(hasFaults ? [{
+      label: 'Fault threshold (P_th)',
       r: faultCorr
     }] : [])].sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
-  }, [mcResults, uqTargetMetric, faultCount]);
+  }, [mcResults, uqTargetMetric]);
 
-  // Load a selected Monte Carlo model back to 2D simulator
-  const loadUQRealization = realization => {
-    if (!realization) return;
-    setK(parseFloat(realization.params.K.toFixed(3)));
-    setResidualTrapFraction(parseFloat(realization.params.residualTrapFraction.toFixed(3)));
-    const newFaults = faults.map((f, i) => {
-      const rf = realization.params.faults[i];
-      if (rf) {
-        return {
-          ...f,
-          thresholdHeight: parseFloat(rf.thresholdHeight.toFixed(3))
-        };
-      }
-      return f;
-    });
-    setFaults(newFaults);
-    setH(realization.h);
-    setHMax(realization.hMax);
-    const finalMasses = {
-      injected: realization.finalInjected,
-      trapped: realization.finalTrapped,
-      mobile: realization.finalMobile,
-      leaked: realization.finalLeaked
+  // Load a Monte Carlo realization back into the 2D view (history: year 0 and the final year)
+  const loadUQRealization = r => {
+    if (!r) return;
+    const p = cloneSimParams(r.runParams);
+    paramsRef.current = p;
+    setParams(p);
+    const m = VE.createModel(p);
+    const s0 = VE.initState(m);
+    historyRef.current = [{
+      state: s0,
+      params: cloneSimParams(p)
+    }];
+    historyRef.current[VE_HORIZON_YR] = {
+      state: r.state,
+      params: cloneSimParams(p)
     };
-    setCurrentMasses(finalMasses);
-    setSimTime(1000);
+    setMassHistory([simMassPoint(VE.diagnose(m, s0), 0), simMassPoint(VE.diagnose(m, r.state), VE_HORIZON_YR)]);
     setIsPlaying(false);
     setIsReversing(false);
-    stateRef.current = {
-      h: [...realization.h],
-      hMax: [...realization.hMax],
-      masses: {
-        ...finalMasses
-      }
-    };
-    const emptyArr = new Array(cellCount).fill(0);
-    historyRef.current = [{
-      time: 0,
-      h: emptyArr,
-      hMax: emptyArr,
-      masses: {
-        injected: 0,
-        trapped: 0,
-        mobile: 0,
-        leaked: 0
-      },
-      params: JSON.parse(JSON.stringify(solverParamsRef.current))
-    }, {
-      time: 1000,
-      h: [...realization.h],
-      hMax: [...realization.hMax],
-      masses: {
-        ...finalMasses
-      },
-      params: JSON.parse(JSON.stringify(solverParamsRef.current))
-    }];
-    setMassHistory([{
-      time: 0,
-      injected: 0,
-      trapped: 0,
-      mobile: 0,
-      leaked: 0
-    }, {
-      time: 1000,
-      ...finalMasses
-    }]);
+    showState(r.state);
     setActiveSubTab('profile');
   };
 
   // SVG Histogram Renderer
   const renderUQHistogram = data => {
-    const width = 450;
-    const height = 200;
+    const width = 450,
+      height = 200;
     const padding = {
       left: 40,
       right: 20,
@@ -7042,6 +7025,7 @@ const SimulatorPage = () => {
     };
     const getX = val => padding.left + (val - data.minVal) / data.range * (width - padding.left - padding.right);
     const getY = count => height - padding.bottom - count / data.maxBinCount * (height - padding.top - padding.bottom);
+    const marks = [data.p10Val, data.p50Val, data.p90Val];
     return /*#__PURE__*/React.createElement("svg", {
       width: "100%",
       height: height,
@@ -7064,61 +7048,45 @@ const SimulatorPage = () => {
         strokeDasharray: "3 3"
       });
     }), data.bins.map((count, idx) => {
-      const valStart = data.minVal + idx * data.binWidth;
-      const valEnd = valStart + data.binWidth;
-      const x1 = getX(valStart);
-      const x2 = getX(valEnd);
+      const x1 = getX(data.minVal + idx * data.binWidth);
+      const x2 = getX(data.minVal + (idx + 1) * data.binWidth);
       const y = getY(count);
-      const barWidth = Math.max(1, x2 - x1 - 1.5);
-      const barHeight = Math.max(0, height - padding.bottom - y);
       return /*#__PURE__*/React.createElement("rect", {
         key: idx,
         x: x1,
         y: y,
-        width: barWidth,
-        height: barHeight,
+        width: Math.max(1, x2 - x1 - 1.5),
+        height: Math.max(0, height - padding.bottom - y),
         fill: "rgba(100, 255, 218, 0.22)",
         stroke: "rgba(100, 255, 218, 0.5)",
         strokeWidth: "1"
       });
-    }), [{
-      label: 'P10',
-      val: data.p10Val,
-      color: '#64ffda'
-    }, {
-      label: 'P50',
-      val: data.p50Val,
-      color: '#ffb300'
-    }, {
-      label: 'P90',
-      val: data.p90Val,
-      color: '#ff6b6b'
-    }].map((p, i) => {
-      const x = getX(p.val);
+    }), uqBands.map((b, i) => {
+      const x = getX(marks[i]);
       return /*#__PURE__*/React.createElement("g", {
-        key: i
+        key: b.key
       }, /*#__PURE__*/React.createElement("line", {
         x1: x,
         y1: padding.top,
         x2: x,
         y2: height - padding.bottom,
-        stroke: p.color,
+        stroke: b.color,
         strokeWidth: "1.5",
         strokeDasharray: "4 3"
       }), /*#__PURE__*/React.createElement("circle", {
         cx: x,
         cy: padding.top,
         r: "3.5",
-        fill: p.color
+        fill: b.color
       }), /*#__PURE__*/React.createElement("text", {
         x: x,
         y: padding.top - 5,
-        fill: p.color,
+        fill: b.color,
         fontSize: "8.5",
         fontWeight: "bold",
         textAnchor: "middle",
         fontFamily: "monospace"
-      }, p.label));
+      }, b.key.toUpperCase()));
     }), /*#__PURE__*/React.createElement("line", {
       x1: padding.left,
       y1: padding.top,
@@ -7140,20 +7108,20 @@ const SimulatorPage = () => {
       fontSize: "8.5",
       textAnchor: "start",
       fontFamily: "monospace"
-    }, data.minVal.toFixed(1), uqTargetMetric === 'leaked' ? ' kt' : '%'), /*#__PURE__*/React.createElement("text", {
+    }, data.minVal.toFixed(2), metricUnit), /*#__PURE__*/React.createElement("text", {
       x: width - padding.right,
       y: height - 8,
       fill: "rgba(255,255,255,0.4)",
       fontSize: "8.5",
       textAnchor: "end",
       fontFamily: "monospace"
-    }, data.maxVal.toFixed(1), uqTargetMetric === 'leaked' ? ' kt' : '%'));
+    }, data.maxVal.toFixed(2), metricUnit));
   };
 
   // SVG Sensitivity Tornado Renderer
   const renderUQSensitivity = data => {
-    const width = 450;
-    const height = 200;
+    const width = 450,
+      height = 200;
     const padding = {
       left: 140,
       right: 30,
@@ -7163,8 +7131,8 @@ const SimulatorPage = () => {
     const centerOffset = padding.left + (width - padding.left - padding.right) / 2;
     const halfPlotWidth = (width - padding.left - padding.right) / 2;
     const getX = r => centerOffset + r * halfPlotWidth;
-    const barHeight = 24;
-    const gap = 16;
+    const barHeight = 24,
+      gap = 16;
     return /*#__PURE__*/React.createElement("svg", {
       width: "100%",
       height: height,
@@ -7183,9 +7151,9 @@ const SimulatorPage = () => {
         y1: padding.top - 5,
         x2: x,
         y2: height - padding.bottom,
-        stroke: tick === 0 ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.05)",
-        strokeWidth: tick === 0 ? "1" : "0.5",
-        strokeDasharray: tick === 0 ? "none" : "3 3"
+        stroke: tick === 0 ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.05)',
+        strokeWidth: tick === 0 ? '1' : '0.5',
+        strokeDasharray: tick === 0 ? 'none' : '3 3'
       }), /*#__PURE__*/React.createElement("text", {
         x: x,
         y: padding.top - 12,
@@ -7198,7 +7166,6 @@ const SimulatorPage = () => {
       const y = padding.top + idx * (barHeight + gap);
       const xStart = item.r >= 0 ? centerOffset : getX(item.r);
       const xEnd = item.r >= 0 ? getX(item.r) : centerOffset;
-      const rectWidth = Math.max(1, xEnd - xStart);
       const color = item.r >= 0 ? '#64ffda' : '#ff6b6b';
       const fill = item.r >= 0 ? 'rgba(100, 255, 218, 0.25)' : 'rgba(255, 107, 107, 0.25)';
       return /*#__PURE__*/React.createElement("g", {
@@ -7213,7 +7180,7 @@ const SimulatorPage = () => {
       }, item.label), /*#__PURE__*/React.createElement("rect", {
         x: xStart,
         y: y,
-        width: rectWidth,
+        width: Math.max(1, xEnd - xStart),
         height: barHeight,
         fill: fill,
         stroke: color,
@@ -7238,381 +7205,21 @@ const SimulatorPage = () => {
     }));
   };
 
-  // Solver implementation
-  const runSolverStep = (currentH, currentHMax, masses, currentFrame, params) => {
-    const {
-      K,
-      porosity,
-      cellCount,
-      Q,
-      injLocation,
-      injDuration,
-      faultCount,
-      faults,
-      residualTrapFraction,
-      parentDX
-    } = params;
-    const N = cellCount;
-    const dx = parentDX || 1000.0 / N;
-    let nextH = [...currentH];
-    let nextHMax = [...currentHMax];
-    let {
-      injected,
-      trapped,
-      mobile,
-      leaked
-    } = masses;
-
-    // 25 substeps per year to guarantee total TVD numerical advection stability
-    const substeps = 25;
-    const dt = 1.0 / substeps;
-
-    // Physical coordinate depth array (scaled by 1/15)
-    const zt = new Array(N).fill(0);
-    for (let i = 0; i < N; i++) {
-      zt[i] = capRockY(i * dx + dx / 2.0, i) / 15.0;
-    }
-
-    // Run explicit finite volume integration substeps
-    for (let step = 0; step < substeps; step++) {
-      // 1. Partition total height into mobile and trapped components for each cell (VE physics)
-      const hMob = new Array(N).fill(0);
-      for (let i = 0; i < N; i++) {
-        const H = nextH[i];
-        const hm = nextHMax[i];
-        const R = residualTrapFraction;
-        const mobileVal = R < 1.0 ? Math.max(0, (H - R * hm) / (1.0 - R)) : 0;
-        hMob[i] = Math.min(H, mobileVal);
-      }
-
-      // 2. Compute fluxes using only the mobile thickness with physical upwind TVD limiter
-      const fluxes = new Array(N - 1).fill(0);
-      for (let i = 0; i < N - 1; i++) {
-        const zL = zt[i] + nextH[i];
-        const zR = zt[i + 1] + nextH[i + 1];
-        const grad = (zR - zL) / (dx / 5.0);
-        const hFace = grad > 0 ? hMob[i + 1] : hMob[i];
-
-        // Find if a fault is located at this grid boundary and apply its transmissibility multiplier
-        let transMult = 1.0;
-        for (let idx = 0; idx < faultCount; idx++) {
-          const f = faults[idx];
-          if (f) {
-            const inter = getSimFaultIntersection(f, idx);
-            const cellFaultIdx = Math.round(inter.x / dx);
-            if (cellFaultIdx - 1 === i) {
-              if (f.isSealed) {
-                transMult = 0.0; // Infinite sealed barrier
-              } else {
-                transMult = f.transmissibility !== undefined ? f.transmissibility : 1.0;
-              }
-              break;
-            }
-          }
-        }
-        let rawFlux = -(K / porosity) * hFace * grad * 0.08 * transMult;
-
-        // TVD physical limiter: flux can never exceed 30% of mobile mass in cell per substep
-        if (rawFlux > 0) {
-          rawFlux = Math.min(rawFlux, 0.30 * hMob[i] / dt);
-        } else {
-          rawFlux = Math.max(rawFlux, -(0.30 * hMob[i + 1]) / dt);
-        }
-        fluxes[i] = rawFlux;
-      }
-
-      // Ghost cells boundaries (zero far-field flux)
-      const H_res = 175.0 / 15.0; // 11.667 m physical maximum thickness of reservoir sandstone bed
-      const hTmp = [...nextH];
-      for (let i = 0; i < N; i++) {
-        const fL = i === 0 ? 0 : fluxes[i - 1];
-        const fR = i === N - 1 ? 0 : fluxes[i];
-        hTmp[i] = Math.max(0, Math.min(H_res, nextH[i] + dt * (fL - fR)));
-      }
-
-      // Injection: Smooth wellbore Gaussian kernel over adjacent cells to prevent point singularity
-      const cellInjIdx = Math.floor(injLocation / 100.0 * N);
-      if (Q > 0 && currentFrame <= injDuration) {
-        const dVolInj = Q * dt;
-        const kernel = [0.10, 0.20, 0.40, 0.20, 0.10];
-        for (let offset = -2; offset <= 2; offset++) {
-          const cIdx = Math.max(0, Math.min(N - 1, cellInjIdx + offset));
-          hTmp[cIdx] = Math.min(H_res, hTmp[cIdx] + dVolInj * kernel[offset + 2] / (porosity * (dx / 5.0)));
-        }
-        injected += dVolInj;
-      }
-
-      // Fault Leaks: threshold-pressure/spill-height capillary barrier
-      for (let idx = 0; idx < faultCount; idx++) {
-        const f = faults[idx];
-        if (!f.isSealed) {
-          const inter = getSimFaultIntersection(f, idx);
-          const cellFaultIdx = Math.round(inter.x / dx);
-          const boundedIdx = Math.max(0, Math.min(N - 1, cellFaultIdx));
-
-          // Leakage occurs only if CO2 column height H exceeds the threshold
-          if (hTmp[boundedIdx] > f.thresholdHeight) {
-            const overpressure = hTmp[boundedIdx] - f.thresholdHeight;
-            const leakHeight = Math.min(overpressure, f.leakRate * dt * 0.8);
-            hTmp[boundedIdx] -= leakHeight;
-            leaked += leakHeight * porosity * (dx / 5.0);
-          }
-        }
-      }
-      nextH = hTmp.map(val => Math.max(0, Math.min(H_res, val)));
-      for (let i = 0; i < N; i++) {
-        if (nextH[i] > nextHMax[i]) nextHMax[i] = Math.min(H_res, nextH[i]);
-      }
-    }
-
-    // Mass distribution calculation (Exact integral of fluid volume)
-    let mobileSum = 0;
-    let trappedSum = 0;
-    for (let i = 0; i < N; i++) {
-      const H = nextH[i];
-      const hm = nextHMax[i];
-      const R = residualTrapFraction;
-      const mobileVal = R < 1.0 ? Math.max(0, (H - R * hm) / (1.0 - R)) : 0;
-      const hMob = Math.min(H, mobileVal);
-      const hTrap = Math.max(0, H - hMob);
-      mobileSum += hMob * (dx / 5.0) * porosity;
-      trappedSum += hTrap * (dx / 5.0) * porosity;
-    }
-    return {
-      h: nextH,
-      hMax: nextHMax,
-      masses: {
-        injected: parseFloat(injected.toFixed(2)),
-        trapped: parseFloat(trappedSum.toFixed(2)),
-        mobile: parseFloat(mobileSum.toFixed(2)),
-        leaked: parseFloat(leaked.toFixed(2))
-      }
-    };
-  };
-
-  // --- NODE-BASED RIBBON BUILDER (Zero Sawteeth Guaranteed) ---
-  const buildSmoothRibbon = (topElevationFn, botElevationFn, kStart, kEnd) => {
-    if (kStart > kEnd) return "";
-    let path = "";
-    for (let k = kStart; k <= kEnd; k++) {
-      const x = k * dx;
-      const isFault = k > 0 && k < cellCount && Math.abs(capRockY(x, k - 1) - capRockY(x, k)) > 0.1;
-      if (k === kStart) {
-        const y0 = topElevationFn(k, isFault ? 'right' : 'avg');
-        path = `M ${x} ${y0}`;
-      } else if (isFault) {
-        const yL = topElevationFn(k, 'left');
-        const yR = topElevationFn(k, 'right');
-        path += ` L ${x} ${yL} L ${x} ${yR}`;
-      } else {
-        const y = topElevationFn(k, 'avg');
-        path += ` L ${x} ${y}`;
-      }
-    }
-    for (let k = kEnd; k >= kStart; k--) {
-      const x = k * dx;
-      const isFault = k > 0 && k < cellCount && Math.abs(capRockY(x, k - 1) - capRockY(x, k)) > 0.1;
-      if (isFault) {
-        const yR = botElevationFn(k, 'right');
-        const yL = botElevationFn(k, 'left');
-        path += ` L ${x} ${yR} L ${x} ${yL}`;
-      } else {
-        const y = botElevationFn(k, 'avg');
-        path += ` L ${x} ${y}`;
-      }
-    }
-    path += " Z";
-    return path;
-  };
-  const getSimNodeValue = (arr, k, side = 'avg') => {
-    if (!arr) return 0;
-    const N = arr.length;
-    if (k <= 0) return arr[0];
-    if (k >= N) return arr[N - 1];
-    if (side === 'left') return arr[k - 1];
-    if (side === 'right') return arr[k];
-    return 0.5 * (arr[k - 1] + arr[k]);
-  };
-
-  // Helper to find the active continuous domain with sub-grid zero-tapered tip nodes
-  const getSimActiveBounds = (nodeValueFn, N, eps = 0.001) => {
-    let kFirst = -1,
-      kLast = -1;
-    for (let k = 0; k <= N; k++) {
-      const val = nodeValueFn(k);
-      if (val > eps) {
-        if (kFirst === -1) kFirst = k;
-        kLast = k;
-      }
-    }
-    if (kFirst === -1) return null;
-    const kStart = Math.max(0, kFirst - 1);
-    const kEnd = Math.min(N, kLast + 1);
-    return {
-      kStart,
-      kEnd
-    };
-  };
-
-  // Trapped CO2 sits directly under the caprock
-  const getTrappedPath = () => {
-    const N = cellCount;
-    const scale = 15.0;
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hTrapped, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    return buildSmoothRibbon((k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k), (k, side) => {
-      const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-      const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-      return Math.min(yBotMax, yTop + getSimNodeValue(hTrapped, k, side) * scale);
-    }, bounds.kStart, bounds.kEnd);
-  };
-
-  // Mobile CO2 flows beneath the trapped layer
-  const getMobilePath = () => {
-    const N = cellCount;
-    const scale = 15.0;
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hMobile, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    return buildSmoothRibbon((k, side) => {
-      const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-      const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-      return Math.min(yBotMax, yTop + getSimNodeValue(hTrapped, k, side) * scale);
-    }, (k, side) => {
-      const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-      const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-      return Math.min(yBotMax, yTop + (getSimNodeValue(hTrapped, k, side) + getSimNodeValue(hMobile, k, side)) * scale);
-    }, bounds.kStart, bounds.kEnd);
-  };
-
-  // Swept Residual Trapping Footprint (hTrapped)
-  const getSweptResidualSimPath = () => {
-    const N = cellCount;
-    const scale = 15.0;
-    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.25 : 0;
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hTrapped, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    return buildSmoothRibbon((k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k), (k, side) => {
-      const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-      const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-      const hTrp = getSimNodeValue(hTrapped, k, side);
-      const f = fringePx * Math.min(1.0, hTrp * 1.5);
-      return Math.min(yBotMax, yTop + hTrp * scale + f);
-    }, bounds.kStart, bounds.kEnd);
-  };
-
-  // Active Flowing Mobile Plume (hMobile)
-  const getActiveMobileSimPath = () => {
-    const N = cellCount;
-    const scale = 15.0;
-    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.35 : 0;
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hMobile, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    return buildSmoothRibbon((k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k), (k, side) => {
-      const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-      const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-      const hMob = getSimNodeValue(hMobile, k, side);
-      const f = fringePx * Math.min(1.0, hMob * 1.8);
-      return Math.min(yBotMax, yTop + hMob * scale + f);
-    }, bounds.kStart, bounds.kEnd);
-  };
-
-  // Maximum Historic Gas Saturation Boundary (hMax Swept Footprint Dashed Line)
-  const getMaxHgLinePath = () => {
-    const N = cellCount;
-    const scale = 15.0;
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hMax, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    let path = "";
-    for (let k = bounds.kStart; k <= bounds.kEnd; k++) {
-      const x = k * dx;
-      const isFault = k > 0 && k < cellCount && Math.abs(capRockY(x, k - 1) - capRockY(x, k)) > 0.1;
-      if (k === bounds.kStart) {
-        const yTop = capRockY(x, isFault ? k : k);
-        const yBotMax = stratumY(x, isFault ? k : k, 175);
-        const y0 = Math.min(yBotMax, yTop + getSimNodeValue(hMax, k, isFault ? 'right' : 'avg') * scale);
-        path = `M ${x} ${y0}`;
-      } else if (isFault) {
-        const yTopL = capRockY(x, k - 1);
-        const yBotMaxL = stratumY(x, k - 1, 175);
-        const yTopR = capRockY(x, k);
-        const yBotMaxR = stratumY(x, k, 175);
-        const yL = Math.min(yBotMaxL, yTopL + getSimNodeValue(hMax, k, 'left') * scale);
-        const yR = Math.min(yBotMaxR, yTopR + getSimNodeValue(hMax, k, 'right') * scale);
-        path += ` L ${x} ${yL} L ${x} ${yR}`;
-      } else {
-        const yTop = capRockY(x, k);
-        const yBotMax = stratumY(x, k, 175);
-        const y = Math.min(yBotMax, yTop + getSimNodeValue(hMax, k, 'avg') * scale);
-        path += ` L ${x} ${y}`;
-      }
-    }
-    return path;
-  };
-
-  // Reservoir Conformable Grid block columns
-  const reservoirBlocks = useMemo(() => {
-    const blocks = [];
-    const N = cellCount;
-    for (let i = 0; i < N; i++) {
-      const x1 = i * dx;
-      const x2 = (i + 1) * dx;
-      const yt1 = capRockY(x1, i);
-      const yt2 = capRockY(x2, i);
-      const yb1 = stratumY(x1, i, 175);
-      const yb2 = stratumY(x2, i, 175);
-
-      // Permeability noise mapping for sandstone heterogeneity
-      const permFactor = 0.5 + 0.5 * Math.sin(i * 12.7 + 1.1);
-      const r = Math.floor(35 + permFactor * 14);
-      const g = Math.floor(26 + permFactor * 10);
-      const b = Math.floor(20 + permFactor * 6);
-      const colFill = `rgb(${r}, ${g}, ${b})`;
-      blocks.push({
-        points: `${x1},${yt1} ${x2},${yt2} ${x2},${yb2} ${x1},${yb1}`,
-        fill: colFill,
-        x1,
-        yt1,
-        x2,
-        yt2,
-        yb1,
-        yb2
-      });
-    }
-    return blocks;
-  }, [cellCount, dipPercent, amplitude, frequency, faultOffset, faultCount, faults]);
-
-  // --- Dynamic SVG Chart Drawing ---
+  // --- Mass-balance chart (one line per category, Mt vs years) ---
   const renderSVGChart = () => {
-    const width = 450;
-    const height = 210;
+    const width = 450,
+      height = 210;
     const padding = {
       left: 45,
       right: 15,
       top: 15,
       bottom: 25
     };
-    const maxVal = Math.max(10, Math.max(currentMasses.injected, currentMasses.mobile + currentMasses.trapped + currentMasses.leaked) * 1.08);
-
-    // Scale helper
-    const getX = t => padding.left + t / 1000.0 * (width - padding.left - padding.right);
-    const getY = val => height - padding.bottom - val / maxVal * (height - padding.top - padding.bottom);
-    let pathInj = "",
-      pathTrap = "",
-      pathMob = "",
-      pathLeak = "";
-    if (massHistory.length > 0) {
-      pathInj = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].injected)}`;
-      pathTrap = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].trapped)}`;
-      pathMob = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].mobile)}`;
-      pathLeak = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].leaked)}`;
-      for (let idx = 1; idx < massHistory.length; idx++) {
-        const pt = massHistory[idx];
-        pathInj += ` L ${getX(pt.time)} ${getY(pt.injected)}`;
-        pathTrap += ` L ${getX(pt.time)} ${getY(pt.trapped)}`;
-        pathMob += ` L ${getX(pt.time)} ${getY(pt.mobile)}`;
-        pathLeak += ` L ${getX(pt.time)} ${getY(pt.leaked)}`;
-      }
-    }
+    const cur = simMassPoint(diag, simTime);
+    const maxVal = Math.max(1, cur.injected, ...massHistory.map(q => q.injected)) * 1.08;
+    const getX = t => padding.left + t / VE_HORIZON_YR * (width - padding.left - padding.right);
+    const getY = v => height - padding.bottom - v / maxVal * (height - padding.top - padding.bottom);
+    const path = key => massHistory.map((q, i) => `${i ? 'L' : 'M'} ${getX(q.time).toFixed(1)} ${getY(q[key]).toFixed(1)}`).join(' ');
     return /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',
@@ -7628,30 +7235,8 @@ const SimulatorPage = () => {
         fontSize: 10.5,
         padding: '2px 4px'
       }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 5
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        width: 10,
-        height: 2,
-        background: '#ffffff',
-        opacity: 0.6,
-        borderTop: '1px dashed #fff'
-      }
-    }), /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: 'rgba(255,255,255,0.7)'
-      }
-    }, "Injected:"), /*#__PURE__*/React.createElement("strong", {
-      style: {
-        color: '#fff',
-        fontFamily: 'monospace'
-      }
-    }, Math.round(currentMasses.injected), " kt")), /*#__PURE__*/React.createElement("span", {
+    }, MASS_SERIES.map(sr => /*#__PURE__*/React.createElement("span", {
+      key: sr.key,
       style: {
         display: 'inline-flex',
         alignItems: 'center',
@@ -7661,60 +7246,19 @@ const SimulatorPage = () => {
       style: {
         width: 10,
         height: 2.5,
-        background: '#64ffda'
+        background: sr.color,
+        opacity: sr.dash ? 0.6 : 1
       }
     }), /*#__PURE__*/React.createElement("span", {
       style: {
         color: 'rgba(255,255,255,0.7)'
       }
-    }, "Mobile:"), /*#__PURE__*/React.createElement("strong", {
+    }, sr.label, ":"), /*#__PURE__*/React.createElement("strong", {
       style: {
-        color: '#64ffda',
+        color: sr.color,
         fontFamily: 'monospace'
       }
-    }, Math.round(currentMasses.mobile), " kt")), /*#__PURE__*/React.createElement("span", {
-      style: {
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 5
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        width: 10,
-        height: 2.5,
-        background: '#3ca68e'
-      }
-    }), /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: 'rgba(255,255,255,0.7)'
-      }
-    }, "Trapped:"), /*#__PURE__*/React.createElement("strong", {
-      style: {
-        color: '#3ca68e',
-        fontFamily: 'monospace'
-      }
-    }, Math.round(currentMasses.trapped), " kt")), /*#__PURE__*/React.createElement("span", {
-      style: {
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 5
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        width: 10,
-        height: 2.5,
-        background: '#ff6b6b'
-      }
-    }), /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: 'rgba(255,255,255,0.7)'
-      }
-    }, "Leaked:"), /*#__PURE__*/React.createElement("strong", {
-      style: {
-        color: '#ff6b6b',
-        fontFamily: 'monospace'
-      }
-    }, Math.round(currentMasses.leaked), " kt"))), /*#__PURE__*/React.createElement("svg", {
+    }, cur[sr.key].toFixed(2), " Mt")))), /*#__PURE__*/React.createElement("svg", {
       width: "100%",
       height: height,
       viewBox: `0 0 ${width} ${height}`,
@@ -7724,8 +7268,7 @@ const SimulatorPage = () => {
         border: '1px solid rgba(255,255,255,0.06)'
       }
     }, [0.25, 0.5, 0.75, 1.0].map((ratio, i) => {
-      const val = maxVal * ratio;
-      const y = getY(val);
+      const y = getY(maxVal * ratio);
       return /*#__PURE__*/React.createElement("g", {
         key: i
       }, /*#__PURE__*/React.createElement("line", {
@@ -7743,44 +7286,24 @@ const SimulatorPage = () => {
         fontSize: "8.5",
         textAnchor: "end",
         fontFamily: "monospace"
-      }, Math.round(val)));
-    }), [0, 200, 400, 600, 800, 1000].map((t, i) => {
-      const x = getX(t);
-      return /*#__PURE__*/React.createElement("text", {
-        key: i,
-        x: x,
-        y: height - 8,
-        fill: "rgba(255,255,255,0.45)",
-        fontSize: "8.5",
-        textAnchor: "middle",
-        fontFamily: "monospace"
-      }, t, "y");
-    }), pathInj && /*#__PURE__*/React.createElement("path", {
-      d: pathInj,
+      }, (maxVal * ratio).toFixed(1)));
+    }), [0, 200, 400, 600, 800, 1000].map(t => /*#__PURE__*/React.createElement("text", {
+      key: t,
+      x: getX(t),
+      y: height - 8,
+      fill: "rgba(255,255,255,0.45)",
+      fontSize: "8.5",
+      textAnchor: "middle",
+      fontFamily: "monospace"
+    }, t, "y")), massHistory.length > 1 && MASS_SERIES.map(sr => /*#__PURE__*/React.createElement("path", {
+      key: sr.key,
+      d: path(sr.key),
       fill: "none",
-      stroke: "#ffffff",
-      strokeWidth: "1.5",
-      strokeDasharray: "3 3",
-      opacity: "0.6"
-    }), pathMob && /*#__PURE__*/React.createElement("path", {
-      d: pathMob,
-      fill: "none",
-      stroke: "#64ffda",
-      strokeWidth: "2",
-      style: {
-        filter: 'drop-shadow(0 0 2px rgba(100,255,218,0.4))'
-      }
-    }), pathTrap && /*#__PURE__*/React.createElement("path", {
-      d: pathTrap,
-      fill: "none",
-      stroke: "#3ca68e",
-      strokeWidth: "1.8"
-    }), pathLeak && /*#__PURE__*/React.createElement("path", {
-      d: pathLeak,
-      fill: "none",
-      stroke: "#ff6b6b",
-      strokeWidth: "2"
-    }), /*#__PURE__*/React.createElement("line", {
+      stroke: sr.color,
+      strokeWidth: "1.8",
+      strokeDasharray: sr.dash,
+      opacity: sr.dash ? 0.6 : 1
+    })), /*#__PURE__*/React.createElement("line", {
       x1: getX(simTime),
       y1: padding.top,
       x2: getX(simTime),
@@ -8304,7 +7827,7 @@ const SimulatorPage = () => {
       fontWeight: 600,
       marginBottom: 6
     }
-  }, "Interactive Numerical PDE Sandbox"), /*#__PURE__*/React.createElement("h2", {
+  }, "Vertical equilibrium model \xB7 runs in your browser"), /*#__PURE__*/React.createElement("h2", {
     style: {
       margin: 0,
       fontSize: 'clamp(28px, 4vw, 38px)',
@@ -8314,7 +7837,7 @@ const SimulatorPage = () => {
       alignItems: 'center',
       gap: 15
     }
-  }, "VE Gravity Tongue Simulator", /*#__PURE__*/React.createElement("button", {
+  }, "CO\u2082 Storage Simulator", /*#__PURE__*/React.createElement("button", {
     onClick: () => setSidebarOpen(!sidebarOpen),
     style: {
       background: sidebarOpen ? 'rgba(100, 255, 218, 0.25)' : 'rgba(100, 255, 218, 0.1)',
@@ -8340,7 +7863,7 @@ const SimulatorPage = () => {
       fontSize: 13.5,
       maxWidth: 680
     }
-  }, "Solve explicit Finite Volume Vertical Equilibrium (VE) equations dynamically. Tweak caprock topography, sandstone parameters, or injection variables in real-time.")), /*#__PURE__*/React.createElement("div", {
+  }, "Inject CO\u2082 into a saline aquifer and follow where it goes: the plume spreads from the well, rises along the caprock, fills structural traps, leaves residual CO\u2082 behind, dissolves into the brine and can leak up faults. All quantities are in real units and every tonne injected is accounted for.")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -8359,7 +7882,7 @@ const SimulatorPage = () => {
       color: 'rgba(255,255,255,0.5)',
       fontWeight: 600
     }
-  }, "Synthetic Reservoir Cases"), /*#__PURE__*/React.createElement("div", {
+  }, "Scenarios"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8,
@@ -8374,13 +7897,17 @@ const SimulatorPage = () => {
     label: 'Anticline Dome',
     icon: 'fa-mountain'
   }, {
-    id: 'faulted',
+    id: 'faultedTrap',
     label: 'Faulted Trap',
     icon: 'fa-bolt'
   }, {
-    id: 'monocline',
+    id: 'dipping',
     label: 'Dipping Layer',
     icon: 'fa-sliders'
+  }, {
+    id: 'leakyFault',
+    label: 'Leaky Fault',
+    icon: 'fa-water'
   }].map(p => /*#__PURE__*/React.createElement("button", {
     key: p.id,
     onClick: () => applyPreset(p.id),
@@ -8460,7 +7987,7 @@ const SimulatorPage = () => {
     style: {
       marginRight: 6
     }
-  }), " 2D Simulator"), /*#__PURE__*/React.createElement("button", {
+  }), " Cross-section"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setActiveSubTab('uq'),
     style: {
       background: activeSubTab === 'uq' ? 'rgba(100, 255, 218, 0.08)' : 'none',
@@ -8481,7 +8008,7 @@ const SimulatorPage = () => {
     style: {
       marginRight: 6
     }
-  }), " Sensitivity & UQ"), /*#__PURE__*/React.createElement("button", {
+  }), " Uncertainty"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setActiveSubTab('guide'),
     style: {
       background: activeSubTab === 'guide' ? 'rgba(100, 255, 218, 0.08)' : 'none',
@@ -8502,7 +8029,7 @@ const SimulatorPage = () => {
     style: {
       marginRight: 6
     }
-  }), " PDE Methodology Guide")), /*#__PURE__*/React.createElement("div", {
+  }), " Model & equations")), /*#__PURE__*/React.createElement("div", {
     style: {
       paddingRight: 8
     }
@@ -8516,12 +8043,12 @@ const SimulatorPage = () => {
       fontSize: 10.5,
       color: 'rgba(255,255,255,0.5)'
     }
-  }, "Monte Carlo Analysis") : /*#__PURE__*/React.createElement("span", {
+  }, "Monte Carlo runs") : /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10.5,
       color: 'rgba(255,255,255,0.5)'
     }
-  }, "Methodology Guide"))), (() => {
+  }, "Equations & limitations"))), (() => {
     if (activeSubTab === 'profile') {
       return /*#__PURE__*/React.createElement("div", {
         style: {
@@ -8536,8 +8063,10 @@ const SimulatorPage = () => {
           top: 12,
           right: 12,
           display: 'flex',
+          flexWrap: 'wrap',
           gap: 12,
           alignItems: 'center',
+          maxWidth: '70%',
           background: 'rgba(0,0,0,0.50)',
           backdropFilter: 'blur(10px)',
           WebkitBackdropFilter: 'blur(10px)',
@@ -8562,7 +8091,7 @@ const SimulatorPage = () => {
           borderRadius: 2,
           background: '#0dfca2'
         }
-      }), " Mobile CO\u2082 (S_g \u2192 0.90)"), /*#__PURE__*/React.createElement("span", {
+      }), " Mobile CO\u2082 (S_g = ", (1 - params.Swr).toFixed(2), ")"), /*#__PURE__*/React.createElement("span", {
         style: {
           display: 'inline-flex',
           alignItems: 'center',
@@ -8576,7 +8105,7 @@ const SimulatorPage = () => {
           background: '#20c997',
           border: '1px solid #1a8e8f'
         }
-      }), " Trapped Gas (S_gr \u2248 0.25)"), /*#__PURE__*/React.createElement("span", {
+      }), " Residual (S_gr = ", params.Sgr.toFixed(2), ")"), /*#__PURE__*/React.createElement("span", {
         style: {
           display: 'inline-flex',
           alignItems: 'center',
@@ -8588,7 +8117,7 @@ const SimulatorPage = () => {
           height: 0,
           borderTop: '2px dashed #64ffda'
         }
-      }), " Max Envelope (h_max)"), hasCapillaryFringe && /*#__PURE__*/React.createElement("span", {
+      }), " Max envelope (h_max)"), params.fringeOn && /*#__PURE__*/React.createElement("span", {
         style: {
           display: 'inline-flex',
           alignItems: 'center',
@@ -8602,7 +8131,7 @@ const SimulatorPage = () => {
           background: 'linear-gradient(180deg, #20c997, #1a8e8f, #0a2a4d)',
           border: '1px solid #20c997'
         }
-      }), " Capillary Fringe"), /*#__PURE__*/React.createElement("span", {
+      }), " Capillary fringe (h_c = ", model.hc.toFixed(1), " m)"), /*#__PURE__*/React.createElement("span", {
         style: {
           display: 'inline-flex',
           alignItems: 'center',
@@ -8610,340 +8139,16 @@ const SimulatorPage = () => {
         }
       }, /*#__PURE__*/React.createElement("span", {
         style: {
-          width: 8,
-          height: 8,
-          borderRadius: 2,
-          background: '#0a2a4d'
+          width: 14,
+          height: 0,
+          borderTop: '1px dashed rgba(255,255,255,0.6)'
         }
-      }), " Brine (S_w = 1.0)")), /*#__PURE__*/React.createElement("svg", {
-        viewBox: "0 0 1000 450",
-        preserveAspectRatio: "none",
-        style: {
-          width: '100%',
-          height: '100%',
-          pointerEvents: 'auto'
-        }
-      }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("clipPath", {
-        id: "caprock-clipper"
-      }, /*#__PURE__*/React.createElement("path", {
-        d: `M 0 ${reservoirBlocks[0] ? reservoirBlocks[0].yt1 : capRockY(0)} ` + reservoirBlocks.map(b => `L ${b.x2} ${b.yt2}`).join(" ") + ` L 1000 ${stratumY(1000, cellCount - 1, 175)} ` + Array.from({
-          length: cellCount + 1
-        }, (_, idx) => {
-          const k = cellCount - idx;
-          const x = k * dx;
-          return `L ${x} ${stratumY(x, Math.max(0, k - 1), 175)}`;
-        }).join(" ") + ` Z`
-      })), /*#__PURE__*/React.createElement("linearGradient", {
-        id: "plume-grad",
-        x1: "0",
-        y1: "0",
-        x2: "0",
-        y2: "1"
-      }, /*#__PURE__*/React.createElement("stop", {
-        offset: "0%",
-        stopColor: "#0dfca2",
-        stopOpacity: "0.95"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "40%",
-        stopColor: "#05e67c",
-        stopOpacity: "0.85"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "100%",
-        stopColor: "#05ab5e",
-        stopOpacity: "0.75"
-      })), /*#__PURE__*/React.createElement("linearGradient", {
-        id: "trapped-grad",
-        x1: "0",
-        y1: "0",
-        x2: "0",
-        y2: "1"
-      }, /*#__PURE__*/React.createElement("stop", {
-        offset: "0%",
-        stopColor: "#0b7a61",
-        stopOpacity: "0.85"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "100%",
-        stopColor: "#034d3c",
-        stopOpacity: "0.75"
-      })), /*#__PURE__*/React.createElement("linearGradient", {
-        id: "active-mobile-sim-grad",
-        x1: "0",
-        y1: "0",
-        x2: "0",
-        y2: "1"
-      }, /*#__PURE__*/React.createElement("stop", {
-        offset: "0%",
-        stopColor: "#0dfca2",
-        stopOpacity: "0.98"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "45%",
-        stopColor: "#0dfca2",
-        stopOpacity: "0.95"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "70%",
-        stopColor: "#05e67c",
-        stopOpacity: "0.92"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "88%",
-        stopColor: "#20c997",
-        stopOpacity: "0.90"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "100%",
-        stopColor: "#1a8e8f",
-        stopOpacity: "0.85"
-      })), /*#__PURE__*/React.createElement("linearGradient", {
-        id: "residual-trapped-sim-grad",
-        x1: "0",
-        y1: "0",
-        x2: "0",
-        y2: "1"
-      }, /*#__PURE__*/React.createElement("stop", {
-        offset: "0%",
-        stopColor: "#20c997",
-        stopOpacity: "0.85"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "40%",
-        stopColor: "#20c997",
-        stopOpacity: "0.75"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "75%",
-        stopColor: "#1a8e8f",
-        stopOpacity: "0.65"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "92%",
-        stopColor: "#125672",
-        stopOpacity: "0.45"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "100%",
-        stopColor: "#0a2a4d",
-        stopOpacity: "0.25"
-      })), /*#__PURE__*/React.createElement("linearGradient", {
-        id: "fringe-sim-grad",
-        x1: "0",
-        y1: "0",
-        x2: "0",
-        y2: "1"
-      }, /*#__PURE__*/React.createElement("stop", {
-        offset: "0%",
-        stopColor: "#20c997",
-        stopOpacity: "0.80"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "50%",
-        stopColor: "#1a8e8f",
-        stopOpacity: "0.60"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "85%",
-        stopColor: "#125672",
-        stopOpacity: "0.35"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "100%",
-        stopColor: "#0a2a4d",
-        stopOpacity: "0.10"
-      })), /*#__PURE__*/React.createElement("linearGradient", {
-        id: "brine-grad",
-        x1: "0",
-        y1: "0",
-        x2: "0",
-        y2: "1"
-      }, /*#__PURE__*/React.createElement("stop", {
-        offset: "0%",
-        stopColor: "#0a2a4d",
-        stopOpacity: "0.85"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "100%",
-        stopColor: "#051426",
-        stopOpacity: "0.95"
-      }))), /*#__PURE__*/React.createElement("path", {
-        d: `M 0 0 L 1000 0 L 1000 ${capRockY(1000, cellCount - 1)} ` + Array.from({
-          length: cellCount + 1
-        }, (_, idx) => {
-          const k = cellCount - idx;
-          const x = k * dx;
-          return `L ${x} ${capRockY(x, Math.max(0, k - 1))}`;
-        }).join(" ") + ` Z`,
-        fill: "#282030",
-        stroke: "rgba(255,255,255,0.02)"
-      }), reservoirBlocks.map((b, idx) => /*#__PURE__*/React.createElement("polygon", {
-        key: idx,
-        points: b.points,
-        fill: b.fill,
-        stroke: "rgba(0,0,0,0.06)",
-        strokeWidth: "0.5"
-      })), /*#__PURE__*/React.createElement("path", {
-        d: `M 0 ${reservoirBlocks[0] ? reservoirBlocks[0].yt1 : capRockY(0)} ` + reservoirBlocks.map(b => `L ${b.x2} ${b.yt2}`).join(" ") + ` L 1000 ${stratumY(1000, cellCount - 1, 175)} ` + Array.from({
-          length: cellCount + 1
-        }, (_, idx) => {
-          const k = cellCount - idx;
-          const x = k * dx;
-          return `L ${x} ${stratumY(x, Math.max(0, k - 1), 175)}`;
-        }).join(" ") + ` Z`,
-        fill: "url(#brine-grad)",
-        opacity: "0.88"
-      }), (() => {
-        const cellInjIdx = Math.floor(injLocation / 100.0 * cellCount);
-        const b = reservoirBlocks[cellInjIdx];
-        if (!b) return null;
-        return /*#__PURE__*/React.createElement("rect", {
-          x: b.x1 + dx / 2.0 - 2,
-          y: b.yt1,
-          width: "4",
-          height: b.yb1 - b.yt1,
-          fill: "rgba(255,255,255,0.2)"
-        });
-      })(), /*#__PURE__*/React.createElement("g", {
-        clipPath: "url(#caprock-clipper)"
-      }, getSweptResidualSimPath() && /*#__PURE__*/React.createElement("path", {
-        d: getSweptResidualSimPath(),
-        fill: "url(#residual-trapped-sim-grad)",
-        opacity: "0.92"
-      }), getActiveMobileSimPath() && /*#__PURE__*/React.createElement("path", {
-        d: getActiveMobileSimPath(),
-        fill: "url(#active-mobile-sim-grad)",
-        opacity: "0.98"
-      }), getMaxHgLinePath() && /*#__PURE__*/React.createElement("path", {
-        d: getMaxHgLinePath(),
-        fill: "none",
-        stroke: "#64ffda",
-        strokeWidth: "1.4",
-        strokeDasharray: "5 3.5",
-        opacity: "0.85"
-      })), /*#__PURE__*/React.createElement("path", {
-        d: `M 0 ${stratumY(0, 0, 175)} ` + Array.from({
-          length: cellCount + 1
-        }, (_, idx) => {
-          const x = idx * dx;
-          return `L ${x} ${stratumY(x, Math.min(cellCount - 1, idx), 175)}`;
-        }).join(" "),
-        stroke: "rgba(0,0,0,0.3)",
-        strokeWidth: "1",
-        fill: "none"
-      }), (() => {
-        const cellInjIdx = Math.floor(injLocation / 100.0 * cellCount);
-        const xWell = cellInjIdx * dx + dx / 2.0;
-        const yCap = capRockY(xWell);
-        return /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("line", {
-          x1: xWell,
-          y1: "0",
-          x2: xWell,
-          y2: yCap + 120,
-          stroke: "url(#well-gradient)",
-          strokeWidth: "4"
-        }), Q > 0 && simTime <= injDuration && /*#__PURE__*/React.createElement("circle", {
-          cx: xWell,
-          cy: yCap + 90,
-          r: "10",
-          fill: "rgba(100,255,218,0.25)",
-          style: {
-            animation: 'pulseFlare 1.5s infinite'
-          }
-        }), Q > 0 && isPlaying && simTime <= injDuration && [0, 0.3, 0.6, 0.9].map((delay, idx) => /*#__PURE__*/React.createElement("circle", {
-          key: idx,
-          cx: xWell,
-          cy: yCap * (idx / 4.0),
-          r: "2",
-          fill: "#0dfca2",
-          style: {
-            animation: `streakRise 1.5s linear ${delay}s infinite`
-          }
-        })));
-      })(), Array.from({
-        length: faultCount
-      }).map((_, idx) => {
-        const f = faults[idx];
-        const inter = getSimFaultIntersection(f, idx);
-        const color = f.isSealed ? '#64ffda' : '#ff6b6b';
-        const yStart = 0;
-        const yEnd = 450;
-        const xStart = inter.x0 + inter.slope * yStart;
-        const xEnd = inter.x0 + inter.slope * yEnd;
-        return /*#__PURE__*/React.createElement("g", {
-          key: idx
-        }, /*#__PURE__*/React.createElement("line", {
-          x1: xStart,
-          y1: yStart,
-          x2: xEnd,
-          y2: yEnd,
-          stroke: color,
-          strokeWidth: "1.2",
-          strokeDasharray: "3 3",
-          opacity: "0.6"
-        }));
-      }), isPlaying && Array.from({
-        length: faultCount
-      }).map((_, idx) => {
-        const f = faults[idx];
-        if (f.isSealed) return null;
-        const inter = getSimFaultIntersection(f, idx);
-        const cellIdx = Math.round(cellCount * (inter.x / 1000.0));
-        const boundedIdx = Math.max(0, Math.min(cellCount - 1, cellIdx));
-
-        // Flow activates ONLY when total plume height exceeds spill threshold height
-        if (h[boundedIdx] > f.thresholdHeight) {
-          const travelY = -65; // Traverses through the overlying seal
-          const travelX = inter.slope * travelY;
-          const xTop = inter.x + travelX;
-          const yTop = inter.y + travelY;
-          return /*#__PURE__*/React.createElement("g", {
-            key: `fl-group-${idx}`
-          }, /*#__PURE__*/React.createElement("line", {
-            x1: inter.x,
-            y1: inter.y,
-            x2: xTop,
-            y2: yTop,
-            stroke: "#ff6b6b",
-            strokeWidth: "1.5",
-            strokeDasharray: "4 3",
-            opacity: "0.8",
-            style: {
-              animation: 'conduitFlow 1s linear infinite'
-            }
-          }), [0, 0.6, 1.2, 1.8].map((delay, i) => /*#__PURE__*/React.createElement("circle", {
-            key: `fl-${idx}-${i}`,
-            cx: inter.x,
-            cy: inter.y,
-            r: "1.6",
-            fill: "#ff6b6b",
-            style: {
-              opacity: 0,
-              '--travel-x': `${travelX}px`,
-              '--travel-y': `${travelY}px`,
-              animation: 'faultRiseTilted 2.0s cubic-bezier(0.25, 0.46, 0.45, 0.94) ' + delay + 's infinite'
-            }
-          })));
-        }
-        return null;
-      }), /*#__PURE__*/React.createElement("text", {
-        x: "30",
-        y: capRockY(30) - 10,
-        fill: "rgba(255,255,255,0.4)",
-        fontSize: "9",
-        letterSpacing: "0.1em",
-        textTransform: "uppercase",
-        fontFamily: "monospace"
-      }, "Caprock Seal"), /*#__PURE__*/React.createElement("text", {
-        x: "30",
-        y: capRockY(30) + 80,
-        fill: "rgba(255,255,255,0.4)",
-        fontSize: "9",
-        letterSpacing: "0.1em",
-        textTransform: "uppercase",
-        fontFamily: "monospace"
-      }, "Sandstone Aquifer"), /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
-        id: "well-gradient",
-        x1: "0",
-        y1: "0",
-        x2: "1",
-        y2: "0"
-      }, /*#__PURE__*/React.createElement("stop", {
-        offset: "0%",
-        stopColor: "#222"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "50%",
-        stopColor: "#ccc"
-      }), /*#__PURE__*/React.createElement("stop", {
-        offset: "100%",
-        stopColor: "#222"
-      })))), /*#__PURE__*/React.createElement("div", {
+      }), " Spill depth \xB7 trap fill")), /*#__PURE__*/React.createElement(CrossSection, {
+        model: model,
+        diag: diag,
+        simTime: simTime,
+        isPlaying: isPlaying
+      }), /*#__PURE__*/React.createElement("div", {
         style: {
           position: 'absolute',
           bottom: 15,
@@ -9120,7 +8325,7 @@ const SimulatorPage = () => {
             textTransform: 'uppercase',
             fontWeight: 'bold'
           }
-        }, "Uncertainty Ranges"), /*#__PURE__*/React.createElement(Slider, {
+        }, "Uncertainty ranges"), /*#__PURE__*/React.createElement(Slider, {
           label: "Permeability (K) range",
           val: `\u00B1${Math.round(kUncertainty * 100)}%`,
           min: "0.10",
@@ -9157,7 +8362,7 @@ const SimulatorPage = () => {
             textTransform: 'uppercase',
             fontWeight: 'bold'
           }
-        }, "Simulation Settings"), /*#__PURE__*/React.createElement("div", {
+        }, "Batch settings"), /*#__PURE__*/React.createElement("div", {
           style: {
             display: 'flex',
             flexDirection: 'column',
@@ -9168,7 +8373,7 @@ const SimulatorPage = () => {
             fontSize: 10.5,
             color: 'rgba(255,255,255,0.7)'
           }
-        }, "Monte Carlo Realizations:"), /*#__PURE__*/React.createElement("div", {
+        }, "Number of runs:"), /*#__PURE__*/React.createElement("div", {
           style: {
             display: 'flex',
             gap: 4,
@@ -9199,7 +8404,7 @@ const SimulatorPage = () => {
             fontSize: 10.5,
             color: 'rgba(255,255,255,0.7)'
           }
-        }, "Target Storage Metric:"), /*#__PURE__*/React.createElement("select", {
+        }, "Outcome to analyse:"), /*#__PURE__*/React.createElement("select", {
           value: uqTargetMetric,
           onChange: e => setUqTargetMetric(e.target.value),
           style: {
@@ -9214,9 +8419,9 @@ const SimulatorPage = () => {
           }
         }, /*#__PURE__*/React.createElement("option", {
           value: "leaked"
-        }, "CO\\u2082 Leakage Mass (ktonnes)"), /*#__PURE__*/React.createElement("option", {
+        }, "CO\\u2082 leaked to upper layer (Mt)"), /*#__PURE__*/React.createElement("option", {
           value: "trapped"
-        }, "Residual Trapping Efficiency (%)")))), /*#__PURE__*/React.createElement("div", {
+        }, "Immobilised: residual + dissolved (%)")))), /*#__PURE__*/React.createElement("div", {
           style: {
             display: 'flex',
             flexDirection: 'column',
@@ -9300,7 +8505,7 @@ const SimulatorPage = () => {
             textTransform: 'uppercase',
             fontWeight: 'bold'
           }
-        }, "Uncertainty Distribution (", uqTargetMetric === 'leaked' ? 'CO\u2082 Leaked Mass' : 'Trapping Efficiency', ")"), renderUQHistogram(uqData)), /*#__PURE__*/React.createElement("div", {
+        }, "Uncertainty Distribution (", uqTargetMetric === 'leaked' ? 'CO\u2082 leaked to upper layer' : 'Immobilised fraction', ")"), renderUQHistogram(uqData)), /*#__PURE__*/React.createElement("div", {
           style: {
             display: 'flex',
             flexDirection: 'column',
@@ -9313,7 +8518,7 @@ const SimulatorPage = () => {
             textTransform: 'uppercase',
             fontWeight: 'bold'
           }
-        }, "Parameter Correlation Coefficients (Pearson r)"), renderUQSensitivity(sensitivityData))), /*#__PURE__*/React.createElement("div", {
+        }, "Which inputs matter (Pearson r)"), renderUQSensitivity(sensitivityData))), /*#__PURE__*/React.createElement("div", {
           style: {
             background: 'rgba(255,255,255,0.02)',
             border: '1px solid rgba(255,255,255,0.05)',
@@ -9330,13 +8535,14 @@ const SimulatorPage = () => {
             textTransform: 'uppercase',
             fontWeight: 'bold'
           }
-        }, "Probabilistic Risk Models"), /*#__PURE__*/React.createElement("div", {
+        }, "Representative runs"), /*#__PURE__*/React.createElement("div", {
           style: {
             display: 'grid',
             gridTemplateColumns: '1fr 1fr 1fr',
             gap: 10
           }
-        }, /*#__PURE__*/React.createElement("div", {
+        }, uqBands.map(b => /*#__PURE__*/React.createElement("div", {
+          key: b.key,
           style: {
             background: 'rgba(0,0,0,0.15)',
             border: '1px solid rgba(255,255,255,0.04)',
@@ -9344,110 +8550,36 @@ const SimulatorPage = () => {
             padding: '10px 12px',
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center'
+            alignItems: 'center',
+            gap: 8
           }
         }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 9.5,
-            color: '#64ffda',
+            color: b.color,
             fontWeight: 'bold'
           }
-        }, "P10 (Low Risk)"), /*#__PURE__*/React.createElement("div", {
+        }, b.label), /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 13,
             fontWeight: 'bold',
             fontFamily: 'monospace',
             marginTop: 2
           }
-        }, uqData.p10Val.toFixed(1), uqTargetMetric === 'leaked' ? ' kt' : '%')), /*#__PURE__*/React.createElement("button", {
-          onClick: () => loadUQRealization(uqData.p10Realization),
+        }, uqData[`${b.key}Val`].toFixed(2), metricUnit)), /*#__PURE__*/React.createElement("button", {
+          onClick: () => loadUQRealization(uqData[`${b.key}Realization`]),
           style: {
-            background: 'rgba(100,255,218,0.1)',
-            border: '1px solid rgba(100,255,218,0.3)',
-            color: '#64ffda',
+            background: 'rgba(255,255,255,0.06)',
+            border: `1px solid ${b.color}`,
+            color: b.color,
             padding: '6px 10px',
             borderRadius: 6,
             fontSize: 10,
             fontWeight: 'bold',
             cursor: 'pointer',
-            transition: 'all 0.2s ease',
             outline: 'none'
           }
-        }, "Load Model")), /*#__PURE__*/React.createElement("div", {
-          style: {
-            background: 'rgba(0,0,0,0.15)',
-            border: '1px solid rgba(255,255,255,0.04)',
-            borderRadius: 10,
-            padding: '10px 12px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }
-        }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 9.5,
-            color: '#ffb300',
-            fontWeight: 'bold'
-          }
-        }, "P50 (Expected)"), /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 13,
-            fontWeight: 'bold',
-            fontFamily: 'monospace',
-            marginTop: 2
-          }
-        }, uqData.p50Val.toFixed(1), uqTargetMetric === 'leaked' ? ' kt' : '%')), /*#__PURE__*/React.createElement("button", {
-          onClick: () => loadUQRealization(uqData.p50Realization),
-          style: {
-            background: 'rgba(255,179,0,0.1)',
-            border: '1px solid rgba(255,179,0,0.3)',
-            color: '#ffb300',
-            padding: '6px 10px',
-            borderRadius: 6,
-            fontSize: 10,
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            outline: 'none'
-          }
-        }, "Load Model")), /*#__PURE__*/React.createElement("div", {
-          style: {
-            background: 'rgba(0,0,0,0.15)',
-            border: '1px solid rgba(255,255,255,0.04)',
-            borderRadius: 10,
-            padding: '10px 12px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }
-        }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 9.5,
-            color: '#ff6b6b',
-            fontWeight: 'bold'
-          }
-        }, "P90 (High Risk)"), /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 13,
-            fontWeight: 'bold',
-            fontFamily: 'monospace',
-            marginTop: 2
-          }
-        }, uqData.p90Val.toFixed(1), uqTargetMetric === 'leaked' ? ' kt' : '%')), /*#__PURE__*/React.createElement("button", {
-          onClick: () => loadUQRealization(uqData.p90Realization),
-          style: {
-            background: 'rgba(255,107,107,0.1)',
-            border: '1px solid rgba(255,107,107,0.3)',
-            color: '#ff6b6b',
-            padding: '6px 10px',
-            borderRadius: 6,
-            fontSize: 10,
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            outline: 'none'
-          }
-        }, "Load Model"))))) : /*#__PURE__*/React.createElement("div", {
+        }, "Load Model")))))) : /*#__PURE__*/React.createElement("div", {
           style: {
             flex: 1,
             display: 'flex',
@@ -9473,14 +8605,14 @@ const SimulatorPage = () => {
             fontSize: 13.5,
             color: 'rgba(255,255,255,0.8)'
           }
-        }, "Uncalculated Probability Space"), /*#__PURE__*/React.createElement("p", {
+        }, "No results yet"), /*#__PURE__*/React.createElement("p", {
           style: {
             margin: '6px 0 0',
             fontSize: 11.5,
             color: 'rgba(255,255,255,0.45)',
             maxWidth: 380
           }
-        }, "Configure parameter uncertainties above and run the batch simulator to generate risk distributions and sensitivity analyses.")))
+        }, "Set the \xB1 ranges above and run a batch to see the spread of outcomes and which inputs drive them.")))
       );
     } else {
       return /*#__PURE__*/React.createElement("div", {
@@ -9500,245 +8632,181 @@ const SimulatorPage = () => {
   })()), /*#__PURE__*/React.createElement("div", {
     className: "controls-subgrid"
   }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      borderRadius: 20,
-      padding: '18px 20px',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
-      backdropFilter: 'blur(12px)'
-    }
+    style: SIM_PANEL_STYLE
   }, /*#__PURE__*/React.createElement("h3", {
-    style: {
-      margin: '0 0 14px',
-      fontSize: 14,
-      textTransform: 'uppercase',
-      letterSpacing: '0.12em',
-      color: '#64ffda',
-      fontFamily: "'Montserrat', sans-serif"
-    }
+    style: SIM_PANEL_TITLE
   }, "Simulation Parameters"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
       gap: 12
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      borderBottom: '1px solid rgba(255,255,255,0.06)',
-      paddingBottom: 10
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: 'rgba(255,255,255,0.4)',
-      textTransform: 'uppercase',
-      fontWeight: 'bold'
-    }
-  }, "Topography Spline (Caprock)"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: 10,
-      marginTop: 6
-    }
+  }, /*#__PURE__*/React.createElement(ControlGroup, {
+    title: "Caprock Geometry"
   }, /*#__PURE__*/React.createElement(Slider, {
-    label: "Regional Dip",
-    val: `${dipPercent}%`,
-    min: "-5",
-    max: "5",
-    step: "0.5",
-    value: dipPercent,
-    onChange: v => setDipPercent(parseFloat(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Anticline Height",
-    val: `${amplitude}px`,
-    min: "0",
-    max: "50",
-    step: "5",
-    value: amplitude,
-    onChange: v => setAmplitude(parseInt(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Anticline Count",
-    val: frequency,
-    min: "0.5",
-    max: "4.0",
-    step: "0.5",
-    value: frequency,
-    onChange: v => setFrequency(parseFloat(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Fault Slip",
-    val: `${faultOffset}x`,
-    min: "0",
+    label: "Regional dip (+ deeper \u2192)",
+    val: `${params.dipPct}%`,
+    min: "-3",
     max: "3",
-    step: "0.2",
-    value: faultOffset,
-    onChange: v => setFaultOffset(parseFloat(v))
-  }))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      borderBottom: '1px solid rgba(255,255,255,0.06)',
-      paddingBottom: 10
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: 'rgba(255,255,255,0.4)',
-      textTransform: 'uppercase',
-      fontWeight: 'bold'
-    }
-  }, "Sandstone Properties"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: 10,
-      marginTop: 6
-    }
-  }, /*#__PURE__*/React.createElement(Slider, {
-    label: "Permeability (K)",
-    val: `${Math.round(K * 1000)} mD`,
-    min: "0.1",
-    max: "3.5",
     step: "0.1",
-    value: K,
-    onChange: v => setK(parseFloat(v))
+    value: params.dipPct,
+    onChange: v => setP('dipPct', parseFloat(v))
   }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Porosity (phi)",
-    val: `${Math.round(porosity * 100)}%`,
-    min: "0.1",
+    label: "Fold amplitude",
+    val: `${params.foldAmp} m`,
+    min: "0",
+    max: "60",
+    step: "1",
+    value: params.foldAmp,
+    onChange: v => setP('foldAmp', parseFloat(v))
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Fold count",
+    val: params.foldCount,
+    min: "0.5",
+    max: "4",
+    step: "0.5",
+    value: params.foldCount,
+    onChange: v => setP('foldCount', parseFloat(v))
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Aquifer thickness H",
+    val: `${params.H} m`,
+    min: "10",
+    max: "100",
+    step: "5",
+    value: params.H,
+    onChange: v => setP('H', parseFloat(v))
+  })), /*#__PURE__*/React.createElement(ControlGroup, {
+    title: "Rock & Fluids"
+  }, /*#__PURE__*/React.createElement(Slider, {
+    label: "Permeability k",
+    val: `${params.k_mD} mD`,
+    min: "10",
+    max: "3000",
+    step: "10",
+    value: params.k_mD,
+    onChange: v => setP('k_mD', parseFloat(v))
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Porosity \u03C6",
+    val: params.phi.toFixed(2),
+    min: "0.05",
+    max: "0.35",
+    step: "0.01",
+    value: params.phi,
+    onChange: v => setP('phi', parseFloat(v))
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Residual brine S_wr",
+    val: params.Swr.toFixed(2),
+    min: "0.05",
     max: "0.4",
-    step: "0.05",
-    value: porosity,
-    onChange: v => setPorosity(parseFloat(v))
+    step: "0.01",
+    value: params.Swr,
+    onChange: v => setP('Swr', parseFloat(v))
   }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Grid Cells (N)",
-    val: cellCount,
+    label: "Residual CO\u2082 S_gr",
+    val: params.Sgr.toFixed(2),
+    min: "0",
+    max: "0.4",
+    step: "0.01",
+    value: params.Sgr,
+    onChange: v => setP('Sgr', parseFloat(v))
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Density contrast \u0394\u03C1 (resets)",
+    val: `${params.dRho} kg/m³`,
+    min: "100",
+    max: "600",
+    step: "10",
+    value: params.dRho,
+    onChange: v => setP('dRho', parseFloat(v))
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Mobility ratio M",
+    val: params.M.toFixed(1),
+    min: "1",
+    max: "20",
+    step: "0.5",
+    value: params.M,
+    onChange: v => setP('M', parseFloat(v))
+  })), /*#__PURE__*/React.createElement(ControlGroup, {
+    title: "Capillary Fringe (display)",
+    right: /*#__PURE__*/React.createElement("label", {
+      style: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        fontSize: 10.5,
+        cursor: 'pointer',
+        color: params.fringeOn ? '#64ffda' : 'rgba(255,255,255,0.5)'
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "checkbox",
+      checked: params.fringeOn,
+      onChange: e => setP('fringeOn', e.target.checked),
+      style: {
+        accentColor: '#64ffda'
+      }
+    }), "Enable fringe")
+  }, params.fringeOn && /*#__PURE__*/React.createElement(Slider, {
+    label: "Entry pressure P_e",
+    val: `${params.Pe_kPa} kPa · h_c ${model.hc.toFixed(1)} m`,
+    min: "1",
+    max: "40",
+    step: "1",
+    value: params.Pe_kPa,
+    onChange: v => setP('Pe_kPa', parseFloat(v))
+  })), /*#__PURE__*/React.createElement(ControlGroup, {
+    title: "Injection & Domain",
+    last: true
+  }, /*#__PURE__*/React.createElement(Slider, {
+    label: "Injection rate",
+    val: `${params.Q_Mtpa} Mt/yr`,
+    min: "0",
+    max: "5",
+    step: "0.1",
+    value: params.Q_Mtpa,
+    onChange: v => setP('Q_Mtpa', parseFloat(v))
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Injection period",
+    val: `${params.injYears} yr`,
+    min: "5",
+    max: "200",
+    step: "5",
+    value: params.injYears,
+    onChange: v => setP('injYears', parseFloat(v))
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Well position",
+    val: `${Math.round(params.wellFrac * 100)}%`,
+    min: "0.1",
+    max: "0.9",
+    step: "0.05",
+    value: params.wellFrac,
+    onChange: v => setP('wellFrac', parseFloat(v))
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Slab width W (resets)",
+    val: `${(params.W / 1000).toFixed(1)} km`,
+    min: "1000",
+    max: "20000",
+    step: "500",
+    value: params.W,
+    onChange: v => setP('W', parseFloat(v))
+  }), /*#__PURE__*/React.createElement(Slider, {
+    label: "Grid cells (resets)",
+    val: params.nx,
     min: "50",
     max: "300",
     step: "10",
-    value: cellCount,
-    onChange: v => setCellCount(parseInt(v))
+    value: params.nx,
+    onChange: v => setP('nx', parseInt(v, 10))
   }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Residual Trap (Sgr)",
-    val: `${Math.round(residualTrapFraction * 100)}%`,
-    min: "0.0",
-    max: "0.4",
-    step: "0.05",
-    value: residualTrapFraction,
-    onChange: v => setResidualTrapFraction(parseFloat(v))
-  }))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      borderBottom: '1px solid rgba(255,255,255,0.06)',
-      paddingBottom: 10
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 4
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: 'rgba(255,255,255,0.4)',
-      textTransform: 'uppercase',
-      fontWeight: 'bold'
-    }
-  }, "Capillary Fringe (P_c Transition)"), /*#__PURE__*/React.createElement("label", {
-    style: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 6,
-      fontSize: 10.5,
-      cursor: 'pointer',
-      color: hasCapillaryFringe ? '#64ffda' : 'rgba(255,255,255,0.5)'
-    }
-  }, /*#__PURE__*/React.createElement("input", {
-    type: "checkbox",
-    checked: hasCapillaryFringe,
-    onChange: e => setHasCapillaryFringe(e.target.checked),
-    style: {
-      accentColor: '#64ffda'
-    }
-  }), "Enable Fringe")), hasCapillaryFringe && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: 10,
-      marginTop: 6
-    }
-  }, /*#__PURE__*/React.createElement(Slider, {
-    label: "Fringe Height (h_c)",
-    val: `${fringeScale.toFixed(2)} m`,
-    min: "0.10",
-    max: "3.00",
-    step: "0.10",
-    value: fringeScale,
-    onChange: v => setFringeScale(parseFloat(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Entry Capillary P_e",
-    val: `${entryPressure} kPa`,
-    min: "5",
-    max: "40",
-    step: "1",
-    value: entryPressure,
-    onChange: v => setEntryPressure(parseInt(v))
-  }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: 'rgba(255,255,255,0.4)',
-      textTransform: 'uppercase',
-      fontWeight: 'bold'
-    }
-  }, "Injection Settings"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: 10,
-      marginTop: 6
-    }
-  }, /*#__PURE__*/React.createElement(Slider, {
-    label: "Flow Rate (Q)",
-    val: Q,
-    min: "0.0",
-    max: "3.5",
+    label: "Dissolution rate",
+    val: `${params.dissMult.toFixed(1)}×`,
+    min: "0",
+    max: "3",
     step: "0.1",
-    value: Q,
-    onChange: v => setQ(parseFloat(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Well Location",
-    val: `${injLocation}%`,
-    min: "10",
-    max: "90",
-    step: "5",
-    value: injLocation,
-    onChange: v => setInjLocation(parseInt(v))
-  }), /*#__PURE__*/React.createElement(Slider, {
-    label: "Inj. Stop Year",
-    val: `${injDuration}y`,
-    min: "50",
-    max: "400",
-    step: "10",
-    value: injDuration,
-    onChange: v => setInjDuration(parseInt(v))
-  }))))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      borderRadius: 20,
-      padding: '18px 20px',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
-      backdropFilter: 'blur(12px)'
-    }
+    value: params.dissMult,
+    onChange: v => setP('dissMult', parseFloat(v))
+  })))), /*#__PURE__*/React.createElement("div", {
+    style: SIM_PANEL_STYLE
   }, /*#__PURE__*/React.createElement("h3", {
-    style: {
-      margin: '0 0 14px',
-      fontSize: 14,
-      textTransform: 'uppercase',
-      letterSpacing: '0.12em',
-      color: '#64ffda',
-      fontFamily: "'Montserrat', sans-serif"
-    }
+    style: SIM_PANEL_TITLE
   }, "Fault Management"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
@@ -9759,6 +8827,7 @@ const SimulatorPage = () => {
   }, [0, 1, 2, 3].map(cnt => /*#__PURE__*/React.createElement("button", {
     key: cnt,
     onClick: () => setFaultCount(cnt),
+    "aria-pressed": faultCount === cnt,
     style: {
       background: faultCount === cnt ? 'rgba(100,255,218,0.2)' : 'rgba(255,255,255,0.05)',
       border: `1px solid ${faultCount === cnt ? '#64ffda' : 'rgba(255,255,255,0.12)'}`,
@@ -9768,7 +8837,6 @@ const SimulatorPage = () => {
       fontSize: 11,
       fontWeight: 'bold',
       cursor: 'pointer',
-      transition: 'all 0.2s ease',
       outline: 'none'
     }
   }, cnt)))), faultCount > 0 && /*#__PURE__*/React.createElement("div", {
@@ -9777,11 +8845,9 @@ const SimulatorPage = () => {
       flexDirection: 'column',
       gap: 14
     }
-  }, Array.from({
-    length: faultCount
-  }).map((_, idx) => {
-    const f = faults[idx];
-    const label = `Fault ${String.fromCharCode(65 + idx)}`;
+  }, params.faults.map((f, idx) => {
+    const mf = model.faults[idx];
+    const jux = Math.max(0, params.H - Math.abs(f.throw_m)) / params.H;
     return /*#__PURE__*/React.createElement("div", {
       key: idx,
       style: {
@@ -9801,9 +8867,9 @@ const SimulatorPage = () => {
       style: {
         fontSize: 11.5,
         fontWeight: 'bold',
-        color: f.isSealed ? '#64ffda' : '#ff6b6b'
+        color: f.sealed ? '#64ffda' : '#ff6b6b'
       }
-    }, label), /*#__PURE__*/React.createElement("label", {
+    }, "Fault ", String.fromCharCode(65 + idx)), /*#__PURE__*/React.createElement("label", {
       style: {
         display: 'inline-flex',
         alignItems: 'center',
@@ -9813,16 +8879,12 @@ const SimulatorPage = () => {
       }
     }, /*#__PURE__*/React.createElement("input", {
       type: "checkbox",
-      checked: f.isSealed,
-      onChange: e => {
-        const newFaults = [...faults];
-        newFaults[idx].isSealed = e.target.checked;
-        setFaults(newFaults);
-      },
+      checked: f.sealed,
+      onChange: e => setFault(idx, 'sealed', e.target.checked),
       style: {
         accentColor: '#64ffda'
       }
-    }), "Sealed (Infinite Barrier)")), /*#__PURE__*/React.createElement("div", {
+    }), "Sealed (no flow, no leak)")), /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
@@ -9830,53 +8892,51 @@ const SimulatorPage = () => {
       }
     }, /*#__PURE__*/React.createElement(Slider, {
       label: "Position",
-      val: `${f.xPercent}%`,
-      min: "10",
-      max: "90",
-      step: "5",
-      value: f.xPercent,
-      onChange: v => {
-        const newFaults = [...faults];
-        newFaults[idx].xPercent = parseInt(v);
-        setFaults(newFaults);
-      }
+      val: `${Math.round(f.xFrac * 100)}%`,
+      min: "0.05",
+      max: "0.95",
+      step: "0.01",
+      value: f.xFrac,
+      onChange: v => setFault(idx, 'xFrac', parseFloat(v))
     }), /*#__PURE__*/React.createElement(Slider, {
-      label: "Capillary Threshold",
-      val: `${f.thresholdHeight} m`,
-      min: "0.0",
-      max: "2.0",
-      step: "0.1",
-      value: f.thresholdHeight,
-      onChange: v => {
-        const newFaults = [...faults];
-        newFaults[idx].thresholdHeight = parseFloat(v);
-        setFaults(newFaults);
-      }
+      label: "Throw (+ down to right)",
+      val: `${f.throw_m} m`,
+      min: "-80",
+      max: "80",
+      step: "1",
+      value: f.throw_m,
+      onChange: v => setFault(idx, 'throw_m', parseFloat(v))
     }), /*#__PURE__*/React.createElement(Slider, {
-      label: "Horiz. Transmissibility",
-      val: f.transmissibility !== undefined ? f.transmissibility.toFixed(2) : "1.00",
-      min: "0.0",
-      max: "1.0",
+      label: "Lateral T (fault rock)",
+      val: f.Trock.toFixed(2),
+      min: "0",
+      max: "1",
       step: "0.05",
-      value: f.transmissibility !== undefined ? f.transmissibility : 1.0,
-      onChange: v => {
-        const newFaults = [...faults];
-        newFaults[idx].transmissibility = parseFloat(v);
-        setFaults(newFaults);
+      value: f.Trock,
+      onChange: v => setFault(idx, 'Trock', parseFloat(v))
+    }), /*#__PURE__*/React.createElement(Slider, {
+      label: "Threshold P_th",
+      val: `${f.Pth_kPa} kPa · h_th ${mf.hth.toFixed(1)} m`,
+      min: "1",
+      max: "200",
+      step: "1",
+      value: f.Pth_kPa,
+      onChange: v => setFault(idx, 'Pth_kPa', parseFloat(v))
+    }), /*#__PURE__*/React.createElement(Slider, {
+      label: "Fault permeability k_f",
+      val: `${f.kf_mD} mD`,
+      min: "0",
+      max: "500",
+      step: "1",
+      value: f.kf_mD,
+      onChange: v => setFault(idx, 'kf_mD', parseFloat(v))
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10.5,
+        color: 'rgba(255,255,255,0.6)',
+        alignSelf: 'end'
       }
-    }), !f.isSealed ? /*#__PURE__*/React.createElement(Slider, {
-      label: "Leakage Rate",
-      val: f.leakRate,
-      min: "0.01",
-      max: "0.40",
-      step: "0.02",
-      value: f.leakRate,
-      onChange: v => {
-        const newFaults = [...faults];
-        newFaults[idx].leakRate = parseFloat(v);
-        setFaults(newFaults);
-      }
-    }) : /*#__PURE__*/React.createElement("div", null)));
+    }, "Sand-on-sand overlap ", Math.round(jux * 100), "%", jux === 0 ? ' · juxtaposition seal' : '')));
   }))))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
@@ -9887,12 +8947,7 @@ const SimulatorPage = () => {
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      borderRadius: 20,
-      padding: '18px 20px',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
-      backdropFilter: 'blur(12px)',
+      ...SIM_PANEL_STYLE,
       display: 'flex',
       flexDirection: 'column',
       gap: 12
@@ -9905,12 +8960,8 @@ const SimulatorPage = () => {
     }
   }, /*#__PURE__*/React.createElement("h3", {
     style: {
-      margin: 0,
-      fontSize: 14,
-      textTransform: 'uppercase',
-      letterSpacing: '0.12em',
-      color: '#64ffda',
-      fontFamily: "'Montserrat', sans-serif"
+      ...SIM_PANEL_TITLE,
+      margin: 0
     }
   }, "CO\u2082 Mass Balance"), /*#__PURE__*/React.createElement("span", {
     style: {
@@ -9918,63 +8969,449 @@ const SimulatorPage = () => {
       fontFamily: 'monospace',
       color: 'rgba(255,255,255,0.5)'
     }
-  }, "Values in ktonnes")), renderSVGChart(), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(4, 1fr)',
-      gap: 8,
-      marginTop: 4
+  }, "Values in Mt")), renderSVGChart(), (() => {
+    const cur = simMassPoint(diag, simTime);
+    const pct = v => cur.injected > 0 ? v / cur.injected * 100 : 0;
+    // step flags describe the last simulated year; a sealed-in well is a standing geometry condition
+    const flags = Object.keys({
+      ...diag.flags,
+      ...(model.injectionBlocked && params.Q_Mtpa > 0 ? {
+        injectionBlocked: true
+      } : {})
+    });
+    const balOk = Math.abs(diag.balanceError) < 1e-9;
+    return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: 8,
+        marginTop: 4
+      }
+    }, MASS_SERIES.map(sr => /*#__PURE__*/React.createElement(StatBox, {
+      key: sr.key,
+      label: sr.label,
+      value: cur[sr.key].toFixed(2),
+      color: sr.color,
+      opacity: sr.dash ? 0.6 : 1
+    })), /*#__PURE__*/React.createElement(StatBox, {
+      label: "Balance error",
+      value: balOk ? '< 1e-9' : diag.balanceError.toExponential(1),
+      color: balOk ? '#64ffda' : '#ff6b6b'
+    })), flags.length > 0 && /*#__PURE__*/React.createElement("div", {
+      role: "status",
+      style: {
+        fontSize: 11,
+        color: '#ffb300',
+        background: 'rgba(255,179,0,0.08)',
+        border: '1px solid rgba(255,179,0,0.3)',
+        borderRadius: 8,
+        padding: '6px 10px'
+      }
+    }, /*#__PURE__*/React.createElement("i", {
+      className: "fas fa-exclamation-triangle"
+    }), " ", flags.map(f => SIM_FLAG_TEXT[f] || f).join(' · ')), /*#__PURE__*/React.createElement("div", {
+      style: {
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+        paddingTop: 12
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: 'rgba(255,255,255,0.4)',
+        textTransform: 'uppercase',
+        fontWeight: 'bold'
+      }
+    }, "Fate of injected CO\u2082"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        marginTop: 8
+      }
+    }, /*#__PURE__*/React.createElement(ProgressBar, {
+      label: "Structurally trapped",
+      pct: pct(cur.structural),
+      color: "#64ffda"
+    }), /*#__PURE__*/React.createElement(ProgressBar, {
+      label: "Residually trapped",
+      pct: pct(cur.residual),
+      color: "#3ca68e"
+    }), /*#__PURE__*/React.createElement(ProgressBar, {
+      label: "Dissolved in brine",
+      pct: pct(cur.dissolved),
+      color: "#4dabf7"
+    }), /*#__PURE__*/React.createElement(ProgressBar, {
+      label: "Leaked to upper layer",
+      pct: pct(cur.upper),
+      color: "#ffb300"
+    }))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: 'rgba(255,255,255,0.45)',
+        fontFamily: 'monospace'
+      }
+    }, Math.round(sim.substepsLastYear), " substeps/yr \xB7 ", model.layers[0].traps.length, " trap(s) in storage aquifer"));
+  })()))));
+};
+
+// Titled two-column group of sliders inside a panel
+const ControlGroup = ({
+  title,
+  right,
+  children,
+  last
+}) => /*#__PURE__*/React.createElement("div", {
+  style: {
+    borderBottom: last ? 'none' : '1px solid rgba(255,255,255,0.06)',
+    paddingBottom: last ? 0 : 10
+  }
+}, /*#__PURE__*/React.createElement("div", {
+  style: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4
+  }
+}, /*#__PURE__*/React.createElement("span", {
+  style: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.4)',
+    textTransform: 'uppercase',
+    fontWeight: 'bold'
+  }
+}, title), right), /*#__PURE__*/React.createElement("div", {
+  style: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 10,
+    marginTop: 6
+  }
+}, children));
+
+// Reservoir cross-section: metres → SVG viewBox 1000×450 (bottom 78 px sit under the time bar).
+// Depth axis is exaggerated to fit; the V.E. factor is printed top-right.
+const CrossSection = ({
+  model,
+  diag,
+  simTime,
+  isPlaying
+}) => {
+  const VW = 1000,
+    VH = 450,
+    top = 34,
+    bottom = 78;
+  const {
+    nx,
+    dx,
+    p,
+    layers,
+    faults
+  } = model;
+  const [L0, L1] = layers;
+  const zMin = Math.min(...L1.zt) - 15;
+  const zMax = Math.max(...L0.zt) + L0.H + 15;
+  const plotH = VH - top - bottom;
+  const X = x => x / p.L * VW;
+  const Y = z => top + (z - zMin) / (zMax - zMin) * plotH;
+  const vExag = p.L / VW / ((zMax - zMin) / plotH);
+  const stepFaces = l => new Set(faults.filter(f => f.throw_m !== 0).map(f => l === 0 ? f.lowerFace : f.upperFace));
+  const st0 = stepFaces(0),
+    st1 = stepFaces(1),
+    none = new Set();
+  // Face-node points of a per-cell depth array over faces [f0, f1]; a vertical step at fault faces keeps throws crisp
+  const nodes = (vals, st, f0, f1) => {
+    const pts = [];
+    for (let f = f0; f <= f1; f++) {
+      const x = X(f * dx).toFixed(1);
+      if (f === 0) pts.push(`${x},${Y(vals[0]).toFixed(1)}`);else if (f === nx) pts.push(`${x},${Y(vals[nx - 1]).toFixed(1)}`);else if (st.has(f)) pts.push(`${x},${Y(vals[f - 1]).toFixed(1)}`, `${x},${Y(vals[f]).toFixed(1)}`);else pts.push(`${x},${Y(0.5 * (vals[f - 1] + vals[f])).toFixed(1)}`);
     }
-  }, /*#__PURE__*/React.createElement(StatBox, {
-    label: "Injected",
-    value: Math.round(currentMasses.injected),
-    color: "#ffffff",
-    opacity: "0.6"
-  }), /*#__PURE__*/React.createElement(StatBox, {
-    label: "Mobile Plume",
-    value: Math.round(currentMasses.mobile),
-    color: "#64ffda"
-  }), /*#__PURE__*/React.createElement(StatBox, {
-    label: "Trapped",
-    value: Math.round(currentMasses.trapped),
-    color: "#3ca68e"
-  }), /*#__PURE__*/React.createElement(StatBox, {
-    label: "Leaked",
-    value: Math.round(currentMasses.leaked),
-    color: "#ff6b6b"
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 12,
-      borderTop: '1px solid rgba(255,255,255,0.06)',
-      paddingTop: 12
+    return pts;
+  };
+  const band = (topV, topSt, botV, botSt, f0 = 0, f1 = nx) => 'M' + nodes(topV, topSt, f0, f1).concat(nodes(botV, botSt, f0, f1).reverse()).join(' L') + ' Z';
+  const line = (vals, st, f0, f1) => 'M' + nodes(vals, st, f0, f1).join(' L');
+  const plus = (a, b) => a.map((v, i) => v + (typeof b === 'number' ? b : b[i]));
+  const flat = z => new Float64Array(nx).fill(z);
+  const plume = (l, L, st) => {
+    const dl = diag.layers[l];
+    let i0 = -1,
+      i1 = -1;
+    for (let i = 0; i < nx; i++) if (dl.hmax[i] > 1e-3 || dl.h[i] > 1e-3) {
+      if (i0 < 0) i0 = i;
+      i1 = i;
     }
-  }, /*#__PURE__*/React.createElement("span", {
+    if (i0 < 0) return null;
+    const f0 = Math.max(0, i0 - 1),
+      f1 = Math.min(nx, i1 + 2);
+    const zH = plus(L.zt, dl.h),
+      zHmax = plus(L.zt, dl.hmax);
+    const zFr = L.zt.map((z, i) => z + Math.min(L.H, VE.fringeBase(model, dl.h[i])));
+    return /*#__PURE__*/React.createElement("g", {
+      key: `plume-${l}`
+    }, /*#__PURE__*/React.createElement("path", {
+      d: band(zH, st, zHmax, st, f0, f1),
+      fill: "url(#residual-trapped-sim-grad)",
+      opacity: "0.92"
+    }), p.fringeOn && /*#__PURE__*/React.createElement("path", {
+      d: band(zH, st, zFr, st, f0, f1),
+      fill: "url(#fringe-sim-grad)",
+      opacity: "0.9"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: band(L.zt, st, zH, st, f0, f1),
+      fill: "url(#active-mobile-sim-grad)",
+      opacity: "0.98"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: line(zHmax, st, f0, f1),
+      fill: "none",
+      stroke: "#64ffda",
+      strokeWidth: "1.2",
+      strokeDasharray: "5 3.5",
+      opacity: "0.8"
+    }));
+  };
+  const traps = [0, 1].map(l => diag.layers[l].traps.filter(t => Number.isFinite(t.spill) && t.capacity > 1e8).map((t, i) => /*#__PURE__*/React.createElement("g", {
+    key: `trap-${l}-${i}`
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: X(t.lo * dx),
+    y1: Y(t.spill),
+    x2: X((t.hi + 1) * dx),
+    y2: Y(t.spill),
+    stroke: "rgba(255,255,255,0.45)",
+    strokeWidth: "0.9",
+    strokeDasharray: "2 3"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: X((t.crest + 0.5) * dx),
+    y: Y(t.spill) + 11,
+    fill: "rgba(255,255,255,0.65)",
+    fontSize: "9",
+    textAnchor: "middle",
+    fontFamily: "monospace"
+  }, `spill · ${Math.round(t.fill * 100)}% of ${kgToMt(t.capacity).toFixed(1)} Mt`))));
+  const faultMarks = faults.map((f, i) => {
+    const iL = f.lowerFace - 1,
+      iR = f.lowerFace;
+    const zRef = 0.5 * (L0.zt[iL] + L0.zt[iR]);
+    const xAt = z => f.lowerFace * dx + f.dipSlope * (z - zRef);
+    const hLo = diag.layers[0].h;
+    const leaking = f.cond > 0 && (hLo[iL] > f.hth || hLo[iR] > f.hth);
+    const color = f.sealed ? 'rgba(255,255,255,0.35)' : leaking ? '#ff6b6b' : 'rgba(255,107,107,0.55)';
+    const zUpperBase = 0.5 * (L1.zt[f.upperFace - 1] + L1.zt[f.upperFace]) + L1.H;
+    return /*#__PURE__*/React.createElement("g", {
+      key: `fault-${i}`
+    }, /*#__PURE__*/React.createElement("line", {
+      x1: X(xAt(zMin - 40)),
+      y1: Y(zMin - 40),
+      x2: X(xAt(zMax + 40)),
+      y2: Y(zMax + 40),
+      stroke: color,
+      strokeWidth: "1.3",
+      strokeDasharray: "4 3"
+    }), /*#__PURE__*/React.createElement("text", {
+      x: X(xAt(zMin)) + 4,
+      y: top - 8,
+      fill: color,
+      fontSize: "10",
+      fontFamily: "monospace"
+    }, String.fromCharCode(65 + i)), leaking && isPlaying && /*#__PURE__*/React.createElement("line", {
+      x1: X(xAt(zRef)),
+      y1: Y(zRef),
+      x2: X(xAt(zUpperBase)),
+      y2: Y(zUpperBase),
+      stroke: "#ff6b6b",
+      strokeWidth: "2.5",
+      strokeDasharray: "4 3",
+      style: {
+        animation: 'conduitFlow 1s linear infinite'
+      }
+    }));
+  });
+  const xw = X(model.xc[model.well]);
+  const zw = L0.zt[model.well];
+  const injecting = p.Q_Mtpa > 0 && simTime < p.injYears && !model.injectionBlocked;
+  const depthTicks = [];
+  for (let z = Math.ceil(zMin / 50) * 50; z <= zMax; z += 50) depthTicks.push(z);
+  const kmTicks = [];
+  for (let x = 0; x <= p.L; x += 5000) kmTicks.push(x);
+  const label = (text, z) => /*#__PURE__*/React.createElement("text", {
+    x: X(300),
+    y: Y(z) + 3,
+    fill: "rgba(255,255,255,0.4)",
+    fontSize: "9",
+    letterSpacing: "0.1em",
+    fontFamily: "monospace"
+  }, text);
+  return /*#__PURE__*/React.createElement("svg", {
+    viewBox: `0 0 ${VW} ${VH}`,
+    preserveAspectRatio: "xMidYMid meet",
     style: {
-      fontSize: 10,
-      color: 'rgba(255,255,255,0.4)',
-      textTransform: 'uppercase',
-      fontWeight: 'bold'
-    }
-  }, "Storage Efficiency"), /*#__PURE__*/React.createElement("div", {
+      width: '100%',
+      height: '100%'
+    },
+    role: "img",
+    "aria-label": `Reservoir cross-section at year ${simTime}`
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+    id: "active-mobile-sim-grad",
+    x1: "0",
+    y1: "0",
+    x2: "0",
+    y2: "1"
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0%",
+    stopColor: "#0dfca2",
+    stopOpacity: "0.98"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "45%",
+    stopColor: "#0dfca2",
+    stopOpacity: "0.95"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "70%",
+    stopColor: "#05e67c",
+    stopOpacity: "0.92"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "88%",
+    stopColor: "#20c997",
+    stopOpacity: "0.90"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: "#1a8e8f",
+    stopOpacity: "0.85"
+  })), /*#__PURE__*/React.createElement("linearGradient", {
+    id: "residual-trapped-sim-grad",
+    x1: "0",
+    y1: "0",
+    x2: "0",
+    y2: "1"
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0%",
+    stopColor: "#20c997",
+    stopOpacity: "0.85"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "40%",
+    stopColor: "#20c997",
+    stopOpacity: "0.75"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "75%",
+    stopColor: "#1a8e8f",
+    stopOpacity: "0.65"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "92%",
+    stopColor: "#125672",
+    stopOpacity: "0.45"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: "#0a2a4d",
+    stopOpacity: "0.25"
+  })), /*#__PURE__*/React.createElement("linearGradient", {
+    id: "fringe-sim-grad",
+    x1: "0",
+    y1: "0",
+    x2: "0",
+    y2: "1"
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0%",
+    stopColor: "#20c997",
+    stopOpacity: "0.80"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "50%",
+    stopColor: "#1a8e8f",
+    stopOpacity: "0.60"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "85%",
+    stopColor: "#125672",
+    stopOpacity: "0.35"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: "#0a2a4d",
+    stopOpacity: "0.10"
+  })), /*#__PURE__*/React.createElement("linearGradient", {
+    id: "brine-grad",
+    x1: "0",
+    y1: "0",
+    x2: "0",
+    y2: "1"
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0%",
+    stopColor: "#0a2a4d",
+    stopOpacity: "0.85"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: "#051426",
+    stopOpacity: "0.95"
+  })), /*#__PURE__*/React.createElement("linearGradient", {
+    id: "well-gradient",
+    x1: "0",
+    y1: "0",
+    x2: "1",
+    y2: "0"
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0%",
+    stopColor: "#222"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "50%",
+    stopColor: "#ccc"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: "#222"
+  }))), /*#__PURE__*/React.createElement("path", {
+    d: band(flat(zMin - 400), none, L1.zt, st1),
+    fill: "#211a2b"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: band(L1.zt, st1, plus(L1.zt, L1.H), st1),
+    fill: "#2e2219"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: band(L1.zt, st1, plus(L1.zt, L1.H), st1),
+    fill: "url(#brine-grad)",
+    opacity: "0.85"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: band(plus(L1.zt, L1.H), st1, L0.zt, st0),
+    fill: "#282030"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: band(L0.zt, st0, plus(L0.zt, L0.H), st0),
+    fill: "#2e2219"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: band(L0.zt, st0, plus(L0.zt, L0.H), st0),
+    fill: "url(#brine-grad)",
+    opacity: "0.85"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: band(plus(L0.zt, L0.H), st0, flat(zMax + 400), none),
+    fill: "#1a1422"
+  }), label('UPPER AQUIFER', L1.zt[3] + L1.H / 2), label('CAPROCK', 0.5 * (L1.zt[3] + L1.H + L0.zt[3])), label('STORAGE AQUIFER', L0.zt[3] + L0.H / 2), plume(1, L1, st1), plume(0, L0, st0), traps, faultMarks, /*#__PURE__*/React.createElement("line", {
+    x1: xw,
+    y1: "0",
+    x2: xw,
+    y2: Y(zw + 0.85 * L0.H),
+    stroke: "url(#well-gradient)",
+    strokeWidth: "4"
+  }), injecting && /*#__PURE__*/React.createElement("circle", {
+    cx: xw,
+    cy: Y(zw + 0.5 * L0.H),
+    r: "9",
+    fill: "rgba(100,255,218,0.25)",
     style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 6,
-      marginTop: 8
+      animation: 'pulseFlare 1.5s infinite'
     }
-  }, /*#__PURE__*/React.createElement(ProgressBar, {
-    label: "Structural Trapping (Mobile)",
-    pct: currentMasses.injected > 0 ? currentMasses.mobile / currentMasses.injected * 100 : 0,
-    color: "#64ffda"
-  }), /*#__PURE__*/React.createElement(ProgressBar, {
-    label: "Residual Capillary Trapping",
-    pct: currentMasses.injected > 0 ? currentMasses.trapped / currentMasses.injected * 100 : 0,
-    color: "#3ca68e"
-  }), /*#__PURE__*/React.createElement(ProgressBar, {
-    label: "Cumulative Leaked Fraction",
-    pct: currentMasses.injected > 0 ? currentMasses.leaked / currentMasses.injected * 100 : 0,
-    color: "#ff6b6b"
-  })))))));
+  }), depthTicks.map(z => /*#__PURE__*/React.createElement("text", {
+    key: `d${z}`,
+    x: "4",
+    y: Y(z) + 3,
+    fill: "rgba(255,255,255,0.35)",
+    fontSize: "8.5",
+    fontFamily: "monospace"
+  }, z, " m")), kmTicks.map(x => /*#__PURE__*/React.createElement("text", {
+    key: `x${x}`,
+    x: Math.min(VW - 4, Math.max(4, X(x))),
+    y: Y(zMax) + 12,
+    fill: "rgba(255,255,255,0.35)",
+    fontSize: "8.5",
+    textAnchor: x === 0 ? 'start' : x === p.L ? 'end' : 'middle',
+    fontFamily: "monospace"
+  }, x / 1000, " km")), /*#__PURE__*/React.createElement("text", {
+    x: VW - 8,
+    y: top - 10,
+    fill: "rgba(255,255,255,0.45)",
+    fontSize: "9",
+    textAnchor: "end",
+    fontFamily: "monospace"
+  }, "V.E. \u2248 ", Math.round(vExag), "\xD7"));
 };
 
 // Slider Input helper component
