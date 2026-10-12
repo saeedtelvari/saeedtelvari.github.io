@@ -170,6 +170,9 @@ test('13 compartment: well sealed in by faults on both sides → injection block
   assert.strictEqual(dg.flags.injectionBlocked, true);
   assert.strictEqual(dg.injected, 0);
   assert(Number.isFinite(dg.balanceError));
+  // geometric property, independent of time: the UI keeps warning after the injection window closes
+  assert.strictEqual(m.injectionBlocked, true);
+  assert.strictEqual(VE.createModel(VE.PRESETS.default).injectionBlocked, false);
 });
 
 test('14 extreme inputs (10 mD, 5 Mt/yr): finite state, exact balance', () => {

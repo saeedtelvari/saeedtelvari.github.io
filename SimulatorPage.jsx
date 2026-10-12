@@ -1,683 +1,274 @@
-// SimulatorPage.jsx — Interactive VE Simulator Page
+// SimulatorPage.jsx — Interactive VE Simulator Page. Physics lives in ve-engine.js (window.VE).
 const { useEffect, useMemo, useRef, useState } = React;
 
-// Main Simulator component
+const VE_HORIZON_YR = 1000;
+const kgToMt = kg => kg / 1e9;
+const cloneSimParams = p => JSON.parse(JSON.stringify(p));
+
+const SIM_PARAM_LABELS = {
+  nx: 'Grid cells', W: 'Slab width (m)', H: 'Aquifer thickness (m)', dipPct: 'Regional dip (%)',
+  foldAmp: 'Fold amplitude (m)', foldCount: 'Fold count', k_mD: 'Permeability (mD)', phi: 'Porosity',
+  Swr: 'Residual brine S_wr', Sgr: 'Residual CO₂ S_gr', dRho: 'Δρ (kg/m³)', M: 'Mobility ratio M',
+  Q_Mtpa: 'Injection rate (Mt/yr)', injYears: 'Injection period (yr)', wellFrac: 'Well position',
+  fringeOn: 'Capillary fringe', Pe_kPa: 'Entry pressure P_e (kPa)', dissMult: 'Dissolution ×'
+};
+
+const SIM_FLAG_TEXT = {
+  injectionBlocked: 'Injection blocked: the well is sealed in by faults',
+  dtFloor: 'Time-step floor hit: results approximate',
+  overflow: 'Column overflow guard triggered'
+};
+
+const MASS_SERIES = [
+  { key: 'injected', label: 'Injected', color: '#ffffff', dash: '3 3' },
+  { key: 'structural', label: 'Structural', color: '#64ffda' },
+  { key: 'migrating', label: 'Migrating', color: '#0dfca2' },
+  { key: 'residual', label: 'Residual', color: '#3ca68e' },
+  { key: 'dissolved', label: 'Dissolved', color: '#4dabf7' },
+  { key: 'upper', label: 'Upper layer', color: '#ffb300' },
+  { key: 'exited', label: 'Exited', color: '#ff6b6b' }
+];
+
+const SIM_PANEL_STYLE = {
+  background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+  border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 20,
+  padding: '18px 20px',
+  boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
+  backdropFilter: 'blur(12px)'
+};
+const SIM_PANEL_TITLE = { margin: '0 0 14px', fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif" };
+
+// Flat view of params for the Time Machine diff; faults become "Fault A · throw_m" etc.
+const flattenSimParams = p => {
+  const out = {};
+  Object.keys(p).forEach(k => {
+    if (k === 'faults') p.faults.forEach((f, i) => Object.keys(f).forEach(fk => { out[`Fault ${String.fromCharCode(65 + i)} · ${fk}`] = f[fk]; }));
+    else out[SIM_PARAM_LABELS[k] || k] = p[k];
+  });
+  out['Active faults'] = p.faults.length;
+  return out;
+};
+
+const diffSimParams = (a, b) => {
+  const fa = flattenSimParams(a), fb = flattenSimParams(b);
+  const fmt = v => (v === undefined ? '—' : typeof v === 'number' ? String(+v.toFixed(4)) : String(v));
+  return Object.keys({ ...fa, ...fb })
+    .filter(k => fa[k] !== fb[k])
+    .map(k => ({ label: k, original: fmt(fa[k]), current: fmt(fb[k]) }));
+};
+
+// Mass categories in Mt (lower layer split by mechanism, upper layer = everything that leaked up)
+const simMassPoint = (d, time) => {
+  const [lo, up] = d.layers;
+  return {
+    time,
+    injected: kgToMt(d.injected),
+    structural: kgToMt(lo.structural),
+    migrating: kgToMt(lo.migrating),
+    residual: kgToMt(lo.residual),
+    dissolved: kgToMt(lo.dissolved),
+    upper: kgToMt(up.total),
+    exited: kgToMt(d.exited)
+  };
+};
+
 const SimulatorPage = () => {
-  // --- STATE PARAMETERS ---
-  // Physical parameters
-  const [K, setK] = useState(1.70); // Absolute permeability scaling (0.1 to 3.5)
-  const [porosity, setPorosity] = useState(0.25); // Porosity (0.1 to 0.4)
-  const [cellCount, setCellCount] = useState(200); // N cells resolution (50 to 300)
-  const [residualTrapFraction, setResidualTrapFraction] = useState(0.25); // Trapping fraction Sgr (0.0 to 0.40)
-  
-  // Define dx in the outer scope of the component so it is available to all rendering sub-blocks
-  const dx = 1000.0 / cellCount;
+  // --- PARAMETERS → MODEL ---
+  const [params, setParams] = useState(() => VE.withDefaults({}));
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
+  const model = useMemo(() => VE.createModel(params), [params]);
+  const modelRef = useRef(model);
+  modelRef.current = model;
 
-  // Topography parameters (Formula sliders)
-  const [dipPercent, setDipPercent] = useState(1.5); // Regional dip in % (-5% to 5%)
-  const [amplitude, setAmplitude] = useState(25); // Anticline wave amplitude (0 to 50px)
-  const [frequency, setFrequency] = useState(2); // Wave frequency multiplier (0.5 to 4)
-  const [faultOffset, setFaultOffset] = useState(1.2); // Fault displacement (0 to 3)
-
-  // Injection parameters
-  const [Q, setQ] = useState(2.30); // Constant injection rate (0.0 to 3.5)
-  const [injLocation, setInjLocation] = useState(70); // Injection cell index % (10% to 90%)
-  const [injDuration, setInjDuration] = useState(240); // Frame count of active injection (50 to 400)
-  
-  // Fault parameters
-  const [faultCount, setFaultCount] = useState(2); // Number of faults (0 to 3)
-  const [faults, setFaults] = useState(() => [
-    { xPercent: 28, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 1.0, dipSlope: -0.22 },
-    { xPercent: 48, isSealed: false, thresholdHeight: 0.30, leakRate: 0.12, transmissibility: 1.0, dipSlope: 0.25 }
-  ]);
-
-  // Capillary fringe state
-  const [hasCapillaryFringe, setHasCapillaryFringe] = useState(true);
-  const [fringeScale, setFringeScale] = useState(0.65); // subtle, crisp capillary transition zone thickness (meters)
-  const [entryPressure, setEntryPressure] = useState(15); // entry capillary pressure (kPa)
+  // --- ENGINE STATE: simRef is the play loop's source of truth; sim mirrors it for rendering ---
+  const [sim, setSim] = useState(() => VE.initState(model));
+  const simRef = useRef(sim);
+  const historyRef = useRef([]); // historyRef.current[year] = { state, params }
+  const [massHistory, setMassHistory] = useState([]);
 
   // Simulation run state
   const [isPlaying, setIsPlaying] = useState(false);
   const [isReversing, setIsReversing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [speed, setSpeed] = useState(1); // 1x, 2x, 4x execution speed
-  const [simTime, setSimTime] = useState(0); // simulation timer frame
+  const [speed, setSpeed] = useState(1);
+  const [activeSubTab, setActiveSubTab] = useState('profile'); // 'profile' | 'uq' | 'guide'
 
-  // Tab Navigation state
-  const [activeSubTab, setActiveSubTab] = useState('profile'); // 'profile' (2D reservoir) or 'uq' (Sensitivity & UQ Analysis)
-
-  // SA/UQ uncertainty bounds configuration states (default +/- percentages)
-  const [kUncertainty, setKUncertainty] = useState(0.40); // +/- 40% permeability range
-  const [sgrUncertainty, setSgrUncertainty] = useState(0.40); // +/- 40% Sgr range
-  const [faultThreshUncertainty, setFaultThreshUncertainty] = useState(0.50); // +/- 50% fault threshold range
-
-  // Monte Carlo execution states
-  const [mcRunsCount, setMcRunsCount] = useState(50); // 25, 50, or 100 simulations
-  const [mcResults, setMcResults] = useState(null); // Array of realization runs
+  // SA/UQ configuration (± fractions) and Monte Carlo state
+  const [kUncertainty, setKUncertainty] = useState(0.40);
+  const [sgrUncertainty, setSgrUncertainty] = useState(0.40);
+  const [faultThreshUncertainty, setFaultThreshUncertainty] = useState(0.50);
+  const [mcRunsCount, setMcRunsCount] = useState(50);
+  const [mcResults, setMcResults] = useState(null);
   const [uqRunning, setUqRunning] = useState(false);
   const [uqProgress, setUqProgress] = useState(0);
-  const [uqTargetMetric, setUqTargetMetric] = useState('leaked'); // 'leaked' (CO2 leaked mass) or 'trapped' (trapping efficiency %)
-  
-  // Solver variables (Plume thickness vector, max thickness historical)
-  const [h, setH] = useState(() => new Array(200).fill(0));
-  const [hMax, setHMax] = useState(() => new Array(200).fill(0));
-  
-  // Cumulative masses tracking state
-  const [massHistory, setMassHistory] = useState([]); // Array of { time, injected, trapped, mobile, leaked }
-  const [currentMasses, setCurrentMasses] = useState({ injected: 0, trapped: 0, mobile: 0, leaked: 0 });
+  const [uqTargetMetric, setUqTargetMetric] = useState('leaked'); // 'leaked' (Mt into upper layer) | 'trapped' (immobilised %)
 
-  // Reset flag / state synchronizer
-  const stateRef = useRef({ h: [], hMax: [], masses: { injected: 0, trapped: 0, mobile: 0, leaked: 0 } });
-  
-  // Time travel history ref — stores full solver state at each year for back-and-forth scrubbing
-  const historyRef = useRef([]);
+  const simTime = Math.round(sim.t);
+  const faultCount = params.faults.length;
+  // A grid-size change rebuilds the model one render before the reset effect runs: never diagnose mismatched arrays
+  const simMatches = sim.layers[0].V.length === model.nx;
+  const diag = useMemo(() => VE.diagnose(model, simMatches ? sim : VE.initState(model)), [model, sim, simMatches]);
 
-  // Initialize solver parameters reference to prevent interval resets on slider modifications
-  const solverParamsRef = useRef(null);
-  solverParamsRef.current = {
-    K,
-    porosity,
-    cellCount,
-    dipPercent,
-    amplitude,
-    frequency,
-    faultOffset,
-    Q,
-    injLocation,
-    injDuration,
-    faultCount,
-    parentDX: dx,
-    faults: JSON.parse(JSON.stringify(faults)),
-    residualTrapFraction
+  const setP = (key, value) => setParams(p => ({ ...p, [key]: value }));
+  const setFault = (idx, key, value) => setParams(p => ({ ...p, faults: p.faults.map((f, i) => (i === idx ? { ...f, [key]: value } : f)) }));
+  const setFaultCount = n => setParams(p => ({ ...p, faults: Array.from({ length: n }, (_, i) => p.faults[i] || cloneSimParams(VE.FAULT_TEMPLATES[i])) }));
+
+  const showState = s => { simRef.current = s; setSim(s); };
+
+  const record = s => {
+    const t = Math.round(s.t);
+    historyRef.current[t] = { state: s, params: cloneSimParams(paramsRef.current) };
+    if (t % 5 === 0 || t === 1 || t === VE_HORIZON_YR) {
+      const pt = simMassPoint(VE.diagnose(modelRef.current, s), t);
+      setMassHistory(hist => [...hist.filter(q => q.time < t), pt]);
+    }
   };
 
-  // Compute mobile and trapped heights dynamically for SVG visualization
-  const { hMobile, hTrapped } = useMemo(() => {
-    const N = h.length;
-    const hMob = new Array(N).fill(0);
-    const hTrap = new Array(N).fill(0);
-    const R = residualTrapFraction;
-    
-    for (let i = 0; i < N; i++) {
-      const H = h[i];
-      const hm = hMax[i];
-      // VE residual trapping model
-      const mobileVal = R < 1.0 ? Math.max(0, (H - R * hm) / (1.0 - R)) : 0;
-      hMob[i] = Math.min(H, mobileVal);
-      hTrap[i] = Math.max(0, H - hMob[i]);
-    }
-    return { hMobile: hMob, hTrapped: hTrap };
-  }, [h, hMax, residualTrapFraction]);
-
-  // Initialize solver vectors when cell count changes
-  useEffect(() => {
-    resetSimulation();
-  }, [cellCount]);
-
-  // Reset simulation function
-  const resetSimulation = () => {
-    const arr = new Array(cellCount).fill(0);
-    setH(arr);
-    setHMax(arr);
-    const initialMasses = { injected: 0, trapped: 0, mobile: 0, leaked: 0 };
-    setCurrentMasses(initialMasses);
-    setMassHistory([{ time: 0, ...initialMasses }]);
-    setSimTime(0);
+  const resetTo = m => {
+    const s0 = VE.initState(m);
+    historyRef.current = [{ state: s0, params: cloneSimParams(paramsRef.current) }];
+    setMassHistory([simMassPoint(VE.diagnose(m, s0), 0)]);
     setIsPlaying(false);
     setIsReversing(false);
-    
-    stateRef.current = { h: [...arr], hMax: [...arr], masses: { ...initialMasses } };
-    historyRef.current = [{
-      time: 0,
-      h: [...arr],
-      hMax: [...arr],
-      masses: { ...initialMasses },
-      params: JSON.parse(JSON.stringify(solverParamsRef.current))
-    }];
+    showState(s0);
+  };
+  const resetSimulation = () => resetTo(modelRef.current); // also used as an onClick handler: ignores its argument
+
+  useEffect(() => { resetTo(modelRef.current); }, [params.nx]);
+
+  const applyPreset = name => {
+    const p = cloneSimParams(VE.PRESETS[name]);
+    paramsRef.current = p;
+    setParams(p);
+    resetTo(VE.createModel(p));
   };
 
-  // Preset Scenario Handlers
-  const applyPreset = (presetName) => {
-    resetSimulation();
-    if (presetName === 'dome') {
-      setDipPercent(0.2);
-      setAmplitude(45);
-      setFrequency(1.5);
-      setFaultOffset(0);
-      setK(1.60);
-      setPorosity(0.25);
-      setQ(2.20);
-      setInjDuration(240);
-      setFaultCount(0);
-      setResidualTrapFraction(0.30);
-    } else if (presetName === 'faulted') {
-      setDipPercent(1.8);
-      setAmplitude(15);
-      setFrequency(2);
-      setFaultOffset(1.8);
-      setK(1.80);
-      setPorosity(0.22);
-      setQ(2.00);
-      setInjDuration(200);
-      setFaultCount(2);
-      setFaults([
-        { xPercent: 26, isSealed: false, thresholdHeight: 0.30, leakRate: 0.16, transmissibility: 0.8, dipSlope: -0.22 },
-        { xPercent: 50, isSealed: false, thresholdHeight: 0.45, leakRate: 0.12, transmissibility: 0.5, dipSlope: 0.25 }
-      ]);
-      setResidualTrapFraction(0.20);
-    } else if (presetName === 'monocline') {
-      setDipPercent(-2.5);
-      setAmplitude(6);
-      setFrequency(0.5);
-      setFaultOffset(0);
-      setK(1.50);
-      setPorosity(0.28);
-      setQ(1.80);
-      setInjDuration(220);
-      setFaultCount(1);
-      setFaults([
-        { xPercent: 32, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 0.9, dipSlope: -0.20 }
-      ]);
-      setResidualTrapFraction(0.25);
-    } else if (presetName === 'default') {
-      setDipPercent(1.5);
-      setAmplitude(25);
-      setFrequency(2);
-      setFaultOffset(1.2);
-      setK(1.70);
-      setPorosity(0.25);
-      setQ(2.30);
-      setInjDuration(240);
-      setFaultCount(2);
-      setFaults([
-        { xPercent: 28, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 1.0, dipSlope: -0.22 },
-        { xPercent: 48, isSealed: false, thresholdHeight: 0.30, leakRate: 0.12, transmissibility: 1.0, dipSlope: 0.25 }
-      ]);
-      setResidualTrapFraction(0.25);
-    }
+  // Advance one simulated year from the live state; false at the horizon or while a resize is pending
+  const stepYear = () => {
+    const m = modelRef.current, s = simRef.current;
+    if (Math.round(s.t) >= VE_HORIZON_YR || s.layers[0].V.length !== m.nx) return false;
+    const next = VE.advance(m, s, 1);
+    record(next);
+    showState(next);
+    return true;
   };
 
-  // Base unperturbed caprock profile
-  const capRockBaseProfile = (x) => {
-    const dip = 150 + x * (dipPercent / 100.0) * 8.0; // regional dip
-    const wave = - amplitude * Math.sin((x * Math.PI / 1000.0) * frequency * 2);
-    return dip + wave;
+  const loadYear = t => {
+    const snap = historyRef.current[t];
+    if (snap) showState(snap.state);
+    return !!snap;
   };
 
-  // Base unperturbed stratum profile for any yOffset
-  const stratumBaseProfile = (x, yOffset = 0) => {
-    return capRockBaseProfile(x) + yOffset;
-  };
-
-  // Computes the exact subpixel intersection (x*, y*) of a sloped fault plane with any geological stratum at depth
-  const getSimStratumFaultIntersection = (f, idx, yOffset = 0) => {
-    const x0 = (f.xPercent / 100.0) * 1000.0;
-    const defaultSlope = idx % 2 === 0 ? -0.22 : 0.25;
-    const slope = f.dipSlope !== undefined ? f.dipSlope : defaultSlope;
-    let x = x0;
-    for (let iter = 0; iter < 3; iter++) {
-      const y = stratumBaseProfile(x, yOffset);
-      x = x0 + slope * y;
-    }
-    const y = stratumBaseProfile(x, yOffset);
-    return { x, y, x0, slope };
-  };
-
-  // Computes intersection for caprock specifically (yOffset = 0)
-  const getSimFaultIntersection = (f, idx) => {
-    return getSimStratumFaultIntersection(f, idx, 0);
-  };
-
-  // Computes elevation for any geological stratum displaced along the sloped fault
-  const stratumY = (x, cellIdx = null, yOffset = 0) => {
-    const base = stratumBaseProfile(x, yOffset);
-    let offset = 0;
-    const xRef = cellIdx !== null ? (cellIdx * dx + dx / 2.0) : x;
-    
-    for (let idx = 0; idx < faultCount; idx++) {
-      const f = faults[idx];
-      const inter = getSimStratumFaultIntersection(f, idx, yOffset);
-      if (xRef > inter.x) {
-        const direction = idx % 2 === 0 ? 1 : -1;
-        offset += direction * faultOffset * 12;
-      }
-    }
-    return base + offset;
-  };
-
-  // Helper: Caprock Underside Topography Function
-  const capRockY = (x, cellIdx = null) => {
-    return stratumY(x, cellIdx, 0);
-  };
-
-  // --- SOLVER ITERATOR (FORWARD & REVERSE) ---
+  // --- PLAY LOOP (reads refs only, so mid-run slider changes reach the solver) ---
   useEffect(() => {
     if (!isPlaying && !isReversing) return;
-
-    const interval = setInterval(() => {
-      if (isPlaying) {
-        setSimTime(t => {
-          const nextTime = t + 1;
-          if (nextTime > 1000) {
-            setIsPlaying(false);
-            return t;
-          }
-
-          // Run numerical VE solver step using parameters from the ref
-          const result = runSolverStep(
-            stateRef.current.h, 
-            stateRef.current.hMax, 
-            stateRef.current.masses,
-            nextTime,
-            solverParamsRef.current
-          );
-
-          // Update local React states
-          setH(result.h);
-          setHMax(result.hMax);
-          setCurrentMasses(result.masses);
-          
-          // Append to mass history for plotting
-          if (nextTime % 5 === 0 || nextTime === 1 || nextTime === 1000) {
-            setMassHistory(history => {
-              const cleaned = history.filter(item => item.time < nextTime);
-              return [...cleaned, { time: nextTime, ...result.masses }];
-            });
-          }
-
-          // Store back in ref for next iteration
-          stateRef.current = {
-            h: result.h,
-            hMax: result.hMax,
-            masses: result.masses
-          };
-
-          // Cache historical snapshot in historyRef for time scrubbing
-          historyRef.current[nextTime] = {
-            time: nextTime,
-            h: [...result.h],
-            hMax: [...result.hMax],
-            masses: { ...result.masses },
-            params: JSON.parse(JSON.stringify(solverParamsRef.current))
-          };
-
-          return nextTime;
-        });
-      } else if (isReversing) {
-        setSimTime(t => {
-          const nextTime = t - 1;
-          if (nextTime < 0) {
-            setIsReversing(false);
-            return t;
-          }
-
-          // Load from history
-          const histState = historyRef.current[nextTime];
-          if (histState) {
-            setH(histState.h);
-            setHMax(histState.hMax);
-            setCurrentMasses(histState.masses);
-
-            stateRef.current = {
-              h: [...histState.h],
-              hMax: [...histState.hMax],
-              masses: { ...histState.masses }
-            };
-          }
-
-          return nextTime;
-        });
+    let owned = simRef.current; // the state this run last produced
+    const id = setInterval(() => {
+      // A reset fired from an effect (grid change) lands before React clears this interval: end the run, don't step it
+      if (simRef.current !== owned) {
+        clearInterval(id);
+        setIsPlaying(false);
+        setIsReversing(false);
+        return;
       }
+      if (isPlaying) {
+        if (!stepYear()) setIsPlaying(false);
+      } else if (!loadYear(Math.round(simRef.current.t) - 1)) {
+        setIsReversing(false);
+      }
+      owned = simRef.current;
     }, 40 / speed);
-
-    return () => clearInterval(interval);
+    return () => clearInterval(id);
   }, [isPlaying, isReversing, speed]);
 
-  // Time-Travel Scrubbing Handler (Non-destructive)
-  const handleScrub = (targetTime) => {
+  const handleScrub = target => {
     setIsPlaying(false);
     setIsReversing(false);
-    
-    const t = Math.max(0, Math.min(historyRef.current.length - 1, targetTime));
-    const histState = historyRef.current[t];
-    if (histState) {
-      setH(histState.h);
-      setHMax(histState.hMax);
-      setCurrentMasses(histState.masses);
-      setSimTime(t);
-      
-      // Update solver references
-      stateRef.current = {
-        h: [...histState.h],
-        hMax: [...histState.hMax],
-        masses: { ...histState.masses }
-      };
-    }
+    loadYear(Math.max(0, Math.min(historyRef.current.length - 1, target)));
   };
 
-  // Branching Committer: Slices the future history from target time and locks in new parameters
-  const commitBranch = (targetTime = simTime) => {
+  // Branch: drop the recorded future beyond the viewed year; later steps use the current params
+  const commitBranch = () => {
     setIsPlaying(false);
     setIsReversing(false);
-    
-    const t = Math.max(0, Math.min(historyRef.current.length - 1, targetTime));
-    
-    // Truncate history ref after this point
+    const t = Math.round(simRef.current.t);
     historyRef.current = historyRef.current.slice(0, t + 1);
-    
-    // Truncate mass history for chart
-    setMassHistory(history => history.filter(item => item.time <= t));
-    
-    // Reload state
-    const histState = historyRef.current[t];
-    if (histState) {
-      setH(histState.h);
-      setHMax(histState.hMax);
-      setCurrentMasses(histState.masses);
-      
-      stateRef.current = {
-        h: [...histState.h],
-        hMax: [...histState.hMax],
-        masses: { ...histState.masses }
-      };
-    }
+    setMassHistory(hist => hist.filter(q => q.time <= t));
   };
 
-  // Check differences between current parameters and parameters saved at simTime
-  const getParamDiff = () => {
-    if (simTime >= historyRef.current.length) return [];
-    const histState = historyRef.current[simTime];
-    if (!histState || !histState.params) return [];
-    
-    const histParams = histState.params;
-    const diffs = [];
-    
-    const checkDiff = (key, label, formatHist, formatCurr) => {
-      const vHist = histParams[key];
-      let vCurr;
-      
-      if (key === 'K') vCurr = K;
-      else if (key === 'porosity') vCurr = porosity;
-      else if (key === 'cellCount') vCurr = cellCount;
-      else if (key === 'residualTrapFraction') vCurr = residualTrapFraction;
-      else if (key === 'dipPercent') vCurr = dipPercent;
-      else if (key === 'amplitude') vCurr = amplitude;
-      else if (key === 'frequency') vCurr = frequency;
-      else if (key === 'faultOffset') vCurr = faultOffset;
-      else if (key === 'Q') vCurr = Q;
-      else if (key === 'injLocation') vCurr = injLocation;
-      else if (key === 'injDuration') vCurr = injDuration;
-      else if (key === 'faultCount') vCurr = faultCount;
-      
-      if (key !== 'faults' && Math.abs(vHist - vCurr) > 1e-5) {
-        diffs.push({
-          label,
-          original: formatHist(vHist),
-          current: formatCurr(vCurr)
-        });
-      }
-    };
-    
-    checkDiff('K', 'Permeability (K)', v => `${Math.round(v*1000)} mD`, v => `${Math.round(v*1000)} mD`);
-    checkDiff('porosity', 'Porosity (\u03C6)', v => `${Math.round(v*100)}%`, v => `${Math.round(v*100)}%`);
-    checkDiff('cellCount', 'Grid Cells (N)', v => v, v => v);
-    checkDiff('residualTrapFraction', 'Residual Trap (Sgr)', v => `${Math.round(v*100)}%`, v => `${Math.round(v*100)}%`);
-    checkDiff('dipPercent', 'Regional Dip', v => `${v}%`, v => `${v}%`);
-    checkDiff('amplitude', 'Anticline Height', v => `${v}px`, v => `${v}px`);
-    checkDiff('frequency', 'Anticline Count', v => v, v => v);
-    checkDiff('faultOffset', 'Fault Slip', v => `${v}x`, v => `${v}x`);
-    checkDiff('Q', 'Flow Rate (Q)', v => v, v => v);
-    checkDiff('injLocation', 'Well Location', v => `${v}%`, v => `${v}%`);
-    checkDiff('injDuration', 'Inj. Stop Year', v => `${v}y`, v => `${v}y`);
-    checkDiff('faultCount', 'Active Faults', v => v, v => v);
-    
-    if (histParams.faultCount === faultCount && faultCount > 0 && histParams.faults) {
-      for (let i = 0; i < faultCount; i++) {
-        const fHist = histParams.faults[i];
-        const fCurr = faults[i];
-        if (fHist && fCurr) {
-          const prefix = `Fault ${String.fromCharCode(65 + i)}`;
-          if (fHist.isSealed !== fCurr.isSealed) {
-            diffs.push({
-              label: `${prefix} Seal`,
-              original: fHist.isSealed ? 'Sealed' : 'Leaking',
-              current: fCurr.isSealed ? 'Sealed' : 'Leaking'
-            });
-          }
-          if (Math.abs(fHist.xPercent - fCurr.xPercent) > 1e-5) {
-            diffs.push({
-              label: `${prefix} Position`,
-              original: `${fHist.xPercent}%`,
-              current: `${fCurr.xPercent}%`
-            });
-          }
-          if (Math.abs(fHist.thresholdHeight - fCurr.thresholdHeight) > 1e-5) {
-            diffs.push({
-              label: `${prefix} Threshold`,
-              original: `${fHist.thresholdHeight} m`,
-              current: `${fCurr.thresholdHeight} m`
-            });
-          }
-          if (!fHist.isSealed && !fCurr.isSealed && Math.abs(fHist.leakRate - fCurr.leakRate) > 1e-5) {
-            diffs.push({
-              label: `${prefix} Leak Rate`,
-              original: fHist.leakRate,
-              current: fCurr.leakRate
-            });
-          }
-        }
-      }
-    }
-    
-    return diffs;
-  };
+  const isPastView = () => Math.round(simRef.current.t) < historyRef.current.length - 1;
 
-  // Play controls toggles
   const handlePlayToggle = () => {
-    if (isReversing) {
-      setIsReversing(false);
-    }
-    if (!isPlaying) {
-      if (simTime < historyRef.current.length - 1) {
-        commitBranch();
-      }
-      setIsPlaying(true);
-    } else {
-      setIsPlaying(false);
-    }
+    setIsReversing(false);
+    if (isPlaying) { setIsPlaying(false); return; }
+    if (isPastView()) commitBranch();
+    setIsPlaying(true);
   };
 
   const handlePlayReverseToggle = () => {
-    if (isPlaying) {
-      setIsPlaying(false);
-    }
-    setIsReversing(!isReversing);
+    setIsPlaying(false);
+    setIsReversing(r => !r);
   };
 
   const stepForward = () => {
     setIsPlaying(false);
     setIsReversing(false);
-    
-    const nextTime = simTime + 1;
-    if (nextTime > 1000) return;
-    
-    if (simTime < historyRef.current.length - 1) {
-      commitBranch();
-    }
-    
-    const result = runSolverStep(
-      stateRef.current.h, 
-      stateRef.current.hMax, 
-      stateRef.current.masses,
-      nextTime,
-      solverParamsRef.current
-    );
-    
-    setH(result.h);
-    setHMax(result.hMax);
-    setCurrentMasses(result.masses);
-    setSimTime(nextTime);
-    
-    if (nextTime % 5 === 0 || nextTime === 1 || nextTime === 1000) {
-      setMassHistory(history => {
-        const cleaned = history.filter(item => item.time < nextTime);
-        return [...cleaned, { time: nextTime, ...result.masses }];
-      });
-    }
-    
-    stateRef.current = {
-      h: result.h,
-      hMax: result.hMax,
-      masses: result.masses
-    };
-    
-    historyRef.current[nextTime] = {
-      time: nextTime,
-      h: [...result.h],
-      hMax: [...result.hMax],
-      masses: { ...result.masses },
-      params: JSON.parse(JSON.stringify(solverParamsRef.current))
-    };
+    if (isPastView()) commitBranch();
+    stepYear();
   };
 
   const stepBackward = () => {
     setIsPlaying(false);
     setIsReversing(false);
-    
-    const prevTime = simTime - 1;
-    if (prevTime < 0) return;
-    
-    const histState = historyRef.current[prevTime];
-    if (histState) {
-      setH(histState.h);
-      setHMax(histState.hMax);
-      setCurrentMasses(histState.masses);
-      setSimTime(prevTime);
-      
-      stateRef.current = {
-        h: [...histState.h],
-        hMax: [...histState.hMax],
-        masses: { ...histState.masses }
-      };
-    }
+    loadYear(Math.round(simRef.current.t) - 1);
   };
 
-  // --- MONTE CARLO UQ/SA ENGINE ---
+  const getParamDiff = () => {
+    const snap = historyRef.current[simTime];
+    return snap ? diffSimParams(snap.params, params) : [];
+  };
+
+  // --- MONTE CARLO UQ/SA ENGINE (uniform ± ranges; chunked to keep the UI responsive) ---
   const runMonteCarloBatch = () => {
     if (uqRunning) return;
-    
     setUqRunning(true);
     setUqProgress(0);
     setMcResults(null);
 
-    const totalRuns = mcRunsCount;
+    const base = cloneSimParams(params);
+    const uni = (v, frac) => v * (1 - frac + 2 * frac * Math.random());
+    const realizations = Array.from({ length: mcRunsCount }, (_, id) => ({
+      id,
+      k_mD: Math.max(1, uni(base.k_mD, kUncertainty)),
+      Sgr: Math.min(0.4, Math.max(0, uni(base.Sgr, sgrUncertainty))),
+      faults: base.faults.map(f => ({ ...f, Pth_kPa: Math.max(0.5, uni(f.Pth_kPa, faultThreshUncertainty)) }))
+    }));
     const results = [];
-    const batchSize = 5;
 
-    // Capture nominal parameter values
-    const nominalK = K;
-    const nominalSgr = residualTrapFraction;
-    const nominalFaults = faults.map(f => ({ ...f }));
-
-    // Generate parameter sets for each realization (Uniform distribution)
-    const realizations = [];
-    for (let i = 0; i < totalRuns; i++) {
-      // 1. Permeability K
-      const kMin = nominalK * (1.0 - kUncertainty);
-      const kMax = nominalK * (1.0 + kUncertainty);
-      const randK = Math.max(0.1, kMin + Math.random() * (kMax - kMin));
-
-      // 2. Residual Trap Fraction Sgr
-      const sgrMin = nominalSgr * (1.0 - sgrUncertainty);
-      const sgrMax = nominalSgr * (1.0 + sgrUncertainty);
-      const randSgr = Math.max(0.0, Math.min(0.40, sgrMin + Math.random() * (sgrMax - sgrMin)));
-
-      // 3. Fault Capillary Threshold
-      const randFaults = nominalFaults.map(f => {
-        const threshMin = f.thresholdHeight * (1.0 - faultThreshUncertainty);
-        const threshMax = f.thresholdHeight * (1.0 + faultThreshUncertainty);
-        const randThresh = Math.max(0.0, Math.min(2.0, threshMin + Math.random() * (threshMax - threshMin)));
-        return {
-          ...f,
-          thresholdHeight: randThresh
-        };
-      });
-
-      realizations.push({
-        id: i,
-        K: randK,
-        residualTrapFraction: randSgr,
-        faults: randFaults
-      });
-    }
-
-    // Run chunked simulation loop
-    const runChunk = (startIndex) => {
-      const endIndex = Math.min(totalRuns, startIndex + batchSize);
-      
-      for (let idx = startIndex; idx < endIndex; idx++) {
-        const r = realizations[idx];
-        
-        // Define solver params for this specific run
-        const runParams = {
-          K: r.K,
-          porosity: porosity,
-          cellCount: cellCount,
-          dipPercent: dipPercent,
-          amplitude: amplitude,
-          frequency: frequency,
-          faultOffset: faultOffset,
-          Q: Q,
-          injLocation: injLocation,
-          injDuration: injDuration,
-          faultCount: faultCount,
-          parentDX: dx,
-          faults: r.faults,
-          residualTrapFraction: r.residualTrapFraction
-        };
-
-        // Initialize state vectors for realization
-        let curH = new Array(cellCount).fill(0);
-        let curHMax = new Array(cellCount).fill(0);
-        let curMasses = { injected: 0, trapped: 0, mobile: 0, leaked: 0 };
-
-        // Run explicit solver to Year 1000
-        for (let year = 1; year <= 1000; year++) {
-          const res = runSolverStep(curH, curHMax, curMasses, year, runParams);
-          curH = res.h;
-          curHMax = res.hMax;
-          curMasses = res.masses;
-        }
-
-        // Record outcomes
-        const trappingEfficiency = curMasses.injected > 0 ? (curMasses.trapped / curMasses.injected) * 100 : 0;
-        const leakedFraction = curMasses.injected > 0 ? (curMasses.leaked / curMasses.injected) * 100 : 0;
-
+    const runChunk = start => {
+      const end = Math.min(realizations.length, start + 5);
+      for (let i = start; i < end; i++) {
+        const r = realizations[i];
+        const runParams = { ...base, k_mD: r.k_mD, Sgr: r.Sgr, faults: r.faults };
+        const m = VE.createModel(runParams);
+        const s = VE.advance(m, VE.initState(m), VE_HORIZON_YR);
+        const d = VE.diagnose(m, s);
+        const immobile = d.layers.reduce((acc, L) => acc + L.residual + L.dissolved, 0);
         results.push({
-          id: idx,
+          id: r.id,
           params: r,
-          finalLeaked: curMasses.leaked,
-          finalTrapped: curMasses.trapped,
-          finalMobile: curMasses.mobile,
-          finalInjected: curMasses.injected,
-          trappingEfficiency,
-          leakedFraction,
-          h: curH,
-          hMax: curHMax
+          runParams,
+          state: s,
+          finalLeaked: kgToMt(d.layers[1].total),
+          trappingEfficiency: d.injected > 0 ? (immobile / d.injected) * 100 : 0
         });
       }
-
-      setUqProgress(Math.round((endIndex / totalRuns) * 100));
-
-      if (endIndex < totalRuns) {
-        setTimeout(() => runChunk(endIndex), 25);
-      } else {
-        setUqRunning(false);
-        setMcResults(results);
-      }
+      setUqProgress(Math.round((end / realizations.length) * 100));
+      if (end < realizations.length) setTimeout(() => runChunk(end), 25);
+      else { setUqRunning(false); setMcResults(results); }
     };
-
-    // Trigger first chunk
     setTimeout(() => runChunk(0), 10);
   };
 
@@ -694,793 +285,207 @@ const SimulatorPage = () => {
     if (M === 0) return 0;
     const meanX = xValues.reduce((a, b) => a + b, 0) / M;
     const meanY = yValues.reduce((a, b) => a + b, 0) / M;
-    
-    let num = 0;
-    let denX = 0;
-    let denY = 0;
+    let num = 0, denX = 0, denY = 0;
     for (let j = 0; j < M; j++) {
-      const dx = xValues[j] - meanX;
-      const dy = yValues[j] - meanY;
-      num += dx * dy;
-      denX += dx * dx;
-      denY += dy * dy;
+      const ex = xValues[j] - meanX;
+      const ey = yValues[j] - meanY;
+      num += ex * ey;
+      denX += ex * ex;
+      denY += ey * ey;
     }
     if (denX === 0 || denY === 0) return 0;
     return num / Math.sqrt(denX * denY);
   };
 
+  const metricOf = r => (uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency);
+  const metricUnit = uqTargetMetric === 'leaked' ? ' Mt' : '%';
+  // Higher leakage is worse; higher immobilisation is better → labels/colours flip with the metric
+  const uqBands = uqTargetMetric === 'leaked'
+    ? [{ key: 'p10', label: 'P10 (Low leakage)', color: '#64ffda' }, { key: 'p50', label: 'P50 (Expected)', color: '#ffb300' }, { key: 'p90', label: 'P90 (High leakage)', color: '#ff6b6b' }]
+    : [{ key: 'p10', label: 'P10 (Low immobilisation)', color: '#ff6b6b' }, { key: 'p50', label: 'P50 (Expected)', color: '#ffb300' }, { key: 'p90', label: 'P90 (High immobilisation)', color: '#64ffda' }];
+
   // Memoized UQ statistics computations
   const uqData = useMemo(() => {
     if (!mcResults) return null;
-    
-    const vals = mcResults.map(r => 
-      uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency
-    );
+    const vals = mcResults.map(metricOf);
     const sorted = [...vals].sort((a, b) => a - b);
-    
     const p10Val = getPercentile(sorted, 10);
     const p50Val = getPercentile(sorted, 50);
     const p90Val = getPercentile(sorted, 90);
-    
-    const findClosestRealization = (targetVal) => {
-      let closest = mcResults[0];
-      let minDiff = Infinity;
+    const findClosestRealization = targetVal => {
+      let closest = mcResults[0], minDiff = Infinity;
       mcResults.forEach(r => {
-        const val = uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency;
-        const diff = Math.abs(val - targetVal);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closest = r;
-        }
+        const diff = Math.abs(metricOf(r) - targetVal);
+        if (diff < minDiff) { minDiff = diff; closest = r; }
       });
       return closest;
     };
-    
-    const p10Realization = findClosestRealization(p10Val);
-    const p50Realization = findClosestRealization(p50Val);
-    const p90Realization = findClosestRealization(p90Val);
-
     const minVal = sorted[0];
     const maxVal = sorted[sorted.length - 1];
     const range = maxVal - minVal || 1.0;
     const numBins = 10;
     const binWidth = range / numBins;
     const bins = new Array(numBins).fill(0);
-    
-    vals.forEach(v => {
-      let binIdx = Math.floor((v - minVal) / binWidth);
-      if (binIdx >= numBins) binIdx = numBins - 1;
-      if (binIdx < 0) binIdx = 0;
-      bins[binIdx]++;
-    });
-    
-    const maxBinCount = Math.max(1, Math.max(...bins));
-    
+    vals.forEach(v => { bins[Math.max(0, Math.min(numBins - 1, Math.floor((v - minVal) / binWidth)))]++; });
     return {
-      vals,
-      sorted,
-      minVal,
-      maxVal,
-      range,
-      bins,
-      maxBinCount,
-      binWidth,
-      p10Val,
-      p50Val,
-      p90Val,
-      p10Realization,
-      p50Realization,
-      p90Realization
+      vals, sorted, minVal, maxVal, range, bins, binWidth,
+      maxBinCount: Math.max(1, ...bins),
+      p10Val, p50Val, p90Val,
+      p10Realization: findClosestRealization(p10Val),
+      p50Realization: findClosestRealization(p50Val),
+      p90Realization: findClosestRealization(p90Val)
     };
   }, [mcResults, uqTargetMetric]);
 
-  // Memoized Sensitivity correlations
+  // Memoized sensitivity correlations
   const sensitivityData = useMemo(() => {
     if (!mcResults) return null;
-    
-    const yVals = mcResults.map(r => 
-      uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency
-    );
-    
-    const kVals = mcResults.map(r => r.params.K);
-    const sgrVals = mcResults.map(r => r.params.residualTrapFraction);
-    
-    const faultThreshVals = mcResults.map(r => {
-      const activeFaults = r.params.faults.slice(0, faultCount);
-      if (activeFaults.length === 0) return 0;
-      const sum = activeFaults.reduce((a, b) => a + b.thresholdHeight, 0);
-      return sum / activeFaults.length;
-    });
-
-    const kCorr = computeCorrelation(kVals, yVals);
-    const sgrCorr = computeCorrelation(sgrVals, yVals);
-    const faultCorr = faultCount > 0 ? computeCorrelation(faultThreshVals, yVals) : 0;
-    
+    const yVals = mcResults.map(metricOf);
+    const kCorr = computeCorrelation(mcResults.map(r => r.params.k_mD), yVals);
+    const sgrCorr = computeCorrelation(mcResults.map(r => r.params.Sgr), yVals);
+    const hasFaults = mcResults[0].params.faults.length > 0;
+    const faultCorr = hasFaults
+      ? computeCorrelation(mcResults.map(r => r.params.faults.reduce((a, f) => a + f.Pth_kPa, 0) / r.params.faults.length), yVals)
+      : 0;
     return [
-      { label: 'Permeability (K)', r: kCorr },
-      { label: 'Residual Trapping (Sgr)', r: sgrCorr },
-      ...(faultCount > 0 ? [{ label: 'Fault Seal Height', r: faultCorr }] : [])
+      { label: 'Permeability (k)', r: kCorr },
+      { label: 'Residual CO₂ (S_gr)', r: sgrCorr },
+      ...(hasFaults ? [{ label: 'Fault threshold (P_th)', r: faultCorr }] : [])
     ].sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
-  }, [mcResults, uqTargetMetric, faultCount]);
+  }, [mcResults, uqTargetMetric]);
 
-  // Load a selected Monte Carlo model back to 2D simulator
-  const loadUQRealization = (realization) => {
-    if (!realization) return;
-    
-    setK(parseFloat(realization.params.K.toFixed(3)));
-    setResidualTrapFraction(parseFloat(realization.params.residualTrapFraction.toFixed(3)));
-    
-    const newFaults = faults.map((f, i) => {
-      const rf = realization.params.faults[i];
-      if (rf) {
-        return {
-          ...f,
-          thresholdHeight: parseFloat(rf.thresholdHeight.toFixed(3))
-        };
-      }
-      return f;
-    });
-    setFaults(newFaults);
-
-    setH(realization.h);
-    setHMax(realization.hMax);
-    const finalMasses = {
-      injected: realization.finalInjected,
-      trapped: realization.finalTrapped,
-      mobile: realization.finalMobile,
-      leaked: realization.finalLeaked
-    };
-    setCurrentMasses(finalMasses);
-    setSimTime(1000);
+  // Load a Monte Carlo realization back into the 2D view (history: year 0 and the final year)
+  const loadUQRealization = r => {
+    if (!r) return;
+    const p = cloneSimParams(r.runParams);
+    paramsRef.current = p;
+    setParams(p);
+    const m = VE.createModel(p);
+    const s0 = VE.initState(m);
+    historyRef.current = [{ state: s0, params: cloneSimParams(p) }];
+    historyRef.current[VE_HORIZON_YR] = { state: r.state, params: cloneSimParams(p) };
+    setMassHistory([simMassPoint(VE.diagnose(m, s0), 0), simMassPoint(VE.diagnose(m, r.state), VE_HORIZON_YR)]);
     setIsPlaying(false);
     setIsReversing(false);
-
-    stateRef.current = {
-      h: [...realization.h],
-      hMax: [...realization.hMax],
-      masses: { ...finalMasses }
-    };
-
-    const emptyArr = new Array(cellCount).fill(0);
-    historyRef.current = [
-      {
-        time: 0,
-        h: emptyArr,
-        hMax: emptyArr,
-        masses: { injected: 0, trapped: 0, mobile: 0, leaked: 0 },
-        params: JSON.parse(JSON.stringify(solverParamsRef.current))
-      },
-      {
-        time: 1000,
-        h: [...realization.h],
-        hMax: [...realization.hMax],
-        masses: { ...finalMasses },
-        params: JSON.parse(JSON.stringify(solverParamsRef.current))
-      }
-    ];
-
-    setMassHistory([
-      { time: 0, injected: 0, trapped: 0, mobile: 0, leaked: 0 },
-      { time: 1000, ...finalMasses }
-    ]);
-    
+    showState(r.state);
     setActiveSubTab('profile');
   };
 
   // SVG Histogram Renderer
-  const renderUQHistogram = (data) => {
-    const width = 450;
-    const height = 200;
+  const renderUQHistogram = data => {
+    const width = 450, height = 200;
     const padding = { left: 40, right: 20, top: 20, bottom: 25 };
-    
-    const getX = (val) => padding.left + ((val - data.minVal) / data.range) * (width - padding.left - padding.right);
-    const getY = (count) => height - padding.bottom - (count / data.maxBinCount) * (height - padding.top - padding.bottom);
-    
+    const getX = val => padding.left + ((val - data.minVal) / data.range) * (width - padding.left - padding.right);
+    const getY = count => height - padding.bottom - (count / data.maxBinCount) * (height - padding.top - padding.bottom);
+    const marks = [data.p10Val, data.p50Val, data.p90Val];
     return (
       <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
         {[0.25, 0.5, 0.75, 1.0].map((ratio, i) => {
           const y = getY(data.maxBinCount * ratio);
-          return (
-            <line key={i} x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="3 3"/>
-          );
+          return <line key={i} x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="3 3" />;
         })}
-        
         {data.bins.map((count, idx) => {
-          const valStart = data.minVal + idx * data.binWidth;
-          const valEnd = valStart + data.binWidth;
-          const x1 = getX(valStart);
-          const x2 = getX(valEnd);
+          const x1 = getX(data.minVal + idx * data.binWidth);
+          const x2 = getX(data.minVal + (idx + 1) * data.binWidth);
           const y = getY(count);
-          const barWidth = Math.max(1, x2 - x1 - 1.5);
-          const barHeight = Math.max(0, height - padding.bottom - y);
-          
-          return (
-            <rect 
-              key={idx} 
-              x={x1} 
-              y={y} 
-              width={barWidth} 
-              height={barHeight} 
-              fill="rgba(100, 255, 218, 0.22)" 
-              stroke="rgba(100, 255, 218, 0.5)" 
-              strokeWidth="1"
-            />
-          );
+          return <rect key={idx} x={x1} y={y} width={Math.max(1, x2 - x1 - 1.5)} height={Math.max(0, height - padding.bottom - y)} fill="rgba(100, 255, 218, 0.22)" stroke="rgba(100, 255, 218, 0.5)" strokeWidth="1" />;
         })}
-        
-        {[
-          { label: 'P10', val: data.p10Val, color: '#64ffda' },
-          { label: 'P50', val: data.p50Val, color: '#ffb300' },
-          { label: 'P90', val: data.p90Val, color: '#ff6b6b' }
-        ].map((p, i) => {
-          const x = getX(p.val);
+        {uqBands.map((b, i) => {
+          const x = getX(marks[i]);
           return (
-            <g key={i}>
-              <line x1={x} y1={padding.top} x2={x} y2={height - padding.bottom} stroke={p.color} strokeWidth="1.5" strokeDasharray="4 3"/>
-              <circle cx={x} cy={padding.top} r="3.5" fill={p.color} />
-              <text x={x} y={padding.top - 5} fill={p.color} fontSize="8.5" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
-                {p.label}
-              </text>
+            <g key={b.key}>
+              <line x1={x} y1={padding.top} x2={x} y2={height - padding.bottom} stroke={b.color} strokeWidth="1.5" strokeDasharray="4 3" />
+              <circle cx={x} cy={padding.top} r="3.5" fill={b.color} />
+              <text x={x} y={padding.top - 5} fill={b.color} fontSize="8.5" fontWeight="bold" textAnchor="middle" fontFamily="monospace">{b.key.toUpperCase()}</text>
             </g>
           );
         })}
-        
-        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
-        <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
-        
-        <text x={padding.left} y={height - 8} fill="rgba(255,255,255,0.4)" fontSize="8.5" textAnchor="start" fontFamily="monospace">
-          {data.minVal.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
-        </text>
-        <text x={width - padding.right} y={height - 8} fill="rgba(255,255,255,0.4)" fontSize="8.5" textAnchor="end" fontFamily="monospace">
-          {data.maxVal.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
-        </text>
+        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+        <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+        <text x={padding.left} y={height - 8} fill="rgba(255,255,255,0.4)" fontSize="8.5" textAnchor="start" fontFamily="monospace">{data.minVal.toFixed(2)}{metricUnit}</text>
+        <text x={width - padding.right} y={height - 8} fill="rgba(255,255,255,0.4)" fontSize="8.5" textAnchor="end" fontFamily="monospace">{data.maxVal.toFixed(2)}{metricUnit}</text>
       </svg>
     );
   };
 
   // SVG Sensitivity Tornado Renderer
-  const renderUQSensitivity = (data) => {
-    const width = 450;
-    const height = 200;
+  const renderUQSensitivity = data => {
+    const width = 450, height = 200;
     const padding = { left: 140, right: 30, top: 25, bottom: 20 };
-    
     const centerOffset = padding.left + (width - padding.left - padding.right) / 2;
     const halfPlotWidth = (width - padding.left - padding.right) / 2;
-    
-    const getX = (r) => centerOffset + r * halfPlotWidth;
-    
-    const barHeight = 24;
-    const gap = 16;
-    
+    const getX = r => centerOffset + r * halfPlotWidth;
+    const barHeight = 24, gap = 16;
     return (
       <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
         {[-1.0, -0.5, 0, 0.5, 1.0].map((tick, i) => {
           const x = getX(tick);
           return (
             <g key={i}>
-              <line x1={x} y1={padding.top - 5} x2={x} y2={height - padding.bottom} stroke={tick === 0 ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.05)"} strokeWidth={tick === 0 ? "1" : "0.5"} strokeDasharray={tick === 0 ? "none" : "3 3"}/>
-              <text x={x} y={padding.top - 12} fill="rgba(255,255,255,0.35)" fontSize="8" textAnchor="middle" fontFamily="monospace">
-                {tick > 0 ? `+${tick.toFixed(1)}` : tick.toFixed(1)}
-              </text>
+              <line x1={x} y1={padding.top - 5} x2={x} y2={height - padding.bottom} stroke={tick === 0 ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.05)'} strokeWidth={tick === 0 ? '1' : '0.5'} strokeDasharray={tick === 0 ? 'none' : '3 3'} />
+              <text x={x} y={padding.top - 12} fill="rgba(255,255,255,0.35)" fontSize="8" textAnchor="middle" fontFamily="monospace">{tick > 0 ? `+${tick.toFixed(1)}` : tick.toFixed(1)}</text>
             </g>
           );
         })}
-        
         {data.map((item, idx) => {
           const y = padding.top + idx * (barHeight + gap);
           const xStart = item.r >= 0 ? centerOffset : getX(item.r);
           const xEnd = item.r >= 0 ? getX(item.r) : centerOffset;
-          const rectWidth = Math.max(1, xEnd - xStart);
           const color = item.r >= 0 ? '#64ffda' : '#ff6b6b';
           const fill = item.r >= 0 ? 'rgba(100, 255, 218, 0.25)' : 'rgba(255, 107, 107, 0.25)';
-          
           return (
             <g key={idx}>
-              <text x={padding.left - 10} y={y + barHeight/2 + 3} fill="rgba(255,255,255,0.85)" fontSize="9.5" textAnchor="end" fontFamily="sans-serif">
-                {item.label}
-              </text>
-              
-              <rect 
-                x={xStart} 
-                y={y} 
-                width={rectWidth} 
-                height={barHeight} 
-                fill={fill} 
-                stroke={color} 
-                strokeWidth="1"
-                rx="3"
-              />
-              
-              <text 
-                x={item.r >= 0 ? xEnd + 6 : xStart - 6} 
-                y={y + barHeight/2 + 3} 
-                fill={color} 
-                fontSize="9" 
-                fontWeight="bold" 
-                textAnchor={item.r >= 0 ? 'start' : 'end'} 
-                fontFamily="monospace"
-              >
-                {item.r.toFixed(2)}
-              </text>
+              <text x={padding.left - 10} y={y + barHeight / 2 + 3} fill="rgba(255,255,255,0.85)" fontSize="9.5" textAnchor="end" fontFamily="sans-serif">{item.label}</text>
+              <rect x={xStart} y={y} width={Math.max(1, xEnd - xStart)} height={barHeight} fill={fill} stroke={color} strokeWidth="1" rx="3" />
+              <text x={item.r >= 0 ? xEnd + 6 : xStart - 6} y={y + barHeight / 2 + 3} fill={color} fontSize="9" fontWeight="bold" textAnchor={item.r >= 0 ? 'start' : 'end'} fontFamily="monospace">{item.r.toFixed(2)}</text>
             </g>
           );
         })}
-        
-        <line x1={padding.left} y1={padding.top - 5} x2={padding.left} y2={height - padding.bottom} stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
+        <line x1={padding.left} y1={padding.top - 5} x2={padding.left} y2={height - padding.bottom} stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
       </svg>
     );
   };
 
-  // Solver implementation
-  const runSolverStep = (currentH, currentHMax, masses, currentFrame, params) => {
-    const {
-      K,
-      porosity,
-      cellCount,
-      Q,
-      injLocation,
-      injDuration,
-      faultCount,
-      faults,
-      residualTrapFraction,
-      parentDX
-    } = params;
-
-    const N = cellCount;
-    const dx = parentDX || (1000.0 / N);
-    let nextH = [...currentH];
-    let nextHMax = [...currentHMax];
-    let { injected, trapped, mobile, leaked } = masses;
-
-    // 25 substeps per year to guarantee total TVD numerical advection stability
-    const substeps = 25;
-    const dt = 1.0 / substeps;
-
-    // Physical coordinate depth array (scaled by 1/15)
-    const zt = new Array(N).fill(0);
-    for (let i = 0; i < N; i++) {
-      zt[i] = capRockY(i * dx + dx / 2.0, i) / 15.0;
-    }
-
-    // Run explicit finite volume integration substeps
-    for (let step = 0; step < substeps; step++) {
-      // 1. Partition total height into mobile and trapped components for each cell (VE physics)
-      const hMob = new Array(N).fill(0);
-      for (let i = 0; i < N; i++) {
-        const H = nextH[i];
-        const hm = nextHMax[i];
-        const R = residualTrapFraction;
-        const mobileVal = R < 1.0 ? Math.max(0, (H - R * hm) / (1.0 - R)) : 0;
-        hMob[i] = Math.min(H, mobileVal);
-      }
-
-      // 2. Compute fluxes using only the mobile thickness with physical upwind TVD limiter
-      const fluxes = new Array(N - 1).fill(0);
-      for (let i = 0; i < N - 1; i++) {
-        const zL = zt[i] + nextH[i];
-        const zR = zt[i + 1] + nextH[i + 1];
-        const grad = (zR - zL) / (dx / 5.0);
-        const hFace = grad > 0 ? hMob[i + 1] : hMob[i];
-        
-        // Find if a fault is located at this grid boundary and apply its transmissibility multiplier
-        let transMult = 1.0;
-        for (let idx = 0; idx < faultCount; idx++) {
-          const f = faults[idx];
-          if (f) {
-            const inter = getSimFaultIntersection(f, idx);
-            const cellFaultIdx = Math.round(inter.x / dx);
-            if (cellFaultIdx - 1 === i) {
-              if (f.isSealed) {
-                transMult = 0.0; // Infinite sealed barrier
-              } else {
-                transMult = f.transmissibility !== undefined ? f.transmissibility : 1.0;
-              }
-              break;
-            }
-          }
-        }
-        
-        let rawFlux = - (K / porosity) * hFace * grad * 0.08 * transMult;
-        
-        // TVD physical limiter: flux can never exceed 30% of mobile mass in cell per substep
-        if (rawFlux > 0) {
-          rawFlux = Math.min(rawFlux, (0.30 * hMob[i]) / dt);
-        } else {
-          rawFlux = Math.max(rawFlux, - (0.30 * hMob[i + 1]) / dt);
-        }
-        fluxes[i] = rawFlux;
-      }
-
-      // Ghost cells boundaries (zero far-field flux)
-      const H_res = 175.0 / 15.0; // 11.667 m physical maximum thickness of reservoir sandstone bed
-      const hTmp = [...nextH];
-      for (let i = 0; i < N; i++) {
-        const fL = i === 0 ? 0 : fluxes[i - 1];
-        const fR = i === N - 1 ? 0 : fluxes[i];
-        hTmp[i] = Math.max(0, Math.min(H_res, nextH[i] + dt * (fL - fR)));
-      }
-
-      // Injection: Smooth wellbore Gaussian kernel over adjacent cells to prevent point singularity
-      const cellInjIdx = Math.floor((injLocation / 100.0) * N);
-      if (Q > 0 && currentFrame <= injDuration) {
-        const dVolInj = Q * dt;
-        const kernel = [0.10, 0.20, 0.40, 0.20, 0.10];
-        for (let offset = -2; offset <= 2; offset++) {
-          const cIdx = Math.max(0, Math.min(N - 1, cellInjIdx + offset));
-          hTmp[cIdx] = Math.min(H_res, hTmp[cIdx] + (dVolInj * kernel[offset + 2]) / (porosity * (dx / 5.0)));
-        }
-        injected += dVolInj;
-      }
-
-      // Fault Leaks: threshold-pressure/spill-height capillary barrier
-      for (let idx = 0; idx < faultCount; idx++) {
-        const f = faults[idx];
-        if (!f.isSealed) {
-          const inter = getSimFaultIntersection(f, idx);
-          const cellFaultIdx = Math.round(inter.x / dx);
-          const boundedIdx = Math.max(0, Math.min(N - 1, cellFaultIdx));
-          
-          // Leakage occurs only if CO2 column height H exceeds the threshold
-          if (hTmp[boundedIdx] > f.thresholdHeight) {
-            const overpressure = hTmp[boundedIdx] - f.thresholdHeight;
-            const leakHeight = Math.min(overpressure, f.leakRate * dt * 0.8);
-            hTmp[boundedIdx] -= leakHeight;
-            leaked += leakHeight * porosity * (dx / 5.0);
-          }
-        }
-      }
-
-      nextH = hTmp.map(val => Math.max(0, Math.min(H_res, val)));
-      for (let i = 0; i < N; i++) {
-        if (nextH[i] > nextHMax[i]) nextHMax[i] = Math.min(H_res, nextH[i]);
-      }
-    }
-
-    // Mass distribution calculation (Exact integral of fluid volume)
-    let mobileSum = 0;
-    let trappedSum = 0;
-    
-    for (let i = 0; i < N; i++) {
-      const H = nextH[i];
-      const hm = nextHMax[i];
-      const R = residualTrapFraction;
-      const mobileVal = R < 1.0 ? Math.max(0, (H - R * hm) / (1.0 - R)) : 0;
-      const hMob = Math.min(H, mobileVal);
-      const hTrap = Math.max(0, H - hMob);
-      
-      mobileSum += hMob * (dx / 5.0) * porosity;
-      trappedSum += hTrap * (dx / 5.0) * porosity;
-    }
-
-    return {
-      h: nextH,
-      hMax: nextHMax,
-      masses: {
-        injected: parseFloat(injected.toFixed(2)),
-        trapped: parseFloat(trappedSum.toFixed(2)),
-        mobile: parseFloat(mobileSum.toFixed(2)),
-        leaked: parseFloat(leaked.toFixed(2))
-      }
-    };
-  };
-
-  // --- NODE-BASED RIBBON BUILDER (Zero Sawteeth Guaranteed) ---
-  const buildSmoothRibbon = (topElevationFn, botElevationFn, kStart, kEnd) => {
-    if (kStart > kEnd) return "";
-    
-    let path = "";
-    for (let k = kStart; k <= kEnd; k++) {
-      const x = k * dx;
-      const isFault = k > 0 && k < cellCount && Math.abs(capRockY(x, k - 1) - capRockY(x, k)) > 0.1;
-      
-      if (k === kStart) {
-        const y0 = topElevationFn(k, isFault ? 'right' : 'avg');
-        path = `M ${x} ${y0}`;
-      } else if (isFault) {
-        const yL = topElevationFn(k, 'left');
-        const yR = topElevationFn(k, 'right');
-        path += ` L ${x} ${yL} L ${x} ${yR}`;
-      } else {
-        const y = topElevationFn(k, 'avg');
-        path += ` L ${x} ${y}`;
-      }
-    }
-    
-    for (let k = kEnd; k >= kStart; k--) {
-      const x = k * dx;
-      const isFault = k > 0 && k < cellCount && Math.abs(capRockY(x, k - 1) - capRockY(x, k)) > 0.1;
-      
-      if (isFault) {
-        const yR = botElevationFn(k, 'right');
-        const yL = botElevationFn(k, 'left');
-        path += ` L ${x} ${yR} L ${x} ${yL}`;
-      } else {
-        const y = botElevationFn(k, 'avg');
-        path += ` L ${x} ${y}`;
-      }
-    }
-    
-    path += " Z";
-    return path;
-  };
-
-  const getSimNodeValue = (arr, k, side = 'avg') => {
-    if (!arr) return 0;
-    const N = arr.length;
-    if (k <= 0) return arr[0];
-    if (k >= N) return arr[N - 1];
-    if (side === 'left') return arr[k - 1];
-    if (side === 'right') return arr[k];
-    return 0.5 * (arr[k - 1] + arr[k]);
-  };
-
-  // Helper to find the active continuous domain with sub-grid zero-tapered tip nodes
-  const getSimActiveBounds = (nodeValueFn, N, eps = 0.001) => {
-    let kFirst = -1, kLast = -1;
-    for (let k = 0; k <= N; k++) {
-      const val = nodeValueFn(k);
-      if (val > eps) {
-        if (kFirst === -1) kFirst = k;
-        kLast = k;
-      }
-    }
-    if (kFirst === -1) return null;
-    const kStart = Math.max(0, kFirst - 1);
-    const kEnd = Math.min(N, kLast + 1);
-    return { kStart, kEnd };
-  };
-
-  // Trapped CO2 sits directly under the caprock
-  const getTrappedPath = () => {
-    const N = cellCount;
-    const scale = 15.0;
-    
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hTrapped, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    
-    return buildSmoothRibbon(
-      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k),
-      (k, side) => {
-        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-        return Math.min(yBotMax, yTop + getSimNodeValue(hTrapped, k, side) * scale);
-      },
-      bounds.kStart, bounds.kEnd
-    );
-  };
-
-  // Mobile CO2 flows beneath the trapped layer
-  const getMobilePath = () => {
-    const N = cellCount;
-    const scale = 15.0;
-    
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hMobile, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    
-    return buildSmoothRibbon(
-      (k, side) => {
-        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-        return Math.min(yBotMax, yTop + getSimNodeValue(hTrapped, k, side) * scale);
-      },
-      (k, side) => {
-        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-        return Math.min(yBotMax, yTop + (getSimNodeValue(hTrapped, k, side) + getSimNodeValue(hMobile, k, side)) * scale);
-      },
-      bounds.kStart, bounds.kEnd
-    );
-  };
-
-  // Swept Residual Trapping Footprint (hTrapped)
-  const getSweptResidualSimPath = () => {
-    const N = cellCount;
-    const scale = 15.0;
-    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.25 : 0;
-    
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hTrapped, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    
-    return buildSmoothRibbon(
-      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k),
-      (k, side) => {
-        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-        const hTrp = getSimNodeValue(hTrapped, k, side);
-        const f = fringePx * Math.min(1.0, hTrp * 1.5);
-        return Math.min(yBotMax, yTop + hTrp * scale + f);
-      },
-      bounds.kStart, bounds.kEnd
-    );
-  };
-
-  // Active Flowing Mobile Plume (hMobile)
-  const getActiveMobileSimPath = () => {
-    const N = cellCount;
-    const scale = 15.0;
-    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.35 : 0;
-    
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hMobile, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    
-    return buildSmoothRibbon(
-      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k),
-      (k, side) => {
-        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-        const hMob = getSimNodeValue(hMobile, k, side);
-        const f = fringePx * Math.min(1.0, hMob * 1.8);
-        return Math.min(yBotMax, yTop + hMob * scale + f);
-      },
-      bounds.kStart, bounds.kEnd
-    );
-  };
-
-  // Maximum Historic Gas Saturation Boundary (hMax Swept Footprint Dashed Line)
-  const getMaxHgLinePath = () => {
-    const N = cellCount;
-    const scale = 15.0;
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hMax, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    
-    let path = "";
-    for (let k = bounds.kStart; k <= bounds.kEnd; k++) {
-      const x = k * dx;
-      const isFault = k > 0 && k < cellCount && Math.abs(capRockY(x, k - 1) - capRockY(x, k)) > 0.1;
-      if (k === bounds.kStart) {
-        const yTop = capRockY(x, isFault ? k : k);
-        const yBotMax = stratumY(x, isFault ? k : k, 175);
-        const y0 = Math.min(yBotMax, yTop + getSimNodeValue(hMax, k, isFault ? 'right' : 'avg') * scale);
-        path = `M ${x} ${y0}`;
-      } else if (isFault) {
-        const yTopL = capRockY(x, k - 1);
-        const yBotMaxL = stratumY(x, k - 1, 175);
-        const yTopR = capRockY(x, k);
-        const yBotMaxR = stratumY(x, k, 175);
-        const yL = Math.min(yBotMaxL, yTopL + getSimNodeValue(hMax, k, 'left') * scale);
-        const yR = Math.min(yBotMaxR, yTopR + getSimNodeValue(hMax, k, 'right') * scale);
-        path += ` L ${x} ${yL} L ${x} ${yR}`;
-      } else {
-        const yTop = capRockY(x, k);
-        const yBotMax = stratumY(x, k, 175);
-        const y = Math.min(yBotMax, yTop + getSimNodeValue(hMax, k, 'avg') * scale);
-        path += ` L ${x} ${y}`;
-      }
-    }
-    return path;
-  };
-
-  // Reservoir Conformable Grid block columns
-  const reservoirBlocks = useMemo(() => {
-    const blocks = [];
-    const N = cellCount;
-    
-    for (let i = 0; i < N; i++) {
-      const x1 = i * dx;
-      const x2 = (i + 1) * dx;
-      const yt1 = capRockY(x1, i);
-      const yt2 = capRockY(x2, i);
-      const yb1 = stratumY(x1, i, 175);
-      const yb2 = stratumY(x2, i, 175);
-      
-      // Permeability noise mapping for sandstone heterogeneity
-      const permFactor = 0.5 + 0.5 * Math.sin(i * 12.7 + 1.1);
-      const r = Math.floor(35 + permFactor * 14);
-      const g = Math.floor(26 + permFactor * 10);
-      const b = Math.floor(20 + permFactor * 6);
-      const colFill = `rgb(${r}, ${g}, ${b})`;
-      
-      blocks.push({
-        points: `${x1},${yt1} ${x2},${yt2} ${x2},${yb2} ${x1},${yb1}`,
-        fill: colFill,
-        x1, yt1, x2, yt2, yb1, yb2
-      });
-    }
-    return blocks;
-  }, [cellCount, dipPercent, amplitude, frequency, faultOffset, faultCount, faults]);
-
-  // --- Dynamic SVG Chart Drawing ---
+  // --- Mass-balance chart (one line per category, Mt vs years) ---
   const renderSVGChart = () => {
-    const width = 450;
-    const height = 210;
+    const width = 450, height = 210;
     const padding = { left: 45, right: 15, top: 15, bottom: 25 };
-    
-    const maxVal = Math.max(10, Math.max(currentMasses.injected, currentMasses.mobile + currentMasses.trapped + currentMasses.leaked) * 1.08);
-    
-    // Scale helper
-    const getX = (t) => padding.left + (t / 1000.0) * (width - padding.left - padding.right);
-    const getY = (val) => height - padding.bottom - (val / maxVal) * (height - padding.top - padding.bottom);
-    
-    let pathInj = "", pathTrap = "", pathMob = "", pathLeak = "";
-    
-    if (massHistory.length > 0) {
-      pathInj = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].injected)}`;
-      pathTrap = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].trapped)}`;
-      pathMob = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].mobile)}`;
-      pathLeak = `M ${getX(massHistory[0].time)} ${getY(massHistory[0].leaked)}`;
-      
-      for (let idx = 1; idx < massHistory.length; idx++) {
-        const pt = massHistory[idx];
-        pathInj += ` L ${getX(pt.time)} ${getY(pt.injected)}`;
-        pathTrap += ` L ${getX(pt.time)} ${getY(pt.trapped)}`;
-        pathMob += ` L ${getX(pt.time)} ${getY(pt.mobile)}`;
-        pathLeak += ` L ${getX(pt.time)} ${getY(pt.leaked)}`;
-      }
-    }
-    
+    const cur = simMassPoint(diag, simTime);
+    const maxVal = Math.max(1, cur.injected, ...massHistory.map(q => q.injected)) * 1.08;
+    const getX = t => padding.left + (t / VE_HORIZON_YR) * (width - padding.left - padding.right);
+    const getY = v => height - padding.bottom - (v / maxVal) * (height - padding.top - padding.bottom);
+    const path = key => massHistory.map((q, i) => `${i ? 'L' : 'M'} ${getX(q.time).toFixed(1)} ${getY(q[key]).toFixed(1)}`).join(' ');
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {/* Interactive Top Legend Pill Bar with Live Numerical Readouts */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', fontSize: 10.5, padding: '2px 4px' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 2, background: '#ffffff', opacity: 0.6, borderTop: '1px dashed #fff' }} />
-            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Injected:</span>
-            <strong style={{ color: '#fff', fontFamily: 'monospace' }}>{Math.round(currentMasses.injected)} kt</strong>
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 2.5, background: '#64ffda' }} />
-            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Mobile:</span>
-            <strong style={{ color: '#64ffda', fontFamily: 'monospace' }}>{Math.round(currentMasses.mobile)} kt</strong>
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 2.5, background: '#3ca68e' }} />
-            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Trapped:</span>
-            <strong style={{ color: '#3ca68e', fontFamily: 'monospace' }}>{Math.round(currentMasses.trapped)} kt</strong>
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 2.5, background: '#ff6b6b' }} />
-            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Leaked:</span>
-            <strong style={{ color: '#ff6b6b', fontFamily: 'monospace' }}>{Math.round(currentMasses.leaked)} kt</strong>
-          </span>
+          {MASS_SERIES.map(sr => (
+            <span key={sr.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 10, height: 2.5, background: sr.color, opacity: sr.dash ? 0.6 : 1 }} />
+              <span style={{ color: 'rgba(255,255,255,0.7)' }}>{sr.label}:</span>
+              <strong style={{ color: sr.color, fontFamily: 'monospace' }}>{cur[sr.key].toFixed(2)} Mt</strong>
+            </span>
+          ))}
         </div>
-
         <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
-          {/* Y Grid axis */}
           {[0.25, 0.5, 0.75, 1.0].map((ratio, i) => {
-            const val = maxVal * ratio;
-            const y = getY(val);
+            const y = getY(maxVal * ratio);
             return (
               <g key={i}>
-                <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="3 3"/>
-                <text x={padding.left - 8} y={y + 3} fill="rgba(255,255,255,0.45)" fontSize="8.5" textAnchor="end" fontFamily="monospace">
-                  {Math.round(val)}
-                </text>
+                <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="3 3" />
+                <text x={padding.left - 8} y={y + 3} fill="rgba(255,255,255,0.45)" fontSize="8.5" textAnchor="end" fontFamily="monospace">{(maxVal * ratio).toFixed(1)}</text>
               </g>
             );
           })}
-          
-          {/* X axis year labels */}
-          {[0, 200, 400, 600, 800, 1000].map((t, i) => {
-            const x = getX(t);
-            return (
-              <text key={i} x={x} y={height - 8} fill="rgba(255,255,255,0.45)" fontSize="8.5" textAnchor="middle" fontFamily="monospace">
-                {t}y
-              </text>
-            );
-          })}
-          
-          {/* Plot Lines */}
-          {pathInj && <path d={pathInj} fill="none" stroke="#ffffff" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.6"/>}
-          {pathMob && <path d={pathMob} fill="none" stroke="#64ffda" strokeWidth="2" style={{ filter: 'drop-shadow(0 0 2px rgba(100,255,218,0.4))' }}/>}
-          {pathTrap && <path d={pathTrap} fill="none" stroke="#3ca68e" strokeWidth="1.8"/>}
-          {pathLeak && <path d={pathLeak} fill="none" stroke="#ff6b6b" strokeWidth="2"/>}
-          
-          {/* Vertical line indicator for current simTime */}
-          <line 
-            x1={getX(simTime)} 
-            y1={padding.top} 
-            x2={getX(simTime)} 
-            y2={height - padding.bottom} 
-            stroke="#64ffda" 
-            strokeWidth="1.2" 
-            strokeDasharray="2 2"
-            opacity="0.8"
-          />
+          {[0, 200, 400, 600, 800, 1000].map(t => (
+            <text key={t} x={getX(t)} y={height - 8} fill="rgba(255,255,255,0.45)" fontSize="8.5" textAnchor="middle" fontFamily="monospace">{t}y</text>
+          ))}
+          {massHistory.length > 1 && MASS_SERIES.map(sr => (
+            <path key={sr.key} d={path(sr.key)} fill="none" stroke={sr.color} strokeWidth="1.8" strokeDasharray={sr.dash} opacity={sr.dash ? 0.6 : 1} />
+          ))}
+          <line x1={getX(simTime)} y1={padding.top} x2={getX(simTime)} y2={height - padding.bottom} stroke="#64ffda" strokeWidth="1.2" strokeDasharray="2 2" opacity="0.8" />
           <circle cx={getX(simTime)} cy={padding.top} r="3" fill="#64ffda" />
-          
-          {/* Axes borders */}
-          <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
-          <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
+          <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+          <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
         </svg>
       </div>
     );
@@ -1863,7 +868,7 @@ const SimulatorPage = () => {
             </button>
           </h2>
           <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.65)', fontSize: 13.5, maxWidth: 680 }}>
-            Solve explicit Finite Volume Vertical Equilibrium (VE) equations dynamically. Tweak caprock topography, sandstone parameters, or injection variables in real-time.
+            Sharp-interface Vertical Equilibrium CO₂ storage model in SI units: viscous push from the injector plus buoyant migration, residual-trapping hysteresis, faults with up-fault leakage, spill-point traps and convective dissolution. Mass balance is exact to round-off.
           </p>
         </div>
         
@@ -1874,8 +879,9 @@ const SimulatorPage = () => {
             {[
               { id: 'default', label: 'Default Case', icon: 'fa-project-diagram' },
               { id: 'dome', label: 'Anticline Dome', icon: 'fa-mountain' },
-              { id: 'faulted', label: 'Faulted Trap', icon: 'fa-bolt' },
-              { id: 'monocline', label: 'Dipping Layer', icon: 'fa-sliders' },
+              { id: 'faultedTrap', label: 'Faulted Trap', icon: 'fa-bolt' },
+              { id: 'dipping', label: 'Dipping Layer', icon: 'fa-sliders' },
+              { id: 'leakyFault', label: 'Leaky Fault', icon: 'fa-water' },
             ].map(p => (
               <button key={p.id} onClick={() => applyPreset(p.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'azure', padding: '6px 12px', borderRadius: 8, fontSize: 11.5, fontWeight: 500, cursor: 'pointer', transition: 'all 0.3s ease' }}>
                 <i className={`fas ${p.icon}`} style={{ fontSize: 9.5, color: '#64ffda' }}/> {p.label}
@@ -1990,257 +996,32 @@ const SimulatorPage = () => {
                     {/* Floating HUD Legend */}
                     <div style={{
                       position: 'absolute', top: 12, right: 12,
-                      display: 'flex', gap: 12, alignItems: 'center',
-                      background: 'rgba(0,0,0,0.50)', backdropFilter: 'blur(10px)',
-                      WebkitBackdropFilter: 'blur(10px)',
+                      display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', maxWidth: '70%',
+                      background: 'rgba(0,0,0,0.50)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
                       border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20,
                       padding: '5px 12px', fontSize: 10, color: 'rgba(255,255,255,0.85)',
                       zIndex: 5, pointerEvents: 'none'
                     }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#0dfca2' }} /> Mobile CO₂ (S_g → 0.90)
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#0dfca2' }} /> Mobile CO₂ (S_g = {(1 - params.Swr).toFixed(2)})
                       </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#20c997', border: '1px solid #1a8e8f' }} /> Trapped Gas (S_gr ≈ 0.25)
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#20c997', border: '1px solid #1a8e8f' }} /> Residual (S_gr = {params.Sgr.toFixed(2)})
                       </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ width: 14, height: 0, borderTop: '2px dashed #64ffda' }} /> Max Envelope (h_max)
+                        <span style={{ width: 14, height: 0, borderTop: '2px dashed #64ffda' }} /> Max envelope (h_max)
                       </span>
-                      {hasCapillaryFringe && (
+                      {params.fringeOn && (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: 2, background: 'linear-gradient(180deg, #20c997, #1a8e8f, #0a2a4d)', border: '1px solid #20c997' }} /> Capillary Fringe
+                          <span style={{ width: 8, height: 8, borderRadius: 2, background: 'linear-gradient(180deg, #20c997, #1a8e8f, #0a2a4d)', border: '1px solid #20c997' }} /> Capillary fringe (h_c = {model.hc.toFixed(1)} m)
                         </span>
                       )}
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 2, background: '#0a2a4d' }} /> Brine (S_w = 1.0)
+                        <span style={{ width: 14, height: 0, borderTop: '1px dashed rgba(255,255,255,0.6)' }} /> Spill depth · trap fill
                       </span>
                     </div>
 
-              <svg viewBox="0 0 1000 450" preserveAspectRatio="none" style={{ width: '100%', height: '100%', pointerEvents: 'auto' }}>
-                <defs>
-                  <clipPath id="caprock-clipper">
-                    <path d={`M 0 ${reservoirBlocks[0] ? reservoirBlocks[0].yt1 : capRockY(0)} ` + 
-                      reservoirBlocks.map(b => `L ${b.x2} ${b.yt2}`).join(" ") + 
-                      ` L 1000 ${stratumY(1000, cellCount - 1, 175)} ` +
-                      Array.from({ length: cellCount + 1 }, (_, idx) => {
-                        const k = cellCount - idx;
-                        const x = k * dx;
-                        return `L ${x} ${stratumY(x, Math.max(0, k - 1), 175)}`;
-                      }).join(" ") + ` Z`}
-                    />
-                  </clipPath>
-                  
-                  <linearGradient id="plume-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#0dfca2" stopOpacity="0.95"/>
-                    <stop offset="40%" stopColor="#05e67c" stopOpacity="0.85"/>
-                    <stop offset="100%" stopColor="#05ab5e" stopOpacity="0.75"/>
-                  </linearGradient>
-                  
-                  <linearGradient id="trapped-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#0b7a61" stopOpacity="0.85"/>
-                    <stop offset="100%" stopColor="#034d3c" stopOpacity="0.75"/>
-                  </linearGradient>
-
-                  {/* Active Mobile Supercritical Flow Gradient (S_max: Green -> Aqua/Teal) */}
-                  <linearGradient id="active-mobile-sim-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#0dfca2" stopOpacity="0.98"/>
-                    <stop offset="45%" stopColor="#0dfca2" stopOpacity="0.95"/>
-                    <stop offset="70%" stopColor="#05e67c" stopOpacity="0.92"/>
-                    <stop offset="88%" stopColor="#20c997" stopOpacity="0.90"/>
-                    <stop offset="100%" stopColor="#1a8e8f" stopOpacity="0.85"/>
-                  </linearGradient>
-
-                  {/* Residual Trapped Gas Swept Footprint Gradient (S_gr Seafoam/Teal -> Brine Blue) */}
-                  <linearGradient id="residual-trapped-sim-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#20c997" stopOpacity="0.85"/>
-                    <stop offset="40%" stopColor="#20c997" stopOpacity="0.75"/>
-                    <stop offset="75%" stopColor="#1a8e8f" stopOpacity="0.65"/>
-                    <stop offset="92%" stopColor="#125672" stopOpacity="0.45"/>
-                    <stop offset="100%" stopColor="#0a2a4d" stopOpacity="0.25"/>
-                  </linearGradient>
-                  
-                  {/* Capillary Fringe Transition Gradient (Green -> Aqua -> Native Aquifer Brine Blue) */}
-                  <linearGradient id="fringe-sim-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#20c997" stopOpacity="0.80"/>
-                    <stop offset="50%" stopColor="#1a8e8f" stopOpacity="0.60"/>
-                    <stop offset="85%" stopColor="#125672" stopOpacity="0.35"/>
-                    <stop offset="100%" stopColor="#0a2a4d" stopOpacity="0.10"/>
-                  </linearGradient>
-
-                  <linearGradient id="brine-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#0a2a4d" stopOpacity="0.85"/>
-                    <stop offset="100%" stopColor="#051426" stopOpacity="0.95"/>
-                  </linearGradient>
-                </defs>
-
-                {/* Conforming caprock layer (solid brown) */}
-                <path d={`M 0 0 L 1000 0 L 1000 ${capRockY(1000, cellCount - 1)} ` + Array.from({ length: cellCount + 1 }, (_, idx) => {
-                  const k = cellCount - idx;
-                  const x = k * dx;
-                  return `L ${x} ${capRockY(x, Math.max(0, k - 1))}`;
-                }).join(" ") + ` Z`} fill="#282030" stroke="rgba(255,255,255,0.02)"/>
-                
-                {/* Reservoir Sandstone conforming blocks with subtle geological permeability texture */}
-                {reservoirBlocks.map((b, idx) => (
-                  <polygon key={idx} points={b.points} fill={b.fill} stroke="rgba(0,0,0,0.06)" strokeWidth="0.5"/>
-                ))}
-
-                {/* Smooth continuous Native Brine Water layer across entire aquifer body */}
-                <path 
-                  d={`M 0 ${reservoirBlocks[0] ? reservoirBlocks[0].yt1 : capRockY(0)} ` + 
-                     reservoirBlocks.map(b => `L ${b.x2} ${b.yt2}`).join(" ") + 
-                     ` L 1000 ${stratumY(1000, cellCount - 1, 175)} ` +
-                     Array.from({ length: cellCount + 1 }, (_, idx) => {
-                       const k = cellCount - idx;
-                       const x = k * dx;
-                       return `L ${x} ${stratumY(x, Math.max(0, k - 1), 175)}`;
-                     }).join(" ") + ` Z`} 
-                  fill="url(#brine-grad)"
-                  opacity="0.88"
-                />
-
-                {/* Well injection casing visual inside reservoir column */}
-                {(() => {
-                  const cellInjIdx = Math.floor((injLocation / 100.0) * cellCount);
-                  const b = reservoirBlocks[cellInjIdx];
-                  if (!b) return null;
-                  return (
-                    <rect x={b.x1 + dx/2.0 - 2} y={b.yt1} width="4" height={b.yb1 - b.yt1} fill="rgba(255,255,255,0.2)"/>
-                  );
-                })()}
-
-                {/* CO2 Plume Multiphase Fluid Body */}
-                <g clipPath="url(#caprock-clipper)">
-                  {/* 1. Swept Residual Trapped Gas Footprint (S_gr) */}
-                  {getSweptResidualSimPath() && (
-                    <path d={getSweptResidualSimPath()} fill="url(#residual-trapped-sim-grad)" opacity="0.92" />
-                  )}
-
-                  {/* 2. Active Flowing Mobile Plume (S_max) */}
-                  {getActiveMobileSimPath() && (
-                    <path d={getActiveMobileSimPath()} fill="url(#active-mobile-sim-grad)" opacity="0.98" />
-                  )}
-
-                  {/* 3. Maximum Historic Gas Saturation Boundary (hMax Swept Footprint Dashed Line) */}
-                  {getMaxHgLinePath() && (
-                    <path 
-                      d={getMaxHgLinePath()} 
-                      fill="none" 
-                      stroke="#64ffda" 
-                      strokeWidth="1.4" 
-                      strokeDasharray="5 3.5" 
-                      opacity="0.85" 
-                    />
-                  )}
-                </g>
-
-                {/* Aquifer boundary bottom seal */}
-                <path d={`M 0 ${stratumY(0, 0, 175)} ` + Array.from({ length: cellCount + 1 }, (_, idx) => {
-                  const x = idx * dx;
-                  return `L ${x} ${stratumY(x, Math.min(cellCount - 1, idx), 175)}`;
-                }).join(" ")} stroke="rgba(0,0,0,0.3)" strokeWidth="1" fill="none"/>
-
-                {/* Injection Well Riser and flare */}
-                {(() => {
-                  const cellInjIdx = Math.floor((injLocation / 100.0) * cellCount);
-                  const xWell = cellInjIdx * dx + dx / 2.0;
-                  const yCap = capRockY(xWell);
-                  
-                  return (
-                    <g>
-                      {/* Vertical steel casing tubing */}
-                      <line x1={xWell} y1="0" x2={xWell} y2={yCap + 120} stroke="url(#well-gradient)" strokeWidth="4"/>
-                      {/* Perforations indicator */}
-                      {Q > 0 && simTime <= injDuration && (
-                        <circle cx={xWell} cy={yCap + 90} r="10" fill="rgba(100,255,218,0.25)" style={{ animation: 'pulseFlare 1.5s infinite' }}/>
-                      )}
-                      {/* Flow bubbles in tubing */}
-                      {Q > 0 && isPlaying && simTime <= injDuration && [0, 0.3, 0.6, 0.9].map((delay, idx) => (
-                        <circle key={idx} cx={xWell} cy={yCap * (idx/4.0)} r="2" fill="#0dfca2" style={{ animation: `streakRise 1.5s linear ${delay}s infinite` }}/>
-                      ))}
-                    </g>
-                  );
-                })()}
-
-                {/* Fault Lines (Dynamic sloped representation intersecting caprock exactly at fault throw) */}
-                {Array.from({ length: faultCount }).map((_, idx) => {
-                  const f = faults[idx];
-                  const inter = getSimFaultIntersection(f, idx);
-                  const color = f.isSealed ? '#64ffda' : '#ff6b6b';
-                  const yStart = 0;
-                  const yEnd = 450;
-                  const xStart = inter.x0 + inter.slope * yStart;
-                  const xEnd = inter.x0 + inter.slope * yEnd;
-                  return (
-                    <g key={idx}>
-                      <line x1={xStart} y1={yStart} x2={xEnd} y2={yEnd} stroke={color} strokeWidth="1.2" strokeDasharray="3 3" opacity="0.6"/>
-                    </g>
-                  );
-                })}
-
-                {/* Leaking CO2 conduit stream ascending along the sloped fault plane */}
-                {isPlaying && Array.from({ length: faultCount }).map((_, idx) => {
-                  const f = faults[idx];
-                  if (f.isSealed) return null;
-                  const inter = getSimFaultIntersection(f, idx);
-                  const cellIdx = Math.round(cellCount * (inter.x / 1000.0));
-                  const boundedIdx = Math.max(0, Math.min(cellCount - 1, cellIdx));
-                  
-                  // Flow activates ONLY when total plume height exceeds spill threshold height
-                  if (h[boundedIdx] > f.thresholdHeight) {
-                    const travelY = -65; // Traverses through the overlying seal
-                    const travelX = inter.slope * travelY;
-                    const xTop = inter.x + travelX;
-                    const yTop = inter.y + travelY;
-
-                    return (
-                      <g key={`fl-group-${idx}`}>
-                        {/* Active conduit flow filament */}
-                        <line 
-                          x1={inter.x} 
-                          y1={inter.y} 
-                          x2={xTop} 
-                          y2={yTop} 
-                          stroke="#ff6b6b" 
-                          strokeWidth="1.5" 
-                          strokeDasharray="4 3" 
-                          opacity="0.8" 
-                          style={{ animation: 'conduitFlow 1s linear infinite' }}
-                        />
-                        {/* Micro-fluid Pulses */}
-                        {[0, 0.6, 1.2, 1.8].map((delay, i) => (
-                          <circle 
-                            key={`fl-${idx}-${i}`} 
-                            cx={inter.x} 
-                            cy={inter.y} 
-                            r="1.6" 
-                            fill="#ff6b6b" 
-                            style={{
-                              opacity: 0,
-                              '--travel-x': `${travelX}px`,
-                              '--travel-y': `${travelY}px`,
-                              animation: 'faultRiseTilted 2.0s cubic-bezier(0.25, 0.46, 0.45, 0.94) ' + delay + 's infinite'
-                            }}
-                          />
-                        ))}
-                      </g>
-                    );
-                  }
-                  return null;
-                })}
-
-                {/* Label legends */}
-                <text x="30" y={capRockY(30) - 10} fill="rgba(255,255,255,0.4)" fontSize="9" letterSpacing="0.1em" textTransform="uppercase" fontFamily="monospace">Caprock Seal</text>
-                <text x="30" y={capRockY(30) + 80} fill="rgba(255,255,255,0.4)" fontSize="9" letterSpacing="0.1em" textTransform="uppercase" fontFamily="monospace">Sandstone Aquifer</text>
-                
-                <defs>
-                  <linearGradient id="well-gradient" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#222"/>
-                    <stop offset="50%" stopColor="#ccc"/>
-                    <stop offset="100%" stopColor="#222"/>
-                  </linearGradient>
-                </defs>
-              </svg>
+                    <CrossSection model={model} diag={diag} simTime={simTime} isPlaying={isPlaying} />
 
               {/* Time Travel Seek/Play Control Bar overlaid at bottom */}
               <div style={{
@@ -2397,8 +1178,8 @@ const SimulatorPage = () => {
                            outline: 'none'
                          }}
                        >
-                         <option value="leaked">CO\u2082 Leakage Mass (ktonnes)</option>
-                         <option value="trapped">Residual Trapping Efficiency (%)</option>
+                         <option value="leaked">CO\u2082 leaked to upper layer (Mt)</option>
+                         <option value="trapped">Immobilised: residual + dissolved (%)</option>
                        </select>
                      </div>
                   </div>
@@ -2458,7 +1239,7 @@ const SimulatorPage = () => {
                       
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>
-                          Uncertainty Distribution ({uqTargetMetric === 'leaked' ? 'CO\u2082 Leaked Mass' : 'Trapping Efficiency'})
+                          Uncertainty Distribution ({uqTargetMetric === 'leaked' ? 'CO\u2082 leaked to upper layer' : 'Immobilised fraction'})
                         </span>
                         {renderUQHistogram(uqData)}
                       </div>
@@ -2483,56 +1264,23 @@ const SimulatorPage = () => {
                     }}>
                       <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Probabilistic Risk Models</span>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                        
-                        {/* P10 */}
-                        <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <div style={{ fontSize: 9.5, color: '#64ffda', fontWeight: 'bold' }}>P10 (Low Risk)</div>
-                            <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
-                              {uqData.p10Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
+                        {uqBands.map(b => (
+                          <div key={b.key} style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                            <div>
+                              <div style={{ fontSize: 9.5, color: b.color, fontWeight: 'bold' }}>{b.label}</div>
+                              <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
+                                {uqData[`${b.key}Val`].toFixed(2)}{metricUnit}
+                              </div>
                             </div>
+                            <button
+                              onClick={() => loadUQRealization(uqData[`${b.key}Realization`])}
+                              style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${b.color}`, color: b.color, padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', outline: 'none' }}
+                            >
+                              Load Model
+                            </button>
                           </div>
-                          <button 
-                            onClick={() => loadUQRealization(uqData.p10Realization)}
-                            style={{ background: 'rgba(100,255,218,0.1)', border: '1px solid rgba(100,255,218,0.3)', color: '#64ffda', padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease', outline: 'none' }}
-                          >
-                            Load Model
-                          </button>
-                        </div>
-                        
-                        {/* P50 */}
-                        <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <div style={{ fontSize: 9.5, color: '#ffb300', fontWeight: 'bold' }}>P50 (Expected)</div>
-                            <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
-                              {uqData.p50Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
-                            </div>
-                          </div>
-                          <button 
-                            onClick={() => loadUQRealization(uqData.p50Realization)}
-                            style={{ background: 'rgba(255,179,0,0.1)', border: '1px solid rgba(255,179,0,0.3)', color: '#ffb300', padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease', outline: 'none' }}
-                          >
-                            Load Model
-                          </button>
-                        </div>
-                        
-                        {/* P90 */}
-                        <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <div style={{ fontSize: 9.5, color: '#ff6b6b', fontWeight: 'bold' }}>P90 (High Risk)</div>
-                            <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
-                              {uqData.p90Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
-                            </div>
-                          </div>
-                          <button 
-                            onClick={() => loadUQRealization(uqData.p90Realization)}
-                            style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', color: '#ff6b6b', padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease', outline: 'none' }}
-                          >
-                            Load Model
-                          </button>
-                        </div>
-
-                       </div>
+                        ))}
+                      </div>
                      </div>
 
                    </div>
@@ -2578,91 +1326,55 @@ const SimulatorPage = () => {
 
           {/* Sub-grid containing Parameters (Left) and Faults (Right) directly below Reservoir Grid */}
           <div className="controls-subgrid">
-            
+
             {/* Simulation Parameters Slider Panel */}
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 20,
-              padding: '18px 20px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
-              backdropFilter: 'blur(12px)'
-            }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif" }}>
-                Simulation Parameters
-              </h3>
-
+            <div style={SIM_PANEL_STYLE}>
+              <h3 style={SIM_PANEL_TITLE}>Simulation Parameters</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {/* Caprock Structure controls */}
-                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 10 }}>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Topography Spline (Caprock)</span>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                    <Slider label="Regional Dip" val={`${dipPercent}%`} min="-5" max="5" step="0.5" value={dipPercent} onChange={v => setDipPercent(parseFloat(v))} />
-                    <Slider label="Anticline Height" val={`${amplitude}px`} min="0" max="50" step="5" value={amplitude} onChange={v => setAmplitude(parseInt(v))} />
-                    <Slider label="Anticline Count" val={frequency} min="0.5" max="4.0" step="0.5" value={frequency} onChange={v => setFrequency(parseFloat(v))} />
-                    <Slider label="Fault Slip" val={`${faultOffset}x`} min="0" max="3" step="0.2" value={faultOffset} onChange={v => setFaultOffset(parseFloat(v))} />
-                  </div>
-                </div>
+                <ControlGroup title="Caprock Geometry">
+                  <Slider label="Regional dip (+ deeper →)" val={`${params.dipPct}%`} min="-3" max="3" step="0.1" value={params.dipPct} onChange={v => setP('dipPct', parseFloat(v))} />
+                  <Slider label="Fold amplitude" val={`${params.foldAmp} m`} min="0" max="60" step="1" value={params.foldAmp} onChange={v => setP('foldAmp', parseFloat(v))} />
+                  <Slider label="Fold count" val={params.foldCount} min="0.5" max="4" step="0.5" value={params.foldCount} onChange={v => setP('foldCount', parseFloat(v))} />
+                  <Slider label="Aquifer thickness H" val={`${params.H} m`} min="10" max="100" step="5" value={params.H} onChange={v => setP('H', parseFloat(v))} />
+                </ControlGroup>
 
-                {/* Rock & Fluids properties */}
-                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 10 }}>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Sandstone Properties</span>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                    <Slider label="Permeability (K)" val={`${Math.round(K*1000)} mD`} min="0.1" max="3.5" step="0.1" value={K} onChange={v => setK(parseFloat(v))} />
-                    <Slider label="Porosity (phi)" val={`${Math.round(porosity*100)}%`} min="0.1" max="0.4" step="0.05" value={porosity} onChange={v => setPorosity(parseFloat(v))} />
-                    <Slider label="Grid Cells (N)" val={cellCount} min="50" max="300" step="10" value={cellCount} onChange={v => setCellCount(parseInt(v))} />
-                    <Slider label="Residual Trap (Sgr)" val={`${Math.round(residualTrapFraction*100)}%`} min="0.0" max="0.4" step="0.05" value={residualTrapFraction} onChange={v => setResidualTrapFraction(parseFloat(v))} />
-                  </div>
-                </div>
+                <ControlGroup title="Rock & Fluids">
+                  <Slider label="Permeability k" val={`${params.k_mD} mD`} min="10" max="3000" step="10" value={params.k_mD} onChange={v => setP('k_mD', parseFloat(v))} />
+                  <Slider label="Porosity φ" val={params.phi.toFixed(2)} min="0.05" max="0.35" step="0.01" value={params.phi} onChange={v => setP('phi', parseFloat(v))} />
+                  <Slider label="Residual brine S_wr" val={params.Swr.toFixed(2)} min="0.05" max="0.4" step="0.01" value={params.Swr} onChange={v => setP('Swr', parseFloat(v))} />
+                  <Slider label="Residual CO₂ S_gr" val={params.Sgr.toFixed(2)} min="0" max="0.4" step="0.01" value={params.Sgr} onChange={v => setP('Sgr', parseFloat(v))} />
+                  <Slider label="Density contrast Δρ" val={`${params.dRho} kg/m³`} min="100" max="600" step="10" value={params.dRho} onChange={v => setP('dRho', parseFloat(v))} />
+                  <Slider label="Mobility ratio M" val={params.M.toFixed(1)} min="1" max="20" step="0.5" value={params.M} onChange={v => setP('M', parseFloat(v))} />
+                </ControlGroup>
 
-                {/* Capillary Fringe & Pressure Parameters */}
-                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Capillary Fringe (P_c Transition)</span>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, cursor: 'pointer', color: hasCapillaryFringe ? '#64ffda' : 'rgba(255,255,255,0.5)' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={hasCapillaryFringe} 
-                        onChange={e => setHasCapillaryFringe(e.target.checked)} 
-                        style={{ accentColor: '#64ffda' }} 
-                      />
-                      Enable Fringe
+                <ControlGroup
+                  title="Capillary Fringe (display)"
+                  right={
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, cursor: 'pointer', color: params.fringeOn ? '#64ffda' : 'rgba(255,255,255,0.5)' }}>
+                      <input type="checkbox" checked={params.fringeOn} onChange={e => setP('fringeOn', e.target.checked)} style={{ accentColor: '#64ffda' }} />
+                      Enable fringe
                     </label>
-                  </div>
-                  {hasCapillaryFringe && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                      <Slider label="Fringe Height (h_c)" val={`${fringeScale.toFixed(2)} m`} min="0.10" max="3.00" step="0.10" value={fringeScale} onChange={v => setFringeScale(parseFloat(v))} />
-                      <Slider label="Entry Capillary P_e" val={`${entryPressure} kPa`} min="5" max="40" step="1" value={entryPressure} onChange={v => setEntryPressure(parseInt(v))} />
-                    </div>
+                  }
+                >
+                  {params.fringeOn && (
+                    <Slider label="Entry pressure P_e" val={`${params.Pe_kPa} kPa · h_c ${model.hc.toFixed(1)} m`} min="1" max="40" step="1" value={params.Pe_kPa} onChange={v => setP('Pe_kPa', parseFloat(v))} />
                   )}
-                </div>
+                </ControlGroup>
 
-                {/* Injection Settings */}
-                <div>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Injection Settings</span>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
-                    <Slider label="Flow Rate (Q)" val={Q} min="0.0" max="3.5" step="0.1" value={Q} onChange={v => setQ(parseFloat(v))} />
-                    <Slider label="Well Location" val={`${injLocation}%`} min="10" max="90" step="5" value={injLocation} onChange={v => setInjLocation(parseInt(v))} />
-                    <Slider label="Inj. Stop Year" val={`${injDuration}y`} min="50" max="400" step="10" value={injDuration} onChange={v => setInjDuration(parseInt(v))} />
-                  </div>
-                </div>
+                <ControlGroup title="Injection & Domain" last>
+                  <Slider label="Injection rate" val={`${params.Q_Mtpa} Mt/yr`} min="0" max="5" step="0.1" value={params.Q_Mtpa} onChange={v => setP('Q_Mtpa', parseFloat(v))} />
+                  <Slider label="Injection period" val={`${params.injYears} yr`} min="5" max="200" step="5" value={params.injYears} onChange={v => setP('injYears', parseFloat(v))} />
+                  <Slider label="Well position" val={`${Math.round(params.wellFrac * 100)}%`} min="0.1" max="0.9" step="0.05" value={params.wellFrac} onChange={v => setP('wellFrac', parseFloat(v))} />
+                  <Slider label="Slab width W" val={`${(params.W / 1000).toFixed(1)} km`} min="1000" max="20000" step="500" value={params.W} onChange={v => setP('W', parseFloat(v))} />
+                  <Slider label="Grid cells (resets)" val={params.nx} min="50" max="300" step="10" value={params.nx} onChange={v => setP('nx', parseInt(v, 10))} />
+                  <Slider label="Dissolution rate" val={`${params.dissMult.toFixed(1)}×`} min="0" max="3" step="0.1" value={params.dissMult} onChange={v => setP('dissMult', parseFloat(v))} />
+                </ControlGroup>
               </div>
             </div>
 
             {/* Fault Management Control Panel */}
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 20,
-              padding: '18px 20px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
-              backdropFilter: 'blur(12px)'
-            }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif" }}>
-                Fault Management
-              </h3>
-
-              {/* Number of Faults selector */}
+            <div style={SIM_PANEL_STYLE}>
+              <h3 style={SIM_PANEL_TITLE}>Fault Management</h3>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 15 }}>
                 <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>Active Faults:</span>
                 <div style={{ display: 'flex', gap: 4 }}>
@@ -2670,17 +1382,12 @@ const SimulatorPage = () => {
                     <button
                       key={cnt}
                       onClick={() => setFaultCount(cnt)}
+                      aria-pressed={faultCount === cnt}
                       style={{
                         background: faultCount === cnt ? 'rgba(100,255,218,0.2)' : 'rgba(255,255,255,0.05)',
                         border: `1px solid ${faultCount === cnt ? '#64ffda' : 'rgba(255,255,255,0.12)'}`,
                         color: faultCount === cnt ? '#64ffda' : 'azure',
-                        padding: '4px 10px',
-                        borderRadius: 6,
-                        fontSize: 11,
-                        fontWeight: 'bold',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        outline: 'none'
+                        padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 'bold', cursor: 'pointer', outline: 'none'
                       }}
                     >
                       {cnt}
@@ -2689,87 +1396,29 @@ const SimulatorPage = () => {
                 </div>
               </div>
 
-              {/* Fault controls rows */}
               {faultCount > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {Array.from({ length: faultCount }).map((_, idx) => {
-                    const f = faults[idx];
-                    const label = `Fault ${String.fromCharCode(65 + idx)}`;
+                  {params.faults.map((f, idx) => {
+                    const mf = model.faults[idx];
+                    const jux = Math.max(0, params.H - Math.abs(f.throw_m)) / params.H;
                     return (
                       <div key={idx} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 12, padding: '10px 12px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                          <span style={{ fontSize: 11.5, fontWeight: 'bold', color: f.isSealed ? '#64ffda' : '#ff6b6b' }}>{label}</span>
+                          <span style={{ fontSize: 11.5, fontWeight: 'bold', color: f.sealed ? '#64ffda' : '#ff6b6b' }}>Fault {String.fromCharCode(65 + idx)}</span>
                           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={f.isSealed}
-                              onChange={e => {
-                                const newFaults = [...faults];
-                                newFaults[idx].isSealed = e.target.checked;
-                                setFaults(newFaults);
-                              }}
-                              style={{ accentColor: '#64ffda' }}
-                            />
-                            Sealed (Infinite Barrier)
+                            <input type="checkbox" checked={f.sealed} onChange={e => setFault(idx, 'sealed', e.target.checked)} style={{ accentColor: '#64ffda' }} />
+                            Sealed (no flow, no leak)
                           </label>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                          <Slider
-                            label="Position"
-                            val={`${f.xPercent}%`}
-                            min="10"
-                            max="90"
-                            step="5"
-                            value={f.xPercent}
-                            onChange={v => {
-                              const newFaults = [...faults];
-                              newFaults[idx].xPercent = parseInt(v);
-                              setFaults(newFaults);
-                            }}
-                          />
-                          <Slider
-                            label="Capillary Threshold"
-                            val={`${f.thresholdHeight} m`}
-                            min="0.0"
-                            max="2.0"
-                            step="0.1"
-                            value={f.thresholdHeight}
-                            onChange={v => {
-                              const newFaults = [...faults];
-                              newFaults[idx].thresholdHeight = parseFloat(v);
-                              setFaults(newFaults);
-                            }}
-                          />
-                          <Slider
-                            label="Horiz. Transmissibility"
-                            val={f.transmissibility !== undefined ? f.transmissibility.toFixed(2) : "1.00"}
-                            min="0.0"
-                            max="1.0"
-                            step="0.05"
-                            value={f.transmissibility !== undefined ? f.transmissibility : 1.0}
-                            onChange={v => {
-                              const newFaults = [...faults];
-                              newFaults[idx].transmissibility = parseFloat(v);
-                              setFaults(newFaults);
-                            }}
-                          />
-                          {!f.isSealed ? (
-                            <Slider
-                              label="Leakage Rate"
-                              val={f.leakRate}
-                              min="0.01"
-                              max="0.40"
-                              step="0.02"
-                              value={f.leakRate}
-                              onChange={v => {
-                                const newFaults = [...faults];
-                                newFaults[idx].leakRate = parseFloat(v);
-                                setFaults(newFaults);
-                              }}
-                            />
-                          ) : (
-                            <div />
-                          )}
+                          <Slider label="Position" val={`${Math.round(f.xFrac * 100)}%`} min="0.05" max="0.95" step="0.01" value={f.xFrac} onChange={v => setFault(idx, 'xFrac', parseFloat(v))} />
+                          <Slider label="Throw (+ down to right)" val={`${f.throw_m} m`} min="-80" max="80" step="1" value={f.throw_m} onChange={v => setFault(idx, 'throw_m', parseFloat(v))} />
+                          <Slider label="Lateral T (fault rock)" val={f.Trock.toFixed(2)} min="0" max="1" step="0.05" value={f.Trock} onChange={v => setFault(idx, 'Trock', parseFloat(v))} />
+                          <Slider label="Threshold P_th" val={`${f.Pth_kPa} kPa · h_th ${mf.hth.toFixed(1)} m`} min="1" max="200" step="1" value={f.Pth_kPa} onChange={v => setFault(idx, 'Pth_kPa', parseFloat(v))} />
+                          <Slider label="Fault permeability k_f" val={`${f.kf_mD} mD`} min="0" max="500" step="1" value={f.kf_mD} onChange={v => setFault(idx, 'kf_mD', parseFloat(v))} />
+                          <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.6)', alignSelf: 'end' }}>
+                            Sand-on-sand overlap {Math.round(jux * 100)}%{jux === 0 ? ' · juxtaposition seal' : ''}
+                          </div>
                         </div>
                       </div>
                     );
@@ -2789,48 +1438,226 @@ const SimulatorPage = () => {
           top: 110
         }}>
           {/* Mass Balance Analytics Panel */}
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 20,
-            padding: '18px 20px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.20)',
-            backdropFilter: 'blur(12px)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12
-          }}>
+          <div style={{ ...SIM_PANEL_STYLE, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64ffda', fontFamily: "'Montserrat', sans-serif" }}>
-                CO₂ Mass Balance
-              </h3>
-              <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'rgba(255,255,255,0.5)' }}>Values in ktonnes</span>
+              <h3 style={{ ...SIM_PANEL_TITLE, margin: 0 }}>CO₂ Mass Balance</h3>
+              <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'rgba(255,255,255,0.5)' }}>Values in Mt</span>
             </div>
 
-            {/* Live Chart Rendering */}
             {renderSVGChart()}
 
-            {/* Mass balance numerical breakdown boxes */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 4 }}>
-              <StatBox label="Injected" value={Math.round(currentMasses.injected)} color="#ffffff" opacity="0.6"/>
-              <StatBox label="Mobile Plume" value={Math.round(currentMasses.mobile)} color="#64ffda"/>
-              <StatBox label="Trapped" value={Math.round(currentMasses.trapped)} color="#3ca68e"/>
-              <StatBox label="Leaked" value={Math.round(currentMasses.leaked)} color="#ff6b6b"/>
-            </div>
+            {(() => {
+              const cur = simMassPoint(diag, simTime);
+              const pct = v => (cur.injected > 0 ? (v / cur.injected) * 100 : 0);
+              // step flags describe the last simulated year; a sealed-in well is a standing geometry condition
+              const flags = Object.keys({ ...diag.flags, ...(model.injectionBlocked && params.Q_Mtpa > 0 ? { injectionBlocked: true } : {}) });
+              const balOk = Math.abs(diag.balanceError) < 1e-9;
+              return (
+                <React.Fragment>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 4 }}>
+                    {MASS_SERIES.map(sr => (
+                      <StatBox key={sr.key} label={sr.label} value={cur[sr.key].toFixed(2)} color={sr.color} opacity={sr.dash ? 0.6 : 1} />
+                    ))}
+                    <StatBox label="Balance error" value={balOk ? '< 1e-9' : diag.balanceError.toExponential(1)} color={balOk ? '#64ffda' : '#ff6b6b'} />
+                  </div>
 
-            {/* Real-time Storage Efficiency Trapping Mechanism Progress Bars */}
-            <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12 }}>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Storage Efficiency</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                <ProgressBar label="Structural Trapping (Mobile)" pct={currentMasses.injected > 0 ? (currentMasses.mobile / currentMasses.injected) * 100 : 0} color="#64ffda"/>
-                <ProgressBar label="Residual Capillary Trapping" pct={currentMasses.injected > 0 ? (currentMasses.trapped / currentMasses.injected) * 100 : 0} color="#3ca68e"/>
-                <ProgressBar label="Cumulative Leaked Fraction" pct={currentMasses.injected > 0 ? (currentMasses.leaked / currentMasses.injected) * 100 : 0} color="#ff6b6b"/>
-              </div>
-            </div>
+                  {flags.length > 0 && (
+                    <div role="status" style={{ fontSize: 11, color: '#ffb300', background: 'rgba(255,179,0,0.08)', border: '1px solid rgba(255,179,0,0.3)', borderRadius: 8, padding: '6px 10px' }}>
+                      <i className="fas fa-exclamation-triangle" /> {flags.map(f => SIM_FLAG_TEXT[f] || f).join(' · ')}
+                    </div>
+                  )}
+
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12 }}>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Fate of injected CO₂</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                      <ProgressBar label="Structurally trapped" pct={pct(cur.structural)} color="#64ffda" />
+                      <ProgressBar label="Residually trapped" pct={pct(cur.residual)} color="#3ca68e" />
+                      <ProgressBar label="Dissolved in brine" pct={pct(cur.dissolved)} color="#4dabf7" />
+                      <ProgressBar label="Leaked to upper layer" pct={pct(cur.upper)} color="#ffb300" />
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>
+                    {Math.round(sim.substepsLastYear)} substeps/yr · {model.layers[0].traps.length} trap(s) in storage aquifer
+                  </div>
+                </React.Fragment>
+              );
+            })()}
           </div>
         </div>
       </div>
     </div>
+  );
+};
+
+// Titled two-column group of sliders inside a panel
+const ControlGroup = ({ title, right, children, last }) => (
+  <div style={{ borderBottom: last ? 'none' : '1px solid rgba(255,255,255,0.06)', paddingBottom: last ? 0 : 10 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>{title}</span>
+      {right}
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>{children}</div>
+  </div>
+);
+
+// Reservoir cross-section: metres → SVG viewBox 1000×450 (bottom 78 px sit under the time bar).
+// Depth axis is exaggerated to fit; the V.E. factor is printed top-right.
+const CrossSection = ({ model, diag, simTime, isPlaying }) => {
+  const VW = 1000, VH = 450, top = 34, bottom = 78;
+  const { nx, dx, p, layers, faults } = model;
+  const [L0, L1] = layers;
+  const zMin = Math.min(...L1.zt) - 15;
+  const zMax = Math.max(...L0.zt) + L0.H + 15;
+  const plotH = VH - top - bottom;
+  const X = x => (x / p.L) * VW;
+  const Y = z => top + ((z - zMin) / (zMax - zMin)) * plotH;
+  const vExag = (p.L / VW) / ((zMax - zMin) / plotH);
+
+  const stepFaces = l => new Set(faults.filter(f => f.throw_m !== 0).map(f => (l === 0 ? f.lowerFace : f.upperFace)));
+  const st0 = stepFaces(0), st1 = stepFaces(1), none = new Set();
+  // Face-node points of a per-cell depth array over faces [f0, f1]; a vertical step at fault faces keeps throws crisp
+  const nodes = (vals, st, f0, f1) => {
+    const pts = [];
+    for (let f = f0; f <= f1; f++) {
+      const x = X(f * dx).toFixed(1);
+      if (f === 0) pts.push(`${x},${Y(vals[0]).toFixed(1)}`);
+      else if (f === nx) pts.push(`${x},${Y(vals[nx - 1]).toFixed(1)}`);
+      else if (st.has(f)) pts.push(`${x},${Y(vals[f - 1]).toFixed(1)}`, `${x},${Y(vals[f]).toFixed(1)}`);
+      else pts.push(`${x},${Y(0.5 * (vals[f - 1] + vals[f])).toFixed(1)}`);
+    }
+    return pts;
+  };
+  const band = (topV, topSt, botV, botSt, f0 = 0, f1 = nx) =>
+    'M' + nodes(topV, topSt, f0, f1).concat(nodes(botV, botSt, f0, f1).reverse()).join(' L') + ' Z';
+  const line = (vals, st, f0, f1) => 'M' + nodes(vals, st, f0, f1).join(' L');
+  const plus = (a, b) => a.map((v, i) => v + (typeof b === 'number' ? b : b[i]));
+  const flat = z => new Float64Array(nx).fill(z);
+
+  const plume = (l, L, st) => {
+    const dl = diag.layers[l];
+    let i0 = -1, i1 = -1;
+    for (let i = 0; i < nx; i++) if (dl.hmax[i] > 1e-3 || dl.h[i] > 1e-3) { if (i0 < 0) i0 = i; i1 = i; }
+    if (i0 < 0) return null;
+    const f0 = Math.max(0, i0 - 1), f1 = Math.min(nx, i1 + 2);
+    const zH = plus(L.zt, dl.h), zHmax = plus(L.zt, dl.hmax);
+    const zFr = L.zt.map((z, i) => z + Math.min(L.H, VE.fringeBase(model, dl.h[i])));
+    return (
+      <g key={`plume-${l}`}>
+        <path d={band(zH, st, zHmax, st, f0, f1)} fill="url(#residual-trapped-sim-grad)" opacity="0.92" />
+        {p.fringeOn && <path d={band(zH, st, zFr, st, f0, f1)} fill="url(#fringe-sim-grad)" opacity="0.9" />}
+        <path d={band(L.zt, st, zH, st, f0, f1)} fill="url(#active-mobile-sim-grad)" opacity="0.98" />
+        <path d={line(zHmax, st, f0, f1)} fill="none" stroke="#64ffda" strokeWidth="1.2" strokeDasharray="5 3.5" opacity="0.8" />
+      </g>
+    );
+  };
+
+  const traps = [0, 1].map(l => diag.layers[l].traps
+    .filter(t => Number.isFinite(t.spill) && t.capacity > 1e8)
+    .map((t, i) => (
+      <g key={`trap-${l}-${i}`}>
+        <line x1={X(t.lo * dx)} y1={Y(t.spill)} x2={X((t.hi + 1) * dx)} y2={Y(t.spill)} stroke="rgba(255,255,255,0.45)" strokeWidth="0.9" strokeDasharray="2 3" />
+        <text x={X((t.crest + 0.5) * dx)} y={Y(t.spill) + 11} fill="rgba(255,255,255,0.65)" fontSize="9" textAnchor="middle" fontFamily="monospace">
+          {`spill · ${Math.round(t.fill * 100)}% of ${kgToMt(t.capacity).toFixed(1)} Mt`}
+        </text>
+      </g>
+    )));
+
+  const faultMarks = faults.map((f, i) => {
+    const iL = f.lowerFace - 1, iR = f.lowerFace;
+    const zRef = 0.5 * (L0.zt[iL] + L0.zt[iR]);
+    const xAt = z => f.lowerFace * dx + f.dipSlope * (z - zRef);
+    const hLo = diag.layers[0].h;
+    const leaking = f.cond > 0 && (hLo[iL] > f.hth || hLo[iR] > f.hth);
+    const color = f.sealed ? 'rgba(255,255,255,0.35)' : leaking ? '#ff6b6b' : 'rgba(255,107,107,0.55)';
+    const zUpperBase = 0.5 * (L1.zt[f.upperFace - 1] + L1.zt[f.upperFace]) + L1.H;
+    return (
+      <g key={`fault-${i}`}>
+        <line x1={X(xAt(zMin - 40))} y1={Y(zMin - 40)} x2={X(xAt(zMax + 40))} y2={Y(zMax + 40)} stroke={color} strokeWidth="1.3" strokeDasharray="4 3" />
+        <text x={X(xAt(zMin)) + 4} y={top - 8} fill={color} fontSize="10" fontFamily="monospace">{String.fromCharCode(65 + i)}</text>
+        {leaking && isPlaying && (
+          <line x1={X(xAt(zRef))} y1={Y(zRef)} x2={X(xAt(zUpperBase))} y2={Y(zUpperBase)} stroke="#ff6b6b" strokeWidth="2.5" strokeDasharray="4 3" style={{ animation: 'conduitFlow 1s linear infinite' }} />
+        )}
+      </g>
+    );
+  });
+
+  const xw = X(model.xc[model.well]);
+  const zw = L0.zt[model.well];
+  const injecting = p.Q_Mtpa > 0 && simTime < p.injYears && !model.injectionBlocked;
+  const depthTicks = [];
+  for (let z = Math.ceil(zMin / 50) * 50; z <= zMax; z += 50) depthTicks.push(z);
+  const kmTicks = [];
+  for (let x = 0; x <= p.L; x += 5000) kmTicks.push(x);
+  const label = (text, z) => (
+    <text x={X(300)} y={Y(z) + 3} fill="rgba(255,255,255,0.4)" fontSize="9" letterSpacing="0.1em" fontFamily="monospace">{text}</text>
+  );
+
+  return (
+    <svg viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: '100%' }} role="img" aria-label={`Reservoir cross-section at year ${simTime}`}>
+      <defs>
+        <linearGradient id="active-mobile-sim-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0dfca2" stopOpacity="0.98" />
+          <stop offset="45%" stopColor="#0dfca2" stopOpacity="0.95" />
+          <stop offset="70%" stopColor="#05e67c" stopOpacity="0.92" />
+          <stop offset="88%" stopColor="#20c997" stopOpacity="0.90" />
+          <stop offset="100%" stopColor="#1a8e8f" stopOpacity="0.85" />
+        </linearGradient>
+        <linearGradient id="residual-trapped-sim-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#20c997" stopOpacity="0.85" />
+          <stop offset="40%" stopColor="#20c997" stopOpacity="0.75" />
+          <stop offset="75%" stopColor="#1a8e8f" stopOpacity="0.65" />
+          <stop offset="92%" stopColor="#125672" stopOpacity="0.45" />
+          <stop offset="100%" stopColor="#0a2a4d" stopOpacity="0.25" />
+        </linearGradient>
+        <linearGradient id="fringe-sim-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#20c997" stopOpacity="0.80" />
+          <stop offset="50%" stopColor="#1a8e8f" stopOpacity="0.60" />
+          <stop offset="85%" stopColor="#125672" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#0a2a4d" stopOpacity="0.10" />
+        </linearGradient>
+        <linearGradient id="brine-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0a2a4d" stopOpacity="0.85" />
+          <stop offset="100%" stopColor="#051426" stopOpacity="0.95" />
+        </linearGradient>
+        <linearGradient id="well-gradient" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#222" />
+          <stop offset="50%" stopColor="#ccc" />
+          <stop offset="100%" stopColor="#222" />
+        </linearGradient>
+      </defs>
+
+      {/* Strata: overburden, upper aquifer, caprock, storage aquifer, underburden */}
+      <path d={band(flat(zMin - 400), none, L1.zt, st1)} fill="#211a2b" />
+      <path d={band(L1.zt, st1, plus(L1.zt, L1.H), st1)} fill="#2e2219" />
+      <path d={band(L1.zt, st1, plus(L1.zt, L1.H), st1)} fill="url(#brine-grad)" opacity="0.85" />
+      <path d={band(plus(L1.zt, L1.H), st1, L0.zt, st0)} fill="#282030" />
+      <path d={band(L0.zt, st0, plus(L0.zt, L0.H), st0)} fill="#2e2219" />
+      <path d={band(L0.zt, st0, plus(L0.zt, L0.H), st0)} fill="url(#brine-grad)" opacity="0.85" />
+      <path d={band(plus(L0.zt, L0.H), st0, flat(zMax + 400), none)} fill="#1a1422" />
+
+      {label('UPPER AQUIFER', L1.zt[3] + L1.H / 2)}
+      {label('CAPROCK', 0.5 * (L1.zt[3] + L1.H + L0.zt[3]))}
+      {label('STORAGE AQUIFER', L0.zt[3] + L0.H / 2)}
+
+      {plume(1, L1, st1)}
+      {plume(0, L0, st0)}
+      {traps}
+      {faultMarks}
+
+      {/* Injector */}
+      <line x1={xw} y1="0" x2={xw} y2={Y(zw + 0.85 * L0.H)} stroke="url(#well-gradient)" strokeWidth="4" />
+      {injecting && <circle cx={xw} cy={Y(zw + 0.5 * L0.H)} r="9" fill="rgba(100,255,218,0.25)" style={{ animation: 'pulseFlare 1.5s infinite' }} />}
+
+      {/* Axes */}
+      {depthTicks.map(z => (
+        <text key={`d${z}`} x="4" y={Y(z) + 3} fill="rgba(255,255,255,0.35)" fontSize="8.5" fontFamily="monospace">{z} m</text>
+      ))}
+      {kmTicks.map(x => (
+        <text key={`x${x}`} x={Math.min(VW - 4, Math.max(4, X(x)))} y={Y(zMax) + 12} fill="rgba(255,255,255,0.35)" fontSize="8.5" textAnchor={x === 0 ? 'start' : x === p.L ? 'end' : 'middle'} fontFamily="monospace">{x / 1000} km</text>
+      ))}
+      <text x={VW - 8} y={top - 10} fill="rgba(255,255,255,0.45)" fontSize="9" textAnchor="end" fontFamily="monospace">V.E. ≈ {Math.round(vExag)}×</text>
+    </svg>
   );
 };
 

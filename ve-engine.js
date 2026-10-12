@@ -128,7 +128,7 @@
     }));
     const Qkg = p.Q_Mtpa * MT / YEAR;
 
-    return {
+    const model = {
       p, nx, dx, xc, rhoG, muG, muW, k, layers, faults,
       lamG: p.krgStar / muG, lamW: 1 / muW,
       kdg: k * p.dRho * G,
@@ -139,6 +139,9 @@
       hc: p.Pe_kPa * KPA / (p.dRho * G),
       a: p.phi * (1 - p.Swr), r: p.phi * p.Sgr, b: p.phi * (1 - p.Swr - p.Sgr)
     };
+    // Purely geometric: column transmissivities are always > 0, so only zero-multiplier faces can seal the well in
+    model.injectionBlocked = splitInjection(model, new Float64Array(nx)) === null;
+    return model;
   }
 
   // ---------------------------------------------------------------- state

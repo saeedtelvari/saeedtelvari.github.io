@@ -14,6 +14,7 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
     const Babel = contextBabel.Babel || contextBabel.window.Babel;
 
     const files = [
+      've-engine.js',
       'Primitives.jsx',
       'Header.jsx',
       'Footer.jsx',
