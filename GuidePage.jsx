@@ -126,7 +126,7 @@ const GuidePage = ({ isEmbedded = false }) => {
           PDE Methodology & Constitutive Models Guide
         </h2>
         <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.65)', fontSize: 13.5, maxWidth: 780 }}>
-          This reference manual details the mathematical foundations, Vertical Equilibrium simplifications, multi-phase constitutive laws (Brooks-Corey capillary pressure and Corey relative permeabilities), and TVD numerical schemes running inside the simulator.
+          This reference documents the model running in the simulator: sharp-interface vertical equilibrium in SI units, residual-trapping hysteresis, faults with juxtaposition seals and up-fault leakage, spill-point trap analysis and convective dissolution — plus its known limitations.
         </p>
       </div>
 
@@ -152,154 +152,82 @@ const GuidePage = ({ isEmbedded = false }) => {
           </p>
         </div>
 
-        {/* Card 2: Saturation Endpoints */}
+        {/* Card 2: Column volume & hysteresis */}
         <div className="math-card">
-          <h3 className="math-header">
-            <i className="fas fa-tint" /> 2. Multi-Phase Saturation Limits & Sum Rule
-          </h3>
+          <h3 className="math-header"><i className="fas fa-tint" /> 2. Sharp Interface & Residual Hysteresis</h3>
           <p className="math-text">
-            At every point in the pore space, the pore volume is completely occupied by gas (supercritical CO₂) and aqueous brine:
+            Each column holds a mobile CO₂ layer of thickness <i>h</i> at saturation 1 − S<sub>wr</sub> beneath the caprock. Where the plume has retreated, the zone between <i>h</i> and the historical maximum <i>h</i><sub>max</sub> keeps residual CO₂ at S<sub>gr</sub>. The conserved quantity per unit area is
           </p>
-          <div className="equation-block">
-            <span className="variable">S</span><span className="subscript">w</span>(<span className="variable">z</span>) + <span className="variable">S</span><span className="subscript">g</span>(<span className="variable">z</span>) = 1.0
-          </div>
+          <div className="equation-block">V = φ [ (1 − S<sub>wr</sub>) h + S<sub>gr</sub> (h<sub>max</sub> − h) ]</div>
           <p className="math-text">
-            The saturation boundaries are parameterized by critical rock-fluid endpoints:
-            <br />• **Connate / Irreducible Water Saturation** (<span className="variable">S</span><span className="subscript">wc</span> = 0.10): Capillary-bound water trapped in micro-pores that cannot be displaced by gas.
-            <br />• **Maximum Mobile Gas Saturation** (<span className="variable">S</span><span className="subscript">g,max</span> = 1 - <span className="variable">S</span><span className="subscript">wc</span> = 0.90): Peak gas saturation at the caprock ceiling.
-            <br />• **Residual Gas Trapping Saturation** (<span className="variable">S</span><span className="subscript">gr</span> = 0.20 – 0.25): Disconnected gas ganglia snapped off during water imbibition.
+            Drainage (V ≥ φ(1 − S<sub>wr</sub>) h<sub>max</sub>): h = V / φ(1 − S<sub>wr</sub>) and h<sub>max</sub> = h. Imbibition: h = (V/φ − S<sub>gr</sub> h<sub>max</sub>) / (1 − S<sub>wr</sub> − S<sub>gr</sub>). Because V — not h — is updated, CO₂ mass is conserved to round-off.
           </p>
         </div>
 
-        {/* Card 3: Capillary Pressure & Vertical Distribution */}
+        {/* Card 3: Capillary fringe */}
         <div className="math-card">
-          <h3 className="math-header">
-            <i className="fas fa-water" /> 3. Brooks-Corey Capillary Pressure Model
-          </h3>
+          <h3 className="math-header"><i className="fas fa-water" /> 3. Brooks–Corey Capillary Fringe (display)</h3>
+          <p className="math-text">The entry pressure sets the fringe height; the saturation profile uses Brooks–Corey with λ = 2:</p>
+          <div className="equation-block">h<sub>c</sub> = P<sub>e</sub> / (Δρ g) &emsp; S<sub>g</sub>(y) = (1 − S<sub>wr</sub>) [ 1 − (h<sub>c</sub>/y)<sup>2</sup> ], y ≥ h<sub>c</sub></div>
           <p className="math-text">
-            Capillary pressure <span className="variable">P</span><span className="subscript">c</span> governs the diffuse transition zone (capillary fringe) between mobile CO₂ and the native brine aquifer using the **Brooks-Corey (1964)** retention law:
-          </p>
-          <div className="equation-block">
-            <span className="variable">P</span><span className="subscript">c</span>(<span className="variable">S</span><span className="subscript">w</span>) = <span className="variable">P</span><span className="subscript">ce</span> &bull; <span className="parenthesis">(</span><span className="fraction"><span className="numerator"><span className="variable">S</span><span className="subscript">w</span> - <span className="variable">S</span><span className="subscript">wc</span></span><span className="denominator">1 - <span className="variable">S</span><span className="subscript">wc</span></span></span><span className="parenthesis">)</span><span className="superscript">-1/&lambda;</span>
-          </div>
-          <p className="math-text">
-            Under hydrostatic VE balance, the vertical gas saturation profile is:
-          </p>
-          <div className="equation-block">
-            <span className="variable">S</span><span className="subscript">g</span>(<span className="variable">z</span>) = (1 - <span className="variable">S</span><span className="subscript">wc</span>) <span className="parenthesis">[</span> 1 - <span className="parenthesis">(</span><span className="fraction"><span className="numerator"><span className="variable">P</span><span className="subscript">ce</span></span><span className="denominator">&Delta;&rho; <span className="variable">g</span> (<span className="variable">h</span> - <span className="variable">z</span>) + <span className="variable">P</span><span className="subscript">ce</span></span></span><span className="parenthesis">)</span><span className="superscript">&lambda;</span> <span className="parenthesis">]</span>
-          </div>
-          <p className="math-text">
-            Where <span className="variable">P</span><span className="subscript">ce</span> = 5.0 kPa is entry displacement pressure, &lambda; = 2.0 is the pore-size distribution index, and &Delta;&rho; = &rho;<span className="subscript">brine</span> - &rho;<span className="subscript">CO₂</span> is fluid density contrast.
+            y is height above the free-water level h′, chosen so the profile holds the same CO₂ as the sharp column: (h′ − h<sub>c</sub>)² / h′ = h. The fringe shapes the rendered saturation only; flow uses the sharp interface.
           </p>
         </div>
 
-        {/* Card 4: Relative Permeability Functions */}
+        {/* Card 4: Mobilities */}
         <div className="math-card">
-          <h3 className="math-header">
-            <i className="fas fa-chart-line" /> 4. Corey Relative Permeability Functions
-          </h3>
+          <h3 className="math-header"><i className="fas fa-chart-line" /> 4. End-Point Mobilities</h3>
+          <div className="equation-block">λ<sub>g</sub> = k<sub>rg</sub>* / μ<sub>g</sub> &emsp; λ<sub>w</sub> = 1 / μ<sub>w</sub> &emsp; M = λ<sub>g</sub> / λ<sub>w</sub></div>
           <p className="math-text">
-            Phase mobilities in the porous sandstone are governed by modified **Corey / Brooks-Corey relative permeabilities**:
-          </p>
-          <div className="equation-block">
-            <span className="variable">k</span><span className="subscript">rg</span>(<span className="variable">S</span><span className="subscript">g</span>) = <span className="variable">k</span><span className="subscript">rg</span><span className="superscript">0</span> <span className="parenthesis">(</span><span className="fraction"><span className="numerator"><span className="variable">S</span><span className="subscript">g</span> - <span className="variable">S</span><span className="subscript">gr</span></span><span className="denominator">1 - <span className="variable">S</span><span className="subscript">wc</span> - <span className="variable">S</span><span className="subscript">gr</span></span></span><span className="parenthesis">)</span><span className="superscript">n<span className="subscript">g</span></span>
-          </div>
-          <div className="equation-block">
-            <span className="variable">k</span><span className="subscript">rw</span>(<span className="variable">S</span><span className="subscript">w</span>) = <span className="variable">k</span><span className="subscript">rw</span><span className="superscript">0</span> <span className="parenthesis">(</span><span className="fraction"><span className="numerator"><span className="variable">S</span><span className="subscript">w</span> - <span className="variable">S</span><span className="subscript">wc</span></span><span className="denominator">1 - <span className="variable">S</span><span className="subscript">wc</span> - <span className="variable">S</span><span className="subscript">gr</span></span></span><span className="parenthesis">)</span><span className="superscript">n<span className="subscript">w</span></span>
-          </div>
-          <p className="math-text">
-            Parameters:
-            <br />• Gas Corey exponent: <span className="variable">n</span><span className="subscript">g</span> = 2.0 (non-wetting phase).
-            <br />• Water Corey exponent: <span className="variable">n</span><span className="subscript">w</span> = 3.0 (wetting phase).
-            <br />• Endpoints: <span className="variable">k</span><span className="subscript">rg</span><span className="superscript">0</span> = 0.85, <span className="variable">k</span><span className="subscript">rw</span><span className="superscript">0</span> = 1.00.
+            Sharp-interface VE uses end-point mobilities: CO₂ at k<sub>rg</sub>* = 0.6 in the plume, brine at k<sub>rw</sub> = 1 below it. μ<sub>w</sub> = 0.5 cP; μ<sub>g</sub> follows from the mobility-ratio control (M = 5 → 0.06 cP).
           </p>
         </div>
 
-        {/* Card 5: Transport PDE & TVD Scheme */}
+        {/* Card 5: Transport */}
         <div className="math-card">
-          <h3 className="math-header">
-            <i className="fas fa-wave-square" /> 5. 1D Transport PDE & TVD Flux Limiter
-          </h3>
+          <h3 className="math-header"><i className="fas fa-wave-square" /> 5. Vertically Integrated Transport</h3>
+          <div className="equation-block">∂V/∂t + ∂F/∂x = q<sub>inj</sub> − q<sub>leak</sub> − q<sub>diss</sub>/ρ<sub>g</sub></div>
+          <div className="equation-block">F = [m<sub>g</sub>/(m<sub>g</sub>+m<sub>w</sub>)] U + [m<sub>g</sub>m<sub>w</sub>/(m<sub>g</sub>+m<sub>w</sub>)] k Δρ g (−∂(z<sub>t</sub> + h)/∂x)</div>
           <p className="math-text">
-            The plume column thickness <span className="variable">h</span>(<span className="variable">x</span>, <span className="variable">t</span>) evolves according to the 1D vertically-integrated mass conservation law:
-          </p>
-          <div className="equation-block">
-            &phi; <span className="fraction"><span className="numerator">&part; <span className="variable">h</span></span><span className="denominator">&part; <span className="variable">t</span></span></span> + 
-            <span className="fraction"><span className="numerator">&part; <span className="variable">q</span></span><span className="denominator">&part; <span className="variable">x</span></span></span> = 
-            <span className="variable">Q</span><span className="subscript">inj</span> - <span className="variable">Q</span><span className="subscript">leak</span>
-          </div>
-          <p className="math-text">
-            To prevent non-physical dispersion and odd-even spatial checkerboarding across steep structural fault throws, our solver enforces a **Total Variation Diminishing (TVD)** upwind flux limiter:
-          </p>
-          <div className="equation-block">
-            |<span className="variable">q</span><span className="subscript">i+1/2</span>| &le; <span className="fraction"><span className="numerator">0.30 &bull; &phi; &bull; <span className="variable">h</span><span className="subscript">mob,upwind</span></span><span className="denominator">&Delta;<span className="variable">t</span></span></span>
-          </div>
-          <p className="math-text">
-            Integrated across 25 substeps per simulation year (&Delta;<span className="variable">t</span> = 0.040 yr), guaranteeing strict CFL stability and mass conservation.
+            m<sub>g</sub> = λ<sub>g</sub>h, m<sub>w</sub> = λ<sub>w</sub>(H − h). The first term is the viscous push of the injector (total flux U, split left/right by flow resistance with open hydrostatic ends) and produces the gravity tongue; the second is buoyant up-dip migration and spreading. The (H − h) factor shuts gravity flow off as a column fills.
           </p>
         </div>
 
-        {/* Card 6: Darcy Flux */}
+        {/* Card 6: Numerics */}
         <div className="math-card">
-          <h3 className="math-header">
-            <i className="fas fa-exchange-alt" /> 6. Integrated Darcy Fluid Flux & Faults
-          </h3>
+          <h3 className="math-header"><i className="fas fa-calculator" /> 6. Numerical Scheme</h3>
           <p className="math-text">
-            The vertically-integrated Darcy flux <span className="variable">q</span> combines regional structural dipping and buoyant hydrostatic spreading:
+            Explicit finite volumes with counter-current upwinding (Brenier &amp; Jaffré 1991): CO₂ mobility from its upstream side, brine mobility from the other. Each substep Δt is the minimum of an advective CFL of 0.5, a diffusive limit, a positivity limit (≤ 50 % of a column's removable CO₂ per step), the column capacity and the injection stop time.
           </p>
-          <div className="equation-block">
-            <span className="variable">q</span> = - <span className="fraction"><span className="numerator"><span className="variable">K</span> <span className="variable">h</span><span className="subscript">mob</span> &Delta;&rho; <span className="variable">g</span></span><span className="denominator">&mu;</span></span> 
-            <span className="parenthesis">[</span>
-            <span className="fraction"><span className="numerator">&part; <span className="variable">z</span><span className="subscript">t</span></span><span className="denominator">&part; <span className="variable">x</span></span></span> + 
-            <span className="fraction"><span className="numerator">&part; <span className="variable">h</span></span><span className="denominator">&part; <span className="variable">x</span></span></span>
-            <span className="parenthesis">]</span> &bull; <span className="variable">T</span><span className="subscript">fault</span>
-          </div>
+          <div className="equation-block">Δt ≤ 0.5 φ(1 − S<sub>wr</sub> − S<sub>gr</sub>) Δx / c<sub>max</sub> &emsp; Δt ≤ 0.45 Δx² / D<sub>max</sub></div>
+          <p className="math-text">A self-check verifies mass balance to 10<sup>−10</sup> and the t<sup>1/3</sup> spreading of a gravity current (Huppert &amp; Woods 1995).</p>
+        </div>
+
+        {/* Card 7: Faults */}
+        <div className="math-card">
+          <h3 className="math-header"><i className="fas fa-bolt" /> 7. Faults: Juxtaposition & Up-Fault Leakage</h3>
+          <div className="equation-block">T<sub>face</sub> = T<sub>jux</sub> · T<sub>rock</sub> &emsp; T<sub>jux</sub> = max(0, H − |throw|) / H</div>
+          <div className="equation-block">v<sub>leak</sub> = (k<sub>f</sub> k<sub>rg</sub>*/μ<sub>g</sub>) [ (Δρ g h − P<sub>th</sub>)/C + Δρ g ] &emsp; for h &gt; h<sub>th</sub> = P<sub>th</sub>/(Δρ g)</div>
           <p className="math-text">
-            Where:
-            <br />• <span className="variable">K</span> is sandstone permeability.
-            <br />• <span className="variable">z</span><span className="subscript">t</span> is the vertical depth profile of the caprock ceiling underside.
-            <br />• <span className="variable">T</span><span className="subscript">fault</span> &in; [0, 1] is cross-fault horizontal transmissibility (<span className="variable">T</span><span className="subscript">fault</span> = 0 for completely sealed barrier faults).
+            Throw ≥ H puts sand against shale and seals the fault laterally. Leaked CO₂ crosses the caprock (thickness C) through a 1 m fault zone into the upper aquifer, which is solved with the same VE equations.
           </p>
         </div>
 
-        {/* Card 7: Residual Trapping */}
+        {/* Card 8: Traps & dissolution */}
         <div className="math-card">
-          <h3 className="math-header">
-            <i className="fas fa-lock" /> 7. Residual Capillary Trapping & Envelope
-          </h3>
+          <h3 className="math-header"><i className="fas fa-lock" /> 8. Spill-Point Traps & Dissolution</h3>
+          <div className="equation-block">Capacity = Σ ρ<sub>g</sub> φ (1 − S<sub>wr</sub>) min(H, z<sub>spill</sub> − z<sub>t</sub>) Δx W</div>
+          <div className="equation-block">F<sub>d</sub> = 0.017 k Δρ<sub>s</sub> g C<sub>s</sub> / μ<sub>w</sub></div>
           <p className="math-text">
-            As the plume migrates updip under buoyancy, trailing-edge water imbibition snaps off CO₂ bubbles inside sandstone pores. In VE, the total height is partitioned into immobile trapped and flowing mobile components:
-          </p>
-          <div className="equation-block">
-            <span className="variable">h</span><span className="subscript">trapped</span> = <span className="variable">S</span><span className="subscript">gr</span> &bull; <span className="variable">h</span><span className="subscript">max</span>
-          </div>
-          <div className="equation-block">
-            <span className="variable">h</span><span className="subscript">mob</span> = max<span className="parenthesis">(</span>0, <span className="fraction"><span className="numerator"><span className="variable">h</span> - <span className="variable">S</span><span className="subscript">gr</span> <span className="variable">h</span><span className="subscript">max</span></span><span className="denominator">1 - <span className="variable">S</span><span className="subscript">gr</span></span></span><span className="parenthesis">)</span>
-          </div>
-          <p className="math-text">
-            Where <span className="variable">h</span><span className="subscript">max</span>(<span className="variable">x</span>) is the historical maximum gas saturation envelope, visualized in the 2D reservoir canvas as the **cyan dashed boundary line**.
+            Spill points come from walking out of each caprock crest to the first saddle, sealing face or domain edge. Convective dissolution (Pau et al. 2010; Δρ<sub>s</sub> = 10 kg/m³, C<sub>s</sub> = 50 kg/m³) acts beneath the mobile plume until a column's brine holds φ H C<sub>s</sub>.
           </p>
         </div>
 
-        {/* Card 8: Fault Leakage */}
+        {/* Card 9: Limitations */}
         <div className="math-card full-width-card">
-          <h3 className="math-header">
-            <i className="fas fa-bolt" /> 8. Capillary Seal Breaching & Fault Conduit Leakage
-          </h3>
+          <h3 className="math-header"><i className="fas fa-exclamation-circle" /> 9. Known Limitations</h3>
           <p className="math-text">
-            Fault zones act as structural barrier seals due to clay smearing, creating high capillary entry pressures. For CO₂ to breach the seal and escape vertically into overlying strata, the buoyant overpressure must exceed the capillary entry threshold:
-          </p>
-          <div className="equation-block">
-            &Delta;<span className="variable">P</span><span className="subscript">buoyancy</span> &gt; <span className="variable">P</span><span className="subscript">c</span><span className="superscript">entry</span> &emsp;&rArr;&emsp; <span className="variable">h</span> &gt; <span className="variable">h</span><span className="subscript">threshold</span> = <span className="fraction"><span className="numerator"><span className="variable">P</span><span className="subscript">c</span><span className="superscript">entry</span></span><span className="denominator">&Delta;&rho; <span className="variable">g</span></span></span>
-          </div>
-          <p className="math-text">
-            Once the spill height is exceeded, vertical leakage volume rate follows Darcy's conduit law:
-          </p>
-          <div className="equation-block">
-            <span className="variable">Q</span><span className="subscript">leak</span> = <span className="variable">C</span><span className="subscript">leak</span> &bull; max<span className="parenthesis">(</span>0, <span className="variable">h</span> - <span className="variable">h</span><span className="subscript">threshold</span><span className="parenthesis">)</span>
-          </div>
-          <p className="math-text">
-            Where <span className="variable">C</span><span className="subscript">leak</span> is the vertical fault zone permeability transmissibility.
+            Incompressible fluids · small-dip approximation (cos θ ≈ 1) · brine mobility not reduced in the residual zone · capillary fringe affects display only · buoyancy-driven net total flux neglected · no leakage above the upper aquifer · no cross-layer juxtaposition · traps are independent (no spill-merge tree) · dissolved CO₂ is immobile and residual CO₂ does not dissolve · 1D VE with no out-of-plane variation.
           </p>
         </div>
 

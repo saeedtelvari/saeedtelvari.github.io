@@ -12,13 +12,13 @@ Built with React 18, SVG mathematical visualizations, and a custom liquid glassm
    - Real-time numerical solver calculating Vertical Equilibrium (VE) $\mathrm{CO}_2$ plume migration and capillary trapping across faulted sandstone formations.
    - Conforming SVG geological cross-section with real-time dynamic fault step interpolation, buoyancy streamlines, active wellbore casing, and glassmorphic simulation playback controls.
 
-2. **Interactive 2D VE Sandbox & UQ Dashboard (`SimulatorPage.jsx`)**:
-   - Interactive parameter controls: permeability, porosity, residual trapping coefficients, injection rate, dip angle, and fault transmissibility multipliers.
-   - Monte Carlo Uncertainty Quantification (UQ) engine with box plots, kernel density distributions, and multi-scenario plume envelopes.
-   - Live $\mathrm{CO}_2$ Mass Balance accounting with real-time structural vs residual capillary trapping efficiency tracking.
+2. **Interactive 2D VE Simulator (`SimulatorPage.jsx` + `ve-engine.js`)**:
+   - Sharp-interface Vertical Equilibrium engine in SI units: viscous injection plus buoyant migration, residual-trapping hysteresis, capillary-fringe rendering, faults with juxtaposition seals and up-fault leakage into an upper aquifer, spill-point trap analysis and convective dissolution.
+   - Exact mass balance (checked to 1e-10 by `node ve-engine.check.js`), five preset scenarios, time-travel scrubbing and branching.
+   - Monte Carlo uncertainty analysis: histogram, P10/P50/P90 realizations you can load back into the 2D view, and a correlation tornado.
 
 3. **Mathematical & Physical Guide (`GuidePage.jsx`)**:
-   - Comprehensive reference manual detailing 1D/2D Vertical Equilibrium formulations, pseudo-relative permeability upscaling, and boundary conditions.
+   - The engine's equations, numerical scheme and known limitations.
 
 4. **Academic CV View (`CVPage.jsx`)**:
    - Academic milestones, education, peer-reviewed publications, honors, and technical skill matrices with clean `@media print` export.
@@ -38,7 +38,10 @@ Built with React 18, SVG mathematical visualizations, and a custom liquid glassm
 - `Footer.jsx` — Translucent footer with copyright and interactive navigation links.
 - `SubsurfaceHero.jsx` — Landing hero with real-time VE fluid solver and animated faulted geological cross-section.
 - `HomeSections.jsx` — Homepage content sections: About, Research Interests, Peer-Reviewed Publications, and Contact.
-- `SimulatorPage.jsx` — Full-featured VE simulation sandbox, Monte Carlo UQ dashboard, and mass balance analytics.
+- `SimulatorPage.jsx` — Simulator UI: cross-section, controls, mass balance, time machine and UQ dashboard.
+- `ve-engine.js` — Pure VE physics engine (`window.VE`), loaded first in the bundle.
+- `ve-engine.check.js` — Assert-only self-check: `node ve-engine.check.js`.
+- `build.js` — Precompiles all files into `bundle.js`: `node build.js`.
 - `GuidePage.jsx` — Mathematical formulation and PDE methodology guide.
 - `CVPage.jsx` — Interactive and printable Curriculum Vitae.
 - `App.jsx` — Top-level router managing multi-view state and smooth scroll anchors.
