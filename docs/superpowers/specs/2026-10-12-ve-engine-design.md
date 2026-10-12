@@ -1,6 +1,6 @@
 # VE Engine Rewrite — Design Spec
 
-Date: 2026-10-12 · Branch: `ve-engine` · Status: awaiting review
+Date: 2026-10-12 · Branch: `ve-engine` · Status: approved
 
 Sub-project 1 of the VE simulator overhaul. Order: **(1) engine** → (2) visual redesign → (3) UQ overhaul → (4) depleted-gas-field preset.
 
@@ -142,7 +142,7 @@ F  = mg/(mg+mw) · U  +  mg·mw/(mg+mw) · k·Δρ·g · ( −∂(zt + h)/∂x )
 
 - `(H − h)` shuts gravity flow off as a column fills — replaces the destructive clamp.
 - At each face, `∂(zt + h)/∂x ≈ ((zt_R + h_R) − (zt_L + h_L))/dx`. A fault throw appears as a zt jump across a face and drives flow through it correctly.
-- Face flux is multiplied by the face multiplier `T_face` (§7.1).
+- The **gravity** term is multiplied by the face multiplier `T_face` (§7.1). The viscous term is not: `U` already carries fault resistance through the left/right split (§5.3), and the total flux must pass the face.
 - Cell update: `V_i += (F_{i−½} − F_{i+½}) · dt/dx`.
 
 **Upwinding at a face:**
@@ -182,7 +182,7 @@ Explicit forward Euler in substeps inside `advance`. Each substep `dt` is the mi
 
 1. Advective CFL: `0.5 · φ(1−Swr−Sgr)·dx / max|∂F/∂h|`, derivative by finite difference with `δ = 1e-3·H`.
 2. Diffusive: `0.45 · dx² / max D`, with `D = (mg·mw/(mg+mw))·kΔρg / (φ(1−Swr−Sgr))`.
-3. Positivity: no cell loses more than 50% of its mobile volume (fluxes + leak + dissolution).
+3. Positivity: fluxes + leakage remove at most 50% of a cell's removable volume `b·h` (b = φ(1−Swr−Sgr)) per substep. Dissolution is capped separately at the other 50% (§8), so V stays ≥ 0. (A constant-rate dissolution sink inside this limit collapses dt at the thin plume tip.)
 4. Capacity: for every cell with net inflow, `inflow·dt ≤ 0.9 · (φ(1−Swr)·H − V_i)`.
 5. Event: remaining time to injection stop and to the end of the requested interval.
 
@@ -209,7 +209,7 @@ Fault object:
 // throw_m > 0: downthrown to the right. dipSlope = dx/dz of the fault plane, drawing + upper-layer position only.
 ```
 
-Defaults: `[{ xFrac: 0.28, throw_m: 15, Trock: 1, Pth_kPa: 40, kf_mD: 5, sealed: false, dipSlope: -0.22 }, { xFrac: 0.48, throw_m: -12, Trock: 0.8, Pth_kPa: 60, kf_mD: 5, sealed: false, dipSlope: 0.25 }]`.
+Defaults: `[{ xFrac: 0.28, throw_m: 15, Trock: 1, Pth_kPa: 20, kf_mD: 5, sealed: false, dipSlope: -0.22 }, { xFrac: 0.48, throw_m: -12, Trock: 0.8, Pth_kPa: 30, kf_mD: 5, sealed: false, dipSlope: 0.25 }]` (threshold columns ≈ 5.8 m and 8.7 m at Δρ = 350).
 
 Geometry: `zt_ℓ(x) += throw_m` for all x right of the fault face in layer ℓ. Lower-layer face = nearest face to `xFrac·L`. Upper-layer face = nearest face to `xFrac·L − dipSlope·(C + H2)`.
 
@@ -249,7 +249,7 @@ Fd = dissMult · α · k·Δρs·g·Cs / μw      α = 0.017, Δρs = 10 kg/m³,
 Default ≈ 2.6 kg/m²/yr. Applied where `h > 0`:
 
 ```
-dm = min(Fd·dt, Dcap − D_i, ρg·mobileVolume_i·0.5)     Dcap = φ·H·Cs
+dm = min(Fd·dt, Dcap − D_i, 0.5·b·h_i·ρg)     Dcap = φ·H·Cs
 D_i += dm;   V_i −= dm/ρg
 ```
 
@@ -316,7 +316,7 @@ Other files:
 | `dome` | structural trapping, fill % | dip 0.1%, fold 45 m × 1.5, no faults |
 | `faultedTrap` | juxtaposition seal, fault-bounded trap | dip 1.5% up toward fault A, fault A throw 60 m (> H) |
 | `dipping` | migration, residual trail, dissolution | dip −2%, fold 5 m, no faults, Sgr 0.3, dissMult 2 |
-| `leakyFault` | upper-layer charging | default geometry, fault A Pth 10 kPa, kf 200 mD |
+| `leakyFault` | upper-layer charging | default geometry, well at 0.35 L (between faults A and B), fault A Pth 10 kPa, kf 200 mD |
 
 Values are starting points; tune in implementation so each preset visibly shows its feature within ~300 simulated years.
 
