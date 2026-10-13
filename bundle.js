@@ -3,8 +3,6 @@
 var { useState, useEffect, useMemo, useRef, useCallback } = React;
 
 // File: Primitives.jsx
-// [destructured React]
-
 /* =====================================================
    Icon — inline SVG set (replaces Font Awesome on the site pages).
    UI glyphs are 24-unit stroke paths; brand marks are the CC0 paths
@@ -89,105 +87,9 @@ const Icon = ({
     d: icon.d
   }));
 };
-
-/* =====================================================
-   Legacy primitives — still used by the old sections and CV until they are
-   rebuilt; delete with them.
-   ===================================================== */
-const Reveal = ({
-  children,
-  delay = '',
-  className = '',
-  style = {}
-}) => {
-  const [revealed, setRevealed] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!ref.current) return undefined;
-    if (!('IntersectionObserver' in window)) {
-      setRevealed(true);
-      return undefined;
-    }
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setRevealed(true);
-        observer.unobserve(entry.target);
-      }
-    }, {
-      threshold: 0.1,
-      rootMargin: '0px 0px -50px 0px'
-    });
-    observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
-  return /*#__PURE__*/React.createElement("div", {
-    ref: ref,
-    className: `reveal ${revealed ? 'revealed' : ''} ${delay} ${className}`,
-    style: style
-  }, children);
-};
-const GlassButton = ({
-  children,
-  onClick,
-  icon
-}) => /*#__PURE__*/React.createElement("button", {
-  type: "button",
-  className: "btn btn--primary",
-  onClick: onClick
-}, icon && /*#__PURE__*/React.createElement("i", {
-  className: icon
-}), children);
-const Tag = ({
-  children
-}) => /*#__PURE__*/React.createElement("span", {
-  style: {
-    display: 'inline-block',
-    padding: '5px 12px',
-    borderRadius: 999,
-    fontSize: 12.5,
-    border: '1px solid var(--sim-rule-strong)',
-    color: 'var(--sim-ink)'
-  }
-}, children);
-const Divider = () => /*#__PURE__*/React.createElement("hr", {
-  style: {
-    height: 1,
-    margin: '32px 0',
-    border: 'none',
-    background: 'var(--sim-rule)'
-  }
-});
-const SectionPanel = ({
-  children,
-  style = {}
-}) => /*#__PURE__*/React.createElement("section", {
-  className: "section-panel",
-  style: {
-    position: 'relative',
-    minHeight: '60vh',
-    padding: '115px 24px',
-    zIndex: 1,
-    ...style
-  }
-}, /*#__PURE__*/React.createElement("div", {
-  className: "section-panel-content",
-  style: {
-    position: 'relative',
-    maxWidth: 1000,
-    margin: '0 auto',
-    background: 'var(--site-sheet)',
-    border: '1px solid var(--sim-rule)',
-    borderRadius: 14
-  }
-}, children));
 Object.assign(window, {
   Icon,
-  SITE_ICONS,
-  Reveal,
-  GlassButton,
-  Tag,
-  Divider,
-  SectionPanel
+  SITE_ICONS
 });
 
 // File: site-content.js
@@ -3744,519 +3646,147 @@ Object.assign(window, {
 });
 
 // File: CVPage.jsx
-// CVPage.jsx — single long glass page mirroring cv.html
+// CVPage.jsx — the curriculum vitae: an Earth document on screen, black on white in print.
+// Facts come from site-content.js, which the homepage shares.
 
-const CVPage = ({
-  onNavigate
-}) => {
-  const handlePrint = () => {
-    window.print();
-  };
-  return /*#__PURE__*/React.createElement("div", {
-    className: "cv-page",
-    style: {
-      minHeight: '100vh',
-      backgroundImage: "url('./assets/headerbg3.jpg')",
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundAttachment: 'fixed',
-      padding: '120px 24px 64px'
-    }
-  }, /*#__PURE__*/React.createElement("style", null, `
-        .cv-skills-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 16px;
-        }
-        @media (max-width: 680px) {
-          .cv-skills-grid {
-            grid-template-columns: 1fr !important;
-          }
-          .cv-card-container {
-            padding: 24px 18px !important;
-          }
-          .cv-name-title {
-            font-size: 38px !important;
-          }
-        }
-        @media print {
-          .app-header, footer, .cv-download-btn, .cv-background-overlay {
-            display: none !important;
-          }
-          body, .cv-page {
-            background: #fff !important;
-          }
-          .cv-page {
-            padding: 0 !important;
-          }
-          .cv-card-container, .cv-card-container * {
-            color: #111 !important;
-            -webkit-text-fill-color: #111 !important;
-            background: none !important;
-            box-shadow: none !important;
-          }
-          .cv-card-container {
-            border: none !important;
-            padding: 0 !important;
-          }
-        }
-      `), /*#__PURE__*/React.createElement("div", {
-    className: "cv-background-overlay",
-    style: {
-      position: 'fixed',
-      inset: 0,
-      background: 'linear-gradient(135deg, rgba(10,10,20,0.85) 0%, rgba(15,25,45,0.80) 50%, rgba(10,20,40,0.85) 100%)',
-      zIndex: 0
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    className: "cv-card-container",
-    style: {
-      position: 'relative',
-      zIndex: 1,
-      maxWidth: 980,
-      margin: '0 auto',
-      padding: 44,
-      background: 'linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.08) 100%)',
-      backdropFilter: 'blur(25px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(25px) saturate(180%)',
-      border: '1px solid rgba(255,255,255,0.15)',
-      borderTop: '1px solid rgba(255,255,255,0.25)',
-      borderLeft: '1px solid rgba(255,255,255,0.20)',
-      borderRadius: 30,
-      boxShadow: '0 8px 32px rgba(0,0,0,0.30), inset 0 2px 4px rgba(255,255,255,0.10)',
-      color: '#fff'
-    }
-  }, /*#__PURE__*/React.createElement("header", {
-    style: {
-      textAlign: 'center',
-      marginBottom: 24
-    }
-  }, /*#__PURE__*/React.createElement("h1", {
-    className: "cv-name-title",
-    style: {
-      margin: '0 0 12px',
-      fontFamily: "'Montserrat', sans-serif",
-      fontWeight: 700,
-      fontSize: 'clamp(36px, 5vw, 56px)',
-      lineHeight: 1.1,
-      background: 'linear-gradient(135deg, #fff 0%, #a8edea 100%)',
-      WebkitBackgroundClip: 'text',
-      backgroundClip: 'text',
-      WebkitTextFillColor: 'transparent'
-    }
-  }, "Sa\u2019eed Telvari"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 19,
-      color: 'rgba(255,255,255,0.70)',
-      margin: '0 0 18px'
-    }
-  }, "Ph.D. Candidate in Petroleum Engineering"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'center',
-      flexWrap: 'wrap',
-      gap: 20,
-      marginBottom: 24
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'rgba(255,255,255,0.85)',
-      fontSize: 14
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-map-marker-alt",
-    style: {
-      color: '#4ecdc4',
-      marginRight: 8
-    }
-  }), "Edinburgh, UK"), /*#__PURE__*/React.createElement("a", {
-    href: "mailto:st4014@hw.ac.uk",
-    style: {
-      color: 'rgba(255,255,255,0.85)',
-      fontSize: 14,
-      textDecoration: 'none'
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-envelope",
-    style: {
-      color: '#4ecdc4',
-      marginRight: 8
-    }
-  }), "st4014@hw.ac.uk"), /*#__PURE__*/React.createElement("a", {
-    href: "https://www.linkedin.com/in/stelvari/",
-    target: "_blank",
-    rel: "noreferrer",
-    style: {
-      color: 'rgba(255,255,255,0.85)',
-      fontSize: 14,
-      textDecoration: 'none'
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fab fa-linkedin",
-    style: {
-      color: '#4ecdc4',
-      marginRight: 8
-    }
-  }), "/in/stelvari")), /*#__PURE__*/React.createElement("div", {
-    className: "cv-download-btn"
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      gap: 12,
-      flexWrap: 'wrap'
-    }
-  }, /*#__PURE__*/React.createElement(GlassButton, {
-    variant: "mint",
-    icon: "fas fa-print",
-    onClick: handlePrint
-  }, "Print / Save as PDF")))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
-    icon: "fas fa-flask",
-    title: "Research Interests"
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: 10
-    }
-  }, ['Reservoir Simulation', 'CO\u2082 Storage', 'CCUS Technologies', 'Vertical Equilibrium Models', 'Machine Learning', 'Upscaling Methods', 'Fractured Reservoirs', 'Digital Rock Physics'].map(t => /*#__PURE__*/React.createElement(Tag, {
-    key: t,
-    variant: "research"
-  }, t)))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
-    icon: "fas fa-graduation-cap",
-    title: "Education"
-  }, /*#__PURE__*/React.createElement(Timeline, {
-    items: [{
-      title: 'Ph.D. in Petroleum Engineering',
-      date: '2024 – Present',
-      inst: 'Heriot-Watt University, Edinburgh, UK',
-      details: ['Thesis: Developing Vertical Equilibrium Models for Simulating CO\u2082 Storage in Depleted Gas Reservoirs']
-    }, {
-      title: 'M.Sc. in Petroleum Engineering — Reservoir',
-      date: '2022 – 2024',
-      inst: 'Amirkabir University of Technology, Tehran',
-      details: ['GPA: 3.65/4 (17.23/20)', 'Thesis: Machine Learning Methods in Upscaling Fine-scale Discrete Fracture Models']
-    }, {
-      title: 'B.Sc. in Petroleum Engineering',
-      date: '2018 – 2022',
-      inst: 'Amirkabir University of Technology, Tehran',
-      details: ['GPA: 17.43/20', 'Thesis: Prediction of two-phase flow properties for digital sandstones using 3D CNNs']
-    }]
-  })), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
-    icon: "fas fa-microscope",
-    title: "Research Experience & Selected Projects"
-  }, /*#__PURE__*/React.createElement(Timeline, {
-    items: [{
-      title: 'Doctoral Researcher — Vertical Equilibrium Modeling',
-      date: '2024 – Present',
-      inst: 'Institute of GeoEnergy Engineering, Heriot-Watt University',
-      details: ['Developing reduced-order models for CO₂–methane–brine migration in depleted gas reservoirs, with applications to screening, uncertainty analysis, and field-scale forecasting.']
-    }, {
-      title: 'Machine-Learning Permeability Upscaling',
-      date: '2022 – 2026',
-      inst: 'Amirkabir University of Technology',
-      details: ['Developed CNN-based workflows for estimating effective permeability from heterogeneous fine-scale reservoir models.']
-    }, {
-      title: 'Digital Sandstone Two-Phase Flow Prediction',
-      date: '2021 – 2023',
-      inst: 'Amirkabir University of Technology',
-      details: ['Built 3D convolutional neural networks to predict relative-permeability and capillary-pressure behavior from digital-rock images.']
-    }]
-  })), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
-    icon: "fas fa-book-open",
-    title: "Selected Publications"
-  }, /*#__PURE__*/React.createElement(Timeline, {
-    items: [{
-      title: 'A Vertical Equilibrium Model for CO₂ Migration in Depleted Gas Fields',
-      date: '2026',
-      inst: 'EarthArXiv preprint · DOI 10.31223/X5P49D',
-      details: ['Telvari, S.; Ramachandran, H.; Wang, G.; Doster, F.']
-    }, {
-      title: 'Accelerated Permeability Upscaling: A Convolutional Neural Network Approach',
-      date: '2026',
-      inst: 'SPE Journal 31(04), 2242–2260',
-      details: ['Sayyafzadeh, M.; Telvari, S.; Guérillot, D.; Sharifi, M.']
-    }, {
-      title: 'Three-Phase VE Simulation of CO₂–Methane–Brine Flow in Reservoirs',
-      date: '2025',
-      inst: 'Sixth EAGE Global Energy Transition Conference & Exhibition',
-      details: ['Telvari, S.; Ramachandran, H.; Wang, G.; Doster, F.']
-    }, {
-      title: 'Prediction of two-phase flow properties for digital sandstones using 3D convolutional neural networks',
-      date: '2023',
-      inst: 'Advances in Water Resources 176, 104442',
-      details: ['Telvari, S.; Sayyafzadeh, M.; Siavashi, J.; Sharifi, M.']
-    }]
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: 12
-    }
-  }, /*#__PURE__*/React.createElement("a", {
-    href: "https://orcid.org/0000-0002-4896-295X",
-    target: "_blank",
-    rel: "noreferrer",
-    style: {
-      color: '#64ffda'
-    }
-  }, "ORCID profile"), /*#__PURE__*/React.createElement("a", {
-    href: "https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330",
-    target: "_blank",
-    rel: "noreferrer",
-    style: {
-      color: '#64ffda'
-    }
-  }, "Google Scholar"))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
-    icon: "fas fa-chalkboard-teacher",
-    title: "Selected Presentations & Teaching"
-  }, /*#__PURE__*/React.createElement(Timeline, {
-    items: [{
-      title: 'Oral presentation & session co-chair',
-      date: 'September 2026',
-      inst: '9th InterPore UK Chapter Conference, Edinburgh',
-      details: ['Presented “A Compositional Vertical Equilibrium Model for CO₂ Storage in Depleted Gas Reservoirs” and co-chaired the Multiphase Phenomena session.']
-    }, {
-      title: 'Oral presentation',
-      date: 'May 2026',
-      inst: 'InterPore2026, Nantes',
-      details: ['Presented “Vertical-Equilibrium Modelling of CO₂ Migration in Depleted Reservoirs”.']
-    }, {
-      title: 'Lead instructor & co-organiser',
-      date: 'March 2026',
-      inst: 'MATLAB/MRST Workshop Series, Heriot-Watt University',
-      details: ['Led a hands-on session building a flow simulator with MRST’s rapid prototyping framework.']
-    }, {
-      title: 'Poster presentation',
-      date: 'October 2025',
-      inst: '6th EAGE Global Energy Transition Conference, Rotterdam',
-      details: ['Presented “Three-Phase VE Simulation of CO₂–Methane–Brine Flow in Reservoirs”.']
-    }]
-  })), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
-    icon: "fas fa-tools",
-    title: "Skills"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "cv-skills-grid"
-  }, /*#__PURE__*/React.createElement(SkillCategory, {
-    icon: "fas fa-code",
-    title: "Programming",
-    tags: ['Python', 'MATLAB', 'Julia']
-  }), /*#__PURE__*/React.createElement(SkillCategory, {
-    icon: "fas fa-industry",
-    title: "Reservoir Simulation",
-    tags: ['MRST', 'Eclipse', 'Petrel RE']
-  }), /*#__PURE__*/React.createElement(SkillCategory, {
-    icon: "fas fa-cube",
-    title: "Industry Training",
-    tags: ['CMG CO₂ Storage', 'SLB Intersect CCS']
-  }), /*#__PURE__*/React.createElement(SkillCategory, {
-    icon: "fas fa-laptop-code",
-    title: "Research Tools",
-    tags: ['Git', 'Jupyter', 'LaTeX', 'Linux']
-  }))), /*#__PURE__*/React.createElement(Divider, null), /*#__PURE__*/React.createElement(CVSection, {
-    icon: "fas fa-award",
-    title: "Selected Recognition"
-  }, /*#__PURE__*/React.createElement("ul", {
-    style: {
-      listStyle: 'none',
-      padding: 0,
-      margin: 0
-    }
-  }, [{
-    icon: 'fas fa-graduation-cap',
-    body: 'James Watt Scholarship recipient — full PhD funding, Heriot-Watt University (2024–present)'
-  }, {
-    icon: 'fas fa-medal',
-    body: 'Runner-up, SPE Aberdeen Section Student Bursary — £1,000 awarded (2026)'
-  }, {
-    icon: 'fas fa-medal',
-    body: 'Team runner-up, EAGE “The Energy–AI Nexus” Hackathon (2026)'
-  }, {
-    icon: 'fas fa-graduation-cap',
-    body: 'National undergraduate scholarship — full tuition waiver'
-  }].map((a, i) => /*#__PURE__*/React.createElement("li", {
-    key: i,
-    style: {
-      display: 'flex',
-      alignItems: 'flex-start',
-      gap: 12,
-      padding: '12px 0',
-      color: 'rgba(255,255,255,0.90)',
-      fontSize: 15,
-      borderBottom: '1px solid rgba(255,255,255,0.05)'
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: a.icon,
-    style: {
-      color: '#ffc107',
-      fontSize: 16,
-      marginTop: 3
-    }
-  }), a.body))))));
-};
-
-/* -----------------------------------------------------
-   Helpers
-   ----------------------------------------------------- */
 const CVSection = ({
-  icon,
+  id,
   title,
   children
-}) => /*#__PURE__*/React.createElement("section", null, /*#__PURE__*/React.createElement("h2", {
-  style: {
-    fontSize: 22,
-    fontWeight: 700,
-    color: '#fff',
-    margin: '0 0 20px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12
-  }
-}, /*#__PURE__*/React.createElement("i", {
-  className: icon,
-  style: {
-    color: '#4ecdc4',
-    fontSize: 20
-  }
-}), title), children);
-const Timeline = ({
+}) => /*#__PURE__*/React.createElement("section", {
+  className: "cv-section",
+  "aria-labelledby": `cv-${id}`
+}, /*#__PURE__*/React.createElement("h2", {
+  id: `cv-${id}`
+}, title), children);
+const CVRows = ({
   items
 }) => /*#__PURE__*/React.createElement("div", {
-  style: {
-    position: 'relative'
-  }
-}, items.map((it, i) => /*#__PURE__*/React.createElement("div", {
-  key: i,
-  style: {
-    position: 'relative',
-    paddingLeft: 32,
-    marginBottom: 22
-  }
-}, /*#__PURE__*/React.createElement("div", {
-  style: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: i === items.length - 1 ? 0 : -22,
-    width: 2,
-    background: 'linear-gradient(180deg, #4ecdc4, rgba(78,205,196,0.20))'
-  }
-}), /*#__PURE__*/React.createElement("div", {
-  style: {
-    position: 'absolute',
-    left: -5,
-    top: 14,
-    width: 12,
-    height: 12,
-    borderRadius: '50%',
-    background: '#4ecdc4',
-    boxShadow: '0 0 10px rgba(78,205,196,0.5)'
-  }
-}), /*#__PURE__*/React.createElement("div", {
-  style: {
-    padding: 18,
-    background: 'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))',
-    border: '1px solid rgba(255,255,255,0.10)',
-    borderRadius: 16
-  }
-}, /*#__PURE__*/React.createElement("div", {
-  style: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 6
-  }
-}, /*#__PURE__*/React.createElement("h3", {
-  style: {
-    fontSize: 17,
-    fontWeight: 600,
-    color: '#fff',
-    margin: 0
-  }
-}, it.title), /*#__PURE__*/React.createElement("span", {
-  style: {
-    background: 'rgba(78,205,196,0.20)',
-    color: '#4ecdc4',
-    padding: '4px 12px',
-    borderRadius: 12,
-    fontSize: 13,
-    fontWeight: 500
-  }
-}, it.date)), /*#__PURE__*/React.createElement("p", {
-  style: {
-    color: 'rgba(255,255,255,0.70)',
-    fontSize: 14,
-    margin: '0 0 10px'
-  }
-}, /*#__PURE__*/React.createElement("i", {
-  className: "fas fa-university",
-  style: {
-    marginRight: 8,
-    color: '#4ecdc4'
-  }
-}), it.inst), it.details.map((d, j) => /*#__PURE__*/React.createElement("p", {
-  key: j,
-  style: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 13.5,
-    margin: '4px 0 0'
-  },
-  dangerouslySetInnerHTML: {
-    __html: d
-  }
-}))))));
-const SkillCategory = ({
-  icon,
-  title,
-  tags,
-  detail
-}) => /*#__PURE__*/React.createElement("div", {
-  style: {
-    padding: 18,
-    background: 'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))',
-    border: '1px solid rgba(255,255,255,0.10)',
-    borderRadius: 16
-  }
-}, /*#__PURE__*/React.createElement("h4", {
-  style: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontSize: 15,
-    fontWeight: 600,
-    color: '#fff',
-    margin: '0 0 12px'
-  }
-}, /*#__PURE__*/React.createElement("i", {
-  className: icon,
-  style: {
-    color: '#4ecdc4'
-  }
-}), title), /*#__PURE__*/React.createElement("div", {
-  style: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: detail ? 12 : 0
-  }
-}, tags.map(t => /*#__PURE__*/React.createElement(Tag, {
-  key: t,
-  variant: "skill"
-}, t))), detail && /*#__PURE__*/React.createElement("p", {
-  style: {
-    color: 'rgba(255,255,255,0.60)',
-    fontSize: 12.5,
-    margin: 0
-  }
-}, /*#__PURE__*/React.createElement("strong", {
-  style: {
-    color: '#fff',
-    fontWeight: 600
-  }
-}, detail.split(':')[0], ":"), detail.split(':')[1]));
+  className: "cv-rows"
+}, items.map(item => /*#__PURE__*/React.createElement("div", {
+  key: `${item.date}-${item.title}`,
+  className: "cv-row"
+}, /*#__PURE__*/React.createElement("span", {
+  className: "cv-date"
+}, item.date), /*#__PURE__*/React.createElement("div", {
+  className: "cv-entry"
+}, /*#__PURE__*/React.createElement("h3", null, item.title), item.place && /*#__PURE__*/React.createElement("p", {
+  className: "cv-place"
+}, item.place), (item.details || []).map(detail => /*#__PURE__*/React.createElement("p", {
+  key: detail,
+  className: "cv-detail"
+}, detail))))));
+const CVPublications = () => /*#__PURE__*/React.createElement("div", {
+  className: "cv-rows"
+}, SITE_PUBLICATIONS.map(pub => /*#__PURE__*/React.createElement("div", {
+  key: pub.id,
+  className: "cv-row"
+}, /*#__PURE__*/React.createElement("span", {
+  className: "cv-date"
+}, pub.year), /*#__PURE__*/React.createElement("div", {
+  className: "cv-entry"
+}, /*#__PURE__*/React.createElement("h3", null, /*#__PURE__*/React.createElement("a", {
+  href: pub.url
+}, pub.title)), /*#__PURE__*/React.createElement("p", {
+  className: "cv-place"
+}, pub.authors.map((name, i) => /*#__PURE__*/React.createElement(React.Fragment, {
+  key: name
+}, i > 0 && ', ', name === 'Telvari, S.' ? /*#__PURE__*/React.createElement("strong", null, name) : name))), /*#__PURE__*/React.createElement("p", {
+  className: "cv-detail"
+}, pub.venue, ". ", pub.status, ". DOI ", /*#__PURE__*/React.createElement("a", {
+  href: pub.url
+}, pub.doi))))));
+const CVPage = () => /*#__PURE__*/React.createElement("article", {
+  className: "cv"
+}, /*#__PURE__*/React.createElement("header", {
+  className: "cv-head"
+}, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", null, "Sa\u2019eed Telvari"), /*#__PURE__*/React.createElement("p", {
+  className: "cv-role"
+}, SITE_CV.title), /*#__PURE__*/React.createElement("ul", {
+  className: "cv-contact"
+}, /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement(Icon, {
+  name: "pin",
+  size: 15
+}), SITE_CV.location), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("a", {
+  href: `mailto:${SITE_LINKS.email}`
+}, /*#__PURE__*/React.createElement(Icon, {
+  name: "mail",
+  size: 15
+}), SITE_LINKS.email)), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("a", {
+  href: SITE_LINKS.orcid
+}, /*#__PURE__*/React.createElement(Icon, {
+  name: "orcid",
+  size: 15
+}), "ORCID ", SITE_LINKS.orcidId)), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("a", {
+  href: SITE_LINKS.scholar
+}, /*#__PURE__*/React.createElement(Icon, {
+  name: "scholar",
+  size: 15
+}), "Google Scholar")), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("a", {
+  href: SITE_LINKS.linkedin
+}, /*#__PURE__*/React.createElement(Icon, {
+  name: "linkedin",
+  size: 15
+}), "linkedin.com/in/", SITE_LINKS.linkedinUser)), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("a", {
+  href: "https://saeedtelvari.github.io/"
+}, "saeedtelvari.github.io")))), /*#__PURE__*/React.createElement("button", {
+  type: "button",
+  className: "btn btn--quiet cv-print",
+  onClick: () => window.print()
+}, /*#__PURE__*/React.createElement(Icon, {
+  name: "print",
+  size: 16
+}), "Print or save as PDF")), /*#__PURE__*/React.createElement(CVSection, {
+  id: "interests",
+  title: "Research interests"
+}, /*#__PURE__*/React.createElement("p", {
+  className: "cv-interests"
+}, SITE_CV.interests)), /*#__PURE__*/React.createElement(CVSection, {
+  id: "education",
+  title: "Education"
+}, /*#__PURE__*/React.createElement(CVRows, {
+  items: SITE_CV.education
+})), /*#__PURE__*/React.createElement(CVSection, {
+  id: "experience",
+  title: "Research projects and experience"
+}, /*#__PURE__*/React.createElement(CVRows, {
+  items: SITE_CV.experience
+})), /*#__PURE__*/React.createElement(CVSection, {
+  id: "publications",
+  title: "Publications"
+}, /*#__PURE__*/React.createElement(CVPublications, null)), /*#__PURE__*/React.createElement(CVSection, {
+  id: "presentations",
+  title: "Presentations"
+}, /*#__PURE__*/React.createElement(CVRows, {
+  items: SITE_CV.presentations
+})), /*#__PURE__*/React.createElement(CVSection, {
+  id: "teaching",
+  title: "Teaching"
+}, /*#__PURE__*/React.createElement(CVRows, {
+  items: SITE_CV.teaching
+})), /*#__PURE__*/React.createElement(CVSection, {
+  id: "service",
+  title: "Service and leadership"
+}, /*#__PURE__*/React.createElement(CVRows, {
+  items: SITE_CV.service
+})), /*#__PURE__*/React.createElement(CVSection, {
+  id: "training",
+  title: "Professional training"
+}, /*#__PURE__*/React.createElement(CVRows, {
+  items: SITE_CV.training
+})), /*#__PURE__*/React.createElement(CVSection, {
+  id: "skills",
+  title: "Skills"
+}, /*#__PURE__*/React.createElement("dl", {
+  className: "cv-skills"
+}, SITE_CV.skills.map(([area, list]) => /*#__PURE__*/React.createElement("div", {
+  key: area
+}, /*#__PURE__*/React.createElement("dt", null, area), /*#__PURE__*/React.createElement("dd", null, list))))), /*#__PURE__*/React.createElement(CVSection, {
+  id: "recognition",
+  title: "Recognition"
+}, /*#__PURE__*/React.createElement(CVRows, {
+  items: SITE_CV.recognition
+})));
 Object.assign(window, {
   CVPage
 });

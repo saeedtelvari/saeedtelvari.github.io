@@ -1,5 +1,3 @@
-const { useState, useEffect, useRef } = React;
-
 /* =====================================================
    Icon — inline SVG set (replaces Font Awesome on the site pages).
    UI glyphs are 24-unit stroke paths; brand marks are the CC0 paths
@@ -36,48 +34,4 @@ const Icon = ({ name, size = 18, className = '' }) => {
   );
 };
 
-/* =====================================================
-   Legacy primitives — still used by the old sections and CV until they are
-   rebuilt; delete with them.
-   ===================================================== */
-const Reveal = ({ children, delay = '', className = '', style = {} }) => {
-  const [revealed, setRevealed] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!ref.current) return undefined;
-    if (!('IntersectionObserver' in window)) { setRevealed(true); return undefined; }
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) { setRevealed(true); observer.unobserve(entry.target); }
-    }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
-    observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
-  return <div ref={ref} className={`reveal ${revealed ? 'revealed' : ''} ${delay} ${className}`} style={style}>{children}</div>;
-};
-
-const GlassButton = ({ children, onClick, icon }) => (
-  <button type="button" className="btn btn--primary" onClick={onClick}>
-    {icon && <i className={icon}></i>}
-    {children}
-  </button>
-);
-
-const Tag = ({ children }) => (
-  <span style={{ display: 'inline-block', padding: '5px 12px', borderRadius: 999, fontSize: 12.5,
-    border: '1px solid var(--sim-rule-strong)', color: 'var(--sim-ink)' }}>{children}</span>
-);
-
-const Divider = () => <hr style={{ height: 1, margin: '32px 0', border: 'none', background: 'var(--sim-rule)' }} />;
-
-const SectionPanel = ({ children, style = {} }) => (
-  <section className="section-panel" style={{ position: 'relative', minHeight: '60vh', padding: '115px 24px', zIndex: 1, ...style }}>
-    <div className="section-panel-content" style={{
-      position: 'relative', maxWidth: 1000, margin: '0 auto',
-      background: 'var(--site-sheet)', border: '1px solid var(--sim-rule)', borderRadius: 14,
-    }}>
-      {children}
-    </div>
-  </section>
-);
-
-Object.assign(window, { Icon, SITE_ICONS, Reveal, GlassButton, Tag, Divider, SectionPanel });
+Object.assign(window, { Icon, SITE_ICONS });

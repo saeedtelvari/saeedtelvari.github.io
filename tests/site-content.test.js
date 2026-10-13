@@ -5,7 +5,7 @@ const path = require('node:path');
 const content = require('../site-content.js');
 const root = path.resolve(__dirname, '..');
 
-test('publication facts are correct and shared by the homepage and CV', { todo: 'Tasks 6–7 read SITE_PUBLICATIONS' }, () => {
+test('publication facts are correct and shared by the homepage and CV', () => {
   const pubs = content.SITE_PUBLICATIONS;
   assert.equal(pubs.length, 4);
   for (const p of pubs) {
