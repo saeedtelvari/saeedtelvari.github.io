@@ -520,6 +520,9 @@
   // ------------------------------------------------------------------ dynamics
 
   const CFL = 0.4;
+  // Films thinner than a micrometre do not move: their mass stays where it is (so the
+  // balance is still exact) and they no longer throttle the time step everywhere.
+  const H_EPS = 1e-6;
 
   const createState = model => {
     const { n, nx, ny } = model;
@@ -566,7 +569,7 @@
   // upwinding: the viscous part follows the total flux, buoyancy follows the phase
   // potentials (gas from the deeper interface, brine the other way).
   const faceFlux = (k, T, U, zetaA, zetaB, hA, hB, H, scratch) => {
-    if (hA <= 0 && hB <= 0) {
+    if (hA <= H_EPS && hB <= H_EPS) {
       scratch.bound = 0;
       return 0;
     }
@@ -601,6 +604,15 @@
     const scratch = { bound: 0 };
     net.fill(0);
     rate.fill(0);
+    // Boundary faces use phase-potential upwinding: the hydrostatic ghost holds no gas,
+    // so CO2 leaves only where its own potential drops outward.
+    const boundaryFlux = (T, c, ghostDepth) => {
+      if (h[c] <= H_EPS) { scratch.bound = 0; return 0; }
+      const hc = Math.min(h[c], H);
+      const drop = state.p[c] + k.tg * (zt[c] + h[c] - ghostDepth);
+      scratch.bound = T * a * (Math.abs(drop) + k.tg * hc);
+      return drop > 0 ? T * a * hc * drop : 0;
+    };
 
     for (let j = 0; j < ny; j++) {
       for (let f = 0; f <= nx; f++) {
@@ -609,9 +621,7 @@
         if (f === 0 || f === nx) {
           if (!p.open || T === 0) { fx[index] = 0; continue; }
           const c = j * nx + (f === 0 ? 0 : nx - 1);
-          // Outward-positive flux from the boundary cell into its hydrostatic ghost.
-          const outward = f === 0 ? -ux[index] : ux[index];
-          const flux = faceFlux(k, T, outward, zt[c] + h[c], ghostX[index], h[c], 0, H, scratch);
+          const flux = boundaryFlux(T, c, ghostX[index]);
           fx[index] = f === 0 ? -flux : flux;
           net[c] -= flux;
           rate[c] += scratch.bound;
@@ -635,8 +645,7 @@
         if (f === 0 || f === ny) {
           if (!p.open || T === 0) { fy[index] = 0; continue; }
           const c = (f === 0 ? 0 : ny - 1) * nx + i;
-          const outward = f === 0 ? -uy[index] : uy[index];
-          const flux = faceFlux(k, T, outward, zt[c] + h[c], ghostY[index], h[c], 0, H, scratch);
+          const flux = boundaryFlux(T, c, ghostY[index]);
           fy[index] = f === 0 ? -flux : flux;
           net[c] -= flux;
           rate[c] += scratch.bound;
@@ -687,19 +696,229 @@
     return dt;
   };
 
+  // ------------------------------------------------------------------ pressure
+
+  const PRESSURE_TOL = 1e-8;
+  const RELAXED_RATE = 0.05 * BAR / YEAR;
+  const MAX_RELAX_TIME = 50 * YEAR;
+
+  // Implicit (backward-Euler) brine-potential equation with total compressibility:
+  //   phi ct H A (p - p_old)/dt + sum T m LamT (p_c - p_nb) = Qv - sum T m LamG drho g (zeta_c - zeta_nb)
+  // solved matrix-free with Jacobi-preconditioned CG, then converted to total face fluxes.
+  const solvePressure = (model, state, dt, injecting) => {
+    const { nx, ny, n, p, tx, ty, mx, my, zt, ghostX, ghostY, area, H } = model;
+    const { h } = state;
+    const a = p.krg / p.muG;
+    const b = 1 / p.muW;
+    const tg = p.dRho * p.g;
+    const cg = state.cg || (state.cg = {
+      wx: new Float64Array((nx + 1) * ny), wy: new Float64Array(nx * (ny + 1)),
+      gx: new Float64Array((nx + 1) * ny), gy: new Float64Array(nx * (ny + 1)),
+      diag: new Float64Array(n), rhs: new Float64Array(n), r: new Float64Array(n),
+      z: new Float64Array(n), d: new Float64Array(n), q: new Float64Array(n), old: new Float64Array(n)
+    });
+    const { wx, wy, gx, gy, diag, rhs, r, z, d, q, old } = cg;
+    const lamT = c => a * Math.min(h[c], H) + b * Math.max(0, H - h[c]);
+    const lamG = c => a * Math.min(h[c], H);
+    const acc = p.phi * p.ct * H * area / dt;
+    old.set(state.p);
+    for (let c = 0; c < n; c++) { diag[c] = acc; rhs[c] = acc * state.p[c]; }
+    if (injecting) rhs[model.well] += p.rate / p.rhoG;
+
+    for (let j = 0; j < ny; j++) {
+      for (let f = 0; f <= nx; f++) {
+        const index = j * (nx + 1) + f;
+        const T = tx[index] * mx[index];
+        wx[index] = 0;
+        gx[index] = 0;
+        if (T === 0) continue;
+        if (f === 0 || f === nx) {
+          if (!p.open) continue;
+          const c = j * nx + (f === 0 ? 0 : nx - 1);
+          // Outward-positive buoyancy flux into the hydrostatic ghost (h = 0, p = 0).
+          wx[index] = T * 0.5 * (lamT(c) + b * H);
+          gx[index] = T * 0.5 * lamG(c) * tg * (zt[c] + h[c] - ghostX[index]);
+          diag[c] += wx[index];
+          rhs[c] -= gx[index];
+          continue;
+        }
+        const L = j * nx + f - 1;
+        const R = L + 1;
+        wx[index] = T * 0.5 * (lamT(L) + lamT(R));
+        gx[index] = T * 0.5 * (lamG(L) + lamG(R)) * tg * (zt[L] + h[L] - zt[R] - h[R]);
+        diag[L] += wx[index];
+        diag[R] += wx[index];
+        rhs[L] -= gx[index];
+        rhs[R] += gx[index];
+      }
+    }
+    for (let f = 0; f <= ny; f++) {
+      for (let i = 0; i < nx; i++) {
+        const index = f * nx + i;
+        const T = ty[index] * my[index];
+        wy[index] = 0;
+        gy[index] = 0;
+        if (T === 0) continue;
+        if (f === 0 || f === ny) {
+          if (!p.open) continue;
+          const c = (f === 0 ? 0 : ny - 1) * nx + i;
+          wy[index] = T * 0.5 * (lamT(c) + b * H);
+          gy[index] = T * 0.5 * lamG(c) * tg * (zt[c] + h[c] - ghostY[index]);
+          diag[c] += wy[index];
+          rhs[c] -= gy[index];
+          continue;
+        }
+        const S = (f - 1) * nx + i;
+        const N = S + nx;
+        wy[index] = T * 0.5 * (lamT(S) + lamT(N));
+        gy[index] = T * 0.5 * (lamG(S) + lamG(N)) * tg * (zt[S] + h[S] - zt[N] - h[N]);
+        diag[S] += wy[index];
+        diag[N] += wy[index];
+        rhs[S] -= gy[index];
+        rhs[N] += gy[index];
+      }
+    }
+
+    const apply = (x, out) => {
+      for (let c = 0; c < n; c++) out[c] = diag[c] * x[c];
+      for (let j = 0; j < ny; j++) {
+        for (let f = 1; f < nx; f++) {
+          const w = wx[j * (nx + 1) + f];
+          if (w === 0) continue;
+          const L = j * nx + f - 1;
+          out[L] -= w * x[L + 1];
+          out[L + 1] -= w * x[L];
+        }
+      }
+      for (let f = 1; f < ny; f++) {
+        for (let i = 0; i < nx; i++) {
+          const w = wy[f * nx + i];
+          if (w === 0) continue;
+          const S = (f - 1) * nx + i;
+          out[S] -= w * x[S + nx];
+          out[S + nx] -= w * x[S];
+        }
+      }
+    };
+
+    const x = state.p;
+    apply(x, q);
+    let bNorm = 0;
+    let rz = 0;
+    for (let c = 0; c < n; c++) {
+      r[c] = rhs[c] - q[c];
+      z[c] = r[c] / diag[c];
+      d[c] = z[c];
+      rz += r[c] * z[c];
+      bNorm += rhs[c] * rhs[c];
+    }
+    bNorm = Math.sqrt(bNorm) || 1;
+    let iterations = 0;
+    for (; iterations < 3000; iterations++) {
+      let rNorm = 0;
+      for (let c = 0; c < n; c++) rNorm += r[c] * r[c];
+      if (Math.sqrt(rNorm) <= PRESSURE_TOL * bNorm) break;
+      apply(d, q);
+      let dq = 0;
+      for (let c = 0; c < n; c++) dq += d[c] * q[c];
+      if (!(dq > 0)) break;
+      const alpha = rz / dq;
+      let rzNew = 0;
+      for (let c = 0; c < n; c++) {
+        x[c] += alpha * d[c];
+        r[c] -= alpha * q[c];
+        z[c] = r[c] / diag[c];
+        rzNew += r[c] * z[c];
+      }
+      const beta = rzNew / rz;
+      rz = rzNew;
+      for (let c = 0; c < n; c++) d[c] = z[c] + beta * d[c];
+    }
+
+    // Total face fluxes: interior faces positive in +x/+y; boundary faces store +x/+y too.
+    for (let j = 0; j < ny; j++) {
+      for (let f = 0; f <= nx; f++) {
+        const index = j * (nx + 1) + f;
+        if (wx[index] === 0 && gx[index] === 0) { state.ux[index] = 0; continue; }
+        if (f === 0) state.ux[index] = -(wx[index] * x[j * nx] + gx[index]);
+        else if (f === nx) state.ux[index] = wx[index] * x[j * nx + nx - 1] + gx[index];
+        else state.ux[index] = wx[index] * (x[j * nx + f - 1] - x[j * nx + f]) + gx[index];
+      }
+    }
+    for (let f = 0; f <= ny; f++) {
+      for (let i = 0; i < nx; i++) {
+        const index = f * nx + i;
+        if (wy[index] === 0 && gy[index] === 0) { state.uy[index] = 0; continue; }
+        if (f === 0) state.uy[index] = -(wy[index] * x[i] + gy[index]);
+        else if (f === ny) state.uy[index] = wy[index] * x[(ny - 1) * nx + i] + gy[index];
+        else state.uy[index] = wy[index] * (x[(f - 1) * nx + i] - x[f * nx + i]) + gy[index];
+      }
+    }
+    let change = 0;
+    for (let c = 0; c < n; c++) change = Math.max(change, Math.abs(x[c] - old[c]));
+    state.cgIterations = iterations;
+    return change;
+  };
+
+  const pressureInterval = (state, p) => {
+    if (state.t < p.injEnd) return clamp(0.1 * state.t, 2 * 86400, 0.25 * YEAR);
+    return 0.25 * YEAR;
+  };
+
   const advance = (model, state, tTarget) => {
     const p = model.p;
+    if (state.nextPressure === undefined) state.nextPressure = 0;
     while (state.t < tTarget * (1 - 1e-12)) {
+      if (state.pressureActive && state.t >= state.nextPressure * (1 - 1e-12)) {
+        let interval = pressureInterval(state, p);
+        if (state.t < p.injEnd) interval = Math.min(interval, p.injEnd - state.t);
+        const injecting = state.t < p.injEnd && p.rate > 0;
+        const change = solvePressure(model, state, interval, injecting);
+        state.nextPressure = state.t + interval;
+        if (!injecting && state.t >= p.injEnd &&
+            (change / interval < RELAXED_RATE || state.t - p.injEnd > MAX_RELAX_TIME)) {
+          state.pressureActive = false;
+          state.ux.fill(0);
+          state.uy.fill(0);
+        }
+      }
       let dtMax = tTarget - state.t;
       if (state.t < p.injEnd && state.t + dtMax > p.injEnd) dtMax = p.injEnd - state.t;
+      if (state.pressureActive) dtMax = Math.min(dtMax, state.nextPressure - state.t);
       stepTransport(model, state, dtMax);
     }
+  };
+
+  // Key performance indicators at the current state (SI).
+  const kpis = (model, state) => {
+    const { n, nx, p, H, area, xc, yc } = model;
+    const a = p.krg / p.muG;
+    const b = 1 / p.muW;
+    let footprint = 0;
+    let maxColumn = 0;
+    let migration = 0;
+    let pMax = 0;
+    const wx = xc[model.well % nx];
+    const wy = yc[Math.floor(model.well / nx)];
+    for (let c = 0; c < n; c++) {
+      if (state.s[c] > 1e-3) footprint += area;
+      if (state.h[c] > maxColumn) maxColumn = state.h[c];
+      if (state.h[c] > 0.1) migration = Math.max(migration, Math.hypot(xc[c % nx] - wx, yc[Math.floor(c / nx)] - wy));
+      if (state.p[c] > pMax) pMax = state.p[c];
+    }
+    let bhp = state.p[model.well];
+    if (state.t < p.injEnd && p.rate > 0) {
+      const hw = Math.min(state.h[model.well], H);
+      const lamT = a * hw + b * (H - hw);
+      bhp += (p.rate / p.rhoG) * Math.log(0.198 * model.dx / 0.1) / (2 * Math.PI * p.k * lamT);
+    }
+    return { footprint, maxColumn, migration, bhp, pMax };
   };
 
   return {
     YEAR, MT, MD, BAR, KM, GRAVITY, LX, LY, GRIDS,
     LIMITS, FAULT_LIMITS, DEFAULTS, PRESETS, MAX_FAULTS,
     normalizeScenario, topDepth, buildModel, roughnessField, trapAnalysis, contourSegments,
-    createState, advance
+    createState, advance, kpis
   };
 });

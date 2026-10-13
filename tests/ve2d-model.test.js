@@ -192,8 +192,10 @@ test('plume thickness stays within the aquifer and below its historical maximum'
 });
 
 test('injection on a flat aquifer spreads symmetrically around the well', () => {
+  // Transport alone (no pressure solve) has no directional bias at all.
   const model = VE2D.buildModel(flat({ boundary: 'closed', wellX: 10.1, wellY: 6.1, injYears: 30 }));
   const state = VE2D.createState(model);
+  state.pressureActive = false;
   VE2D.advance(model, state, YEARS(20));
   const w = model.well;
   const scale = Math.max(...state.h);
@@ -201,6 +203,19 @@ test('injection on a flat aquifer spreads symmetrically around the well', () => 
     near(state.h[w + k], state.h[w - k], 1e-9 * scale, `x symmetry at ${k}`);
     near(state.h[w + k * model.nx], state.h[w - k * model.nx], 1e-9 * scale, `y symmetry at ${k}`);
     near(state.h[w + k], state.h[w + k * model.nx], 1e-9 * scale, `x/y isotropy at ${k}`);
+  }
+});
+
+test('with the pressure solve the injected plume is still nearly isotropic', () => {
+  // The box is not symmetric about the well cell, so only near-isotropy is expected.
+  const model = VE2D.buildModel(flat({ boundary: 'open', wellX: 10.1, wellY: 6.1, injYears: 30 }));
+  const state = VE2D.createState(model);
+  VE2D.advance(model, state, YEARS(20));
+  const w = model.well;
+  const scale = Math.max(...state.h);
+  for (let k = 1; k < 8; k++) {
+    near(state.h[w + k], state.h[w - k], 0.02 * scale, `x symmetry at ${k}`);
+    near(state.h[w + k], state.h[w + k * model.nx], 0.03 * scale, `x/y isotropy at ${k}`);
   }
 });
 
@@ -238,9 +253,94 @@ test('open boundaries release CO2 only where its potential points outward', () =
     const state = VE2D.createState(model);
     model.p.rate = 0;
     lens(model, state, x, 6000, 600, 1);
+    const initial = storedMass(model, state);
     VE2D.advance(model, state, YEARS(30));
-    return state.exited;
+    return state.exited / initial;
   };
-  assert.equal(run(19800), 0, 'a thin lens at the down-dip edge stays in the model');
-  assert.ok(run(200) > 0, 'a lens at the up-dip edge leaves the model');
+  assert.ok(run(19800) < 1e-6, 'a thin lens at the down-dip edge stays in the model');
+  assert.ok(run(200) > 0.01, 'a lens at the up-dip edge leaves the model');
+});
+
+// ---------------------------------------------------------------- Task 4
+
+test('closed aquifer: mean pressure build-up equals injected volume over pore compressibility', () => {
+  const model = VE2D.buildModel(flat({ boundary: 'closed', grid: 'coarse', rateMt: 1, injYears: 30 }));
+  const state = VE2D.createState(model);
+  VE2D.advance(model, state, YEARS(30));
+  const p = model.p;
+  const expected = (state.injected / p.rhoG) / (p.phi * p.ct * model.Lx * model.Ly * model.H);
+  const mean = state.p.reduce((sum, value) => sum + value, 0) / model.n;
+  assert.ok(Math.abs(mean - expected) / expected < 0.03, `mean build-up ${mean / 1e5} bar vs ${expected / 1e5} bar`);
+});
+
+test('viscous injection without buoyancy matches the Nordbotten–Celia sharp-interface solution', () => {
+  const model = VE2D.buildModel(flat({ grid: 'fine', boundary: 'open', wellX: 10.1, wellY: 6.1, rateMt: 1, injYears: 30, sgr: 0 }));
+  model.p.dRho = 0;
+  const state = VE2D.createState(model);
+  VE2D.advance(model, state, YEARS(30));
+  const p = model.p;
+  const lambda = (p.krg / p.muG) * p.muW;
+  const volume = state.injected / p.rhoG;
+  const phiEff = p.phi * (1 - p.swr);
+  const rMax = Math.sqrt(lambda * volume / (Math.PI * phiEff * model.H));
+  const rMin = Math.sqrt(volume / (lambda * Math.PI * phiEff * model.H));
+  // Volume-weighted mean radius of the analytic profile h = H/(λ-1)(rMax/r - 1), h = H inside rMin.
+  let top = 0;
+  let bottom = 0;
+  for (let r = 0.5; r < rMax; r += 1) {
+    const hr = r < rMin ? model.H : model.H / (lambda - 1) * (rMax / r - 1);
+    top += r * hr * r;
+    bottom += hr * r;
+  }
+  const wx = model.xc[model.well % model.nx];
+  const wy = model.yc[Math.floor(model.well / model.nx)];
+  let mTop = 0;
+  let mBottom = 0;
+  for (let c = 0; c < model.n; c++) {
+    const r = Math.hypot(model.xc[c % model.nx] - wx, model.yc[Math.floor(c / model.nx)] - wy);
+    mTop += r * state.h[c];
+    mBottom += state.h[c];
+  }
+  const analytic = top / bottom;
+  const numerical = mTop / mBottom;
+  assert.ok(Math.abs(numerical - analytic) / analytic < 0.1, `mean radius ${numerical} m vs ${analytic} m`);
+});
+
+test('open boundaries relax the pressure after injection stops', () => {
+  // Without buoyancy the only pressure signal is the injection build-up, which must vanish.
+  const model = VE2D.buildModel(flat({ grid: 'coarse', boundary: 'open', injYears: 10 }));
+  model.p.dRho = 0;
+  const state = VE2D.createState(model);
+  VE2D.advance(model, state, YEARS(10));
+  const peak = Math.max(...state.p);
+  assert.ok(peak > 1e5, 'injection raises pressure by more than a bar');
+  VE2D.advance(model, state, YEARS(30));
+  const residual = Math.max(...state.p.map(Math.abs));
+  assert.ok(residual < 0.01e5, `residual ${residual / 1e5} bar vs peak ${peak / 1e5} bar`);
+  assert.equal(state.pressureActive, false);
+});
+
+test('Peaceman bottom-hole build-up is consistent between grids', () => {
+  const bhp = grid => {
+    const model = VE2D.buildModel({ ...VE2D.DEFAULTS, grid, faults: [] });
+    const state = VE2D.createState(model);
+    VE2D.advance(model, state, YEARS(29.9));
+    return VE2D.kpis(model, state).bhp;
+  };
+  const standard = bhp('standard');
+  const fine = bhp('fine');
+  assert.ok(standard > 0 && fine > 0, 'positive build-up');
+  assert.ok(Math.abs(standard - fine) / fine < 0.1, `${standard / 1e5} vs ${fine / 1e5} bar`);
+});
+
+test('with injection the plume stays inside the aquifer thickness', () => {
+  const model = VE2D.buildModel({ ...VE2D.DEFAULTS, grid: 'coarse', rateMt: 3, thickness: 30 });
+  const state = VE2D.createState(model);
+  for (const year of [1, 5, 20, 40, 80]) {
+    VE2D.advance(model, state, YEARS(year));
+    for (let c = 0; c < model.n; c++) {
+      assert.ok(state.h[c] >= 0 && state.h[c] <= model.H * (1 + 1e-6), `h=${state.h[c]} in [0, H] at year ${year}`);
+      assert.ok(state.h[c] <= state.hMax[c] + 1e-12, `h <= hMax at year ${year}`);
+    }
+  }
 });
