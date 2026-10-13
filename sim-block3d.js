@@ -93,14 +93,14 @@
   };
 
   // The aquifer top as a heightfield on a lattice finer than the grid, cut at fault
-  // traces; scarps on the footwall edge of every cut; four walls down through the
-  // aquifer (thickness H) and a drawn base layer.
+  // traces; scarps on the footwall edge of every cut; four walls down to the aquifer
+  // base, which follows the local thickness.
   const buildGeometry = (view, depthAt, options = {}) => {
-    const { Lx, Ly, H } = view;
+    const { Lx, Ly } = view;
+    const thicknessAt = options.thicknessAt || (() => view.H);
     const subdivisions = options.subdivisions || Math.max(1, Math.round(MESH_NODES / view.nx));
     const MX = view.nx * subdivisions;
     const MY = view.ny * subdivisions;
-    const base = Math.max(20, 0.6 * H);
     const traces = view.faults.map((fault, index) => traceOf(fault, view.faultLines[index], index));
     const node = (a, b) => [a * Lx / MX, b * Ly / MY, b * (MX + 1) + a];
 
@@ -134,6 +134,7 @@
     const section = { position: [], top: [], normal: [], sample: [], fault: [], index: [] };
     let zMin = Infinity;
     let zMax = -Infinity;
+    let zBottom = -Infinity;
     const cellStep = 0.3 * Math.min(view.dx, view.dy);
 
     for (let b = 0; b < MY; b++) {
@@ -189,7 +190,7 @@
     const sideOf = (trace, point) => signedDistance(trace, point[0], point[1]) > 0 ? 1 : -1;
     for (const edge of edges) {
       const columns = [];
-      const push = (point, sides) => columns.push({ point, depth: evaluate(point, sides)[0] });
+      const push = (point, sides) => columns.push({ point, depth: evaluate(point, sides)[0], thickness: thicknessAt(point[0], point[1]) });
       edge.nodes.forEach((point, k) => {
         const previous = edge.nodes[k - 1];
         const next = edge.nodes[k + 1];
@@ -219,7 +220,8 @@
         const p = columns[k];
         const q = columns[k + 1];
         if (p.point[0] === q.point[0] && p.point[1] === q.point[1]) continue;
-        addQuad(section, p.point, q.point, [p.depth, q.depth], [p.depth + H + base, q.depth + H + base], edge.normal, { fault: 0, sample: point => point });
+        addQuad(section, p.point, q.point, [p.depth, q.depth], [p.depth + p.thickness, q.depth + q.thickness], edge.normal, { fault: 0, sample: point => point });
+        zBottom = Math.max(zBottom, p.depth + p.thickness, q.depth + q.thickness);
       }
     }
 
@@ -229,26 +231,26 @@
         position: Float32Array.from(section.position), top: Float32Array.from(section.top), normal: Float32Array.from(section.normal),
         sample: Float32Array.from(section.sample), fault: Float32Array.from(section.fault), index: Uint32Array.from(section.index)
       },
-      zMin, zMax, base, H
+      zMin, zMax, zBottom
     };
   };
 
   // Cell state for the GPU: column (m), historical maximum (m), dissolved fraction of
-  // capacity, pressure build-up (bar).
+  // the cell's capacity, pressure build-up (bar).
   const packFrame = (view, frame) => {
     const n = frame.h.length;
     const data = new Float32Array(4 * n);
     for (let c = 0; c < n; c++) {
       data[4 * c] = frame.h[c];
       data[4 * c + 1] = frame.hMax[c];
-      data[4 * c + 2] = view.disCapacity > 0 ? frame.md[c] / view.disCapacity : 0;
+      data[4 * c + 2] = view.disCapacity[c] > 0 ? frame.md[c] / view.disCapacity[c] : 0;
       data[4 * c + 3] = frame.p[c] / 1e5;
     }
     return data;
   };
 
-  // Static per-model fields: structural closure below the spill point (m, capped) and
-  // the outline mask of the traps the map also draws.
+  // Static per-model fields: structural closure below the spill point (m, capped), the
+  // outline mask of the traps the map also draws, and the aquifer thickness (m).
   const packStatic = view => {
     const n = view.zt.length;
     const data = new Float32Array(4 * n);
@@ -256,6 +258,7 @@
     for (let c = 0; c < n; c++) {
       data[4 * c] = Math.min(1000, Math.max(0, view.zSpill[c] - view.zt[c]));
       data[4 * c + 1] = big.has(view.trapId[c]) ? 1 : 0;
+      data[4 * c + 2] = view.Hc[c];
     }
     return data;
   };
@@ -273,7 +276,7 @@
       surfaceTop: Z(geometry.zMin),
       surfaceBottom: Z(geometry.zMax),
       top: Math.max(Z(geometry.zMin), Z(wellDepth) + stem),
-      bottom: Z(geometry.zMax + geometry.H + geometry.base)
+      bottom: Z(Math.max(geometry.zMax, geometry.zBottom))
     };
   };
   const toDisplay = (box, x, y, depth) => [x - box.Lx / 2, y - box.Ly / 2, -(depth - box.zRef) * box.exaggeration];
@@ -575,7 +578,6 @@ uniform sampler2D uStatic;
 uniform vec2 uSize;
 uniform vec2 uCell;
 uniform ivec2 uGrid;
-uniform float uH;
 uniform vec3 uFree;
 uniform vec3 uStructural;
 uniform vec3 uResidual;
@@ -602,12 +604,14 @@ void main() {
     d = textureLod(uData, vSample / uSize, 0.0);
     s = textureLod(uStatic, vSample / uSize, 0.0);
   }
-  vec3 rgb = below < uH ? uAquifer : uBase;
+  // Below the aquifer only on scarps whose throw exceeds the thickness.
+  float H = s.b;
+  vec3 rgb = below < H ? uAquifer : uBase;
   if (vFault > 0) rgb = mix(rgb, uInk, 0.28);
-  if (uLayers.y > 0.5 && below < uH && below > uH * (1.0 - clamp(d.b, 0.0, 1.0))) rgb = mix(rgb, uDissolved, 0.55);
+  if (uLayers.y > 0.5 && below < H && below > H * (1.0 - clamp(d.b, 0.0, 1.0))) rgb = mix(rgb, uDissolved, 0.55);
   if (uLayers.x > 0.5 && d.g > 0.05 && below >= d.r && below < d.g) rgb = mix(rgb, uResidual, 0.6);
   if (d.r > 0.05 && below < d.r) rgb = mix(rgb, mix(uFree, uStructural, clamp(min(d.r, s.r) / max(d.r, 1e-4), 0.0, 1.0)), 0.95);
-  rgb = mix(rgb, uInk, 0.16 * (1.0 - smoothstep(0.5, 1.5, abs(below - uH) / fw)));
+  rgb = mix(rgb, uInk, 0.16 * (1.0 - smoothstep(0.5, 1.5, abs(below - H) / fw)));
   // A fill light from the south-east keeps both walls facing the default view readable.
   rgb *= 0.8 + 0.2 * dot(normalize(vNormal), vec2(0.447, -0.894));
   float edge = 1.0 - smoothstep(0.8, 1.8, below / fw);
@@ -806,7 +810,6 @@ void main() {
         gl.uniform1i(v.uStatic, 1);
         gl.uniform2f(v.uCell, grid.dx, grid.dy);
         gl.uniform2i(v.uGrid, grid.nx, grid.ny);
-        gl.uniform1f(v.uH, state.H);
         for (const name of ['Free', 'Structural', 'Residual', 'Dissolved', 'Ink', 'Leak', 'Aquifer', 'Base']) gl.uniform3fv(v[`u${name}`], colors[name[0].toLowerCase() + name.slice(1)]);
         gl.uniform4fv(v.uLayers, layers);
         gl.uniform3fv(v.uLeaking, [0, 1, 2].map(i => state.leaking[i] ? 1 : 0));

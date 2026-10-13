@@ -193,14 +193,15 @@ const simReadoutAt = (model, frame, x, y) => {
   const i = Math.max(0, Math.min(model.nx - 1, Math.floor(x / model.dx)));
   const j = Math.max(0, Math.min(model.ny - 1, Math.floor(y / model.dy)));
   const c = j * model.nx + i;
-  return { x, y, depth: model.zt[c], h: frame.h[c], residual: (frame.hMax[c] - frame.h[c]) * model.sgr / (1 - model.swr), md: frame.md[c], p: frame.p[c] };
+  return { x, y, depth: model.zt[c], thickness: model.Hc[c], h: frame.h[c], residual: (frame.hMax[c] - frame.h[c]) * model.sgr / (1 - model.swr), md: frame.md[c], p: frame.p[c] };
 };
 
 const SimReadout = ({ readout, size }) => (
-  <div className="sim-readout" style={{ left: Math.min(readout.px + 16, size.width - 200), top: Math.min(readout.py + 16, size.height - 150) }}>
+  <div className="sim-readout" style={{ left: Math.min(readout.px + 16, size.width - 200), top: Math.min(readout.py + 16, size.height - 170) }}>
     <dl>
       <dt>Position</dt><dd>{(readout.x / 1000).toFixed(1)}, {(readout.y / 1000).toFixed(1)} km</dd>
       <dt>Top of aquifer</dt><dd>{simFormatNumber(readout.depth)} m</dd>
+      <dt>Aquifer thickness</dt><dd>{readout.thickness.toFixed(0)} m</dd>
       <dt>Mobile CO₂ column</dt><dd>{readout.h.toFixed(1)} m</dd>
       <dt>Residual CO₂</dt><dd>{readout.residual.toFixed(2)} m</dd>
       <dt>Dissolved</dt><dd>{simFormatNumber(readout.md)} kg/m²</dd>
@@ -349,7 +350,7 @@ const SimMapView = ({ model, frame, palette, layers, reducedMotion, line, onLine
         const p = 4 * ((ny - 1 - j) * nx + i);
         const h = frame.h[c];
         if (layers.dissolved && frame.md[c] > 0) {
-          const a = Math.min(0.75, frame.md[c] / model.disCapacity);
+          const a = Math.min(0.75, frame.md[c] / model.disCapacity[c]);
           image.data[p] = dissolved[0]; image.data[p + 1] = dissolved[1]; image.data[p + 2] = dissolved[2]; image.data[p + 3] = 255 * a;
         }
         const zone = frame.hMax[c] - h;
@@ -712,7 +713,7 @@ const simUnitRgb = color => simParseColor(color).map(v => v / 255);
 const simBlockViewport = size => ({ width: size.width, height: size.height, top: 100, bottom: size.width < 560 ? 104 : 62, side: 16 });
 
 // Labels, distance ticks, north arrow and depth key over the WebGL canvas.
-const simDrawBlockOverlay = (ctx, { cam, box, model, geometry, depthAt, wellDepth, palette, size, viewport, leaking }) => {
+const simDrawBlockOverlay = (ctx, { cam, box, model, geometry, depthAt, thicknessAt, wellDepth, palette, size, viewport, leaking }) => {
   ctx.clearRect(0, 0, size.width, size.height);
   const at = (x, y, depth, lift = 0) => {
     const p = SimBlock3D.toDisplay(box, x, y, depth);
@@ -745,7 +746,7 @@ const simDrawBlockOverlay = (ctx, { cam, box, model, geometry, depthAt, wellDept
     const toEye = [cam.eye[0] - (mid[0] - Lx / 2), cam.eye[1] - (mid[1] - Ly / 2)];
     if (toEye[0] * edge.normal[0] + toEye[1] * edge.normal[1] <= 0) continue;
     edge.points.forEach(([x, y], k) => {
-      const depth = depthAt(x, y) + model.H + geometry.base;
+      const depth = depthAt(x, y) + thicknessAt(x, y);
       const p = at(x, y, depth);
       const q = at(x + 600 * edge.normal[0], y + 600 * edge.normal[1], depth);
       if (!p || !q) return;
@@ -850,7 +851,8 @@ const SimBlockView = ({ model, frame, palette, layers, reducedMotion, year, scen
   const animation = useRef(0);
 
   const depthAt = useMemo(() => VE2D.depthField(scenario), [scenario]);
-  const geometry = useMemo(() => SimBlock3D.buildGeometry(model, depthAt), [model, depthAt]);
+  const thicknessAt = useMemo(() => VE2D.thicknessField(scenario), [scenario]);
+  const geometry = useMemo(() => SimBlock3D.buildGeometry(model, depthAt, { thicknessAt }), [model, depthAt, thicknessAt]);
   const wellDepth = useMemo(() => depthAt(model.wellX, model.wellY), [model, depthAt]);
   const box = useMemo(() => SimBlock3D.sceneBox(geometry, model, exaggeration, wellDepth), [geometry, model, exaggeration, wellDepth]);
   const viewport = simBlockViewport(size);
@@ -920,11 +922,10 @@ const SimBlockView = ({ model, frame, palette, layers, reducedMotion, year, scen
       depthRange: [geometry.zMin, geometry.zMax],
       interval: layers.contours ? simContourInterval(geometry.zMax - geometry.zMin) : 0,
       refH: Math.max(4, 0.5 * model.H),
-      H: model.H,
-      well: { x: model.wellX, y: model.wellY, top: wellDepth - box.stem / exaggeration, bottom: wellDepth + model.H, radius: 0.004 * Math.max(model.Lx, model.Ly), injecting },
+      well: { x: model.wellX, y: model.wellY, top: wellDepth - box.stem / exaggeration, bottom: wellDepth + thicknessAt(model.wellX, model.wellY), radius: 0.004 * Math.max(model.Lx, model.Ly), injecting },
       leaking
     });
-    simDrawBlockOverlay(simPrepareCanvas(overlayRef.current, size.width, size.height), { cam, box, model, geometry, depthAt, wellDepth, palette, size, viewport, leaking });
+    simDrawBlockOverlay(simPrepareCanvas(overlayRef.current, size.width, size.height), { cam, box, model, geometry, depthAt, thicknessAt, wellDepth, palette, size, viewport, leaking });
   };
   const drawRef = useRef(draw);
   drawRef.current = draw;
@@ -1079,6 +1080,7 @@ const SimSectionView = ({ model, frame, palette, scenario, line, layers, reduced
   const data = useMemo(() => {
     if (!line || !frame) return null;
     const depthAt = VE2D.depthField(scenario);
+    const thicknessAt = VE2D.thicknessField(scenario);
     const samples = 360;
     const length = Math.hypot(line.x1 - line.x0, line.y1 - line.y0) || 1;
     const points = [];
@@ -1087,13 +1089,15 @@ const SimSectionView = ({ model, frame, palette, scenario, line, layers, reduced
       const x = Math.max(1, Math.min(model.Lx - 1, line.x0 + (line.x1 - line.x0) * t));
       const y = Math.max(1, Math.min(model.Ly - 1, line.y0 + (line.y1 - line.y0) * t));
       const zt = depthAt(x, y);
+      const H = thicknessAt(x, y);
       const spill = simSampleField(model, model.zSpill, x, y);
       points.push({
-        d: t * length, x, y, zt,
+        d: t * length, x, y, zt, H,
+        cap: simSampleField(model, model.disCapacity, x, y),
         h: Math.max(0, simSampleField(model, frame.h, x, y)),
         hMax: Math.max(0, simSampleField(model, frame.hMax, x, y)),
         md: Math.max(0, simSampleField(model, frame.md, x, y)),
-        closure: Number.isFinite(spill) ? Math.max(0, spill - simSampleField(model, model.zt, x, y)) : model.H
+        closure: Number.isFinite(spill) ? Math.max(0, spill - simSampleField(model, model.zt, x, y)) : H
       });
     }
     const crossings = [];
@@ -1117,10 +1121,9 @@ const SimSectionView = ({ model, frame, palette, scenario, line, layers, reduced
   const W = size.width;
   const Hpx = size.height;
   const m = { left: 64, right: 24, top: 66, bottom: W < 560 ? 104 : 74 };
-  const H = model.H;
   let zMin = Infinity;
   let zMax = -Infinity;
-  for (const p of points) { zMin = Math.min(zMin, p.zt); zMax = Math.max(zMax, p.zt + H); }
+  for (const p of points) { zMin = Math.min(zMin, p.zt); zMax = Math.max(zMax, p.zt + p.H); }
   const top = zMin - SIM_CAPROCK_DRAWN - 50;
   const bottom = zMax + 50;
   const sx = d => m.left + (W - m.left - m.right) * d / length;
@@ -1133,7 +1136,7 @@ const SimSectionView = ({ model, frame, palette, scenario, line, layers, reduced
     return `${d}Z`;
   };
   const injecting = year < model.injYears;
-  const fingers = points.filter((p, k) => k % 14 === 7 && p.md > 0.02 * model.disCapacity && p.md < 0.95 * model.disCapacity && p.h > 0.5);
+  const fingers = points.filter((p, k) => k % 14 === 7 && p.md > 0.02 * p.cap && p.md < 0.95 * p.cap && p.h > 0.5);
   const leaking = crossings.filter(c => frame.leaking?.[c.index]);
   const depthTicks = simTicks(top, bottom, 5).filter(t => t > top && t < bottom);
   const distanceTicks = simTicks(0, length / 1000, 6);
@@ -1146,18 +1149,18 @@ const SimSectionView = ({ model, frame, palette, scenario, line, layers, reduced
         <pattern id="sim-residual" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill={palette.residual} fillOpacity="0.25" /><rect width="2" height="6" fill={palette.glowResidual} /></pattern>
         <linearGradient id="sim-plume" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={palette.glowFree} /><stop offset="1" stopColor={palette.free} /></linearGradient>
         <linearGradient id="sim-dissolved" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor={palette.glowDissolved} stopOpacity="0.2" /><stop offset="1" stopColor={palette.glowDissolved} stopOpacity="0.75" /></linearGradient>
-        <clipPath id="sim-aquifer-clip"><path d={pathBetween(p => p.zt, p => p.zt + H)} /></clipPath>
+        <clipPath id="sim-aquifer-clip"><path d={pathBetween(p => p.zt, p => p.zt + p.H)} /></clipPath>
       </defs>
       <rect x={m.left} y={m.top} width={W - m.left - m.right} height={Hpx - m.top - m.bottom} fill={palette.rockOver} />
       {simTicks(top, bottom, 12).map(t => <line key={`s${t}`} x1={m.left} x2={W - m.right} y1={sy(t)} y2={sy(t)} stroke={palette.rule} strokeOpacity="0.5" />)}
       <path d={pathBetween(p => p.zt - SIM_CAPROCK_DRAWN, p => p.zt)} fill="url(#sim-shale)" />
-      <path d={pathBetween(p => p.zt, p => p.zt + H)} fill="url(#sim-sand)" />
-      <path d={pathBetween(p => p.zt + H, () => bottom)} fill={palette.rockBase} />
+      <path d={pathBetween(p => p.zt, p => p.zt + p.H)} fill="url(#sim-sand)" />
+      <path d={pathBetween(p => p.zt + p.H, () => bottom)} fill={palette.rockBase} />
       <g clipPath="url(#sim-aquifer-clip)">
-        <path d={pathBetween(p => p.zt + H - H * Math.min(1, p.md / model.disCapacity), p => p.zt + H)} fill="url(#sim-dissolved)" />
+        <path d={pathBetween(p => p.zt + p.H * (1 - Math.min(1, p.md / p.cap)), p => p.zt + p.H)} fill="url(#sim-dissolved)" />
         {!reducedMotion && fingers.map((p, k) => (
           <path key={k} className="sim-finger" style={{ animationDelay: `${(k % 7) * -0.6}s` }}
-            d={`M${sx(p.d)},${sy(p.zt + p.hMax)} q 3 ${(sy(p.zt + H) - sy(p.zt + p.hMax)) * 0.5} -1 ${(sy(p.zt + H) - sy(p.zt + p.hMax)) * 0.9}`}
+            d={`M${sx(p.d)},${sy(p.zt + p.hMax)} q 3 ${(sy(p.zt + p.H) - sy(p.zt + p.hMax)) * 0.5} -1 ${(sy(p.zt + p.H) - sy(p.zt + p.hMax)) * 0.9}`}
             stroke={palette.glowDissolved} strokeOpacity="0.55" strokeWidth="1.2" fill="none" strokeLinecap="round" />
         ))}
         {layers.residual !== false && <path d={pathBetween(p => p.zt + p.h, p => p.zt + Math.max(p.h, p.hMax))} fill="url(#sim-residual)" />}
@@ -1184,10 +1187,10 @@ const SimSectionView = ({ model, frame, palette, scenario, line, layers, reduced
       }))}
       {well !== null && (
         <g>
-          <line x1={sx(well)} x2={sx(well)} y1={m.top - 4} y2={sy(points[Math.round(well / length * (points.length - 1))].zt + H)} stroke={palette.ink} strokeWidth="2.5" />
+          <line x1={sx(well)} x2={sx(well)} y1={m.top - 4} y2={sy(points[Math.round(well / length * (points.length - 1))].zt + points[Math.round(well / length * (points.length - 1))].H)} stroke={palette.ink} strokeWidth="2.5" />
           {[0.2, 0.4, 0.6, 0.8].map(f => {
             const p = points[Math.round(well / length * (points.length - 1))];
-            return <line key={f} x1={sx(well) - 6} x2={sx(well) + 6} y1={sy(p.zt + f * H)} y2={sy(p.zt + f * H)} stroke={palette.ink} strokeWidth="1.5" />;
+            return <line key={f} x1={sx(well) - 6} x2={sx(well) + 6} y1={sy(p.zt + f * p.H)} y2={sy(p.zt + f * p.H)} stroke={palette.ink} strokeWidth="1.5" />;
           })}
           {injecting && !reducedMotion && <line className="sim-inject" x1={sx(well)} x2={sx(well)} y1={m.top} y2={sy(points[Math.round(well / length * (points.length - 1))].zt)} stroke={palette.glowFree} strokeWidth="2.5" strokeDasharray="6 10" />}
           <text x={sx(well) + 8} y={m.top + 4} fill={palette.ink} fontSize="12" fontWeight="700">INJ-1</text>

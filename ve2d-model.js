@@ -29,6 +29,7 @@
     permMd: [10, 5000, 1],
     porosity: [0.05, 0.35, 0.01],
     thickness: [10, 200, 1],
+    thicknessVar: [0, 60, 1],
     ct: [0.2, 5, 0.1],
     rhoCo2: [400, 900, 10],
     rhoBrine: [1000, 1200, 5],
@@ -73,6 +74,7 @@
     permMd: 500,
     porosity: 0.2,
     thickness: 50,
+    thicknessVar: 20,
     ct: 1,
     rhoCo2: 700,
     rhoBrine: 1050,
@@ -178,30 +180,37 @@
     };
   });
 
-  // Caprock roughness: an anisotropic Gaussian random field with a self-affine spectrum
-  // (Hurst exponent 0.8, wavelengths 8 km to 500 m), stretched 2.5 times along strike. It is
-  // a sum of random Fourier modes, one per equal step in log wavenumber (amplitude k^-H),
-  // scaled to unit variance, so the roughness input is the RMS height in metres.
-  const ROUGH = Object.freeze({ modes: 48, longest: 8000, shortest: 500, hurst: 0.8, stretch: 2.5 });
-
-  const roughModes = scenario => {
-    const rng = mulberry32(scenario.seed + 7919);
-    const angle = strikeAngle(scenario);
+  // Smooth Gaussian random fields with a self-affine spectrum, stretched along strike: a
+  // sum of random Fourier modes, one per equal step in log wavenumber (amplitude k^-H),
+  // scaled to unit variance.
+  const spectralModes = (seed, spec, angle) => {
+    const rng = mulberry32(seed);
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
-    const modes = new Float64Array(4 * ROUGH.modes);
+    const modes = new Float64Array(4 * spec.modes);
     let variance = 0;
-    for (let m = 0; m < ROUGH.modes; m++) {
-      const k = 2 * Math.PI / (ROUGH.longest * (ROUGH.shortest / ROUGH.longest) ** ((m + rng()) / ROUGH.modes));
+    for (let m = 0; m < spec.modes; m++) {
+      const k = 2 * Math.PI / (spec.longest * (spec.shortest / spec.longest) ** ((m + rng()) / spec.modes));
       const direction = 2 * Math.PI * rng();
-      const along = k * Math.cos(direction) / ROUGH.stretch;
+      const along = k * Math.cos(direction) / spec.stretch;
       const across = k * Math.sin(direction);
-      modes.set([along * cos - across * sin, along * sin + across * cos, 2 * Math.PI * rng(), k ** -ROUGH.hurst], 4 * m);
-      variance += k ** (-2 * ROUGH.hurst) / 2;
+      modes.set([along * cos - across * sin, along * sin + across * cos, 2 * Math.PI * rng(), k ** -spec.hurst], 4 * m);
+      variance += k ** (-2 * spec.hurst) / 2;
     }
     for (let m = 3; m < modes.length; m += 4) modes[m] /= Math.sqrt(variance);
     return modes;
   };
+
+  // Caprock roughness (Hurst exponent 0.8, wavelengths 8 km to 500 m, stretched 2.5 times
+  // along strike); the roughness input is its RMS height in metres.
+  const ROUGH = Object.freeze({ modes: 48, longest: 8000, shortest: 500, hurst: 0.8, stretch: 2.5 });
+  const roughModes = scenario => spectralModes(scenario.seed + 7919, ROUGH, strikeAngle(scenario));
+
+  // Aquifer thickness: the mean times a log-normal factor exp(sG - s^2/2) of a smoother
+  // field (Hurst 0.9, wavelengths 12 km to 1.5 km, sand belts stretched twice along
+  // strike), so the mean is kept, thickness stays positive and s is about its spread.
+  const THICK = Object.freeze({ modes: 32, longest: 12000, shortest: 1500, hurst: 0.9, stretch: 2 });
+  const thickModes = scenario => spectralModes(scenario.seed + 104729, THICK, strikeAngle(scenario));
 
   const roughnessAt = (modes, x, y) => {
     let value = 0;
@@ -253,13 +262,25 @@
     return depth;
   };
 
-  const depthCache = scenario => ({ domes: domeCentres(scenario), frames: scenario.faults.map(faultFrame), rough: roughModes(scenario) });
+  const thicknessAt = (x, y, scenario, cache) => {
+    const spread = scenario.thicknessVar / 100;
+    if (!(spread > 0)) return scenario.thickness;
+    return scenario.thickness * Math.exp(spread * roughnessAt(cache?.thick || thickModes(scenario), x, y) - spread * spread / 2);
+  };
+
+  const depthCache = scenario => ({ domes: domeCentres(scenario), frames: scenario.faults.map(faultFrame), rough: roughModes(scenario), thick: thickModes(scenario) });
 
   // The top-surface depth of one (normalised) scenario as a function of x and y in metres,
   // with its domes, fault frames and roughness modes computed once.
   const depthField = scenario => {
     const cache = depthCache(scenario);
     return (x, y) => topDepth(x, y, scenario, cache);
+  };
+
+  // The aquifer thickness of one (normalised) scenario as a function of x and y in metres.
+  const thicknessField = scenario => {
+    const cache = depthCache(scenario);
+    return (x, y) => thicknessAt(x, y, scenario, cache);
   };
 
   // Segment p–q against the fault trace; returns the along-strike parameter t in [-1, 1] or null.
@@ -314,16 +335,23 @@
     const xc = Float64Array.from({ length: nx }, (_, i) => (i + 0.5) * dx);
     const yc = Float64Array.from({ length: ny }, (_, j) => (j + 0.5) * dy);
     const zt = new Float64Array(n);
-    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) zt[j * nx + i] = depthAt(xc[i], yc[j]);
+    const Hc = new Float64Array(n);
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        zt[j * nx + i] = depthAt(xc[i], yc[j]);
+        Hc[j * nx + i] = thicknessAt(xc[i], yc[j], scenario, cache);
+      }
+    }
 
-    // Face multiplier: cross-fault transmissibility times the juxtaposed fraction of H.
+    // Face multiplier: cross-fault transmissibility times the juxtaposed fraction of the
+    // aquifer thickness at the face.
     const multiplier = (px, py, qx, qy) => {
       let value = 1;
       scenario.faults.forEach((fault, index) => {
         const t = traceCrossing(cache.frames[index], px, py, qx, qy);
         if (t === null) return;
         const localThrow = fault.throw * (1 - t * t);
-        value = Math.min(value, fault.trans * Math.max(0, 1 - localThrow / H));
+        value = Math.min(value, fault.trans * Math.max(0, 1 - localThrow / thicknessAt((px + qx) / 2, (py + qy) / 2, scenario, cache)));
       });
       return value;
     };
@@ -385,7 +413,7 @@
 
     const well = clamp(Math.floor(scenario.wellY * KM / dy), 0, ny - 1) * nx + clamp(Math.floor(scenario.wellX * KM / dx), 0, nx - 1);
 
-    const model = { scenario, nx, ny, n, dx, dy, Lx: LX, Ly: LY, area: dx * dy, H, p, xc, yc, zt, tx, ty, mx, my, ghostX, ghostY, leakCells, faultLines, well, depthAt, domes: cache.domes };
+    const model = { scenario, nx, ny, n, dx, dy, Lx: LX, Ly: LY, area: dx * dy, H, Hc, p, xc, yc, zt, tx, ty, mx, my, ghostX, ghostY, leakCells, faultLines, well, depthAt, domes: cache.domes };
     model.traps = trapAnalysis(model);
     return model;
   };
@@ -499,7 +527,7 @@
       for (const c of cells) {
         if (zt[c] < zt[crestCell]) crestCell = c;
         if (spillCell === -1 && from[c] !== -1 && trapId[from[c]] !== id) spillCell = from[c];
-        capacity += Math.min(model.H, zSpill[c] - zt[c]) * capacityFactor;
+        capacity += Math.min(model.Hc[c], zSpill[c] - zt[c]) * capacityFactor;
       }
       traps.push({ id, cells: Int32Array.from(cells), crestCell, spillCell, spillDepth: zSpill[crestCell], capacity });
     }
@@ -598,7 +626,7 @@
   // Gas volume flux across one face (positive from side A to side B) with hybrid
   // upwinding: the viscous part follows the total flux, buoyancy follows the phase
   // potentials (gas from the deeper interface, brine the other way).
-  const faceFlux = (k, T, U, zetaA, zetaB, hA, hB, H, scratch) => {
+  const faceFlux = (k, T, U, zetaA, zetaB, hA, hB, HA, HB, scratch) => {
     if (hA <= H_EPS && hB <= H_EPS) {
       scratch.bound = 0;
       return 0;
@@ -609,22 +637,23 @@
     let mob = 0;
     let gravity = 0;
     if (dz !== 0 && T > 0) {
-      const gas = a * Math.min(dz > 0 ? hA : hB, H);
-      const brine = b * Math.max(0, H - (dz > 0 ? hB : hA));
+      const gas = dz > 0 ? a * Math.min(hA, HA) : a * Math.min(hB, HB);
+      const brine = dz > 0 ? b * Math.max(0, HB - hB) : b * Math.max(0, HA - hA);
       mob = gas + brine > 0 ? gas * brine / (gas + brine) : 0;
       gravity = T * k.tg * dz * mob;
     }
     let viscous = 0;
     let slope = 0;
     if (U !== 0) {
-      const hu = Math.min(U > 0 ? hA : hB, H);
+      const Hu = U > 0 ? HA : HB;
+      const hu = Math.min(U > 0 ? hA : hB, Hu);
       const gas = a * hu;
-      const brine = b * (H - hu);
+      const brine = b * (Hu - hu);
       const total = gas + brine;
       if (total > 0) {
         viscous = U * gas / total;
         // df/dh at the upstream column: the local characteristic speed.
-        slope = a * b * H / (total * total);
+        slope = a * b * Hu / (total * total);
       }
     }
     scratch.bound = T * k.tg * (mob + Math.abs(dz) * (a + b)) + Math.abs(U) * slope;
@@ -638,13 +667,13 @@
   // (only above the seal capacity, never draining a column below it) and convective
   // dissolution into the brine column until it is saturated.
   const applySinks = (model, state, dt) => {
-    const { p, area, H } = model;
+    const { p, area, Hc } = model;
     const { h, s, md } = state;
     const imbibe = p.phi * Math.max(1e-3, 1 - p.swr - p.sgr);
     state.leaking.fill(0);
     for (const { cell, length, fault } of model.leakCells) {
       const { sealCap, kf } = model.scenario.faults[fault];
-      const excess = Math.min(h[cell], H) - sealCap;
+      const excess = Math.min(h[cell], Hc[cell]) - sealCap;
       if (!(excess > 0)) continue;
       const rate = length * FAULT_ZONE_WIDTH * kf * MD * (p.krg / p.muG) * p.dRho * p.g * (excess / CAPROCK_THICKNESS + 1);
       const volume = Math.min(rate * dt, excess * imbibe * area);
@@ -655,8 +684,8 @@
       invertColumn(p, state, cell);
     }
     if (p.disRate > 0 && p.disCap > 0) {
-      const capacity = p.disCap * p.phi * H;
       for (let c = 0; c < model.n; c++) {
+        const capacity = p.disCap * p.phi * Hc[c];
         if (s[c] <= 0 || md[c] >= capacity) continue;
         const mass = Math.min(p.disRate * dt, capacity - md[c], p.rhoG * s[c]);
         if (!(mass > 0)) continue;
@@ -669,7 +698,7 @@
   };
 
   const stepTransport = (model, state, dtMax) => {
-    const { nx, ny, n, p, tx, ty, mx, my, zt, ghostX, ghostY, area, H } = model;
+    const { nx, ny, n, p, tx, ty, mx, my, zt, ghostX, ghostY, area, Hc } = model;
     const { h, s, ux, uy, fx, fy, net, rate } = state;
     const a = p.krg / p.muG;
     const b = 1 / p.muW;
@@ -681,7 +710,7 @@
     // so CO2 leaves only where its own potential drops outward.
     const boundaryFlux = (T, c, ghostDepth) => {
       if (h[c] <= H_EPS) { scratch.bound = 0; return 0; }
-      const hc = Math.min(h[c], H);
+      const hc = Math.min(h[c], Hc[c]);
       const drop = state.p[c] + k.tg * (zt[c] + h[c] - ghostDepth);
       scratch.bound = T * a * (Math.abs(drop) + k.tg * hc);
       return drop > 0 ? T * a * hc * drop : 0;
@@ -703,7 +732,7 @@
         const L = j * nx + f - 1;
         const R = L + 1;
         if (T === 0) { fx[index] = 0; continue; }
-        const flux = faceFlux(k, T, ux[index], zt[L] + h[L], zt[R] + h[R], h[L], h[R], H, scratch);
+        const flux = faceFlux(k, T, ux[index], zt[L] + h[L], zt[R] + h[R], h[L], h[R], Hc[L], Hc[R], scratch);
         fx[index] = flux;
         net[L] -= flux;
         net[R] += flux;
@@ -727,7 +756,7 @@
         const S = (f - 1) * nx + i;
         const N = S + nx;
         if (T === 0) { fy[index] = 0; continue; }
-        const flux = faceFlux(k, T, uy[index], zt[S] + h[S], zt[N] + h[N], h[S], h[N], H, scratch);
+        const flux = faceFlux(k, T, uy[index], zt[S] + h[S], zt[N] + h[N], h[S], h[N], Hc[S], Hc[N], scratch);
         fy[index] = flux;
         net[S] -= flux;
         net[N] += flux;
@@ -743,7 +772,7 @@
     // Explicit stability: the smallest storage coefficient (imbibition) bounds the step,
     // and one step may fill at most a quarter of the injector cell's pore volume.
     const storage = p.phi * Math.max(1e-3, 1 - p.swr - p.sgr) * area;
-    let dt = volumeRate > 0 ? Math.min(dtMax, 0.25 * p.phi * (1 - p.swr) * H * area / volumeRate) : dtMax;
+    let dt = volumeRate > 0 ? Math.min(dtMax, 0.25 * p.phi * (1 - p.swr) * Hc[model.well] * area / volumeRate) : dtMax;
     for (let c = 0; c < n; c++) if (rate[c] > 0) dt = Math.min(dt, CFL * storage / rate[c]);
     // Never let a column go negative: shrink the step instead of clipping mass.
     for (let c = 0; c < n; c++) {
@@ -778,10 +807,10 @@
   const MAX_RELAX_TIME = 50 * YEAR;
 
   // Implicit (backward-Euler) brine-potential equation with total compressibility:
-  //   phi ct H A (p - p_old)/dt + sum T m LamT (p_c - p_nb) = Qv - sum T m LamG drho g (zeta_c - zeta_nb)
+  //   phi ct H_c A (p - p_old)/dt + sum T m LamT (p_c - p_nb) = Qv - sum T m LamG drho g (zeta_c - zeta_nb)
   // solved matrix-free with Jacobi-preconditioned CG, then converted to total face fluxes.
   const solvePressure = (model, state, dt, injecting) => {
-    const { nx, ny, n, p, tx, ty, mx, my, zt, ghostX, ghostY, area, H } = model;
+    const { nx, ny, n, p, tx, ty, mx, my, zt, ghostX, ghostY, area, Hc } = model;
     const { h } = state;
     const a = p.krg / p.muG;
     const b = 1 / p.muW;
@@ -794,11 +823,11 @@
       wE: new Float64Array(n), wN: new Float64Array(n), prev: new Float64Array(n), prevInterval: 0
     });
     const { wx, wy, gx, gy, diag, rhs, r, z, d, q, old } = cg;
-    const lamT = c => a * Math.min(h[c], H) + b * Math.max(0, H - h[c]);
-    const lamG = c => a * Math.min(h[c], H);
-    const acc = p.phi * p.ct * H * area / dt;
+    const lamT = c => a * Math.min(h[c], Hc[c]) + b * Math.max(0, Hc[c] - h[c]);
+    const lamG = c => a * Math.min(h[c], Hc[c]);
+    const acc = p.phi * p.ct * area / dt;
     old.set(state.p);
-    for (let c = 0; c < n; c++) { diag[c] = acc; rhs[c] = acc * state.p[c]; }
+    for (let c = 0; c < n; c++) { diag[c] = acc * Hc[c]; rhs[c] = diag[c] * state.p[c]; }
     if (injecting) rhs[model.well] += p.rate / p.rhoG;
 
     for (let j = 0; j < ny; j++) {
@@ -812,7 +841,7 @@
           if (!p.open) continue;
           const c = j * nx + (f === 0 ? 0 : nx - 1);
           // Outward-positive buoyancy flux into the hydrostatic ghost (h = 0, p = 0).
-          wx[index] = T * 0.5 * (lamT(c) + b * H);
+          wx[index] = T * 0.5 * (lamT(c) + b * Hc[c]);
           gx[index] = T * 0.5 * lamG(c) * tg * (zt[c] + h[c] - ghostX[index]);
           diag[c] += wx[index];
           rhs[c] -= gx[index];
@@ -838,7 +867,7 @@
         if (f === 0 || f === ny) {
           if (!p.open) continue;
           const c = (f === 0 ? 0 : ny - 1) * nx + i;
-          wy[index] = T * 0.5 * (lamT(c) + b * H);
+          wy[index] = T * 0.5 * (lamT(c) + b * Hc[c]);
           gy[index] = T * 0.5 * lamG(c) * tg * (zt[c] + h[c] - ghostY[index]);
           diag[c] += wy[index];
           rhs[c] -= gy[index];
@@ -980,7 +1009,7 @@
 
   // Key performance indicators at the current state (SI).
   const kpis = (model, state) => {
-    const { n, nx, p, H, area, xc, yc } = model;
+    const { n, nx, p, Hc, area, xc, yc } = model;
     const a = p.krg / p.muG;
     const b = 1 / p.muW;
     let footprint = 0;
@@ -997,8 +1026,9 @@
     }
     let bhp = state.p[model.well];
     if (state.t < p.injEnd && p.rate > 0) {
-      const hw = Math.min(state.h[model.well], H);
-      const lamT = a * hw + b * (H - hw);
+      const Hw = Hc[model.well];
+      const hw = Math.min(state.h[model.well], Hw);
+      const lamT = a * hw + b * (Hw - hw);
       bhp += (p.rate / p.rhoG) * Math.log(0.198 * model.dx / 0.1) / (2 * Math.PI * p.k * lamT);
     }
     return { footprint, maxColumn, migration, bhp, pMax };
@@ -1045,6 +1075,7 @@
     Lx: model.Lx,
     Ly: model.Ly,
     H: model.H,
+    Hc: Float32Array.from(model.Hc),
     depth: model.scenario.depth,
     years: model.scenario.years,
     injYears: model.scenario.injYears,
@@ -1063,7 +1094,7 @@
     swr: model.p.swr,
     sgr: model.p.sgr,
     rhoG: model.p.rhoG,
-    disCapacity: model.p.disCap * model.p.phi * model.H
+    disCapacity: Float32Array.from(model.Hc, H => model.p.disCap * model.p.phi * H)
   });
 
   const snapshotOf = (model, state, year) => ({
@@ -1190,7 +1221,7 @@
       const distance = between(2.5, 3.5);
       return {
         preset: kind, seed, dipDeg: round(between(0.4, 1)), dipAz: Math.round(strike + 270 + between(-3, 3)) % 360,
-        domes: 0, roughness: Math.round(between(1, 4)), faults,
+        domes: 0, roughness: Math.round(between(1, 4)), thicknessVar: Math.round(between(15, 35)), faults,
         ...well(host.x - distance * hanging[0], host.y - distance * hanging[1])
       };
     }
@@ -1212,7 +1243,7 @@
       const distance = between(2.5, 3.5);
       return {
         preset: kind, seed, dipDeg: round(between(0.2, 0.8)), dipAz, domes,
-        domeRelief: 5 * Math.round(between(50, 140) / 5), roughness: Math.round(between(1, 5)), faults,
+        domeRelief: 5 * Math.round(between(50, 140) / 5), roughness: Math.round(between(1, 5)), thicknessVar: Math.round(between(10, 30)), faults,
         ...well(main.x / KM + distance * down[0], main.y / KM + distance * down[1])
       };
     }
@@ -1224,7 +1255,7 @@
     const along = between(-3, 3);
     return {
       preset: kind, seed, dipDeg: round(between(0.5, 1.5)), dipAz, domes: rng() < 0.3 ? 1 : 0,
-      domeRelief: 5 * Math.round(between(15, 40) / 5), roughness: Math.round(between(8, 18)), faults,
+      domeRelief: 5 * Math.round(between(15, 40) / 5), roughness: Math.round(between(8, 18)), thicknessVar: Math.round(between(20, 45)), faults,
       ...well(10 + 5 * down[0] + along * down[1], 6 + 5 * down[1] - along * down[0])
     };
   };
@@ -1347,7 +1378,7 @@
   return {
     YEAR, MT, MD, BAR, KM, GRAVITY, LX, LY, GRIDS,
     LIMITS, FAULT_LIMITS, DEFAULTS, PRESETS, MAX_FAULTS,
-    normalizeScenario, topDepth, depthField, buildModel, trapAnalysis, contourSegments,
+    normalizeScenario, topDepth, depthField, thicknessField, buildModel, trapAnalysis, contourSegments,
     RANDOM_STYLES, randomStructure, faultSeal,
     createState, advance, kpis, inventory, run,
     UQ_PARAMS, mulberry32, latinHypercube, spearman, sampleBatch, summarize, runBatch

@@ -10,7 +10,8 @@ const setup = patch => {
   const model = VE2D.buildModel(scenario);
   const view = { nx: model.nx, ny: model.ny, dx: model.dx, dy: model.dy, Lx: model.Lx, Ly: model.Ly, H: model.H, faults: scenario.faults, faultLines: model.faultLines };
   const depthAt = (x, y) => VE2D.topDepth(x, y, scenario);
-  return { scenario, model, view, depthAt, geometry: B.buildGeometry(view, depthAt) };
+  const thicknessAt = VE2D.thicknessField(scenario);
+  return { scenario, model, view, depthAt, thicknessAt, geometry: B.buildGeometry(view, depthAt, { thicknessAt }) };
 };
 
 const triangles = (mesh, size = 3) => {
@@ -108,9 +109,9 @@ test('fault scarps close the surface and face the downthrown side', () => {
   }
 });
 
-test('walls seal the four edges from the surface down through aquifer and base', () => {
+test('walls seal the four edges from the surface down to the aquifer base', () => {
   for (const patch of [{}, VE2D.PRESETS['sealed-block'].patch]) {
-    const { view, geometry } = setup(patch);
+    const { view, geometry, thicknessAt } = setup(patch);
     const keys = surfaceKeys(geometry);
     const walls = sectionVertices(geometry, 'wall');
     const sides = new Set();
@@ -119,7 +120,7 @@ test('walls seal the four edges from the surface down through aquifer and base',
       assert.ok(onEdge.some(Boolean), `wall vertex ${v.x},${v.y} off the edge or facing inwards`);
       sides.add(onEdge.indexOf(true));
       if (v.z === v.top) assert.ok(keys.has(vertexKey(v.x, v.y, v.z)), 'wall top not on the surface');
-      else assert.ok(Math.abs(v.z - v.top - (view.H + geometry.base)) < 1e-3, 'wall bottom below the base');
+      else assert.ok(Math.abs(v.z - v.top - thicknessAt(v.x, v.y)) < 1e-3, 'wall bottom at the local aquifer base');
     }
     assert.equal(sides.size, 4);
     const s = geometry.section;
@@ -172,8 +173,8 @@ test('picking finds the surface point under the cursor', () => {
 });
 
 test('cell state is packed for the GPU in SI units', () => {
-  const view = { nx: 2, ny: 1, disCapacity: 100, traps: [{ id: 0, size: 6, capacity: 1e6 }], rhoG: 700, trapId: Int32Array.from([0, -1]), zt: Float32Array.from([1500, 1510]), zSpill: Float32Array.from([1520, Infinity]) };
+  const view = { nx: 2, ny: 1, disCapacity: Float32Array.from([100, 200]), Hc: Float32Array.from([40, 60]), traps: [{ id: 0, size: 6, capacity: 1e6 }], rhoG: 700, trapId: Int32Array.from([0, -1]), zt: Float32Array.from([1500, 1510]), zSpill: Float32Array.from([1520, Infinity]) };
   const frame = { h: Float32Array.from([3, 0]), hMax: Float32Array.from([4, 1]), md: Float32Array.from([50, 0]), p: Float32Array.from([2.5e5, 0]) };
   assert.deepEqual(Array.from(B.packFrame(view, frame)), [3, 4, 0.5, 2.5, 0, 1, 0, 0]);
-  assert.deepEqual(Array.from(B.packStatic(view)), [20, 1, 0, 0, 1000, 0, 0, 0]);
+  assert.deepEqual(Array.from(B.packStatic(view)), [20, 1, 40, 0, 1000, 0, 60, 0]);
 });

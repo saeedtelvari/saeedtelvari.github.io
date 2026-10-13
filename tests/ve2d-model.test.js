@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const VE2D = require('../ve2d-model.js');
 
 const flat = patch => VE2D.normalizeScenario({
-  dipDeg: 0, domes: 0, roughness: 0, faults: [], ...patch
+  dipDeg: 0, domes: 0, roughness: 0, thicknessVar: 0, faults: [], ...patch
 });
 const near = (actual, expected, tolerance, message) =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${message}: ${actual} vs ${expected} (±${tolerance})`);
@@ -339,7 +339,7 @@ test('with injection the plume stays inside the aquifer thickness', () => {
   for (const year of [1, 5, 20, 40, 80]) {
     VE2D.advance(model, state, YEARS(year));
     for (let c = 0; c < model.n; c++) {
-      assert.ok(state.h[c] >= 0 && state.h[c] <= model.H * (1 + 1e-6), `h=${state.h[c]} in [0, H] at year ${year}`);
+      assert.ok(state.h[c] >= 0 && state.h[c] <= model.Hc[c] * (1 + 1e-6), `h=${state.h[c]} in [0, H] at year ${year}`);
       assert.ok(state.h[c] <= state.hMax[c] + 1e-12, `h <= hMax at year ${year}`);
     }
   }
@@ -379,9 +379,9 @@ test('dissolution stops when the brine column is saturated', () => {
   const model = VE2D.buildModel({ ...VE2D.DEFAULTS, grid: 'coarse', disRate: 2, disCap: 1, years: 200 });
   const state = VE2D.createState(model);
   VE2D.advance(model, state, YEARS(200));
-  const capacity = model.scenario.disCap * model.p.phi * model.H;
+  const capacity = c => model.scenario.disCap * model.p.phi * model.Hc[c];
   assert.ok(state.dissolved > 0, 'CO2 dissolves');
-  assert.ok(Math.max(...state.md) <= capacity + 1e-9, `dissolved mass per area ${Math.max(...state.md)} <= ${capacity}`);
+  for (let c = 0; c < model.n; c++) assert.ok(state.md[c] <= capacity(c) + 1e-9, `dissolved mass per area ${state.md[c]} <= ${capacity(c)}`);
   const none = VE2D.buildModel({ ...VE2D.DEFAULTS, grid: 'coarse', disRate: 0, years: 200 });
   const noneState = VE2D.createState(none);
   VE2D.advance(none, noneState, YEARS(100));
@@ -642,4 +642,54 @@ test('the anticline preset fills its dome to the spill point', () => {
   const result = VE2D.run(scenario, { keepSnapshots: false });
   const peak = Math.max(...result.history.map(row => row.structural));
   assert.ok(peak > 0.9 * largest, `structural peak ${(peak / 1e9).toFixed(1)} Mt of ${(largest / 1e9).toFixed(1)} Mt closure`);
+});
+
+// ---------------------------------------------------------------- thickness
+
+test('aquifer thickness varies smoothly around its mean with the requested spread', () => {
+  assert.equal(VE2D.thicknessField(flat({ thicknessVar: 0 }))(1234, 5678), 50, 'no variation: the input thickness everywhere');
+  const seeds = [1, 2, 3, 4, 5, 6];
+  let mean = 0;
+  let cv = 0;
+  let min = Infinity;
+  for (const seed of seeds) {
+    const thicknessAt = VE2D.thicknessField(flat({ seed, thickness: 50, thicknessVar: 30 }));
+    const values = [];
+    for (let y = 250; y < 12000; y += 500) for (let x = 250; x < 20000; x += 500) values.push(thicknessAt(x, y));
+    const m = values.reduce((sum, v) => sum + v, 0) / values.length;
+    mean += m / seeds.length;
+    cv += Math.sqrt(values.reduce((sum, v) => sum + (v - m) ** 2, 0) / values.length) / m / seeds.length;
+    min = Math.min(min, ...values);
+    assert.ok(Math.abs(thicknessAt(10050, 6000) - thicknessAt(10000, 6000)) < 1, 'smooth on a 50 m scale');
+  }
+  near(mean, 50, 5, 'mean thickness');
+  near(cv, 0.3, 0.08, 'spread as a fraction of the mean');
+  assert.ok(min > 0, 'thickness stays positive');
+});
+
+test('cells carry their local thickness and traps fill only down to it', () => {
+  const model = VE2D.buildModel(flat({ domes: 1, domeRelief: 40, thickness: 20, thicknessVar: 40 }));
+  const thicknessAt = VE2D.thicknessField(model.scenario);
+  for (const c of [0, 777, model.n - 1]) near(model.Hc[c], thicknessAt(model.xc[c % model.nx], model.yc[Math.floor(c / model.nx)]), 1e-9, 'cell-centre thickness');
+  const trap = model.traps.traps[0];
+  const factor = model.p.phi * (1 - model.p.swr) * model.area;
+  let expected = 0;
+  for (const c of trap.cells) expected += Math.min(model.Hc[c], model.traps.zSpill[c] - model.zt[c]) * factor;
+  near(trap.capacity, expected, 1e-6 * expected, 'each column counts down to its own aquifer base');
+});
+
+test('closed aquifer with variable thickness: build-up fills its pore volume', () => {
+  const model = VE2D.buildModel(flat({ boundary: 'closed', grid: 'coarse', rateMt: 1, injYears: 30, thicknessVar: 40 }));
+  const state = VE2D.createState(model);
+  VE2D.advance(model, state, YEARS(30));
+  const p = model.p;
+  let pore = 0;
+  let weighted = 0;
+  for (let c = 0; c < model.n; c++) { pore += model.Hc[c]; weighted += model.Hc[c] * state.p[c]; }
+  const expected = (state.injected / p.rhoG) / (p.phi * p.ct * pore * model.area);
+  near(weighted / pore, expected, 0.03 * expected, 'thickness-weighted mean build-up');
+});
+
+test('random structures vary the aquifer thickness', () => {
+  for (let seed = 1; seed <= 12; seed++) assert.ok(VE2D.randomStructure(seed).thicknessVar > 0, `seed ${seed}`);
 });

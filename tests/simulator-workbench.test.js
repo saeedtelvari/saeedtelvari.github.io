@@ -64,11 +64,11 @@ test('inventory CSV is in megatonnes with one row per year', () => {
 });
 
 test('grid CSV lists every cell in SI units', () => {
-  const model = { nx: 2, ny: 1, dx: 500, dy: 500, zt: Float32Array.from([1500, 1501]) };
+  const model = { nx: 2, ny: 1, dx: 500, dy: 500, zt: Float32Array.from([1500, 1501]), Hc: Float32Array.from([48, 52]) };
   const frame = { h: Float32Array.from([2, 0]), hMax: Float32Array.from([3, 0]), md: Float32Array.from([1, 0]), p: Float32Array.from([2e5, 0]) };
   const lines = h.simGridCsv(model, frame).split('\n');
-  assert.equal(lines[0], 'x_km,y_km,top_depth_m,h_m,hmax_m,dissolved_kg_m2,dp_bar');
-  assert.equal(lines[1], '0.250,0.250,1500.00,2.000,3.000,1.00,2.000');
+  assert.equal(lines[0], 'x_km,y_km,top_depth_m,thickness_m,h_m,hmax_m,dissolved_kg_m2,dp_bar');
+  assert.equal(lines[1], '0.250,0.250,1500.00,48.00,2.000,3.000,1.00,2.000');
   assert.equal(lines.length, 3);
 });
 

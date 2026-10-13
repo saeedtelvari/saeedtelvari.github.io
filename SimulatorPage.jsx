@@ -83,11 +83,11 @@ const simInventoryCsv = history => [
 ].join('\n');
 
 const simGridCsv = (model, frame) => {
-  const rows = ['x_km,y_km,top_depth_m,h_m,hmax_m,dissolved_kg_m2,dp_bar'];
+  const rows = ['x_km,y_km,top_depth_m,thickness_m,h_m,hmax_m,dissolved_kg_m2,dp_bar'];
   for (let c = 0; c < model.nx * model.ny; c++) {
     const i = c % model.nx;
     const j = Math.floor(c / model.nx);
-    rows.push([((i + 0.5) * model.dx / 1000).toFixed(3), ((j + 0.5) * model.dy / 1000).toFixed(3), model.zt[c].toFixed(2),
+    rows.push([((i + 0.5) * model.dx / 1000).toFixed(3), ((j + 0.5) * model.dy / 1000).toFixed(3), model.zt[c].toFixed(2), model.Hc[c].toFixed(2),
       frame.h[c].toFixed(3), frame.hMax[c].toFixed(3), frame.md[c].toFixed(2), (frame.p[c] / 1e5).toFixed(3)].join(','));
   }
   return rows.join('\n');
@@ -269,7 +269,8 @@ const SIM_FIELDS = {
   years: { label: 'Simulated period', unit: 'years', digits: 0 },
   permMd: { label: 'Permeability', unit: 'mD', digits: 0, log: true },
   porosity: { label: 'Porosity', unit: '', digits: 2 },
-  thickness: { label: 'Aquifer thickness', unit: 'm', digits: 0 },
+  thickness: { label: 'Aquifer thickness', unit: 'm', digits: 0, hint: 'Mean thickness of the aquifer.' },
+  thicknessVar: { label: 'Thickness variation', unit: '%', digits: 0, hint: 'Spread around the mean: sand belts thicken and thin along strike.' },
   dipDeg: { label: 'Regional dip', unit: '°', digits: 1 },
   dipAz: { label: 'Dip direction', unit: '° from N', digits: 0, hint: 'Direction in which the caprock deepens; CO₂ rises the other way. Domes and undulations run along strike, across it.' },
   domes: { label: 'Domes', unit: '', digits: 0 },
@@ -315,7 +316,7 @@ const useSimSimulation = scenario => {
       }
       if (!workerRef.current) {
         try {
-          const worker = new Worker('./simulation-worker.js?v=2');
+          const worker = new Worker('./simulation-worker.js?v=3');
           worker.onmessage = ({ data }) => {
             if (data.type === 'done' || data.type === 'error') busyRef.current = false;
             setRun(current => simApplyWorkerMessage(current, data));
@@ -471,6 +472,7 @@ const SimInputs = ({ scenario, onChange, onPreset, onRandom, onClose }) => {
         {field('permMd')}
         {field('porosity')}
         {field('thickness')}
+        {field('thicknessVar')}
       </SimGroup>
       <SimGroup title="Structure">
         {field('dipDeg')}
@@ -656,7 +658,7 @@ const SimUncertainty = ({ scenario, onLoad, theme, hidden }) => {
     const base = { ...scenario, grid: grid === 'same' ? scenario.grid : 'coarse' };
     const scenarios = VE2D.sampleBatch(base, active.map(({ key, min, max, log }) => ({ key, min: Math.min(min, max), max: Math.max(min, max), log })), runs, seed);
     try {
-      const worker = new Worker('./simulation-worker.js?v=2');
+      const worker = new Worker('./simulation-worker.js?v=3');
       workerRef.current = worker;
       worker.onmessage = ({ data }) => {
         if (data.type === 'progress') setState(current => ({ ...current, done: data.done, total: data.total }));

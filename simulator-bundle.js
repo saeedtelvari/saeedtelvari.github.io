@@ -37,6 +37,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     permMd: [10, 5000, 1],
     porosity: [0.05, 0.35, 0.01],
     thickness: [10, 200, 1],
+    thicknessVar: [0, 60, 1],
     ct: [0.2, 5, 0.1],
     rhoCo2: [400, 900, 10],
     rhoBrine: [1000, 1200, 5],
@@ -89,6 +90,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     permMd: 500,
     porosity: 0.2,
     thickness: 50,
+    thicknessVar: 20,
     ct: 1,
     rhoCo2: 700,
     rhoBrine: 1050,
@@ -228,10 +230,29 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     };
   });
 
-  // Caprock roughness: an anisotropic Gaussian random field with a self-affine spectrum
-  // (Hurst exponent 0.8, wavelengths 8 km to 500 m), stretched 2.5 times along strike. It is
-  // a sum of random Fourier modes, one per equal step in log wavenumber (amplitude k^-H),
-  // scaled to unit variance, so the roughness input is the RMS height in metres.
+  // Smooth Gaussian random fields with a self-affine spectrum, stretched along strike: a
+  // sum of random Fourier modes, one per equal step in log wavenumber (amplitude k^-H),
+  // scaled to unit variance.
+  const spectralModes = (seed, spec, angle) => {
+    const rng = mulberry32(seed);
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const modes = new Float64Array(4 * spec.modes);
+    let variance = 0;
+    for (let m = 0; m < spec.modes; m++) {
+      const k = 2 * Math.PI / (spec.longest * (spec.shortest / spec.longest) ** ((m + rng()) / spec.modes));
+      const direction = 2 * Math.PI * rng();
+      const along = k * Math.cos(direction) / spec.stretch;
+      const across = k * Math.sin(direction);
+      modes.set([along * cos - across * sin, along * sin + across * cos, 2 * Math.PI * rng(), k ** -spec.hurst], 4 * m);
+      variance += k ** (-2 * spec.hurst) / 2;
+    }
+    for (let m = 3; m < modes.length; m += 4) modes[m] /= Math.sqrt(variance);
+    return modes;
+  };
+
+  // Caprock roughness (Hurst exponent 0.8, wavelengths 8 km to 500 m, stretched 2.5 times
+  // along strike); the roughness input is its RMS height in metres.
   const ROUGH = Object.freeze({
     modes: 48,
     longest: 8000,
@@ -239,24 +260,19 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     hurst: 0.8,
     stretch: 2.5
   });
-  const roughModes = scenario => {
-    const rng = mulberry32(scenario.seed + 7919);
-    const angle = strikeAngle(scenario);
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    const modes = new Float64Array(4 * ROUGH.modes);
-    let variance = 0;
-    for (let m = 0; m < ROUGH.modes; m++) {
-      const k = 2 * Math.PI / (ROUGH.longest * (ROUGH.shortest / ROUGH.longest) ** ((m + rng()) / ROUGH.modes));
-      const direction = 2 * Math.PI * rng();
-      const along = k * Math.cos(direction) / ROUGH.stretch;
-      const across = k * Math.sin(direction);
-      modes.set([along * cos - across * sin, along * sin + across * cos, 2 * Math.PI * rng(), k ** -ROUGH.hurst], 4 * m);
-      variance += k ** (-2 * ROUGH.hurst) / 2;
-    }
-    for (let m = 3; m < modes.length; m += 4) modes[m] /= Math.sqrt(variance);
-    return modes;
-  };
+  const roughModes = scenario => spectralModes(scenario.seed + 7919, ROUGH, strikeAngle(scenario));
+
+  // Aquifer thickness: the mean times a log-normal factor exp(sG - s^2/2) of a smoother
+  // field (Hurst 0.9, wavelengths 12 km to 1.5 km, sand belts stretched twice along
+  // strike), so the mean is kept, thickness stays positive and s is about its spread.
+  const THICK = Object.freeze({
+    modes: 32,
+    longest: 12000,
+    shortest: 1500,
+    hurst: 0.9,
+    stretch: 2
+  });
+  const thickModes = scenario => spectralModes(scenario.seed + 104729, THICK, strikeAngle(scenario));
   const roughnessAt = (modes, x, y) => {
     let value = 0;
     for (let m = 0; m < modes.length; m += 4) value += modes[m + 3] * Math.cos(modes[m] * x + modes[m + 1] * y + modes[m + 2]);
@@ -310,10 +326,16 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     });
     return depth;
   };
+  const thicknessAt = (x, y, scenario, cache) => {
+    const spread = scenario.thicknessVar / 100;
+    if (!(spread > 0)) return scenario.thickness;
+    return scenario.thickness * Math.exp(spread * roughnessAt(cache?.thick || thickModes(scenario), x, y) - spread * spread / 2);
+  };
   const depthCache = scenario => ({
     domes: domeCentres(scenario),
     frames: scenario.faults.map(faultFrame),
-    rough: roughModes(scenario)
+    rough: roughModes(scenario),
+    thick: thickModes(scenario)
   });
 
   // The top-surface depth of one (normalised) scenario as a function of x and y in metres,
@@ -321,6 +343,12 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
   const depthField = scenario => {
     const cache = depthCache(scenario);
     return (x, y) => topDepth(x, y, scenario, cache);
+  };
+
+  // The aquifer thickness of one (normalised) scenario as a function of x and y in metres.
+  const thicknessField = scenario => {
+    const cache = depthCache(scenario);
+    return (x, y) => thicknessAt(x, y, scenario, cache);
   };
 
   // Segment p–q against the fault trace; returns the along-strike parameter t in [-1, 1] or null.
@@ -377,16 +405,23 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       length: ny
     }, (_, j) => (j + 0.5) * dy);
     const zt = new Float64Array(n);
-    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) zt[j * nx + i] = depthAt(xc[i], yc[j]);
+    const Hc = new Float64Array(n);
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        zt[j * nx + i] = depthAt(xc[i], yc[j]);
+        Hc[j * nx + i] = thicknessAt(xc[i], yc[j], scenario, cache);
+      }
+    }
 
-    // Face multiplier: cross-fault transmissibility times the juxtaposed fraction of H.
+    // Face multiplier: cross-fault transmissibility times the juxtaposed fraction of the
+    // aquifer thickness at the face.
     const multiplier = (px, py, qx, qy) => {
       let value = 1;
       scenario.faults.forEach((fault, index) => {
         const t = traceCrossing(cache.frames[index], px, py, qx, qy);
         if (t === null) return;
         const localThrow = fault.throw * (1 - t * t);
-        value = Math.min(value, fault.trans * Math.max(0, 1 - localThrow / H));
+        value = Math.min(value, fault.trans * Math.max(0, 1 - localThrow / thicknessAt((px + qx) / 2, (py + qy) / 2, scenario, cache)));
       });
       return value;
     };
@@ -456,6 +491,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       Ly: LY,
       area: dx * dy,
       H,
+      Hc,
       p,
       xc,
       yc,
@@ -595,7 +631,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       for (const c of cells) {
         if (zt[c] < zt[crestCell]) crestCell = c;
         if (spillCell === -1 && from[c] !== -1 && trapId[from[c]] !== id) spillCell = from[c];
-        capacity += Math.min(model.H, zSpill[c] - zt[c]) * capacityFactor;
+        capacity += Math.min(model.Hc[c], zSpill[c] - zt[c]) * capacityFactor;
       }
       traps.push({
         id,
@@ -736,7 +772,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
   // Gas volume flux across one face (positive from side A to side B) with hybrid
   // upwinding: the viscous part follows the total flux, buoyancy follows the phase
   // potentials (gas from the deeper interface, brine the other way).
-  const faceFlux = (k, T, U, zetaA, zetaB, hA, hB, H, scratch) => {
+  const faceFlux = (k, T, U, zetaA, zetaB, hA, hB, HA, HB, scratch) => {
     if (hA <= H_EPS && hB <= H_EPS) {
       scratch.bound = 0;
       return 0;
@@ -747,22 +783,23 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     let mob = 0;
     let gravity = 0;
     if (dz !== 0 && T > 0) {
-      const gas = a * Math.min(dz > 0 ? hA : hB, H);
-      const brine = b * Math.max(0, H - (dz > 0 ? hB : hA));
+      const gas = dz > 0 ? a * Math.min(hA, HA) : a * Math.min(hB, HB);
+      const brine = dz > 0 ? b * Math.max(0, HB - hB) : b * Math.max(0, HA - hA);
       mob = gas + brine > 0 ? gas * brine / (gas + brine) : 0;
       gravity = T * k.tg * dz * mob;
     }
     let viscous = 0;
     let slope = 0;
     if (U !== 0) {
-      const hu = Math.min(U > 0 ? hA : hB, H);
+      const Hu = U > 0 ? HA : HB;
+      const hu = Math.min(U > 0 ? hA : hB, Hu);
       const gas = a * hu;
-      const brine = b * (H - hu);
+      const brine = b * (Hu - hu);
       const total = gas + brine;
       if (total > 0) {
         viscous = U * gas / total;
         // df/dh at the upstream column: the local characteristic speed.
-        slope = a * b * H / (total * total);
+        slope = a * b * Hu / (total * total);
       }
     }
     scratch.bound = T * k.tg * (mob + Math.abs(dz) * (a + b)) + Math.abs(U) * slope;
@@ -778,7 +815,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     const {
       p,
       area,
-      H
+      Hc
     } = model;
     const {
       h,
@@ -796,7 +833,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
         sealCap,
         kf
       } = model.scenario.faults[fault];
-      const excess = Math.min(h[cell], H) - sealCap;
+      const excess = Math.min(h[cell], Hc[cell]) - sealCap;
       if (!(excess > 0)) continue;
       const rate = length * FAULT_ZONE_WIDTH * kf * MD * (p.krg / p.muG) * p.dRho * p.g * (excess / CAPROCK_THICKNESS + 1);
       const volume = Math.min(rate * dt, excess * imbibe * area);
@@ -807,8 +844,8 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       invertColumn(p, state, cell);
     }
     if (p.disRate > 0 && p.disCap > 0) {
-      const capacity = p.disCap * p.phi * H;
       for (let c = 0; c < model.n; c++) {
+        const capacity = p.disCap * p.phi * Hc[c];
         if (s[c] <= 0 || md[c] >= capacity) continue;
         const mass = Math.min(p.disRate * dt, capacity - md[c], p.rhoG * s[c]);
         if (!(mass > 0)) continue;
@@ -833,7 +870,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       ghostX,
       ghostY,
       area,
-      H
+      Hc
     } = model;
     const {
       h,
@@ -864,7 +901,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
         scratch.bound = 0;
         return 0;
       }
-      const hc = Math.min(h[c], H);
+      const hc = Math.min(h[c], Hc[c]);
       const drop = state.p[c] + k.tg * (zt[c] + h[c] - ghostDepth);
       scratch.bound = T * a * (Math.abs(drop) + k.tg * hc);
       return drop > 0 ? T * a * hc * drop : 0;
@@ -891,7 +928,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
           fx[index] = 0;
           continue;
         }
-        const flux = faceFlux(k, T, ux[index], zt[L] + h[L], zt[R] + h[R], h[L], h[R], H, scratch);
+        const flux = faceFlux(k, T, ux[index], zt[L] + h[L], zt[R] + h[R], h[L], h[R], Hc[L], Hc[R], scratch);
         fx[index] = flux;
         net[L] -= flux;
         net[R] += flux;
@@ -921,7 +958,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
           fy[index] = 0;
           continue;
         }
-        const flux = faceFlux(k, T, uy[index], zt[S] + h[S], zt[N] + h[N], h[S], h[N], H, scratch);
+        const flux = faceFlux(k, T, uy[index], zt[S] + h[S], zt[N] + h[N], h[S], h[N], Hc[S], Hc[N], scratch);
         fy[index] = flux;
         net[S] -= flux;
         net[N] += flux;
@@ -936,7 +973,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     // Explicit stability: the smallest storage coefficient (imbibition) bounds the step,
     // and one step may fill at most a quarter of the injector cell's pore volume.
     const storage = p.phi * Math.max(1e-3, 1 - p.swr - p.sgr) * area;
-    let dt = volumeRate > 0 ? Math.min(dtMax, 0.25 * p.phi * (1 - p.swr) * H * area / volumeRate) : dtMax;
+    let dt = volumeRate > 0 ? Math.min(dtMax, 0.25 * p.phi * (1 - p.swr) * Hc[model.well] * area / volumeRate) : dtMax;
     for (let c = 0; c < n; c++) if (rate[c] > 0) dt = Math.min(dt, CFL * storage / rate[c]);
     // Never let a column go negative: shrink the step instead of clipping mass.
     for (let c = 0; c < n; c++) {
@@ -968,7 +1005,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
   const MAX_RELAX_TIME = 50 * YEAR;
 
   // Implicit (backward-Euler) brine-potential equation with total compressibility:
-  //   phi ct H A (p - p_old)/dt + sum T m LamT (p_c - p_nb) = Qv - sum T m LamG drho g (zeta_c - zeta_nb)
+  //   phi ct H_c A (p - p_old)/dt + sum T m LamT (p_c - p_nb) = Qv - sum T m LamG drho g (zeta_c - zeta_nb)
   // solved matrix-free with Jacobi-preconditioned CG, then converted to total face fluxes.
   const solvePressure = (model, state, dt, injecting) => {
     const {
@@ -984,7 +1021,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       ghostX,
       ghostY,
       area,
-      H
+      Hc
     } = model;
     const {
       h
@@ -1022,13 +1059,13 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       q,
       old
     } = cg;
-    const lamT = c => a * Math.min(h[c], H) + b * Math.max(0, H - h[c]);
-    const lamG = c => a * Math.min(h[c], H);
-    const acc = p.phi * p.ct * H * area / dt;
+    const lamT = c => a * Math.min(h[c], Hc[c]) + b * Math.max(0, Hc[c] - h[c]);
+    const lamG = c => a * Math.min(h[c], Hc[c]);
+    const acc = p.phi * p.ct * area / dt;
     old.set(state.p);
     for (let c = 0; c < n; c++) {
-      diag[c] = acc;
-      rhs[c] = acc * state.p[c];
+      diag[c] = acc * Hc[c];
+      rhs[c] = diag[c] * state.p[c];
     }
     if (injecting) rhs[model.well] += p.rate / p.rhoG;
     for (let j = 0; j < ny; j++) {
@@ -1042,7 +1079,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
           if (!p.open) continue;
           const c = j * nx + (f === 0 ? 0 : nx - 1);
           // Outward-positive buoyancy flux into the hydrostatic ghost (h = 0, p = 0).
-          wx[index] = T * 0.5 * (lamT(c) + b * H);
+          wx[index] = T * 0.5 * (lamT(c) + b * Hc[c]);
           gx[index] = T * 0.5 * lamG(c) * tg * (zt[c] + h[c] - ghostX[index]);
           diag[c] += wx[index];
           rhs[c] -= gx[index];
@@ -1068,7 +1105,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
         if (f === 0 || f === ny) {
           if (!p.open) continue;
           const c = (f === 0 ? 0 : ny - 1) * nx + i;
-          wy[index] = T * 0.5 * (lamT(c) + b * H);
+          wy[index] = T * 0.5 * (lamT(c) + b * Hc[c]);
           gy[index] = T * 0.5 * lamG(c) * tg * (zt[c] + h[c] - ghostY[index]);
           diag[c] += wy[index];
           rhs[c] -= gy[index];
@@ -1216,7 +1253,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       n,
       nx,
       p,
-      H,
+      Hc,
       area,
       xc,
       yc
@@ -1237,8 +1274,9 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     }
     let bhp = state.p[model.well];
     if (state.t < p.injEnd && p.rate > 0) {
-      const hw = Math.min(state.h[model.well], H);
-      const lamT = a * hw + b * (H - hw);
+      const Hw = Hc[model.well];
+      const hw = Math.min(state.h[model.well], Hw);
+      const lamT = a * hw + b * (Hw - hw);
       bhp += p.rate / p.rhoG * Math.log(0.198 * model.dx / 0.1) / (2 * Math.PI * p.k * lamT);
     }
     return {
@@ -1298,6 +1336,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     Lx: model.Lx,
     Ly: model.Ly,
     H: model.H,
+    Hc: Float32Array.from(model.Hc),
     depth: model.scenario.depth,
     years: model.scenario.years,
     injYears: model.scenario.injYears,
@@ -1334,7 +1373,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     swr: model.p.swr,
     sgr: model.p.sgr,
     rhoG: model.p.rhoG,
-    disCapacity: model.p.disCap * model.p.phi * model.H
+    disCapacity: Float32Array.from(model.Hc, H => model.p.disCap * model.p.phi * H)
   });
   const snapshotOf = (model, state, year) => ({
     year,
@@ -1485,6 +1524,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
         dipAz: Math.round(strike + 270 + between(-3, 3)) % 360,
         domes: 0,
         roughness: Math.round(between(1, 4)),
+        thicknessVar: Math.round(between(15, 35)),
         faults,
         ...well(host.x - distance * hanging[0], host.y - distance * hanging[1])
       };
@@ -1515,6 +1555,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
         domes,
         domeRelief: 5 * Math.round(between(50, 140) / 5),
         roughness: Math.round(between(1, 5)),
+        thicknessVar: Math.round(between(10, 30)),
         faults,
         ...well(main.x / KM + distance * down[0], main.y / KM + distance * down[1])
       };
@@ -1532,6 +1573,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       domes: rng() < 0.3 ? 1 : 0,
       domeRelief: 5 * Math.round(between(15, 40) / 5),
       roughness: Math.round(between(8, 18)),
+      thicknessVar: Math.round(between(20, 45)),
       faults,
       ...well(10 + 5 * down[0] + along * down[1], 6 + 5 * down[1] - along * down[0])
     };
@@ -1713,6 +1755,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     normalizeScenario,
     topDepth,
     depthField,
+    thicknessField,
     buildModel,
     trapAnalysis,
     contourSegments,
@@ -1843,18 +1886,17 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
   };
 
   // The aquifer top as a heightfield on a lattice finer than the grid, cut at fault
-  // traces; scarps on the footwall edge of every cut; four walls down through the
-  // aquifer (thickness H) and a drawn base layer.
+  // traces; scarps on the footwall edge of every cut; four walls down to the aquifer
+  // base, which follows the local thickness.
   const buildGeometry = (view, depthAt, options = {}) => {
     const {
       Lx,
-      Ly,
-      H
+      Ly
     } = view;
+    const thicknessAt = options.thicknessAt || (() => view.H);
     const subdivisions = options.subdivisions || Math.max(1, Math.round(MESH_NODES / view.nx));
     const MX = view.nx * subdivisions;
     const MY = view.ny * subdivisions;
-    const base = Math.max(20, 0.6 * H);
     const traces = view.faults.map((fault, index) => traceOf(fault, view.faultLines[index], index));
     const node = (a, b) => [a * Lx / MX, b * Ly / MY, b * (MX + 1) + a];
 
@@ -1897,6 +1939,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     };
     let zMin = Infinity;
     let zMax = -Infinity;
+    let zBottom = -Infinity;
     const cellStep = 0.3 * Math.min(view.dx, view.dy);
     for (let b = 0; b < MY; b++) {
       for (let a = 0; a < MX; a++) {
@@ -1977,7 +2020,8 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       const columns = [];
       const push = (point, sides) => columns.push({
         point,
-        depth: evaluate(point, sides)[0]
+        depth: evaluate(point, sides)[0],
+        thickness: thicknessAt(point[0], point[1])
       });
       edge.nodes.forEach((point, k) => {
         const previous = edge.nodes[k - 1];
@@ -2020,10 +2064,11 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
         const p = columns[k];
         const q = columns[k + 1];
         if (p.point[0] === q.point[0] && p.point[1] === q.point[1]) continue;
-        addQuad(section, p.point, q.point, [p.depth, q.depth], [p.depth + H + base, q.depth + H + base], edge.normal, {
+        addQuad(section, p.point, q.point, [p.depth, q.depth], [p.depth + p.thickness, q.depth + q.thickness], edge.normal, {
           fault: 0,
           sample: point => point
         });
+        zBottom = Math.max(zBottom, p.depth + p.thickness, q.depth + q.thickness);
       }
     }
     return {
@@ -2042,27 +2087,26 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       },
       zMin,
       zMax,
-      base,
-      H
+      zBottom
     };
   };
 
   // Cell state for the GPU: column (m), historical maximum (m), dissolved fraction of
-  // capacity, pressure build-up (bar).
+  // the cell's capacity, pressure build-up (bar).
   const packFrame = (view, frame) => {
     const n = frame.h.length;
     const data = new Float32Array(4 * n);
     for (let c = 0; c < n; c++) {
       data[4 * c] = frame.h[c];
       data[4 * c + 1] = frame.hMax[c];
-      data[4 * c + 2] = view.disCapacity > 0 ? frame.md[c] / view.disCapacity : 0;
+      data[4 * c + 2] = view.disCapacity[c] > 0 ? frame.md[c] / view.disCapacity[c] : 0;
       data[4 * c + 3] = frame.p[c] / 1e5;
     }
     return data;
   };
 
-  // Static per-model fields: structural closure below the spill point (m, capped) and
-  // the outline mask of the traps the map also draws.
+  // Static per-model fields: structural closure below the spill point (m, capped), the
+  // outline mask of the traps the map also draws, and the aquifer thickness (m).
   const packStatic = view => {
     const n = view.zt.length;
     const data = new Float32Array(4 * n);
@@ -2070,6 +2114,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     for (let c = 0; c < n; c++) {
       data[4 * c] = Math.min(1000, Math.max(0, view.zSpill[c] - view.zt[c]));
       data[4 * c + 1] = big.has(view.trapId[c]) ? 1 : 0;
+      data[4 * c + 2] = view.Hc[c];
     }
     return data;
   };
@@ -2091,7 +2136,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       surfaceTop: Z(geometry.zMin),
       surfaceBottom: Z(geometry.zMax),
       top: Math.max(Z(geometry.zMin), Z(wellDepth) + stem),
-      bottom: Z(geometry.zMax + geometry.H + geometry.base)
+      bottom: Z(Math.max(geometry.zMax, geometry.zBottom))
     };
   };
   const toDisplay = (box, x, y, depth) => [x - box.Lx / 2, y - box.Ly / 2, -(depth - box.zRef) * box.exaggeration];
@@ -2420,7 +2465,6 @@ uniform sampler2D uStatic;
 uniform vec2 uSize;
 uniform vec2 uCell;
 uniform ivec2 uGrid;
-uniform float uH;
 uniform vec3 uFree;
 uniform vec3 uStructural;
 uniform vec3 uResidual;
@@ -2447,12 +2491,14 @@ void main() {
     d = textureLod(uData, vSample / uSize, 0.0);
     s = textureLod(uStatic, vSample / uSize, 0.0);
   }
-  vec3 rgb = below < uH ? uAquifer : uBase;
+  // Below the aquifer only on scarps whose throw exceeds the thickness.
+  float H = s.b;
+  vec3 rgb = below < H ? uAquifer : uBase;
   if (vFault > 0) rgb = mix(rgb, uInk, 0.28);
-  if (uLayers.y > 0.5 && below < uH && below > uH * (1.0 - clamp(d.b, 0.0, 1.0))) rgb = mix(rgb, uDissolved, 0.55);
+  if (uLayers.y > 0.5 && below < H && below > H * (1.0 - clamp(d.b, 0.0, 1.0))) rgb = mix(rgb, uDissolved, 0.55);
   if (uLayers.x > 0.5 && d.g > 0.05 && below >= d.r && below < d.g) rgb = mix(rgb, uResidual, 0.6);
   if (d.r > 0.05 && below < d.r) rgb = mix(rgb, mix(uFree, uStructural, clamp(min(d.r, s.r) / max(d.r, 1e-4), 0.0, 1.0)), 0.95);
-  rgb = mix(rgb, uInk, 0.16 * (1.0 - smoothstep(0.5, 1.5, abs(below - uH) / fw)));
+  rgb = mix(rgb, uInk, 0.16 * (1.0 - smoothstep(0.5, 1.5, abs(below - H) / fw)));
   // A fill light from the south-east keeps both walls facing the default view readable.
   rgb *= 0.8 + 0.2 * dot(normalize(vNormal), vec2(0.447, -0.894));
   float edge = 1.0 - smoothstep(0.8, 1.8, below / fw);
@@ -2678,7 +2724,6 @@ void main() {
         gl.uniform1i(v.uStatic, 1);
         gl.uniform2f(v.uCell, grid.dx, grid.dy);
         gl.uniform2i(v.uGrid, grid.nx, grid.ny);
-        gl.uniform1f(v.uH, state.H);
         for (const name of ['Free', 'Structural', 'Residual', 'Dissolved', 'Ink', 'Leak', 'Aquifer', 'Base']) gl.uniform3fv(v[`u${name}`], colors[name[0].toLowerCase() + name.slice(1)]);
         gl.uniform4fv(v.uLayers, layers);
         gl.uniform3fv(v.uLeaking, [0, 1, 2].map(i => state.leaking[i] ? 1 : 0));
@@ -2776,7 +2821,7 @@ const SimTex = ({
 const SIM_METHOD_SECTIONS = [['scope', 'What the model is'], ['geometry', 'Geometry'], ['equations', 'Plume equation'], ['fluxes', 'Fluxes'], ['pressure', 'Pressure and injection'], ['edges', 'Model edges'], ['faults', 'Faults and leakage'], ['dissolution', 'Dissolution'], ['inventory', 'Traps and inventory'], ['numerics', 'Numerics'], ['verification', 'Verification'], ['limits', 'Limitations'], ['parameters', 'Parameters'], ['references', 'References']];
 const GuidePage = () => {
   const d = VE2D.DEFAULTS;
-  const rows = [['Permeability', 'k', `${d.permMd} mD`, 'Homogeneous'], ['Porosity', '\\phi', d.porosity, ''], ['Aquifer thickness', 'H', `${d.thickness} m`, 'Uniform'], ['Residual brine saturation', 'S_{wr}', d.swr, 'co2lab Johansen example'], ['Residual CO₂ saturation', 'S_{gr}', d.sgr, 'co2lab Johansen example'], ['CO₂ relative permeability end point', 'k_{rg}^{*}', d.krg, 'Within Bennion & Bachu (2008) range'], ['CO₂ / brine density', '\\rho_g,\\ \\rho_w', `${d.rhoCo2} / ${d.rhoBrine} kg/m³`, 'About 1500 m depth'], ['CO₂ / brine viscosity', '\\mu_g,\\ \\mu_w', `${d.muCo2} / ${d.muBrine} mPa·s`, ''], ['Total compressibility', 'c_t', `${d.ct}×10⁻⁴ bar⁻¹`, 'Rock plus brine'], ['Dissolution rate', 'r_d', `${d.disRate} kg m⁻² yr⁻¹`, 'co2lab default 5×10⁻¹¹ m/s at φ = 0.2'], ['CO₂ solubility in brine', 'c_{sat}', `${d.disCap} kg/m³`, 'CO2store value used by co2lab'], ['Fault-zone width, caprock thickness', 'w,\\ L_c', '5 m, 100 m', 'Fixed']];
+  const rows = [['Permeability', 'k', `${d.permMd} mD`, 'Homogeneous'], ['Porosity', '\\phi', d.porosity, ''], ['Aquifer thickness', 'H', `${d.thickness} m`, 'Mean'], ['Thickness variation', '\\sigma_H', `${d.thicknessVar} %`, 'Log-normal, smooth along strike'], ['Residual brine saturation', 'S_{wr}', d.swr, 'co2lab Johansen example'], ['Residual CO₂ saturation', 'S_{gr}', d.sgr, 'co2lab Johansen example'], ['CO₂ relative permeability end point', 'k_{rg}^{*}', d.krg, 'Within Bennion & Bachu (2008) range'], ['CO₂ / brine density', '\\rho_g,\\ \\rho_w', `${d.rhoCo2} / ${d.rhoBrine} kg/m³`, 'About 1500 m depth'], ['CO₂ / brine viscosity', '\\mu_g,\\ \\mu_w', `${d.muCo2} / ${d.muBrine} mPa·s`, ''], ['Total compressibility', 'c_t', `${d.ct}×10⁻⁴ bar⁻¹`, 'Rock plus brine'], ['Dissolution rate', 'r_d', `${d.disRate} kg m⁻² yr⁻¹`, 'co2lab default 5×10⁻¹¹ m/s at φ = 0.2'], ['CO₂ solubility in brine', 'c_{sat}', `${d.disCap} kg/m³`, 'CO2store value used by co2lab'], ['Fault-zone width, caprock thickness', 'w,\\ L_c', '5 m, 100 m', 'Fixed']];
   return /*#__PURE__*/React.createElement("div", {
     className: "sim-method__inner"
   }, /*#__PURE__*/React.createElement("nav", {
@@ -2791,9 +2836,13 @@ const GuidePage = () => {
     id: "m-geometry"
   }, "Geometry"), /*#__PURE__*/React.createElement("p", null, "The aquifer covers 20 \xD7 12 km on a Cartesian grid of 500, 250 or 167 m cells. Its top surface, the base of the caprock, is an analytic depth field ", /*#__PURE__*/React.createElement(SimTex, {
     tex: "z_t(x,y)"
-  }), " (positive down) made of a regional dip plane, Gaussian domes elongated along the regional strike, caprock roughness and normal faults. The roughness is an anisotropic Gaussian random field with a self-affine spectrum (Hurst exponent 0.8, wavelengths from 8 km down to 500 m), stretched 2.5 times along strike and built as a sum of random Fourier modes; the roughness input is its RMS height. A fault's throw is largest at mid-length and zero at the tips. Facing along strike, the hanging wall is on the right: it drops by 70 % of the throw while the footwall rises by 30 %, both decaying away from the fault over a fifth of its length, so a footwall crest closes against its fault. The aquifer has a uniform thickness ", /*#__PURE__*/React.createElement(SimTex, {
+  }), " (positive down) made of a regional dip plane, Gaussian domes elongated along the regional strike, caprock roughness and normal faults. The roughness is an anisotropic Gaussian random field with a self-affine spectrum (Hurst exponent 0.8, wavelengths from 8 km down to 500 m), stretched 2.5 times along strike and built as a sum of random Fourier modes; the roughness input is its RMS height. A fault's throw is largest at mid-length and zero at the tips. Facing along strike, the hanging wall is on the right: it drops by 70 % of the throw while the footwall rises by 30 %, both decaying away from the fault over a fifth of its length, so a footwall crest closes against its fault. The aquifer thickness varies around its mean ", /*#__PURE__*/React.createElement(SimTex, {
     tex: "H"
-  }), "."), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "New random structure"), " draws one of three settings so that dip, folds, faults and fault rock agree. Tilted fault blocks: two or three synthetic normal faults with a common strike and beds dipping away from them, with the injector down-dip of a footwall crest. Faulted dome: a closure elongated along strike, cut by small crestal faults whose hanging walls face the crest, with the injector on its down-dip flank. Undulating homocline: a steeper dip with 8\u201318 m of RMS roughness and at most one small fault. Throw grows with fault length, ", /*#__PURE__*/React.createElement(SimTex, {
+  }), " by a log-normal factor ", /*#__PURE__*/React.createElement(SimTex, {
+    tex: "e^{\\sigma_H G - \\sigma_H^2/2}"
+  }), " of a smoother random field ", /*#__PURE__*/React.createElement(SimTex, {
+    tex: "G"
+  }), " (Hurst exponent 0.9, wavelengths from 12 km down to 1.5 km, stretched twice along strike like sand belts), so the mean is kept and the thickness stays positive. Every column holds CO\u2082 down to its own base: thickness enters the fluxes, the storage term of the pressure equation, trap capacity, dissolution and leakage cell by cell."), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "New random structure"), " draws one of three settings so that dip, folds, faults and fault rock agree. Tilted fault blocks: two or three synthetic normal faults with a common strike and beds dipping away from them, with the injector down-dip of a footwall crest. Faulted dome: a closure elongated along strike, cut by small crestal faults whose hanging walls face the crest, with the injector on its down-dip flank. Undulating homocline: a steeper dip with 8\u201318 m of RMS roughness and at most one small fault. Each setting also varies the thickness, by 10 to 45 %. Throw grows with fault length, ", /*#__PURE__*/React.createElement(SimTex, {
     tex: "D = \\gamma L"
   }), " with ", /*#__PURE__*/React.createElement(SimTex, {
     tex: "\\gamma"
@@ -2878,7 +2927,7 @@ const GuidePage = () => {
     id: "m-verification"
   }, "Verification"), /*#__PURE__*/React.createElement("p", null, "The engine is tested in Node on every change. The current results:"), /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Check"), /*#__PURE__*/React.createElement("th", null, "Result"))), /*#__PURE__*/React.createElement("tbody", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, "Mass balance over 1000 years, default scenario"), /*#__PURE__*/React.createElement("td", null, "Worst relative error 9\xD710\u207B\xB9\xB3 (250 m grid)")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, "Closed aquifer: mean build-up vs injected volume / (\u03C6 c", /*#__PURE__*/React.createElement("sub", null, "t"), " V)"), /*#__PURE__*/React.createElement("td", null, "178.6 bar, error below 0.01 %")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, "Injection without buoyancy vs Nordbotten and Celia (2006)"), /*#__PURE__*/React.createElement("td", null, "Volume-weighted plume radius +7.5 % after 30 years (167 m grid)")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, "Thin plume on a 1\xB0 slope vs buoyant Darcy speed"), /*#__PURE__*/React.createElement("td", null, "56.1 vs 58.1 m/yr (\u22123.4 %)")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, "Grid convergence, 250 m vs 167 m, year 1000"), /*#__PURE__*/React.createElement("td", null, "Footprint +1.1 %, leaked 4.68 % vs 4.55 % of injected")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, "Symmetry, bounds, sealing faults, seal capacity, solubility cap, outflow direction"), /*#__PURE__*/React.createElement("td", null, "Pass")))), /*#__PURE__*/React.createElement("h2", {
     id: "m-limits"
-  }, "Limitations"), /*#__PURE__*/React.createElement("ul", null, /*#__PURE__*/React.createElement("li", null, "Sharp interface: no capillary fringe, so very thin plumes are idealised."), /*#__PURE__*/React.createElement("li", null, "Constant fluid densities and viscosities; no CO\u2082 compressibility, temperature or composition effects."), /*#__PURE__*/React.createElement("li", null, "Homogeneous permeability and thickness; no layering inside the aquifer."), /*#__PURE__*/React.createElement("li", null, "Brine mobility in the residual zone is not reduced; dissolved CO\u2082 does not migrate."), /*#__PURE__*/React.createElement("li", null, "After injection the total flux is set to zero once the pressure has relaxed."), /*#__PURE__*/React.createElement("li", null, "No geomechanics: the fracture margin is a guide, not a calculation.")), /*#__PURE__*/React.createElement("h2", {
+  }, "Limitations"), /*#__PURE__*/React.createElement("ul", null, /*#__PURE__*/React.createElement("li", null, "Sharp interface: no capillary fringe, so very thin plumes are idealised."), /*#__PURE__*/React.createElement("li", null, "Constant fluid densities and viscosities; no CO\u2082 compressibility, temperature or composition effects."), /*#__PURE__*/React.createElement("li", null, "Homogeneous permeability; no layering inside the aquifer."), /*#__PURE__*/React.createElement("li", null, "Brine mobility in the residual zone is not reduced; dissolved CO\u2082 does not migrate."), /*#__PURE__*/React.createElement("li", null, "After injection the total flux is set to zero once the pressure has relaxed."), /*#__PURE__*/React.createElement("li", null, "No geomechanics: the fracture margin is a guide, not a calculation.")), /*#__PURE__*/React.createElement("h2", {
     id: "m-parameters"
   }, "Parameters"), /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Parameter"), /*#__PURE__*/React.createElement("th", null, "Symbol"), /*#__PURE__*/React.createElement("th", null, "Default"), /*#__PURE__*/React.createElement("th", null, "Source or note"))), /*#__PURE__*/React.createElement("tbody", null, rows.map(([name, symbol, value, note]) => /*#__PURE__*/React.createElement("tr", {
     key: name
@@ -3607,6 +3656,7 @@ const simReadoutAt = (model, frame, x, y) => {
     x,
     y,
     depth: model.zt[c],
+    thickness: model.Hc[c],
     h: frame.h[c],
     residual: (frame.hMax[c] - frame.h[c]) * model.sgr / (1 - model.swr),
     md: frame.md[c],
@@ -3620,9 +3670,9 @@ const SimReadout = ({
   className: "sim-readout",
   style: {
     left: Math.min(readout.px + 16, size.width - 200),
-    top: Math.min(readout.py + 16, size.height - 150)
+    top: Math.min(readout.py + 16, size.height - 170)
   }
-}, /*#__PURE__*/React.createElement("dl", null, /*#__PURE__*/React.createElement("dt", null, "Position"), /*#__PURE__*/React.createElement("dd", null, (readout.x / 1000).toFixed(1), ", ", (readout.y / 1000).toFixed(1), " km"), /*#__PURE__*/React.createElement("dt", null, "Top of aquifer"), /*#__PURE__*/React.createElement("dd", null, simFormatNumber(readout.depth), " m"), /*#__PURE__*/React.createElement("dt", null, "Mobile CO\u2082 column"), /*#__PURE__*/React.createElement("dd", null, readout.h.toFixed(1), " m"), /*#__PURE__*/React.createElement("dt", null, "Residual CO\u2082"), /*#__PURE__*/React.createElement("dd", null, readout.residual.toFixed(2), " m"), /*#__PURE__*/React.createElement("dt", null, "Dissolved"), /*#__PURE__*/React.createElement("dd", null, simFormatNumber(readout.md), " kg/m\xB2"), /*#__PURE__*/React.createElement("dt", null, "Pressure build-up"), /*#__PURE__*/React.createElement("dd", null, (readout.p / 1e5).toFixed(2), " bar")));
+}, /*#__PURE__*/React.createElement("dl", null, /*#__PURE__*/React.createElement("dt", null, "Position"), /*#__PURE__*/React.createElement("dd", null, (readout.x / 1000).toFixed(1), ", ", (readout.y / 1000).toFixed(1), " km"), /*#__PURE__*/React.createElement("dt", null, "Top of aquifer"), /*#__PURE__*/React.createElement("dd", null, simFormatNumber(readout.depth), " m"), /*#__PURE__*/React.createElement("dt", null, "Aquifer thickness"), /*#__PURE__*/React.createElement("dd", null, readout.thickness.toFixed(0), " m"), /*#__PURE__*/React.createElement("dt", null, "Mobile CO\u2082 column"), /*#__PURE__*/React.createElement("dd", null, readout.h.toFixed(1), " m"), /*#__PURE__*/React.createElement("dt", null, "Residual CO\u2082"), /*#__PURE__*/React.createElement("dd", null, readout.residual.toFixed(2), " m"), /*#__PURE__*/React.createElement("dt", null, "Dissolved"), /*#__PURE__*/React.createElement("dd", null, simFormatNumber(readout.md), " kg/m\xB2"), /*#__PURE__*/React.createElement("dt", null, "Pressure build-up"), /*#__PURE__*/React.createElement("dd", null, (readout.p / 1e5).toFixed(2), " bar")));
 
 // ---------------------------------------------------------------- map
 
@@ -3814,7 +3864,7 @@ const SimMapView = ({
         const p = 4 * ((ny - 1 - j) * nx + i);
         const h = frame.h[c];
         if (layers.dissolved && frame.md[c] > 0) {
-          const a = Math.min(0.75, frame.md[c] / model.disCapacity);
+          const a = Math.min(0.75, frame.md[c] / model.disCapacity[c]);
           image.data[p] = dissolved[0];
           image.data[p + 1] = dissolved[1];
           image.data[p + 2] = dissolved[2];
@@ -4321,6 +4371,7 @@ const simDrawBlockOverlay = (ctx, {
   model,
   geometry,
   depthAt,
+  thicknessAt,
   wellDepth,
   palette,
   size,
@@ -4369,7 +4420,7 @@ const simDrawBlockOverlay = (ctx, {
     const toEye = [cam.eye[0] - (mid[0] - Lx / 2), cam.eye[1] - (mid[1] - Ly / 2)];
     if (toEye[0] * edge.normal[0] + toEye[1] * edge.normal[1] <= 0) continue;
     edge.points.forEach(([x, y], k) => {
-      const depth = depthAt(x, y) + model.H + geometry.base;
+      const depth = depthAt(x, y) + thicknessAt(x, y);
       const p = at(x, y, depth);
       const q = at(x + 600 * edge.normal[0], y + 600 * edge.normal[1], depth);
       if (!p || !q) return;
@@ -4492,7 +4543,10 @@ const SimBlockView = ({
   });
   const animation = useRef(0);
   const depthAt = useMemo(() => VE2D.depthField(scenario), [scenario]);
-  const geometry = useMemo(() => SimBlock3D.buildGeometry(model, depthAt), [model, depthAt]);
+  const thicknessAt = useMemo(() => VE2D.thicknessField(scenario), [scenario]);
+  const geometry = useMemo(() => SimBlock3D.buildGeometry(model, depthAt, {
+    thicknessAt
+  }), [model, depthAt, thicknessAt]);
   const wellDepth = useMemo(() => depthAt(model.wellX, model.wellY), [model, depthAt]);
   const box = useMemo(() => SimBlock3D.sceneBox(geometry, model, exaggeration, wellDepth), [geometry, model, exaggeration, wellDepth]);
   const viewport = simBlockViewport(size);
@@ -4579,12 +4633,11 @@ const SimBlockView = ({
       depthRange: [geometry.zMin, geometry.zMax],
       interval: layers.contours ? simContourInterval(geometry.zMax - geometry.zMin) : 0,
       refH: Math.max(4, 0.5 * model.H),
-      H: model.H,
       well: {
         x: model.wellX,
         y: model.wellY,
         top: wellDepth - box.stem / exaggeration,
-        bottom: wellDepth + model.H,
+        bottom: wellDepth + thicknessAt(model.wellX, model.wellY),
         radius: 0.004 * Math.max(model.Lx, model.Ly),
         injecting
       },
@@ -4596,6 +4649,7 @@ const SimBlockView = ({
       model,
       geometry,
       depthAt,
+      thicknessAt,
       wellDepth,
       palette,
       size,
@@ -4873,6 +4927,7 @@ const SimSectionView = ({
   const data = useMemo(() => {
     if (!line || !frame) return null;
     const depthAt = VE2D.depthField(scenario);
+    const thicknessAt = VE2D.thicknessField(scenario);
     const samples = 360;
     const length = Math.hypot(line.x1 - line.x0, line.y1 - line.y0) || 1;
     const points = [];
@@ -4881,16 +4936,19 @@ const SimSectionView = ({
       const x = Math.max(1, Math.min(model.Lx - 1, line.x0 + (line.x1 - line.x0) * t));
       const y = Math.max(1, Math.min(model.Ly - 1, line.y0 + (line.y1 - line.y0) * t));
       const zt = depthAt(x, y);
+      const H = thicknessAt(x, y);
       const spill = simSampleField(model, model.zSpill, x, y);
       points.push({
         d: t * length,
         x,
         y,
         zt,
+        H,
+        cap: simSampleField(model, model.disCapacity, x, y),
         h: Math.max(0, simSampleField(model, frame.h, x, y)),
         hMax: Math.max(0, simSampleField(model, frame.hMax, x, y)),
         md: Math.max(0, simSampleField(model, frame.md, x, y)),
-        closure: Number.isFinite(spill) ? Math.max(0, spill - simSampleField(model, model.zt, x, y)) : model.H
+        closure: Number.isFinite(spill) ? Math.max(0, spill - simSampleField(model, model.zt, x, y)) : H
       });
     }
     const crossings = [];
@@ -4940,12 +4998,11 @@ const SimSectionView = ({
     top: 66,
     bottom: W < 560 ? 104 : 74
   };
-  const H = model.H;
   let zMin = Infinity;
   let zMax = -Infinity;
   for (const p of points) {
     zMin = Math.min(zMin, p.zt);
-    zMax = Math.max(zMax, p.zt + H);
+    zMax = Math.max(zMax, p.zt + p.H);
   }
   const top = zMin - SIM_CAPROCK_DRAWN - 50;
   const bottom = zMax + 50;
@@ -4959,7 +5016,7 @@ const SimSectionView = ({
     return `${d}Z`;
   };
   const injecting = year < model.injYears;
-  const fingers = points.filter((p, k) => k % 14 === 7 && p.md > 0.02 * model.disCapacity && p.md < 0.95 * model.disCapacity && p.h > 0.5);
+  const fingers = points.filter((p, k) => k % 14 === 7 && p.md > 0.02 * p.cap && p.md < 0.95 * p.cap && p.h > 0.5);
   const leaking = crossings.filter(c => frame.leaking?.[c.index]);
   const depthTicks = simTicks(top, bottom, 5).filter(t => t > top && t < bottom);
   const distanceTicks = simTicks(0, length / 1000, 6);
@@ -5048,7 +5105,7 @@ const SimSectionView = ({
   })), /*#__PURE__*/React.createElement("clipPath", {
     id: "sim-aquifer-clip"
   }, /*#__PURE__*/React.createElement("path", {
-    d: pathBetween(p => p.zt, p => p.zt + H)
+    d: pathBetween(p => p.zt, p => p.zt + p.H)
   }))), /*#__PURE__*/React.createElement("rect", {
     x: m.left,
     y: m.top,
@@ -5067,15 +5124,15 @@ const SimSectionView = ({
     d: pathBetween(p => p.zt - SIM_CAPROCK_DRAWN, p => p.zt),
     fill: "url(#sim-shale)"
   }), /*#__PURE__*/React.createElement("path", {
-    d: pathBetween(p => p.zt, p => p.zt + H),
+    d: pathBetween(p => p.zt, p => p.zt + p.H),
     fill: "url(#sim-sand)"
   }), /*#__PURE__*/React.createElement("path", {
-    d: pathBetween(p => p.zt + H, () => bottom),
+    d: pathBetween(p => p.zt + p.H, () => bottom),
     fill: palette.rockBase
   }), /*#__PURE__*/React.createElement("g", {
     clipPath: "url(#sim-aquifer-clip)"
   }, /*#__PURE__*/React.createElement("path", {
-    d: pathBetween(p => p.zt + H - H * Math.min(1, p.md / model.disCapacity), p => p.zt + H),
+    d: pathBetween(p => p.zt + p.H * (1 - Math.min(1, p.md / p.cap)), p => p.zt + p.H),
     fill: "url(#sim-dissolved)"
   }), !reducedMotion && fingers.map((p, k) => /*#__PURE__*/React.createElement("path", {
     key: k,
@@ -5083,7 +5140,7 @@ const SimSectionView = ({
     style: {
       animationDelay: `${k % 7 * -0.6}s`
     },
-    d: `M${sx(p.d)},${sy(p.zt + p.hMax)} q 3 ${(sy(p.zt + H) - sy(p.zt + p.hMax)) * 0.5} -1 ${(sy(p.zt + H) - sy(p.zt + p.hMax)) * 0.9}`,
+    d: `M${sx(p.d)},${sy(p.zt + p.hMax)} q 3 ${(sy(p.zt + p.H) - sy(p.zt + p.hMax)) * 0.5} -1 ${(sy(p.zt + p.H) - sy(p.zt + p.hMax)) * 0.9}`,
     stroke: palette.glowDissolved,
     strokeOpacity: "0.55",
     strokeWidth: "1.2",
@@ -5146,7 +5203,7 @@ const SimSectionView = ({
     x1: sx(well),
     x2: sx(well),
     y1: m.top - 4,
-    y2: sy(points[Math.round(well / length * (points.length - 1))].zt + H),
+    y2: sy(points[Math.round(well / length * (points.length - 1))].zt + points[Math.round(well / length * (points.length - 1))].H),
     stroke: palette.ink,
     strokeWidth: "2.5"
   }), [0.2, 0.4, 0.6, 0.8].map(f => {
@@ -5155,8 +5212,8 @@ const SimSectionView = ({
       key: f,
       x1: sx(well) - 6,
       x2: sx(well) + 6,
-      y1: sy(p.zt + f * H),
-      y2: sy(p.zt + f * H),
+      y1: sy(p.zt + f * p.H),
+      y2: sy(p.zt + f * p.H),
       stroke: palette.ink,
       strokeWidth: "1.5"
     });
@@ -5346,11 +5403,11 @@ const simDecodeScenario = search => {
 const SIM_HISTORY_KEYS = ['injected', 'free', 'structural', 'residual', 'dissolved', 'exited', 'leaked', 'balance'];
 const simInventoryCsv = history => ['year,injected_Mt,free_Mt,structural_Mt,residual_Mt,dissolved_Mt,exited_Mt,leaked_Mt,balance_Mt', ...history.map(row => [row.year, ...SIM_HISTORY_KEYS.map(key => (row[key] / 1e9).toPrecision(8))].join(','))].join('\n');
 const simGridCsv = (model, frame) => {
-  const rows = ['x_km,y_km,top_depth_m,h_m,hmax_m,dissolved_kg_m2,dp_bar'];
+  const rows = ['x_km,y_km,top_depth_m,thickness_m,h_m,hmax_m,dissolved_kg_m2,dp_bar'];
   for (let c = 0; c < model.nx * model.ny; c++) {
     const i = c % model.nx;
     const j = Math.floor(c / model.nx);
-    rows.push([((i + 0.5) * model.dx / 1000).toFixed(3), ((j + 0.5) * model.dy / 1000).toFixed(3), model.zt[c].toFixed(2), frame.h[c].toFixed(3), frame.hMax[c].toFixed(3), frame.md[c].toFixed(2), (frame.p[c] / 1e5).toFixed(3)].join(','));
+    rows.push([((i + 0.5) * model.dx / 1000).toFixed(3), ((j + 0.5) * model.dy / 1000).toFixed(3), model.zt[c].toFixed(2), model.Hc[c].toFixed(2), frame.h[c].toFixed(3), frame.hMax[c].toFixed(3), frame.md[c].toFixed(2), (frame.p[c] / 1e5).toFixed(3)].join(','));
   }
   return rows.join('\n');
 };
@@ -5664,7 +5721,14 @@ const SIM_FIELDS = {
   thickness: {
     label: 'Aquifer thickness',
     unit: 'm',
-    digits: 0
+    digits: 0,
+    hint: 'Mean thickness of the aquifer.'
+  },
+  thicknessVar: {
+    label: 'Thickness variation',
+    unit: '%',
+    digits: 0,
+    hint: 'Spread around the mean: sand belts thicken and thin along strike.'
   },
   dipDeg: {
     label: 'Regional dip',
@@ -5813,7 +5877,7 @@ const useSimSimulation = scenario => {
       }
       if (!workerRef.current) {
         try {
-          const worker = new Worker('./simulation-worker.js?v=2');
+          const worker = new Worker('./simulation-worker.js?v=3');
           worker.onmessage = ({
             data
           }) => {
@@ -6048,7 +6112,7 @@ const SimInputs = ({
     title: "Injection"
   }, field('rateMt'), field('injYears'), field('wellX'), field('wellY'), field('years')), /*#__PURE__*/React.createElement(SimGroup, {
     title: "Aquifer"
-  }, field('permMd'), field('porosity'), field('thickness')), /*#__PURE__*/React.createElement(SimGroup, {
+  }, field('permMd'), field('porosity'), field('thickness'), field('thicknessVar')), /*#__PURE__*/React.createElement(SimGroup, {
     title: "Structure"
   }, field('dipDeg'), field('dipAz'), field('domes'), field('domeRelief'), field('roughness')), /*#__PURE__*/React.createElement(SimGroup, {
     title: `Faults (${scenario.faults.length})`
@@ -6412,7 +6476,7 @@ const SimUncertainty = ({
       log
     })), runs, seed);
     try {
-      const worker = new Worker('./simulation-worker.js?v=2');
+      const worker = new Worker('./simulation-worker.js?v=3');
       workerRef.current = worker;
       worker.onmessage = ({
         data

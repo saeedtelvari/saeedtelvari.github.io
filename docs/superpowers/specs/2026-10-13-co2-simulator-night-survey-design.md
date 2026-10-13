@@ -148,8 +148,12 @@ vertical equilibrium here).
 
 ## 5. Physics model (ve2d-model.js)
 
-Sharp-interface vertical-equilibrium model of a homogeneous confined aquifer of thickness H
-under a caprock of depth z_t(x, y) (positive down). SI throughout.
+Sharp-interface vertical-equilibrium model of a confined aquifer of homogeneous rock and
+thickness H(x, y) under a caprock of depth z_t(x, y) (positive down). SI throughout. Thickness
+(revised 2026-10-13 after review) is the mean H times a log-normal factor of a smooth random
+field (wavelengths 12-1.5 km, stretched along strike); fluxes take each phase's thickness from
+its upstream column, and storage, trap capacity, dissolution and leakage use the column's own
+H. The 3D walls stop at the aquifer base; the decorative layer below it was removed.
 
 ### 5.1 State
 
@@ -254,6 +258,7 @@ aligned to output times and the end of injection. Snapshots every 5 years.
 | Regional dip / direction | 0.6° / 90° | 0–3°, 0–360° |
 | Domes / relief | 1 / 40 m | 0–4, 0–150 m |
 | Roughness (RMS) | 4 m | 0–40 m |
+| Thickness variation | 20 % | 0–60 % |
 | ρ_CO2, ρ_brine | 700, 1050 kg/m³ | 400–900, 1000–1200 |
 | μ_CO2, μ_brine | 0.055, 0.6 mPa·s | 0.02–0.1, 0.3–1.5 |
 | S_wr, S_gr, k_rg* | 0.27, 0.20, 0.5 | co2lab Johansen; Bennion & Bachu range |

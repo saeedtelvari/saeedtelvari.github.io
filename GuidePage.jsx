@@ -39,7 +39,8 @@ const GuidePage = () => {
   const rows = [
     ['Permeability', 'k', `${d.permMd} mD`, 'Homogeneous'],
     ['Porosity', '\\phi', d.porosity, ''],
-    ['Aquifer thickness', 'H', `${d.thickness} m`, 'Uniform'],
+    ['Aquifer thickness', 'H', `${d.thickness} m`, 'Mean'],
+    ['Thickness variation', '\\sigma_H', `${d.thicknessVar} %`, 'Log-normal, smooth along strike'],
     ['Residual brine saturation', 'S_{wr}', d.swr, 'co2lab Johansen example'],
     ['Residual CO₂ saturation', 'S_{gr}', d.sgr, 'co2lab Johansen example'],
     ['CO₂ relative permeability end point', 'k_{rg}^{*}', d.krg, 'Within Bennion & Bachu (2008) range'],
@@ -78,15 +79,20 @@ const GuidePage = () => {
           500 m), stretched 2.5 times along strike and built as a sum of random Fourier modes; the roughness input is its RMS
           height. A fault's throw is largest at mid-length and zero at the tips. Facing along strike, the hanging wall is on
           the right: it drops by 70 % of the throw while the footwall rises by 30 %, both decaying away from the fault over a
-          fifth of its length, so a footwall crest closes against its fault. The aquifer has a uniform
-          thickness <SimTex tex="H" />.
+          fifth of its length, so a footwall crest closes against its fault. The aquifer thickness varies
+          around its mean <SimTex tex="H" /> by a log-normal factor <SimTex tex="e^{\sigma_H G - \sigma_H^2/2}" /> of a
+          smoother random field <SimTex tex="G" /> (Hurst exponent 0.9, wavelengths from 12 km down to 1.5 km, stretched
+          twice along strike like sand belts), so the mean is kept and the thickness stays positive. Every column holds CO₂
+          down to its own base: thickness enters the fluxes, the storage term of the pressure equation, trap capacity,
+          dissolution and leakage cell by cell.
         </p>
         <p>
           <strong>New random structure</strong> draws one of three settings so that dip, folds, faults and fault rock agree.
           Tilted fault blocks: two or three synthetic normal faults with a common strike and beds dipping away from them,
           with the injector down-dip of a footwall crest. Faulted dome: a closure elongated along strike, cut by small
           crestal faults whose hanging walls face the crest, with the injector on its down-dip flank. Undulating homocline:
-          a steeper dip with 8–18 m of RMS roughness and at most one small fault. Throw grows with fault
+          a steeper dip with 8–18 m of RMS roughness and at most one small fault. Each setting also varies the
+          thickness, by 10 to 45 %. Throw grows with fault
           length, <SimTex tex="D = \gamma L" /> with <SimTex tex="\gamma" /> between 0.002 and 0.015. Each fault's shale gouge ratio
           sets its rock: permeability and thickness (throw / 66) after Manzocchi et al. (1999) give the cross-fault
           multiplier for 250 m cells, and the calibration of Bretan et al. (2003) gives the CO₂ column the fault holds.
@@ -212,7 +218,7 @@ const GuidePage = () => {
         <ul>
           <li>Sharp interface: no capillary fringe, so very thin plumes are idealised.</li>
           <li>Constant fluid densities and viscosities; no CO₂ compressibility, temperature or composition effects.</li>
-          <li>Homogeneous permeability and thickness; no layering inside the aquifer.</li>
+          <li>Homogeneous permeability; no layering inside the aquifer.</li>
           <li>Brine mobility in the residual zone is not reduced; dissolved CO₂ does not migrate.</li>
           <li>After injection the total flux is set to zero once the pressure has relaxed.</li>
           <li>No geomechanics: the fracture margin is a guide, not a calculation.</li>
