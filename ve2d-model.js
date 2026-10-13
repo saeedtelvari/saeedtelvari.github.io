@@ -585,13 +585,19 @@
       gravity = T * k.tg * dz * mob;
     }
     let viscous = 0;
+    let slope = 0;
     if (U !== 0) {
       const hu = Math.min(U > 0 ? hA : hB, H);
       const gas = a * hu;
       const brine = b * (H - hu);
-      viscous = gas + brine > 0 ? U * gas / (gas + brine) : 0;
+      const total = gas + brine;
+      if (total > 0) {
+        viscous = U * gas / total;
+        // df/dh at the upstream column: the local characteristic speed.
+        slope = a * b * H / (total * total);
+      }
     }
-    scratch.bound = T * k.tg * (mob + Math.abs(dz) * (a + b)) + Math.abs(U) * k.fPrime;
+    scratch.bound = T * k.tg * (mob + Math.abs(dz) * (a + b)) + Math.abs(U) * slope;
     return viscous + gravity;
   };
 
@@ -600,7 +606,7 @@
     const { h, s, ux, uy, fx, fy, net, rate } = state;
     const a = p.krg / p.muG;
     const b = 1 / p.muW;
-    const k = { a, b, tg: p.dRho * p.g, fPrime: Math.max(a / b, b / a) / H };
+    const k = { a, b, tg: p.dRho * p.g };
     const scratch = { bound: 0 };
     net.fill(0);
     rate.fill(0);
@@ -668,9 +674,9 @@
     net[model.well] += volumeRate;
 
     // Explicit stability: the smallest storage coefficient (imbibition) bounds the step,
-    // and one step may fill at most a tenth of the injector cell's pore volume.
+    // and one step may fill at most a quarter of the injector cell's pore volume.
     const storage = p.phi * Math.max(1e-3, 1 - p.swr - p.sgr) * area;
-    let dt = volumeRate > 0 ? Math.min(dtMax, 0.1 * p.phi * (1 - p.swr) * H * area / volumeRate) : dtMax;
+    let dt = volumeRate > 0 ? Math.min(dtMax, 0.25 * p.phi * (1 - p.swr) * H * area / volumeRate) : dtMax;
     for (let c = 0; c < n; c++) if (rate[c] > 0) dt = Math.min(dt, CFL * storage / rate[c]);
     // Never let a column go negative: shrink the step instead of clipping mass.
     for (let c = 0; c < n; c++) {
@@ -698,7 +704,7 @@
 
   // ------------------------------------------------------------------ pressure
 
-  const PRESSURE_TOL = 1e-8;
+  const PRESSURE_TOL = 1e-7;
   const RELAXED_RATE = 0.05 * BAR / YEAR;
   const MAX_RELAX_TIME = 50 * YEAR;
 
@@ -715,7 +721,8 @@
       wx: new Float64Array((nx + 1) * ny), wy: new Float64Array(nx * (ny + 1)),
       gx: new Float64Array((nx + 1) * ny), gy: new Float64Array(nx * (ny + 1)),
       diag: new Float64Array(n), rhs: new Float64Array(n), r: new Float64Array(n),
-      z: new Float64Array(n), d: new Float64Array(n), q: new Float64Array(n), old: new Float64Array(n)
+      z: new Float64Array(n), d: new Float64Array(n), q: new Float64Array(n), old: new Float64Array(n),
+      wE: new Float64Array(n), wN: new Float64Array(n), prev: new Float64Array(n), prevInterval: 0
     });
     const { wx, wy, gx, gy, diag, rhs, r, z, d, q, old } = cg;
     const lamT = c => a * Math.min(h[c], H) + b * Math.max(0, H - h[c]);
@@ -779,29 +786,40 @@
       }
     }
 
-    const apply = (x, out) => {
-      for (let c = 0; c < n; c++) out[c] = diag[c] * x[c];
-      for (let j = 0; j < ny; j++) {
-        for (let f = 1; f < nx; f++) {
-          const w = wx[j * (nx + 1) + f];
-          if (w === 0) continue;
-          const L = j * nx + f - 1;
-          out[L] -= w * x[L + 1];
-          out[L + 1] -= w * x[L];
-        }
+    // Five-point stencil per cell: east and north couplings (west/south are the
+    // neighbours' east/north) give a single pass over the grid.
+    const { wE, wN } = cg;
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        const c = j * nx + i;
+        wE[c] = i < nx - 1 ? wx[j * (nx + 1) + i + 1] : 0;
+        wN[c] = j < ny - 1 ? wy[(j + 1) * nx + i] : 0;
       }
-      for (let f = 1; f < ny; f++) {
+    }
+    const apply = (x, out) => {
+      for (let j = 0; j < ny; j++) {
+        const row = j * nx;
         for (let i = 0; i < nx; i++) {
-          const w = wy[f * nx + i];
-          if (w === 0) continue;
-          const S = (f - 1) * nx + i;
-          out[S] -= w * x[S + nx];
-          out[S + nx] -= w * x[S];
+          const c = row + i;
+          let v = diag[c] * x[c];
+          if (i > 0) v -= wE[c - 1] * x[c - 1];
+          if (i < nx - 1) v -= wE[c] * x[c + 1];
+          if (j > 0) v -= wN[c - nx] * x[c - nx];
+          if (j < ny - 1) v -= wN[c] * x[c + nx];
+          out[c] = v;
         }
       }
     };
 
+    // Start CG from a linear extrapolation of the last two solutions.
     const x = state.p;
+    const prev = cg.prev;
+    if (cg.prevInterval > 0) {
+      const ratio = Math.min(2, dt / cg.prevInterval);
+      for (let c = 0; c < n; c++) x[c] += ratio * (x[c] - prev[c]);
+    }
+    prev.set(old);
+    cg.prevInterval = dt;
     apply(x, q);
     let bNorm = 0;
     let rz = 0;
@@ -857,12 +875,14 @@
     let change = 0;
     for (let c = 0; c < n; c++) change = Math.max(change, Math.abs(x[c] - old[c]));
     state.cgIterations = iterations;
+    state.cgTotal = (state.cgTotal || 0) + iterations;
+    state.solves = (state.solves || 0) + 1;
     return change;
   };
 
   const pressureInterval = (state, p) => {
-    if (state.t < p.injEnd) return clamp(0.1 * state.t, 2 * 86400, 0.25 * YEAR);
-    return 0.25 * YEAR;
+    if (state.t < p.injEnd) return clamp(0.25 * state.t, 2 * 86400, 0.5 * YEAR);
+    return 0.5 * YEAR;
   };
 
   const advance = (model, state, tTarget) => {
