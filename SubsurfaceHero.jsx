@@ -232,7 +232,7 @@ const HeroSection = React.memo(({ sectionRef }) => {
           <rect width="1000" height="580" fill="url(#hero-lower-texture)"/>
         </mask>
         <linearGradient id="hero-descent-bridge" x1="0" y1="490" x2="0" y2="580" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#263038" stopOpacity="0"/><stop offset="1" stopColor="#263038"/>
+          <stop stopColor="#1d150f" stopOpacity="0"/><stop offset="1" stopColor="#1d150f"/>
         </linearGradient>
       </defs>
       <rect width="1000" height="580" className="hero-rock--over" />
