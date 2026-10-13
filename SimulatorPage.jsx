@@ -1,4393 +1,986 @@
-// SimulatorPage.jsx — Interactive VE Simulator Page
+// SimulatorPage.jsx — CO2 Storage Simulator: scenario inputs, streamed results, playback,
+// outcomes and the uncertainty study. Views are in SimViews.jsx, charts in SimCharts.jsx,
+// the method page in GuidePage.jsx, the physics in ve2d-model.js.
 const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
-const SIM_TABS = ['profile', 'map', 'topography', 'uq', 'guide'];
-const VISUALIZATION_TABS = ['profile', 'map', 'topography'];
-const MAP_TABS = ['map', 'topography'];
-const OPEN_BOUNDARY_LABEL = 'Open · initial pressure';
+// ---------------------------------------------------------------- pure helpers
 
-// Shared visualization colors keep the scientific layers distinct across map,
-// topography, profile, legends, charts, and outcome metrics.
-const SIM_PALETTE = Object.freeze({
-  terrainLow: [15, 60, 66],
-  terrainHigh: [43, 160, 146],
-  mobile: '#e78bff',
-  mobileRgb: [231, 139, 255],
-  trapped: '#6d4ca3',
-  trappedRgb: [109, 76, 163],
-  leakage: '#ff718a',
-  injector: '#f6c453',
-  injectorEdge: '#fff2c7',
-  sealedFault: '#7ce5d3',
-  transmissiveFault: '#ff8a82',
-  active: '#a6f7cf',
-  activeDeep: '#60d9ad',
-  capillary: '#3bbfa3',
-  capillaryDeep: '#267f95',
-  brine: '#162d54',
-  brineDeep: '#091a34'
-});
-
-const interpolateRgb = (from, to, ratio) => {
-  const t = Math.max(0, Math.min(1, Number(ratio) || 0));
-  return from.map((value, index) => Math.round(value + (to[index] - value) * t));
-};
-
-const rgbCss = values => `rgb(${values.join(', ')})`;
-const rgbaCss = (values, alpha) => `rgba(${values.join(', ')}, ${alpha})`;
-
-// Declarative registry of every parameter the UQ batch can sample.
-// dec = display decimals; dec 0 params are sampled as integers.
-const UQ_PARAM_DEFS = [
-  { key: 'K', label: 'Permeability (K)', lo: 0.1, hi: 3.5, dec: 2, percentDef: 40 },
-  { key: 'residualTrapFraction', label: 'Residual Trap (Sgr)', lo: 0.0, hi: 0.40, dec: 3, percentDef: 40 },
-  { key: 'porosity', label: 'Porosity (\u03C6)', lo: 0.10, hi: 0.40, dec: 3, percentDef: 20 },
-  { key: 'Q', label: 'Injection Rate (Q)', lo: 0.0, hi: 3.5, dec: 2, percentDef: 30 },
-  { key: 'injLocation', label: 'Well Position (%)', lo: 10, hi: 90, dec: 0, percentDef: 8 },
-  { key: 'dipPercent', label: 'Regional Dip (%)', lo: -5.0, hi: 5.0, dec: 2, percentDef: 35 },
-  { key: 'amplitude', label: 'Anticline Height (px)', lo: 0, hi: 50, dec: 0, percentDef: 25 },
-  { key: 'faultThreshold', label: 'Fault Seal Threshold (m)', lo: 0.0, hi: 2.0, dec: 2, percentDef: 50, group: 'fault' },
-  { key: 'faultLeakRate', label: 'Fault Leak Rate', lo: 0.01, hi: 0.40, dec: 3, percentDef: 40, group: 'fault', leakingOnly: true },
-  { key: 'faultTransmissibility', label: 'Fault Transmissibility', lo: 0.0, hi: 1.0, dec: 2, percentDef: 30, group: 'fault' }
+const SIM_SECTIONS = [
+  { id: 'simulator', label: 'Simulator' },
+  { id: 'uncertainty', label: 'Uncertainty' },
+  { id: 'method', label: 'Method' }
 ];
+const SIM_VIEWS = [
+  { id: 'map', label: 'Map' },
+  { id: '3d', label: '3D' },
+  { id: 'section', label: 'Section' }
+];
+// Stack order bottom to top; colours come from CSS custom properties.
+const SIM_INVENTORY = [
+  { key: 'dissolved', label: 'Dissolved', color: '--sim-c-dissolved', hint: 'Dissolved in the brine below the plume' },
+  { key: 'residual', label: 'Residually trapped', color: '--sim-c-residual', hint: 'Disconnected CO₂ left behind as the plume moves' },
+  { key: 'structural', label: 'Structurally trapped', color: '--sim-c-structural', hint: 'Mobile CO₂ held in a trap above its spill point' },
+  { key: 'free', label: 'Free plume', color: '--sim-c-free', hint: 'Mobile CO₂ that can still migrate' },
+  { key: 'exited', label: 'Left the model', color: '--sim-c-exited', hint: 'Migrated out across an open model edge' },
+  { key: 'leaked', label: 'Leaked through faults', color: '--sim-c-leaked', hint: 'Escaped up a leaky fault zone' }
+];
+const SIM_FRAME_YEARS = 5;
+const SIM_SPEEDS = [25, 60, 150];
+const SIM_THEME_KEY = 'co2-simulator-theme';
+const SIM_FAULT_KEYS = ['x', 'y', 'strike', 'length', 'throw', 'trans', 'sealCap', 'kf'];
+// Typical fracture margin above hydrostatic (fracture ~0.16 bar/m, brine ~0.105 bar/m).
+const SIM_FRACTURE_MARGIN_BAR_PER_M = 0.055;
 
-const roundDec = (v, d) => d === 0 ? Math.round(v) : +v.toFixed(d);
-
-// Parse a free-text list like "1.0, 1.5; 2  2.5" into finite numbers.
-// Empty tokens are dropped BEFORE Number() — Number('') is 0, not NaN.
-const parseValueList = (text) =>
-  (text || '').split(/[\s,;]+/).filter(t => t.length > 0).map(Number).filter(v => isFinite(v));
-
-const scenarioNumber = (query, key, min, max, fallback, integer = false) => {
-  if (!query.has(key)) return fallback;
-  const value = Number(query.get(key));
-  if (!isFinite(value)) return fallback;
-  const clamped = Math.max(min, Math.min(max, value));
-  return integer ? Math.round(clamped) : clamped;
+const simFormatMass = kg => {
+  const mt = kg / 1e9;
+  if (!Number.isFinite(mt) || Math.abs(mt) < 5e-4) return '0 Mt';
+  if (Math.abs(mt) < 0.1) return `${(mt * 1000).toFixed(0)} kt`;
+  return `${mt.toFixed(mt < 10 ? 2 : 1)} Mt`;
 };
 
-const createScenarioSignature = parameters => JSON.stringify(parameters);
+const simFormatPercent = (part, whole) => {
+  if (!(whole > 0)) return '–';
+  const pct = 100 * part / whole;
+  if (pct > 0 && pct < 0.1) return '<0.1%';
+  return `${pct.toFixed(pct < 10 ? 1 : 0)}%`;
+};
 
-const updateScenarioParameter = (scenario, key, value) => {
-  const next = { ...scenario, [key]: typeof value === 'function' ? value(scenario[key]) : value };
-  if (key === 'faultCount' || key === 'faults') {
-    next.faults = Array.from({ length: Math.max(next.faultCount, next.faults.length) }, (_, index) =>
-      next.faults[index] || { xPercent: 30 + index * 20, yStartPercent: 0, yEndPercent: 100,
-        isSealed: false, thresholdHeight: 0.3, leakRate: 0.12, transmissibility: 1, dipSlope: 0 });
+const simFormatNumber = (value, digits = 0) => Number(value).toLocaleString('en-GB', { maximumFractionDigits: digits, minimumFractionDigits: digits });
+
+const simEncodeScenario = scenario => {
+  const params = new URLSearchParams();
+  params.set('preset', scenario.preset);
+  params.set('grid', scenario.grid);
+  params.set('boundary', scenario.boundary);
+  for (const key of Object.keys(VE2D.LIMITS)) params.set(key, String(+Number(scenario[key]).toPrecision(6)));
+  params.set('faults', scenario.faults.map(fault => SIM_FAULT_KEYS.map(key => +Number(fault[key]).toPrecision(5)).join(',')).join(';'));
+  return params.toString();
+};
+
+// Hand-edited links are untrusted: everything passes through the engine's normaliser.
+const simDecodeScenario = search => {
+  const params = new URLSearchParams(search);
+  if (!params.has('preset') && !params.has('rateMt') && !params.has('faults')) return null;
+  const raw = {};
+  for (const [key, value] of params) if (key !== 'faults') raw[key] = value;
+  if (params.has('faults')) {
+    const text = params.get('faults');
+    raw.faults = text === '' ? [] : text.split(';').map(item => {
+      const values = item.split(',');
+      return Object.fromEntries(SIM_FAULT_KEYS.map((key, index) => [key, values[index]]));
+    });
   }
-  return next;
+  return VE2D.normalizeScenario(raw);
 };
 
-const massBalanceCsv = (history, modelType, terrainSeed) => [
-  'year,injected_kt,mobile_kt,trapped_kt,leaked_kt,model_type,terrain_seed',
-  ...history.map(r => [r.time, r.injected, r.mobile, r.trapped, r.leaked, modelType, modelType === 'map' ? terrainSeed : ''].join(','))
+const SIM_HISTORY_KEYS = ['injected', 'free', 'structural', 'residual', 'dissolved', 'exited', 'leaked', 'balance'];
+
+const simInventoryCsv = history => [
+  'year,injected_Mt,free_Mt,structural_Mt,residual_Mt,dissolved_Mt,exited_Mt,leaked_Mt,balance_Mt',
+  ...history.map(row => [row.year, ...SIM_HISTORY_KEYS.map(key => (row[key] / 1e9).toPrecision(8))].join(','))
 ].join('\n');
 
-const deriveRunStatus = ({ isPlaying, isReversing, scenarioSignature, lastRunSignature, simTime }) =>
-  isPlaying
-    ? 'Running'
-    : isReversing
-      ? 'Running backward'
-      : scenarioSignature !== lastRunSignature
-        ? 'Inputs changed'
-        : simTime > 0
-          ? 'Paused'
-          : 'Ready';
+const simGridCsv = (model, frame) => {
+  const rows = ['x_km,y_km,top_depth_m,h_m,hmax_m,dissolved_kg_m2,dp_bar'];
+  for (let c = 0; c < model.nx * model.ny; c++) {
+    const i = c % model.nx;
+    const j = Math.floor(c / model.nx);
+    rows.push([((i + 0.5) * model.dx / 1000).toFixed(3), ((j + 0.5) * model.dy / 1000).toFixed(3), model.zt[c].toFixed(2),
+      frame.h[c].toFixed(3), frame.hMax[c].toFixed(3), frame.md[c].toFixed(2), (frame.p[c] / 1e5).toFixed(3)].join(','));
+  }
+  return rows.join('\n');
+};
 
-const executeFileAction = (action, onFailure) => {
+const simInitialRun = () => ({ id: 0, status: 'idle', scenario: null, model: null, frames: [], history: [], truncated: false, error: null });
+
+// Reducer for worker messages; anything from an older run id is ignored.
+const simApplyWorkerMessage = (run, message) => {
+  if (!message || message.id !== run.id) return run;
+  switch (message.type) {
+    case 'model': return { ...run, status: 'computing', model: message.model, frames: [], history: [], truncated: false, error: null };
+    case 'frame': return { ...run, frames: run.frames.concat([message.snap]), history: run.history.concat(message.rows) };
+    case 'done': return { ...run, status: 'ready', history: run.history.concat(message.rows), truncated: !!message.truncated };
+    case 'error': return { ...run, status: 'error', error: message.message };
+    default: return run;
+  }
+};
+
+// Linear interpolation between the two snapshots around `year`.
+const simFrameAt = (frames, year) => {
+  if (!frames || !frames.length) return null;
+  const position = Math.max(0, year / SIM_FRAME_YEARS);
+  const index = Math.min(frames.length - 1, Math.floor(position));
+  const a = frames[index];
+  const b = frames[Math.min(frames.length - 1, index + 1)];
+  const w = a === b ? 0 : Math.min(1, position - index);
+  if (w < 1e-6) return a;
+  const mix = key => {
+    const from = a[key];
+    const to = b[key];
+    const out = new Float32Array(from.length);
+    for (let c = 0; c < from.length; c++) out[c] = from[c] + (to[c] - from[c]) * w;
+    return out;
+  };
+  return { year, h: mix('h'), hMax: mix('hMax'), md: mix('md'), p: mix('p'), fx: mix('fx'), fy: mix('fy'), leaking: w < 0.5 ? a.leaking : b.leaking };
+};
+
+const simRowAt = (history, year) => {
+  if (!history || !history.length) return null;
+  const index = Math.min(history.length - 1, Math.max(0, Math.floor(year)));
+  const a = history[index];
+  const b = history[Math.min(history.length - 1, index + 1)];
+  const w = Math.min(1, Math.max(0, year - index));
+  if (a === b || w === 0) return a;
+  const row = { year };
+  for (const key of Object.keys(a)) row[key] = typeof a[key] === 'number' ? a[key] + (b[key] - a[key]) * w : a[key];
+  return row;
+};
+
+const simStoredTheme = storage => {
   try {
-    action();
+    const value = storage?.getItem(SIM_THEME_KEY);
+    return value === 'day' || value === 'night' ? value : 'night';
+  } catch (_) {
+    return 'night';
+  }
+};
+
+const simPersistTheme = (theme, storage) => {
+  try { storage?.setItem(SIM_THEME_KEY, theme); } catch (_) { /* storage blocked: the choice lasts for this visit */ }
+};
+
+const simCopyText = async (text, clipboard) => {
+  try {
+    if (!clipboard?.writeText) return false;
+    await clipboard.writeText(text);
     return true;
   } catch (_) {
-    onFailure();
     return false;
   }
 };
 
-const getPlaybackAction = ({ isPlaying, simTime, scenarioChanged }) =>
-  isPlaying ? 'pause' : simTime === 0 || scenarioChanged ? 'run-scenario' : 'resume';
-
-const selectActiveResults = (activeView, crossSection, map) =>
-  activeView === 'map' || activeView === 'topography' ? map : crossSection;
-const consumeMapCommand = (command, handledId) => command?.id === handledId ? null : command;
-const createMapSnapshot = ({ time, mapState, history, isRunning, speed, params }) => ({
-  time,
-  h: mapState.h,
-  hMax: mapState.hMax,
-  masses: mapState.masses,
-  history,
-  isRunning,
-  speed,
-  params
-});
-const getMapPlaybackTransition = ({ isRunning, speed }, type) => {
-  if (type === 'run') return { reset: true, isRunning: true };
-  if (type === 'reset') return { reset: true, isRunning: false };
-  if (type === 'pause') return { isRunning: false };
-  if (type === 'resume') return { isRunning: true };
-  if (type === 'step') return { isRunning: false, advance: true };
-  if (type === 'speed') return { speed: speed === 1 ? 2 : speed === 2 ? 4 : 1 };
-  return null;
-};
-const deriveMapRunStatus = (snapshot, scenarioSignature, lastRunSignature) => deriveRunStatus({
-  isPlaying: snapshot.isRunning,
-  isReversing: false,
-  scenarioSignature,
-  lastRunSignature,
-  simTime: snapshot.time
-});
-
-const DEFAULT_TOPOGRAPHY_CAMERA = { azimuth: -0.72, elevation: 0.62, zoom: 1 };
-
-const createRandomGridConfig = (random = Math.random) => {
-  const randomInt = (min, max) => Math.floor(min + random() * (max - min + 1));
-  const randomValue = (min, max, decimals = 2) => roundDec(min + random() * (max - min), decimals);
-  const randomFault = index => {
-    const yStartPercent = randomInt(1, 10) * 5;
-    const yEndPercent = yStartPercent + randomInt(5, Math.floor((95 - yStartPercent) / 5)) * 5;
-    return {
-      xPercent: randomInt(5, 15) * 5,
-      yStartPercent,
-      yEndPercent,
-      isSealed: random() < 0.3,
-      thresholdHeight: 0.2 + randomInt(0, 3) * 0.1,
-      leakRate: 0.06 + randomInt(0, 8) * 0.02,
-      transmissibility: 0.35 + randomInt(0, 12) * 0.05,
-      dipSlope: randomValue(index % 2 ? -0.22 : -0.26, index % 2 ? 0.22 : 0.26, 2)
-    };
-  };
-  const faultCount = randomInt(1, 3);
-  return {
-    terrainSeed: randomInt(1, 999999),
-    heterogeneity: 0.6 + randomInt(0, 7) * 0.05,
-    mapCols: 80 + randomInt(0, 6) * 8,
-    dipPercent: -2.5 + randomInt(0, 10) * 0.5,
-    amplitude: randomInt(1, 4) * 5,
-    frequency: 1,
-    faultOffset: 0.4 + randomInt(0, 11) * 0.2,
-    faultCount,
-    faults: Array.from({ length: 3 }, (_, index) => randomFault(index))
-  };
+const simDownload = (content, filename, type) => {
+  const blob = content instanceof Blob ? content : new Blob([content], { type });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 };
 
-const clampTopographyCamera = (camera = {}) => {
-  const clamp = (value, min, max, fallback) => {
-    const number = Number(value);
-    return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
-  };
-  return {
-    azimuth: clamp(camera.azimuth, -Math.PI * 2, Math.PI * 2, DEFAULT_TOPOGRAPHY_CAMERA.azimuth),
-    elevation: clamp(camera.elevation, 0.22, 1.12, DEFAULT_TOPOGRAPHY_CAMERA.elevation),
-    zoom: clamp(camera.zoom, 0.65, 2.2, DEFAULT_TOPOGRAPHY_CAMERA.zoom)
-  };
-};
-
-const resetTopographyCamera = () => ({ ...DEFAULT_TOPOGRAPHY_CAMERA });
-
-const projectTopographyPoint = ({ x = 0.5, y = 0.5, height = 0.5 } = {}, camera, canvasWidth, canvasHeight) => {
-  const numeric = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
-  const width = Math.max(0, Number(canvasWidth) || 0);
-  const heightPx = Math.max(0, Number(canvasHeight) || 0);
-  const { azimuth, elevation, zoom } = clampTopographyCamera(camera);
-  const dx = numeric(x, 0.5) - 0.5;
-  const dy = numeric(y, 0.5) - 0.5;
-  const dz = numeric(height, 0.5) - 0.5;
-  const rotatedX = dx * Math.cos(azimuth) - dy * Math.sin(azimuth);
-  const depth = dx * Math.sin(azimuth) + dy * Math.cos(azimuth);
-  const projectedX = 0.5 + rotatedX * zoom * 0.62;
-  const projectedY = 0.5 + (depth * Math.cos(elevation) - dz * Math.sin(elevation)) * zoom * 0.62;
-  return {
-    x: projectedX * width,
-    y: projectedY * heightPx
-  };
-};
-
-const faultXAtNormalizedY = (fault, y) => {
-  if (typeof globalThis.VE2D?.faultXAtY === 'function') return globalThis.VE2D.faultXAtY(fault, y * 600, 1000, 600) / 1000;
-  return (Number(fault?.xPercent) || 0) / 100 + (Number(fault?.dipSlope) || 0) * 0.6 * (y - 0.5);
-};
-
-const visibleFaultSegment = fault => {
-  const start = Math.max(0, Math.min(100, Number(fault?.yStartPercent ?? 0))) / 100;
-  const end = Math.max(0, Math.min(100, Number(fault?.yEndPercent ?? 100))) / 100;
-  const yStart = Math.min(start, end);
-  const yEnd = Math.max(start, end);
-  const xAtCenter = (Number(fault?.xPercent) || 0) / 100;
-  const normalizedSlope = (Number(fault?.dipSlope) || 0) * 0.6;
-  if (Math.abs(normalizedSlope) < 1e-9) return xAtCenter > 0 && xAtCenter < 1 ? { yStart, yEnd } : null;
-  const crossings = [(0 - xAtCenter) / normalizedSlope + 0.5, (1 - xAtCenter) / normalizedSlope + 0.5];
-  const clippedStart = Math.max(yStart, Math.min(...crossings));
-  const clippedEnd = Math.min(yEnd, Math.max(...crossings));
-  return clippedEnd - clippedStart > 1e-6 ? { yStart: clippedStart, yEnd: clippedEnd } : null;
-};
-
-const faultEndpointFade = (y, segment) => {
-  const length = Math.max(1e-6, segment.yEnd - segment.yStart);
-  const taper = Math.min(0.18, length * 0.45);
-  const smoothstep = value => value * value * (3 - 2 * value);
-  const start = smoothstep(Math.max(0, Math.min(1, (y - segment.yStart) / taper)));
-  const end = smoothstep(Math.max(0, Math.min(1, (segment.yEnd - y) / taper)));
-  return Math.min(start, end);
-};
-
-const faultEndpointCoordinates = segment => {
-  const length = Math.max(1e-6, segment.yEnd - segment.yStart);
-  const taper = Math.min(0.18, length * 0.45);
-  return [
-    segment.yStart,
-    segment.yStart + taper * 0.25,
-    segment.yStart + taper * 0.5,
-    segment.yStart + taper * 0.75,
-    segment.yStart + taper,
-    segment.yEnd - taper,
-    segment.yEnd - taper * 0.75,
-    segment.yEnd - taper * 0.5,
-    segment.yEnd - taper * 0.25,
-    segment.yEnd
-  ];
-};
-
-const clipPolygonByFault = (points, fault, keepRight) => {
-  const clipped = [];
-  for (let index = 0; index < points.length; index++) {
-    const from = points[index];
-    const to = points[(index + 1) % points.length];
-    const fromSide = from.x - faultXAtNormalizedY(fault, from.y);
-    const toSide = to.x - faultXAtNormalizedY(fault, to.y);
-    const fromInside = keepRight ? fromSide >= -1e-9 : fromSide <= 1e-9;
-    const toInside = keepRight ? toSide >= -1e-9 : toSide <= 1e-9;
-    if (fromInside) clipped.push(from);
-    if (fromInside !== toInside) {
-      const ratio = fromSide / (fromSide - toSide);
-      clipped.push({ x: from.x + (to.x - from.x) * ratio, y: from.y + (to.y - from.y) * ratio });
-    }
-  }
-  return clipped;
-};
-
-const splitTopographyPieceByFault = (piece, fault, faultIndex, y0, y1, segment) => {
-  if (y0 < segment.yStart - 1e-9 || y1 > segment.yEnd + 1e-9) return [piece];
-  const sides = piece.points.map(point => point.x - faultXAtNormalizedY(fault, point.y));
-  if (Math.min(...sides) >= -1e-9 || Math.max(...sides) <= 1e-9) return [piece];
-  const left = clipPolygonByFault(piece.points, fault, false);
-  const right = clipPolygonByFault(piece.points, fault, true);
-  return [
-    ...(left.length >= 3 ? [{ points: left, faultSides: { ...piece.faultSides, [faultIndex]: -1 } }] : []),
-    ...(right.length >= 3 ? [{ points: right, faultSides: { ...piece.faultSides, [faultIndex]: 1 } }] : [])
-  ];
-};
-
-const formatMass = value => `${Number(value || 0).toLocaleString('en-GB', { maximumFractionDigits: 1 })} kt`;
-
-const copyTextToClipboard = async (text, clipboard, fallback) => {
-  if (clipboard && typeof clipboard.writeText === 'function') {
-    try {
-      await clipboard.writeText(text);
-      return true;
-    } catch (_) { /* Try the legacy copy path below. */ }
-  }
-  try {
-    return Boolean(fallback(text));
-  } catch (_) {
-    return false;
-  }
-};
-
-const toggleMobilePanel = (currentPanel, requestedPanel) =>
-  currentPanel === requestedPanel ? null : requestedPanel;
-
-const focusMobilePanelTrigger = (panel, triggers) => {
-  const trigger = triggers[panel];
-  if (!trigger || trigger.isConnected === false) return;
-  const visible = typeof trigger.getClientRects !== 'function' || trigger.getClientRects().length > 0;
-  if (visible && typeof trigger.focus === 'function') trigger.focus();
-};
-
-const lockPageScroll = pageDocument => {
-  const previousOverflow = pageDocument.body.style.overflow;
-  pageDocument.body.style.overflow = 'hidden';
-  return () => { pageDocument.body.style.overflow = previousOverflow; };
-};
-
-const selectPresentedMobilePanel = (panel, viewport) =>
-  viewport.mobile ? panel : viewport.compact && panel === 'outcomes' ? panel : null;
-
-const getMobileFocusWrapTarget = (focusables, activeElement, backwards) => {
-  if (!focusables.length) return null;
-  const currentIndex = focusables.indexOf(activeElement);
-  if (currentIndex === -1) return backwards ? focusables[focusables.length - 1] : focusables[0];
-  if (backwards && currentIndex === 0) return focusables[focusables.length - 1];
-  if (!backwards && currentIndex === focusables.length - 1) return focusables[0];
-  return null;
-};
-
-const setMobilePanelBackgroundInert = (elements, inert) => {
-  elements.filter(Boolean).forEach(element => { element.inert = inert; });
-};
-
-const normalizeParameterInput = (raw, min, max) => {
-  if (String(raw).trim() === '') {
-    return { value: null, message: `Enter a number from ${min} to ${max}.` };
-  }
-  const number = Number(raw);
-  if (!Number.isFinite(number)) {
-    return { value: null, message: `Enter a number from ${min} to ${max}.` };
-  }
-  const value = Math.max(min, Math.min(max, number));
-  return {
-    value,
-    message: value === number ? '' : `Corrected to ${value} (allowed range ${min}–${max}).`
-  };
-};
-
-const THEME_STORAGE_KEY = 've-simulator-theme';
-
-const getStoredTheme = storage => {
-  try {
-    return storage?.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light';
-  } catch (_) {
-    return 'light';
-  }
-};
-
-const persistTheme = (theme, storage) => {
-  if (theme !== 'dark' && theme !== 'light') return;
-  try {
-    storage?.setItem(THEME_STORAGE_KEY, theme);
-  } catch (_) { /* Storage may be unavailable in private browsing. */ }
-};
-
-// Draw one sample for a parameter given its config and nominal value.
-// Returns { value, sampled } — sampled=false means the nominal was used unchanged.
-const sampleUqParam = (def, cfg, nominal) => {
-  if (!cfg || !cfg.enabled) return { value: nominal, sampled: false };
-  const clampDef = (v) => Math.max(def.lo, Math.min(def.hi, v));
-
-  if (cfg.mode === 'range') {
-    let a = isFinite(cfg.min) ? cfg.min : def.lo;
-    let b = isFinite(cfg.max) ? cfg.max : def.hi;
-    if (a > b) { const t = a; a = b; b = t; }
-    return { value: roundDec(clampDef(a + Math.random() * (b - a)), def.dec), sampled: true };
-  }
-
-  if (cfg.mode === 'values') {
-    const vals = parseValueList(cfg.values);
-    if (vals.length === 0) return { value: nominal, sampled: false };
-    return { value: roundDec(clampDef(vals[Math.floor(Math.random() * vals.length)]), def.dec), sampled: true };
-  }
-
-  // percent mode (+/- of nominal)
-  const unc = (isFinite(cfg.percent) ? cfg.percent : def.percentDef) / 100;
-  return { value: roundDec(clampDef(nominal * (1.0 - unc) + Math.random() * (2.0 * unc * nominal)), def.dec), sampled: true };
-};
-
-// Per-parameter sampling config editor: enable checkbox + mode toggle + mode inputs
-const UQParamConfig = ({ def, cfg, onChange }) => {
-  const inputStyle = {
-    background: 'rgba(0,0,0,0.3)',
-    border: '1px solid rgba(255,255,255,0.15)',
-    color: '#fff',
-    padding: '3px 6px',
-    borderRadius: 6,
-    fontSize: 10.5,
-    fontFamily: 'monospace',
-    width: 58
-  };
-  const numVal = (v) => isFinite(v) ? v : '';
-  const numChange = (e) => e.target.value === '' ? NaN : parseFloat(e.target.value);
-  const stepVal = def.dec === 0 ? 1 : Math.pow(10, -def.dec);
-
-  return (
-    <div className="ve-uq-parameter" style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 6,
-      opacity: cfg.enabled ? 1 : 0.45,
-      background: 'rgba(255,255,255,0.02)',
-      border: `1px solid ${cfg.enabled ? 'rgba(100,255,218,0.18)' : 'rgba(255,255,255,0.05)'}`,
-      borderRadius: 10,
-      padding: '8px 10px'
-    }}>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, cursor: 'pointer' }}>
-        <input
-          type="checkbox"
-          checked={cfg.enabled}
-          onChange={e => onChange({ enabled: e.target.checked })}
-          aria-label={`Include ${def.label} in uncertainty analysis`}
-          style={{ accentColor: '#64ffda' }}
-        />
-        <span style={{ color: cfg.enabled ? '#64ffda' : 'rgba(255,255,255,0.7)', fontWeight: cfg.enabled ? 'bold' : 500, flex: 1 }}>
-          {def.label}
-        </span>
-      </label>
-
-      <div style={{ display: 'flex', gap: 3 }} role="group" aria-label={`${def.label} sampling mode`}>
-        {[
-          { id: 'range', label: 'Range' },
-          { id: 'percent', label: '\u00B1%' },
-          { id: 'values', label: 'Values' }
-        ].map(m => (
-          <button
-            key={m.id}
-            onClick={() => onChange({ mode: m.id })}
-            aria-pressed={cfg.mode === m.id}
-            style={{
-              flex: 1,
-              background: cfg.mode === m.id ? 'rgba(100,255,218,0.18)' : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${cfg.mode === m.id ? '#64ffda' : 'rgba(255,255,255,0.10)'}`,
-              color: cfg.mode === m.id ? '#64ffda' : 'rgba(255,255,255,0.55)',
-              padding: '2px 0',
-              borderRadius: 5,
-              fontSize: 9,
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
-
-      {cfg.enabled && cfg.mode === 'range' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <input
-            type="number"
-            aria-label={`${def.label} minimum value`}
-            value={numVal(cfg.min)}
-            step={stepVal}
-            min={def.lo}
-            max={def.hi}
-            onChange={e => onChange({ min: numChange(e) })}
-            style={inputStyle}
-          />
-          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>to</span>
-          <input
-            type="number"
-            aria-label={`${def.label} maximum value`}
-            value={numVal(cfg.max)}
-            step={stepVal}
-            min={def.lo}
-            max={def.hi}
-            onChange={e => onChange({ max: numChange(e) })}
-            style={inputStyle}
-          />
-        </div>
-      )}
-
-      {cfg.enabled && cfg.mode === 'percent' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: 'rgba(255,255,255,0.7)' }}>
-          <span style={{ fontFamily: 'monospace' }}>nominal &plusmn;</span>
-          <input
-            type="number"
-            aria-label={`${def.label} percent variation`}
-            value={numVal(cfg.percent)}
-            min={1}
-            max={95}
-            onChange={e => onChange({ percent: numChange(e) })}
-            style={inputStyle}
-          />
-          <span style={{ fontFamily: 'monospace' }}>%</span>
-        </div>
-      )}
-
-      {cfg.enabled && cfg.mode === 'values' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <input
-            type="text"
-            aria-label={`${def.label} discrete values, comma separated`}
-            value={cfg.values}
-            placeholder="e.g. 1.0, 1.5, 2.0"
-            onChange={e => onChange({ values: e.target.value })}
-            style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }}
-          />
-          <span style={{ fontSize: 9, color: parseValueList(cfg.values).length > 0 ? 'rgba(255,255,255,0.35)' : SIM_PALETTE.leakage }}>
-            {parseValueList(cfg.values).length} valid value{parseValueList(cfg.values).length === 1 ? '' : 's'} — sampled uniformly
-          </span>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const Ve2DMapPanel = ({
-  K, porosity, residualTrapFraction, dipPercent, amplitude, frequency, faultOffset,
-  terrainSeed, heterogeneity, Q, injLocation, injDuration, faultCount, faults, mapCols, wellY, boundaryCondition, preset,
-  command, onCommandConsumed, onRun, onReset, onSnapshot
-}) => {
-  const mapRows = Math.max(12, Math.round(mapCols * 0.6));
-  const canvasRef = useRef(null);
-  const depthCacheRef = useRef(null);
-  const stateRef = useRef(globalThis.VE2D.createVe2dState({ cols: mapCols, rows: mapRows }));
-  const timeRef = useRef(0);
-  const paramsRef = useRef(null);
-  const historyRef = useRef([{ time: 0, ...stateRef.current.masses }]);
-  const [mapState, setMapState] = useState(stateRef.current);
-  const [mapTime, setMapTime] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const [mapSpeed, setMapSpeed] = useState(1);
-
-  paramsRef.current = {
-    width: 1000,
-    height: 600,
-    permeability: K,
-    porosity,
-    residualTrapFraction,
-    injectionRate: Q,
-    injectionDuration: injDuration,
-    wellX: injLocation,
-    wellY,
-    dipX: dipPercent,
-    dipY: dipPercent * 0.35,
-    structureAmplitude: amplitude,
-    structureFrequency: frequency,
-    faultOffset,
-    terrainSeed,
-    heterogeneity,
-    boundaryCondition,
-    faults: faults.slice(0, faultCount).map(fault => ({ ...fault }))
-  };
-
-  const resetMap = useCallback(() => {
-    const next = globalThis.VE2D.createVe2dState({ cols: mapCols, rows: mapRows });
-    stateRef.current = next;
-    timeRef.current = 0;
-    historyRef.current = [{ time: 0, ...next.masses }];
-    setMapState(next);
-    setMapTime(0);
-    setIsRunning(false);
-  }, [mapCols, mapRows]);
-
-  const advanceMap = () => {
-    if (timeRef.current >= 1000) {
-      setIsRunning(false);
-      return;
-    }
-    const nextTime = timeRef.current + 1;
-    const next = globalThis.VE2D.stepVe2d(stateRef.current, paramsRef.current, nextTime);
-    stateRef.current = next;
-    timeRef.current = nextTime;
-    historyRef.current = [...historyRef.current, { time: nextTime, ...next.masses }];
-    setMapState(next);
-    setMapTime(nextTime);
-  };
-
-  const mapScenarioKey = JSON.stringify(paramsRef.current);
-  useEffect(() => resetMap(), [resetMap, preset, mapScenarioKey]);
-
-  useEffect(() => {
-    if (!command) return;
-    const transition = getMapPlaybackTransition({ isRunning, speed: mapSpeed }, command.type);
-    if (transition?.reset) resetMap();
-    if (transition?.advance) advanceMap();
-    if (typeof transition?.isRunning === 'boolean') setIsRunning(transition.isRunning);
-    if (transition?.speed) setMapSpeed(transition.speed);
-    onCommandConsumed(command.id);
-  }, [command, onCommandConsumed, resetMap]);
-
-  useEffect(() => {
-    onSnapshot(createMapSnapshot({ time: timeRef.current, mapState: stateRef.current, history: historyRef.current, isRunning, speed: mapSpeed, params: paramsRef.current }));
-  }, [mapState, mapTime, isRunning, mapSpeed, onSnapshot, K, porosity, residualTrapFraction, dipPercent, amplitude, frequency, faultOffset, terrainSeed, heterogeneity, Q, injLocation, injDuration, faultCount, faults, wellY]);
-
-  useEffect(() => {
-    if (!isRunning) return;
-    const timer = setInterval(advanceMap, 70 / mapSpeed);
-    return () => clearInterval(timer);
-  }, [isRunning, mapSpeed]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const width = 1000;
-    const height = 600;
-    const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = width * pixelRatio;
-    canvas.height = height * pixelRatio;
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-
-    const cellWidth = width / mapState.cols;
-    const cellHeight = height / mapState.rows;
-    const depthKey = JSON.stringify({ cols: mapState.cols, rows: mapState.rows, params: paramsRef.current });
-    if (depthCacheRef.current?.key !== depthKey) {
-      depthCacheRef.current = {
-        key: depthKey,
-        depths: mapState.h.map((_, index) => {
-          const col = index % mapState.cols;
-          const row = Math.floor(index / mapState.cols);
-          return globalThis.VE2D.topDepth((col + 0.5) * cellWidth, (row + 0.5) * cellHeight, paramsRef.current);
-        })
-      };
-    }
-    const depths = depthCacheRef.current.depths;
-    const minDepth = Math.min(...depths);
-    const maxDepth = Math.max(...depths);
-    const depthSpan = Math.max(0.001, maxDepth - minDepth);
-    const maxPlume = Math.max(0.001, ...mapState.h);
-
-    for (let index = 0; index < mapState.h.length; index++) {
-      const col = index % mapState.cols;
-      const row = Math.floor(index / mapState.cols);
-      const depthRatio = (depths[index] - minDepth) / depthSpan;
-      ctx.fillStyle = rgbCss(interpolateRgb(SIM_PALETTE.terrainLow, SIM_PALETTE.terrainHigh, depthRatio));
-      ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
-
-      if (mapState.h[index] > 0.0001) {
-        const intensity = Math.sqrt(mapState.h[index] / maxPlume);
-        const historic = mapState.hMax[index];
-        const mobile = residualTrapFraction < 1
-          ? Math.min(mapState.h[index], Math.max(0, (mapState.h[index] - residualTrapFraction * historic) / (1 - residualTrapFraction)))
-          : 0;
-        const trappedRatio = mapState.h[index] > 0 ? 1 - mobile / mapState.h[index] : 0;
-        ctx.fillStyle = rgbaCss(interpolateRgb(SIM_PALETTE.mobileRgb, SIM_PALETTE.trappedRgb, trappedRatio), 0.24 + intensity * 0.72);
-        ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
-      }
-    }
-
-    ctx.lineWidth = 1.2;
-    for (const ratio of [0.25, 0.5, 0.75]) {
-      const level = maxPlume * ratio;
-      ctx.strokeStyle = `rgba(255,255,255,${0.22 + ratio * 0.38})`;
-      for (let row = 0; row < mapState.rows; row++) {
-        for (let col = 0; col < mapState.cols; col++) {
-          const index = row * mapState.cols + col;
-          if (mapState.h[index] < level) continue;
-          const edge = col === 0 || row === 0 || col === mapState.cols - 1 || row === mapState.rows - 1 ||
-            mapState.h[index - 1] < level || mapState.h[index + 1] < level ||
-            mapState.h[index - mapState.cols] < level || mapState.h[index + mapState.cols] < level;
-          if (edge) ctx.strokeRect(col * cellWidth, row * cellHeight, cellWidth, cellHeight);
-        }
-      }
-    }
-
-    paramsRef.current.faults.forEach(fault => {
-      const segment = visibleFaultSegment(fault);
-      if (!segment) return;
-      const y0 = segment.yStart * height;
-      const y1 = segment.yEnd * height;
-      const lineX = y => globalThis.VE2D.faultXAtY(fault, y, width, height);
-      ctx.beginPath();
-      ctx.moveTo(lineX(y0), y0);
-      ctx.lineTo(lineX(y1), y1);
-      ctx.strokeStyle = fault.isSealed ? SIM_PALETTE.sealedFault : SIM_PALETTE.transmissiveFault;
-      ctx.lineWidth = fault.isSealed ? 3 : 2;
-      ctx.setLineDash(fault.isSealed ? [] : [9, 7]);
-      ctx.stroke();
-    });
-    ctx.setLineDash([]);
-
-    const wellX = (injLocation / 100) * width;
-    const wellMapY = (wellY / 100) * height;
-    ctx.beginPath();
-    ctx.arc(wellX, wellMapY, 10, 0, Math.PI * 2);
-    ctx.fillStyle = SIM_PALETTE.injector;
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(wellX - 15, wellMapY);
-    ctx.lineTo(wellX + 15, wellMapY);
-    ctx.moveTo(wellX, wellMapY - 15);
-    ctx.lineTo(wellX, wellMapY + 15);
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(22, height - 62, 250, 40);
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(42, height - 40);
-    ctx.lineTo(242, height - 40);
-    ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.font = '16px monospace';
-    ctx.fillText('200 m', 108, height - 46);
-    ctx.fillText('N', width - 48, 38);
-    ctx.beginPath();
-    ctx.moveTo(width - 42, 48);
-    ctx.lineTo(width - 42, 88);
-    ctx.lineTo(width - 50, 72);
-    ctx.moveTo(width - 42, 88);
-    ctx.lineTo(width - 34, 72);
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }, [mapState, residualTrapFraction, injLocation, wellY, K, porosity, dipPercent, amplitude, frequency, faultOffset, terrainSeed, heterogeneity, faultCount, faults]);
-
-  const downloadMap = (type) => {
-    const link = document.createElement('a');
-    if (type === 'png') {
-      link.href = canvasRef.current.toDataURL('image/png');
-      link.download = 've-2d-plan-view.png';
-    } else {
-      const cellWidth = 1000 / mapState.cols;
-      const cellHeight = 600 / mapState.rows;
-      const rows = ['x_m,y_m,h_m,h_max_m,model_type,terrain_seed,year'];
-      mapState.h.forEach((value, index) => rows.push([
-        ((index % mapState.cols) + 0.5) * cellWidth,
-        (Math.floor(index / mapState.cols) + 0.5) * cellHeight,
-        value,
-        mapState.hMax[index],
-        'map',
-        terrainSeed,
-        mapTime
-      ].join(',')));
-      link.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' }));
-      link.download = 've-2d-grid.csv';
-      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-    }
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  };
-
-  return (
-    <div id="tabpanel-map" role="tabpanel" aria-labelledby="tab-map" tabIndex={0} style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#101a2a', minHeight: 520 }}>
-      <div style={{ position: 'relative', flex: 1, minHeight: 420 }}>
-        <canvas
-          ref={canvasRef}
-          role="img"
-          aria-label={`Plan-view CO2 plume at year ${mapTime}. ${mapState.masses.mobile.toFixed(1)} mobile and ${mapState.masses.trapped.toFixed(1)} trapped mass units.`}
-          style={{ width: '100%', height: '100%', minHeight: 420, display: 'block' }}
-        />
-        <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', flexWrap: 'wrap', gap: 10, padding: '7px 11px', borderRadius: 14, background: 'rgba(0,0,0,0.58)', fontSize: 10, color: '#fff', pointerEvents: 'none' }}>
-          <span><b style={{ color: SIM_PALETTE.mobile }}>■</b> Mobile CO₂</span>
-          <span><b style={{ color: SIM_PALETTE.trapped }}>■</b> Residual CO₂</span>
-          <span><b style={{ color: SIM_PALETTE.injector }}>●</b> Injector</span>
-          <span><b style={{ color: SIM_PALETTE.sealedFault }}>━</b> Sealed fault</span>
-          <span><b style={{ color: SIM_PALETTE.transmissiveFault }}>┄</b> Transmissive fault</span>
-        </div>
-      </div>
-      <div style={{ padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-        <button onClick={() => isRunning ? setIsRunning(false) : mapTime > 0 ? setIsRunning(true) : onRun()} aria-label={isRunning ? 'Pause 2D map simulation' : 'Run 2D map simulation'} style={{ background: '#64ffda', color: '#10251f', border: 0, borderRadius: 8, padding: '7px 12px', fontWeight: 700, cursor: 'pointer' }}>
-          <i className={`fas ${isRunning ? 'fa-pause' : 'fa-play'}`} /> {isRunning ? 'Pause' : 'Run'}
-        </button>
-        <button onClick={() => { setIsRunning(false); advanceMap(); }} aria-label="Advance 2D map one year" style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}><i className="fas fa-step-forward" /></button>
-        <button onClick={onReset} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}><i className="fas fa-redo" /> Reset</button>
-        <button onClick={() => setMapSpeed(value => value === 1 ? 2 : value === 2 ? 4 : 1)} style={{ background: 'none', color: '#64ffda', border: 0, cursor: 'pointer', fontWeight: 700 }}>{mapSpeed}×</button>
-        <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.72)' }}>Year {mapTime} · {mapCols}×{mapRows} cells · seed {terrainSeed} · heterogeneity {heterogeneity.toFixed(2)} · {boundaryCondition === 'closed' ? 'Closed boundary' : OPEN_BOUNDARY_LABEL}</span>
-        <div style={{ flex: 1 }} />
-        <button onClick={() => downloadMap('csv')} style={{ background: 'none', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '6px 9px', cursor: 'pointer' }}>Grid CSV</button>
-        <button onClick={() => downloadMap('png')} style={{ background: 'none', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '6px 9px', cursor: 'pointer' }}>Map PNG</button>
-      </div>
-      <div className="sim-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '0 14px 12px', background: 'rgba(0,0,0,0.2)' }}>
-        <StatBox label="Injected" value={mapState.masses.injected.toFixed(1)} color="#fff" opacity="0.7" />
-        <StatBox label="Mobile" value={mapState.masses.mobile.toFixed(1)} color={SIM_PALETTE.mobile} />
-        <StatBox label="Trapped" value={mapState.masses.trapped.toFixed(1)} color={SIM_PALETTE.trapped} />
-        <StatBox label="Leaked" value={mapState.masses.leaked.toFixed(1)} color={SIM_PALETTE.leakage} />
-      </div>
-    </div>
-  );
-};
-
-const Ve3DTopographyPanel = ({ mapSnapshot = {}, mapCols, mapRows, faultCount, faults = [], injLocation, wellY, boundaryCondition, onMapCommand }) => {
-  const canvasRef = useRef(null);
-  const terrainCacheRef = useRef(null);
-  const pointersRef = useRef(new Map());
-  const dragRef = useRef(null);
-  const pinchRef = useRef(null);
-  const [camera, setCamera] = useState(resetTopographyCamera);
-  const [elevationScale, setElevationScale] = useState(1.35);
-  const [showGrid, setShowGrid] = useState(true);
-  const gridRows = mapRows || Math.max(12, Math.round(mapCols * 0.6));
-  const time = Number(mapSnapshot.time) || 0;
-  const zoomLabel = `${camera.zoom.toFixed(2)}×`;
-  const elevationLabel = `${elevationScale.toFixed(2)}×`;
-  const terrainSeed = Number(mapSnapshot.params?.terrainSeed) || 0;
-  const heterogeneity = Number(mapSnapshot.params?.heterogeneity) || 0;
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const width = 1000;
-    const height = 600;
-    const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = width * pixelRatio;
-    canvas.height = height * pixelRatio;
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#10202d';
-    ctx.fillRect(0, 0, width, height);
-
-    const h = Array.isArray(mapSnapshot.h) ? mapSnapshot.h : [];
-    const hMax = Array.isArray(mapSnapshot.hMax) ? mapSnapshot.hMax : h;
-    const peak = Math.max(0.0001, ...hMax.map(value => Number(value) || 0));
-    const activeFaults = faults.slice(0, faultCount).map((fault, index) => ({ fault, index, segment: visibleFaultSegment(fault) })).filter(item => item.segment);
-    const structure = { width, height, faults: [], ...(mapSnapshot.params || {}) };
-    const terrainKey = JSON.stringify({ mapCols, gridRows, structure, activeFaults });
-    const projectionKey = JSON.stringify({ terrainKey, camera, elevationScale });
-    const cachedTerrain = terrainCacheRef.current?.projectionKey === projectionKey ? terrainCacheRef.current : null;
-    const cachedBaseTerrain = terrainCacheRef.current?.terrainKey === terrainKey ? terrainCacheRef.current.baseCells : null;
-    const depths = new Map();
-    const surfaceDepth = (x, y, faultSides = {}) => {
-      let sampleX = x;
-      Object.entries(faultSides).forEach(([faultIndex, side]) => {
-        const fault = activeFaults.find(item => item.index === Number(faultIndex))?.fault;
-        if (fault && Math.abs(x - faultXAtNormalizedY(fault, y)) < 1e-7) sampleX += Number(side) * 0.00002;
-      });
-      const key = `${sampleX.toFixed(5)}:${y.toFixed(5)}`;
-      if (!depths.has(key)) depths.set(key, globalThis.VE2D.topDepth(sampleX * width, y * height, structure));
-      return depths.get(key);
-    };
-    const depthSpan = 4;
-    const surfaceHeight = (x, y, faultSides = {}) =>
-      Math.max(0.04, Math.min(0.96, 0.5 - (surfaceDepth(x, y, faultSides) / depthSpan) * 0.5));
-    const projectedHeight = (heightValue, plume = 0) =>
-      Math.max(0.04, Math.min(0.96, 0.5 - (0.5 - heightValue) * elevationScale + plume * 0.08));
-    const surfaceAt = (x, y, plume = 0, faultSides = {}) =>
-      Math.max(0.04, Math.min(0.96, 0.5 - (surfaceDepth(x, y, faultSides) / depthSpan) * 0.5 * elevationScale + plume * 0.08));
-    const surfaceLight = (x, y, faultSides = {}) => {
-      const step = 0.008;
-      const left = surfaceHeight(Math.max(0, x - step), y, faultSides);
-      const right = surfaceHeight(Math.min(1, x + step), y, faultSides);
-      const north = surfaceHeight(x, Math.max(0, y - step), faultSides);
-      const south = surfaceHeight(x, Math.min(1, y + step), faultSides);
-      const normal = { x: -(right - left) / (2 * step), y: -(south - north) / (2 * step), z: 1 };
-      const length = Math.hypot(normal.x, normal.y, normal.z);
-      return Math.max(0.34, Math.min(1, (normal.x * -0.38 + normal.y * 0.42 + normal.z * 0.82) / length));
-    };
-    const stateRatio = (values, x, y) => {
-      const col = Math.max(0, Math.min(mapCols - 1, Math.round(x * (mapCols - 1))));
-      const row = Math.max(0, Math.min(gridRows - 1, Math.round(y * (gridRows - 1))));
-      return (Number(values[row * mapCols + col]) || 0) / peak;
-    };
-    const yCoordinates = [...new Set([
-      ...Array.from({ length: gridRows }, (_, row) => row / Math.max(1, gridRows - 1)),
-      ...activeFaults.flatMap(item => faultEndpointCoordinates(item.segment))
-    ].map(value => Number(value.toFixed(7))))].sort((a, b) => a - b);
-    let baseCells = cachedBaseTerrain;
-    if (!baseCells) {
-      baseCells = [];
-      for (let row = 0; row < yCoordinates.length - 1; row++) {
-        const y0 = yCoordinates[row];
-        const y1 = yCoordinates[row + 1];
-        for (let col = 0; col < mapCols - 1; col++) {
-          const x0 = col / Math.max(1, mapCols - 1);
-          const x1 = (col + 1) / Math.max(1, mapCols - 1);
-          let pieces = [{ points: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], faultSides: {} }];
-          activeFaults.forEach(({ fault, index, segment }) => {
-            pieces = pieces.flatMap(piece => splitTopographyPieceByFault(piece, fault, index, y0, y1, segment));
-          });
-          pieces.forEach(piece => {
-            const center = piece.points.reduce((sum, point) => ({ x: sum.x + point.x / piece.points.length, y: sum.y + point.y / piece.points.length }), { x: 0, y: 0 });
-            const surfaceRatio = Math.max(0, Math.min(1, 0.5 - surfaceDepth(center.x, center.y, piece.faultSides) / depthSpan));
-            baseCells.push({
-              rawPoints: piece.points,
-              faultSides: piece.faultSides,
-              center,
-              surfaceHeights: piece.points.map(point => surfaceHeight(point.x, point.y, piece.faultSides)),
-              surfaceRatio,
-              light: surfaceLight(center.x, center.y, piece.faultSides),
-            });
-          });
-        }
-      }
-    }
-    let cells = cachedTerrain?.cells;
-    let faultFaces = cachedTerrain?.faultFaces;
-    let faultTracePoints = cachedTerrain?.faultTracePoints;
-    if (!cells) {
-      cells = baseCells.map(cell => ({
-        ...cell,
-        points: cell.rawPoints.map((point, index) => projectTopographyPoint({ x: point.x, y: point.y, height: projectedHeight(cell.surfaceHeights[index]) }, camera, width, height)),
-        depth: cell.center.y * Math.cos(camera.azimuth) + cell.center.x * Math.sin(camera.azimuth)
-      }));
-      faultFaces = [];
-      faultTracePoints = [];
-      activeFaults.forEach(({ fault, index, segment }) => {
-        const faultYs = yCoordinates.filter(y => y >= segment.yStart - 1e-9 && y <= segment.yEnd + 1e-9);
-        const faces = [];
-        const tracePoints = [];
-        for (let sample = 0; sample < faultYs.length - 1; sample++) {
-          const y0 = faultYs[sample];
-          const y1 = faultYs[sample + 1];
-          const x0 = faultXAtNormalizedY(fault, y0);
-          const x1 = faultXAtNormalizedY(fault, y1);
-          const left0 = projectTopographyPoint({ x: x0, y: y0, height: surfaceAt(x0, y0, 0, { [index]: -1 }) }, camera, width, height);
-          const left1 = projectTopographyPoint({ x: x1, y: y1, height: surfaceAt(x1, y1, 0, { [index]: -1 }) }, camera, width, height);
-          const right0 = projectTopographyPoint({ x: x0, y: y0, height: surfaceAt(x0, y0, 0, { [index]: 1 }) }, camera, width, height);
-          const right1 = projectTopographyPoint({ x: x1, y: y1, height: surfaceAt(x1, y1, 0, { [index]: 1 }) }, camera, width, height);
-          faces.push({ left0, left1, right0, right1, opacity: faultEndpointFade((y0 + y1) / 2, segment) });
-          tracePoints.push(projectTopographyPoint({ x: x0, y: y0, height: surfaceAt(x0, y0) }, camera, width, height));
-          if (sample === faultYs.length - 2) tracePoints.push(projectTopographyPoint({ x: x1, y: y1, height: surfaceAt(x1, y1) }, camera, width, height));
-        }
-        faultFaces.push({ fault, faces });
-        faultTracePoints.push({ fault, points: tracePoints });
-      });
-      cells.sort((a, b) => a.depth - b.depth);
-      terrainCacheRef.current = { terrainKey, projectionKey, baseCells, cells, faultFaces, faultTracePoints };
-    }
-    const plumeLift = Math.sin(camera.elevation) * camera.zoom * 0.62 * height * 0.08;
-    faultFaces.forEach(({ fault, faces }) => {
-      faces.forEach(({ left0, left1, right0, right1, opacity }) => {
-        ctx.beginPath();
-        ctx.moveTo(left0.x, left0.y);
-        ctx.lineTo(left1.x, left1.y);
-        ctx.lineTo(right1.x, right1.y);
-        ctx.lineTo(right0.x, right0.y);
-        ctx.closePath();
-        ctx.globalAlpha = opacity;
-        ctx.fillStyle = 'rgba(20, 75, 73, 0.46)';
-        ctx.fill();
-      });
-    });
-    ctx.globalAlpha = 1;
-    cells.forEach(cell => {
-      const plumeRatio = stateRatio(h, cell.center.x, cell.center.y);
-      const historicRatio = stateRatio(hMax, cell.center.x, cell.center.y);
-      const points = cell.points.map((point, index) => ({ x: point.x, y: point.y - stateRatio(h, cell.rawPoints[index].x, cell.rawPoints[index].y) * plumeLift }));
-      const shade = 0.38 + cell.light * 0.82;
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y);
-      points.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
-      ctx.closePath();
-      const terrainColor = interpolateRgb(SIM_PALETTE.terrainLow, SIM_PALETTE.terrainHigh, cell.surfaceRatio);
-      const plumeColor = interpolateRgb(SIM_PALETTE.trappedRgb, SIM_PALETTE.mobileRgb, plumeRatio * 0.85 + historicRatio * 0.15);
-      const shadedColor = (plumeRatio > 0.0001 ? plumeColor : terrainColor).map(value => Math.round(value * shade));
-      ctx.fillStyle = rgbCss(shadedColor);
-      ctx.fill();
-      if (showGrid) {
-        ctx.strokeStyle = 'rgba(219, 246, 239, 0.14)';
-        ctx.lineWidth = 0.8;
-        ctx.stroke();
-      }
-    });
-
-    faultTracePoints.forEach(({ fault, points: faultPoints }) => {
-      if (faultPoints.length < 2) return;
-      ctx.beginPath();
-      faultPoints.forEach((point, pointIndex) => pointIndex ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
-      ctx.strokeStyle = fault.isSealed ? SIM_PALETTE.sealedFault : SIM_PALETTE.transmissiveFault;
-      ctx.lineWidth = 1.8;
-      ctx.setLineDash(fault.isSealed ? [] : [7, 5]);
-      ctx.stroke();
-    });
-    ctx.setLineDash([]);
-    const injectorX = (Number(injLocation) || 0) / 100;
-    const injectorY = (Number(wellY) || 0) / 100;
-    const injector = projectTopographyPoint({ x: injectorX, y: injectorY, height: surfaceAt(injectorX, injectorY, 0.035) }, camera, width, height);
-    ctx.beginPath();
-    ctx.arc(injector.x, injector.y, 7, 0, Math.PI * 2);
-    ctx.fillStyle = SIM_PALETTE.injector;
-    ctx.fill();
-    ctx.strokeStyle = SIM_PALETTE.injectorEdge;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }, [camera, elevationScale, faultCount, faults, gridRows, injLocation, mapCols, mapSnapshot, showGrid, wellY]);
-
-  const updateZoom = delta => setCamera(current => clampTopographyCamera({ ...current, zoom: current.zoom + delta }));
-  const updateCamera = updater => setCamera(current => clampTopographyCamera(updater(current)));
-  const resetView = () => setCamera(resetTopographyCamera());
-  const pointerDistance = points => Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
-
-  const onPointerDown = event => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    const points = [...pointersRef.current.values()];
-    if (points.length === 1) dragRef.current = { x: event.clientX, y: event.clientY, camera };
-    if (points.length === 2) pinchRef.current = { distance: pointerDistance(points), zoom: camera.zoom };
-  };
-
-  const onPointerMove = event => {
-    if (!pointersRef.current.has(event.pointerId)) return;
-    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    const points = [...pointersRef.current.values()];
-    if (points.length === 2 && pinchRef.current) {
-      const distance = pointerDistance(points);
-      const nextZoom = pinchRef.current.zoom * (distance / Math.max(1, pinchRef.current.distance));
-      setCamera(current => clampTopographyCamera({ ...current, zoom: nextZoom }));
-      return;
-    }
-    if (points.length !== 1 || !dragRef.current) return;
-    const dx = event.clientX - dragRef.current.x;
-    const dy = event.clientY - dragRef.current.y;
-    setCamera(clampTopographyCamera({
-      ...dragRef.current.camera,
-      azimuth: dragRef.current.camera.azimuth + dx * 0.012,
-      elevation: dragRef.current.camera.elevation - dy * 0.01
-    }));
-  };
-
-  const onPointerEnd = event => {
-    pointersRef.current.delete(event.pointerId);
-    dragRef.current = null;
-    const points = [...pointersRef.current.values()];
-    if (points.length === 1) dragRef.current = { ...points[0], camera };
-    pinchRef.current = points.length === 2 ? { distance: pointerDistance(points), zoom: camera.zoom } : null;
-  };
-
-  return (
-    <section className="ve-topography-panel" aria-label="3D topography viewer">
-      <div className="ve-topography-toolbar">
-        <div>
-          <strong>3D topography</strong>
-          <span>Drag to orbit · scroll or pinch to zoom</span>
-        </div>
-        <div className="ve-topography-actions">
-          <button type="button" onClick={() => onMapCommand(mapSnapshot.isRunning ? 'pause' : 'resume')} aria-label={mapSnapshot.isRunning ? 'Pause map simulation' : 'Resume map simulation'}>{mapSnapshot.isRunning ? 'Pause' : 'Resume'}</button>
-          <button type="button" onClick={() => onMapCommand('step')} aria-label="Advance map one year">Step</button>
-          <button type="button" onClick={() => onMapCommand('speed')} aria-label="Change map simulation speed">{mapSnapshot.speed || 1}×</button>
-          <button type="button" onClick={() => updateZoom(-0.12)} aria-label="Zoom out">−</button>
-          <button type="button" onClick={() => updateZoom(0.12)} aria-label="Zoom in">+</button>
-          <button type="button" onClick={() => setShowGrid(current => !current)} aria-pressed={showGrid}>{showGrid ? 'Grid on' : 'Grid off'}</button>
-          <button type="button" onClick={resetView}>Reset view</button>
-        </div>
-      </div>
-      <canvas
-        ref={canvasRef}
-        className="ve-topography-canvas"
-        role="img"
-        tabIndex={0}
-        aria-label={`3D topography grid at year ${time}; ${mapCols} by ${gridRows} cells; azimuth ${camera.azimuth.toFixed(2)} radians; elevation ${camera.elevation.toFixed(2)} radians; zoom ${zoomLabel}; elevation scale ${elevationLabel}.`}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerEnd}
-        onPointerCancel={onPointerEnd}
-        onWheel={event => { event.preventDefault(); updateZoom(event.deltaY > 0 ? -0.08 : 0.08); }}
-        onKeyDown={event => {
-          if (event.key === 'r' || event.key === 'R') resetView();
-          if (event.key === '+' || event.key === '=') updateZoom(0.12);
-          if (event.key === '-') updateZoom(-0.12);
-          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-            event.preventDefault();
-            updateCamera(current => ({ ...current, azimuth: current.azimuth + (event.key === 'ArrowRight' ? 0.12 : -0.12) }));
-          }
-          if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-            event.preventDefault();
-            updateCamera(current => ({ ...current, elevation: current.elevation + (event.key === 'ArrowUp' ? 0.08 : -0.08) }));
-          }
-        }}
-      />
-      <div className="ve-topography-status">
-        <span>Year {time} · {mapCols}×{gridRows} grid · seed {terrainSeed} · heterogeneity {heterogeneity.toFixed(2)}</span>
-        <span>Z span 4 model units · Zoom {zoomLabel} · {boundaryCondition === 'closed' ? 'Closed boundary' : OPEN_BOUNDARY_LABEL}</span>
-        <label>
-          Elevation exaggeration {elevationLabel}
-          <input type="range" min="0.65" max="2.2" step="0.05" value={elevationScale} onChange={event => setElevationScale(Number(event.target.value))} />
-        </label>
-      </div>
-    </section>
-  );
-};
-
-// Main Simulator component
-const SimulatorPage = () => {
-  const [activeSubTab, setActiveSubTab] = useState('topography');
-  const [riskModel, setRiskModel] = useState('map');
-  // The two solvers retain independent inputs, histories and playback state.
-  const [scenarios, setScenarios] = useState(() => {
-    const defaults = { K: 1.7, porosity: 0.25, cellCount: 200, residualTrapFraction: 0.25,
-    dipPercent: 0.8, amplitude: 15, frequency: 1, faultOffset: 1.2,
-    Q: 2.3, injLocation: 70, wellY: 50, mapCols: 72, injDuration: 240, terrainSeed: 3901, heterogeneity: 0.55,
-    boundaryCondition: 'initial-pressure',
-    faultCount: 2, faults: [
-      { xPercent: 28, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 1, dipSlope: -0.22 },
-      { xPercent: 48, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.30, leakRate: 0.12, transmissibility: 1, dipSlope: 0.25 }
-    ], hasCapillaryFringe: true, fringeScale: 0.65, entryPressure: 15, selectedPreset: 'default' };
-    return { map: defaults, profile: { ...defaults, faults: defaults.faults.map(f => ({ ...f })) } };
+const simMessages = (model, row, frame, run) => {
+  const messages = [];
+  if (!model || !row) return messages;
+  if (run.truncated) messages.push({ tone: 'danger', icon: 'fa-triangle-exclamation', text: `The run stopped at year ${run.history.at(-1)?.year}: these inputs need more time steps than the browser budget allows.` });
+  model.faults.forEach((fault, index) => {
+    if (frame?.leaking?.[index]) messages.push({ tone: 'danger', icon: 'fa-arrow-up', text: `Fault F${index + 1} is leaking: the CO₂ column against it exceeds its ${fault.sealCap} m seal capacity.` });
   });
-  const activeModel = activeSubTab === 'profile' || (activeSubTab === 'uq' && riskModel === 'profile') ? 'profile' : 'map';
-  const profileParams = scenarios.profile;
-  const mapParams = scenarios.map;
-  const { K, porosity, cellCount, residualTrapFraction, dipPercent, amplitude, frequency, faultOffset, Q, injLocation, wellY, mapCols, injDuration, terrainSeed, heterogeneity, faultCount, faults, hasCapillaryFringe, fringeScale, entryPressure, selectedPreset } = scenarios[activeModel];
-  const loadingModelRef = useRef(null);
-  const setParameter = (key, value) => {
-    const model = loadingModelRef.current || activeModel;
-    setScenarios(current => ({ ...current, [model]: updateScenarioParameter(current[model], key, value) }));
+  const marginBar = SIM_FRACTURE_MARGIN_BAR_PER_M * model.depth;
+  if (row.bhpPeak / 1e5 > marginBar) messages.push({ tone: 'warning', icon: 'fa-gauge-high', text: `Peak pressure rise at the well, ${simFormatNumber(row.bhpPeak / 1e5)} bar, exceeds a typical fracture margin of about ${simFormatNumber(marginBar)} bar at ${simFormatNumber(model.depth)} m.` });
+  const leakingNow = frame?.leaking && [...frame.leaking].some(Boolean);
+  if (!leakingNow && row.leaked > 0) messages.push({ tone: 'warning', icon: 'fa-arrow-up', text: `${simFormatMass(row.leaked)} has leaked through faults so far; no fault is leaking now.` });
+  if (row.exited > 1e-4 * row.injected) messages.push({ tone: 'warning', icon: 'fa-arrow-right-from-bracket', text: `${simFormatMass(row.exited)} has left the model across an open edge.` });
+  if (!messages.length && row.injected > 0) messages.push({ tone: 'info', icon: 'fa-circle-check', text: 'Nothing has leaked or left the model so far.' });
+  return messages;
+};
+
+// Default section A–A′: through the injector and the crest of the largest trap, edge to
+// edge; east–west through the injector when there is no trap.
+const simDefaultSectionLine = model => {
+  const trap = model.traps.slice().sort((a, b) => b.capacity - a.capacity)[0];
+  const wx = model.wellX;
+  const wy = model.wellY;
+  let dx = 1;
+  let dy = 0;
+  if (trap) {
+    const cx = ((trap.crestCell % model.nx) + 0.5) * model.dx;
+    const cy = (Math.floor(trap.crestCell / model.nx) + 0.5) * model.dy;
+    const length = Math.hypot(cx - wx, cy - wy);
+    if (length > model.dx) { dx = (cx - wx) / length; dy = (cy - wy) / length; }
+  }
+  const reach = sign => {
+    const tx = dx * sign > 0 ? (model.Lx - wx) / (dx * sign) : dx * sign < 0 ? -wx / (dx * sign) : Infinity;
+    const ty = dy * sign > 0 ? (model.Ly - wy) / (dy * sign) : dy * sign < 0 ? -wy / (dy * sign) : Infinity;
+    return Math.min(tx, ty);
   };
-  const setK = value => setParameter('K', value);
-  const setPorosity = value => setParameter('porosity', value);
-  const setCellCount = value => setParameter('cellCount', value);
-  const setResidualTrapFraction = value => setParameter('residualTrapFraction', value);
-  const setDipPercent = value => setParameter('dipPercent', value);
-  const setAmplitude = value => setParameter('amplitude', value);
-  const setFrequency = value => setParameter('frequency', value);
-  const setFaultOffset = value => setParameter('faultOffset', value);
-  const setQ = value => setParameter('Q', value);
-  const setInjLocation = value => setParameter('injLocation', value);
-  const setWellY = value => setParameter('wellY', value);
-  const setMapCols = value => setParameter('mapCols', value);
-  const setInjDuration = value => setParameter('injDuration', value);
-  const setTerrainSeed = value => setParameter('terrainSeed', value);
-  const setHeterogeneity = value => setParameter('heterogeneity', value);
-  const setFaultCount = value => setParameter('faultCount', value);
-  const setFaults = value => setParameter('faults', value);
-  const setHasCapillaryFringe = value => setParameter('hasCapillaryFringe', value);
-  const setFringeScale = value => setParameter('fringeScale', value);
-  const setEntryPressure = value => setParameter('entryPressure', value);
-  const setSelectedPreset = value => setParameter('selectedPreset', value);
-  const dx = 1000 / profileParams.cellCount;
+  const back = reach(-1);
+  const ahead = reach(1);
+  const line = { x0: wx - dx * back, y0: wy - dy * back, x1: wx + dx * ahead, y1: wy + dy * ahead };
+  // A is the western end, so the section reads west to east like the map.
+  return line.x0 <= line.x1 ? line : { x0: line.x1, y0: line.y1, x1: line.x0, y1: line.y0 };
+};
 
-  // Simulation run state
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isReversing, setIsReversing] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [speed, setSpeed] = useState(1); // 1x, 2x, 4x execution speed
-  const [simTime, setSimTime] = useState(0); // simulation timer frame
+const simReadPalette = element => {
+  const style = element ? getComputedStyle(element) : null;
+  const v = (name, fallback) => (style && style.getPropertyValue(name).trim()) || fallback;
+  return {
+    free: v('--sim-c-free', '#23a07a'),
+    structural: v('--sim-c-structural', '#c08417'),
+    residual: v('--sim-c-residual', '#cf5f9e'),
+    dissolved: v('--sim-c-dissolved', '#3b82d4'),
+    exited: v('--sim-c-exited', '#8270e0'),
+    leaked: v('--sim-c-leaked', '#d94a3f'),
+    glowFree: v('--sim-glow-free', '#4fe0b0'),
+    glowStructural: v('--sim-glow-structural', '#f0b649'),
+    glowResidual: v('--sim-glow-residual', '#ee8ac2'),
+    glowDissolved: v('--sim-glow-dissolved', '#6fb0ff'),
+    glowLeaked: v('--sim-glow-leaked', '#ff6b5e'),
+    depth: [0, 1, 2, 3, 4, 5, 6].map(i => v(`--sim-depth-${i}`, '#555')),
+    contour: v('--sim-contour', 'rgba(232,236,244,0.32)'),
+    stage: v('--sim-stage', '#0a0f1c'),
+    ink: v('--sim-ink', '#e8ecf4'),
+    inkMuted: v('--sim-ink-muted', '#9aa6bf'),
+    inkFaint: v('--sim-ink-faint', '#6f7b96'),
+    rule: v('--sim-rule', '#26324d'),
+    surface: v('--sim-surface', '#111a2e'),
+    accent: v('--sim-accent', '#f2c66d'),
+    rockCap: v('--sim-rock-cap', '#3b3f55'),
+    rockAquifer: v('--sim-rock-aquifer', '#2a3350'),
+    rockBase: v('--sim-rock-base', '#151a2b'),
+    rockOver: v('--sim-rock-over', '#10162a'),
+    font: v('--sim-font-ui', 'Open Sans, sans-serif'),
+    mono: v('--sim-font-mono', 'monospace')
+  };
+};
 
-  // Tab Navigation state
-  const [theme, setTheme] = useState(() => getStoredTheme(window.localStorage));
-  const [shareStatus, setShareStatus] = useState('');
-  const [mobilePanel, setMobilePanel] = useState(null);
-  const [responsivePanelViewport, setResponsivePanelViewport] = useState(() => ({
-    mobile: window.matchMedia('(max-width: 760px)').matches,
-    compact: window.matchMedia('(max-width: 1180px)').matches
-  }));
-  const tabRefs = useRef({});
-  const mobileTriggerRefs = useRef({});
-  const mobileCloseRefs = useRef({});
-  const mobileTriggersRef = useRef(null);
-  const reservoirSvgRef = useRef(null);
-  const uqWorkerRef = useRef(null);
-  const presentedPanel = selectPresentedMobilePanel(mobilePanel, responsivePanelViewport);
+// Field metadata: labels, units and one-line explanations shown under each input.
+const SIM_FIELDS = {
+  rateMt: { label: 'Injection rate', unit: 'Mt/yr', digits: 1, hint: 'CO₂ mass injected each year.' },
+  injYears: { label: 'Injection period', unit: 'years', digits: 0 },
+  wellX: { label: 'Well, east', unit: 'km', digits: 1, hint: 'Drag the well on the map to move it.' },
+  wellY: { label: 'Well, north', unit: 'km', digits: 1 },
+  years: { label: 'Simulated period', unit: 'years', digits: 0 },
+  permMd: { label: 'Permeability', unit: 'mD', digits: 0, log: true },
+  porosity: { label: 'Porosity', unit: '', digits: 2 },
+  thickness: { label: 'Aquifer thickness', unit: 'm', digits: 0 },
+  dipDeg: { label: 'Regional dip', unit: '°', digits: 1 },
+  dipAz: { label: 'Dip direction', unit: '° from N', digits: 0, hint: 'Direction in which the caprock deepens; CO₂ rises the other way.' },
+  domes: { label: 'Domes', unit: '', digits: 0 },
+  domeRelief: { label: 'Dome relief', unit: 'm', digits: 0 },
+  roughness: { label: 'Caprock roughness', unit: 'm', digits: 0, hint: 'Small undulations that hold CO₂ in many small traps.' },
+  sgr: { label: 'Residual CO₂ saturation', unit: '', digits: 2, hint: 'Fraction of pore space left as trapped CO₂ when brine returns.' },
+  swr: { label: 'Residual brine saturation', unit: '', digits: 2 },
+  krg: { label: 'CO₂ relative permeability', unit: '', digits: 2, hint: 'End-point value at residual brine saturation.' },
+  disRate: { label: 'Dissolution rate', unit: 'kg/m²/yr', digits: 2, hint: 'Convective dissolution below the plume.' },
+  disCap: { label: 'CO₂ solubility', unit: 'kg/m³', digits: 0, hint: 'Mass of CO₂ a cubic metre of brine can hold.' },
+  rhoCo2: { label: 'CO₂ density', unit: 'kg/m³', digits: 0 },
+  rhoBrine: { label: 'Brine density', unit: 'kg/m³', digits: 0 },
+  muCo2: { label: 'CO₂ viscosity', unit: 'mPa·s', digits: 3 },
+  muBrine: { label: 'Brine viscosity', unit: 'mPa·s', digits: 2 },
+  ct: { label: 'Total compressibility', unit: '×10⁻⁴ /bar', digits: 1 }
+};
+const SIM_FAULT_FIELDS = {
+  x: { label: 'Centre, east', unit: 'km', digits: 1 },
+  y: { label: 'Centre, north', unit: 'km', digits: 1 },
+  strike: { label: 'Strike', unit: '° from N', digits: 0 },
+  length: { label: 'Length', unit: 'km', digits: 1 },
+  throw: { label: 'Throw', unit: 'm', digits: 0, hint: 'Vertical offset; a throw above the aquifer thickness seals the fault.' },
+  trans: { label: 'Cross-fault transmissibility', unit: '', digits: 2, hint: '0 seals the fault, 1 is no barrier.' },
+  sealCap: { label: 'Seal capacity', unit: 'm', digits: 0, hint: 'CO₂ column the fault zone holds before it leaks.' },
+  kf: { label: 'Fault-zone permeability', unit: 'mD', digits: 0, hint: '0 means the fault never leaks vertically.' }
+};
+
+// ---------------------------------------------------------------- hooks
+
+const useSimSimulation = scenario => {
+  const [run, setRun] = useState(simInitialRun);
+  const workerRef = useRef(null);
+  const busyRef = useRef(false);
+  const idRef = useRef(0);
+  const key = JSON.stringify(scenario);
 
   useEffect(() => {
-    document.querySelector('.ve-standalone')?.setAttribute('data-theme', theme);
-    persistTheme(theme, window.localStorage);
+    const timer = setTimeout(() => {
+      const id = ++idRef.current;
+      if (busyRef.current && workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+      if (!workerRef.current) {
+        try {
+          const worker = new Worker('./simulation-worker.js?v=1');
+          worker.onmessage = ({ data }) => {
+            if (data.type === 'done' || data.type === 'error') busyRef.current = false;
+            setRun(current => simApplyWorkerMessage(current, data));
+          };
+          worker.onerror = event => {
+            busyRef.current = false;
+            setRun(current => ({ ...current, status: 'error', error: event.message || 'The simulation worker failed to start.' }));
+          };
+          workerRef.current = worker;
+        } catch (error) {
+          setRun(current => ({ ...current, id, status: 'error', error: 'This browser blocked the simulation worker.' }));
+          return;
+        }
+      }
+      busyRef.current = true;
+      setRun(current => ({ ...current, id, status: 'computing', scenario, error: null }));
+      workerRef.current.postMessage({ type: 'run', id, scenario });
+    }, idRef.current === 0 ? 0 : 250);
+    return () => clearTimeout(timer);
+  }, [key]);
+
+  useEffect(() => () => workerRef.current?.terminate(), []);
+  return run;
+};
+
+const useSimReducedMotion = () => {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (!query) return undefined;
+    const update = () => setReduced(query.matches);
+    update();
+    query.addEventListener?.('change', update);
+    return () => query.removeEventListener?.('change', update);
+  }, []);
+  return reduced;
+};
+
+// ---------------------------------------------------------------- inputs
+
+const SimField = ({ name, meta, value, limits, onChange }) => {
+  const [min, max, step] = limits;
+  const [draft, setDraft] = useState(null);
+  const [feedback, setFeedback] = useState('');
+  const id = `sim-field-${name}`;
+  const toSlider = v => meta.log ? Math.log10(v) : v;
+  const fromSlider = v => meta.log ? Math.round(10 ** v) : v;
+  const sliderMin = toSlider(min);
+  const sliderMax = toSlider(max);
+  const fill = `${(100 * (toSlider(value) - sliderMin) / (sliderMax - sliderMin || 1)).toFixed(1)}%`;
+  const commit = text => {
+    const number = Number(text);
+    if (text === '' || !Number.isFinite(number)) {
+      setFeedback(`Enter a number between ${min} and ${max}.`);
+      return;
+    }
+    const bounded = Math.min(max, Math.max(min, number));
+    setFeedback(bounded !== number ? `Kept within ${min}–${max} ${meta.unit}.` : '');
+    setDraft(null);
+    onChange(bounded);
+  };
+  return (
+    <div className="sim-field">
+      <div className="sim-field__top">
+        <label htmlFor={id}>{meta.label}</label>
+        <span className="sim-field__value">
+          <input
+            id={id}
+            type="number"
+            inputMode="decimal"
+            min={min}
+            max={max}
+            step={step}
+            value={draft ?? +Number(value).toFixed(meta.digits ?? 2)}
+            aria-describedby={feedback ? `${id}-feedback` : meta.hint ? `${id}-hint` : undefined}
+            aria-invalid={feedback && draft !== null ? 'true' : undefined}
+            onChange={event => setDraft(event.target.value)}
+            onBlur={event => { if (draft !== null) commit(event.target.value); }}
+            onKeyDown={event => { if (event.key === 'Enter') commit(event.currentTarget.value); }}
+          />
+          {meta.unit && <span>{meta.unit}</span>}
+        </span>
+      </div>
+      <input
+        className="sim-range"
+        type="range"
+        aria-label={meta.label}
+        min={sliderMin}
+        max={sliderMax}
+        step={meta.log ? 0.01 : step}
+        value={toSlider(value)}
+        style={{ '--fill': fill }}
+        onChange={event => { setDraft(null); setFeedback(''); onChange(fromSlider(Number(event.target.value))); }}
+      />
+      {feedback
+        ? <p className="sim-field__feedback" id={`${id}-feedback`} role="status">{feedback}</p>
+        : meta.hint && <p className="sim-field__hint" id={`${id}-hint`}>{meta.hint}</p>}
+    </div>
+  );
+};
+
+const SimChoice = ({ label, options, value, onChange }) => (
+  <div className="sim-field">
+    <div className="sim-field__top"><span style={{ fontWeight: 600, fontSize: 13.5 }}>{label}</span></div>
+    <div className="sim-choice" role="group" aria-label={label} style={{ '--choices': options.length }}>
+      {options.map(option => (
+        <button key={option.id} type="button" aria-pressed={value === option.id} onClick={() => onChange(option.id)}>{option.label}</button>
+      ))}
+    </div>
+    {options.find(option => option.id === value)?.hint && <p className="sim-field__hint">{options.find(option => option.id === value).hint}</p>}
+  </div>
+);
+
+const SimGroup = ({ title, open = true, children }) => (
+  <details className="sim-group" open={open}>
+    <summary>{title}</summary>
+    <div className="sim-group__body">{children}</div>
+  </details>
+);
+
+const SimInputs = ({ scenario, onChange, onPreset, onRandom, onClose }) => {
+  const field = key => <SimField key={key} name={key} meta={SIM_FIELDS[key]} value={scenario[key]} limits={VE2D.LIMITS[key]} onChange={value => onChange({ [key]: value })} />;
+  const setFault = (index, patch) => onChange({ faults: scenario.faults.map((fault, i) => i === index ? { ...fault, ...patch } : fault) });
+  const presetIds = Object.keys(VE2D.PRESETS);
+  const preset = VE2D.PRESETS[scenario.preset];
+  return (
+    <>
+      <div className="sim-rail__head">
+        <h2>Scenario</h2>
+        <button type="button" className="sim-icon-button sim-sheet-close" onClick={onClose} aria-label="Close inputs"><i className="fas fa-times" aria-hidden="true" /></button>
+      </div>
+      <div className="sim-scenario">
+        <label className="sim-sr-only" htmlFor="sim-preset">Scenario</label>
+        <select id="sim-preset" value={preset ? scenario.preset : 'custom'} onChange={event => onPreset(event.target.value)}>
+          {presetIds.map(id => <option key={id} value={id}>{VE2D.PRESETS[id].label}</option>)}
+          {!preset && <option value="custom">Custom</option>}
+        </select>
+        <p>{preset ? preset.description : 'Your own combination of inputs. Share it with the link button.'}</p>
+        <div className="sim-scenario__row">
+          <button type="button" className="sim-button" onClick={onRandom}><i className="fas fa-shuffle" aria-hidden="true" /> New random structure</button>
+        </div>
+      </div>
+      <SimGroup title="Injection">
+        {field('rateMt')}
+        {field('injYears')}
+        {field('wellX')}
+        {field('wellY')}
+        {field('years')}
+      </SimGroup>
+      <SimGroup title="Aquifer">
+        {field('permMd')}
+        {field('porosity')}
+        {field('thickness')}
+      </SimGroup>
+      <SimGroup title="Structure">
+        {field('dipDeg')}
+        {field('dipAz')}
+        {field('domes')}
+        {field('domeRelief')}
+        {field('roughness')}
+      </SimGroup>
+      <SimGroup title={`Faults (${scenario.faults.length})`}>
+        {scenario.faults.map((fault, index) => (
+          <div className="sim-fault" key={index}>
+            <div className="sim-fault__head">
+              <span><span className="sim-fault__swatch" data-leaky={fault.kf > 0} aria-hidden="true" />Fault F{index + 1}</span>
+              <button type="button" className="sim-button sim-button--quiet" onClick={() => onChange({ faults: scenario.faults.filter((_, i) => i !== index) })}>Remove</button>
+            </div>
+            {Object.keys(SIM_FAULT_FIELDS).map(key => (
+              <SimField key={key} name={`f${index}-${key}`} meta={SIM_FAULT_FIELDS[key]} value={fault[key]} limits={VE2D.FAULT_LIMITS[key]} onChange={value => setFault(index, { [key]: value })} />
+            ))}
+          </div>
+        ))}
+        {scenario.faults.length < VE2D.MAX_FAULTS && (
+          <button type="button" className="sim-button" onClick={() => onChange({ faults: [...scenario.faults, { x: 6 + 4 * scenario.faults.length, y: 6, strike: 20, length: 6, throw: 10, trans: 0.5, sealCap: 20, kf: 10 }] })}>
+            <i className="fas fa-plus" aria-hidden="true" /> Add a fault
+          </button>
+        )}
+      </SimGroup>
+      <SimGroup title="Trapping and fluids" open={false}>
+        {['sgr', 'swr', 'krg', 'disRate', 'disCap', 'rhoCo2', 'rhoBrine', 'muCo2', 'muBrine', 'ct'].map(field)}
+      </SimGroup>
+      <SimGroup title="Model edges and grid" open={false}>
+        <SimChoice label="Model edges" value={scenario.boundary} onChange={boundary => onChange({ boundary })} options={[
+          { id: 'open', label: 'Open', hint: 'Hydrostatic aquifer beyond the edges: brine and CO₂ can leave.' },
+          { id: 'closed', label: 'Closed', hint: 'Sealed compartment: nothing leaves and pressure builds up.' }
+        ]} />
+        <SimChoice label="Grid" value={scenario.grid} onChange={grid => onChange({ grid })} options={[
+          { id: 'coarse', label: '500 m', hint: '40 × 24 cells: fastest.' },
+          { id: 'standard', label: '250 m', hint: '80 × 48 cells.' },
+          { id: 'fine', label: '167 m', hint: '120 × 72 cells: slowest, most detail.' }
+        ]} />
+      </SimGroup>
+    </>
+  );
+};
+
+// ---------------------------------------------------------------- outcomes
+
+const SimOutcomes = ({ model, row, frame, run, history, year, onSeek }) => {
+  if (!model || !row) {
+    return (
+      <div className="sim-outcome-section">
+        <h3>Outcomes</h3>
+        <p className="sim-field__hint">{run.status === 'error' ? run.error : 'Running the scenario…'}</p>
+      </div>
+    );
+  }
+  const total = SIM_INVENTORY.reduce((sum, item) => sum + row[item.key], 0);
+  const messages = simMessages(model, row, frame, run);
+  const balance = row.injected > 0 ? Math.abs(row.balance) / row.injected : 0;
+  return (
+    <>
+      <section className="sim-outcome-section" aria-labelledby="sim-where">
+        <h3 id="sim-where">Where the CO₂ is <span>at year {Math.round(year)}</span></h3>
+        <div className="sim-stackbar" role="img" aria-label="Share of injected CO₂ in each class">
+          {SIM_INVENTORY.map(item => <span key={item.key} style={{ '--swatch': `var(${item.color})`, flexGrow: total > 0 ? row[item.key] / total : 0 }} />)}
+        </div>
+        <ul className="sim-inventory">
+          {SIM_INVENTORY.slice().reverse().map(item => (
+            <li key={item.key} title={item.hint}>
+              <span className="sim-swatch" style={{ '--swatch': `var(${item.color})` }} aria-hidden="true" />
+              <span className="sim-inventory__label">{item.label}</span>
+              <span className="sim-inventory__value">{simFormatMass(row[item.key])}</span>
+              <span className="sim-inventory__pct">{simFormatPercent(row[item.key], row.injected)}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="sim-inventory__total">
+          <span>Injected {simFormatMass(row.injected)}</span>
+          <span title="Injected minus every class, relative to injected">Mass balance error {balance < 1e-12 ? '< 10⁻¹²' : balance.toExponential(1)}</span>
+        </div>
+      </section>
+      <section className="sim-outcome-section" aria-labelledby="sim-time">
+        <h3 id="sim-time">Through time</h3>
+        <SimInventoryChart history={history} year={year} years={model.years} injYears={model.injYears} onSeek={onSeek} />
+      </section>
+      <section className="sim-outcome-section" aria-labelledby="sim-plume">
+        <h3 id="sim-plume">Plume and pressure</h3>
+        <dl className="sim-kpis">
+          <div><dt>CO₂ footprint</dt><dd>{simFormatNumber(row.footprint / 1e6, 1)}<small>km²</small></dd></div>
+          <div><dt>Thickest column</dt><dd>{simFormatNumber(row.maxColumn, 1)}<small>m</small></dd></div>
+          <div><dt>Mobile plume reach</dt><dd>{simFormatNumber(row.migration / 1000, 1)}<small>km from well</small></dd></div>
+          <div><dt>Peak pressure rise at the well</dt><dd>{simFormatNumber(row.bhpPeak / 1e5, 1)}<small>bar</small></dd></div>
+        </dl>
+      </section>
+      <section className="sim-outcome-section" aria-labelledby="sim-notes">
+        <h3 id="sim-notes">Notes</h3>
+        <ul className="sim-messages">
+          {messages.map(message => (
+            <li key={message.text} data-tone={message.tone}><i className={`fas ${message.icon}`} aria-hidden="true" /><span>{message.text}</span></li>
+          ))}
+        </ul>
+      </section>
+    </>
+  );
+};
+
+const SimTransport = ({ year, years, injYears, computedYears, playing, speed, onPlay, onSeek, onSpeed }) => {
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(f * years));
+  return (
+    <div className="sim-transport">
+      <button type="button" className="sim-play" onClick={onPlay} aria-label={playing ? 'Pause' : year >= years ? 'Replay from year 0' : 'Play'}>
+        <i className={`fas ${playing ? 'fa-pause' : year >= years ? 'fa-rotate-left' : 'fa-play'}`} aria-hidden="true" />
+      </button>
+      <div className="sim-steps">
+        <button type="button" className="sim-icon-button" onClick={() => onSeek(Math.max(0, Math.ceil(year / SIM_FRAME_YEARS - 1) * SIM_FRAME_YEARS))} aria-label="Back 5 years"><i className="fas fa-backward-step" aria-hidden="true" /></button>
+        <button type="button" className="sim-icon-button" onClick={() => onSeek(Math.min(computedYears, Math.floor(year / SIM_FRAME_YEARS + 1) * SIM_FRAME_YEARS))} aria-label="Forward 5 years"><i className="fas fa-forward-step" aria-hidden="true" /></button>
+      </div>
+      <div className="sim-scrubber">
+        <div className="sim-scrubber__bands" aria-hidden="true">
+          <span className="sim-scrubber__computed" style={{ width: `${100 * computedYears / years}%` }} />
+          <span className="sim-scrubber__injection" style={{ width: `${100 * injYears / years}%` }} />
+        </div>
+        <input type="range" min={0} max={years} step={1} value={Math.round(year)} aria-label="Simulation year" aria-valuetext={`Year ${Math.round(year)} of ${years}`}
+          onChange={event => onSeek(Math.min(computedYears, Number(event.target.value)))} />
+        <div className="sim-scrubber__ticks" aria-hidden="true">{ticks.map(t => <span key={t}>{t}</span>)}</div>
+      </div>
+      <div className="sim-year" aria-live="off"><strong>{Math.round(year)}</strong> <span>of {years} years</span></div>
+      <button type="button" className="sim-button sim-speed" onClick={onSpeed} aria-label={`Playback speed ${speed + 1}×, change`}>{speed + 1}×</button>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------- uncertainty
+
+const SIM_UQ_METRICS = [
+  { key: 'leakedPct', label: 'Leaked through faults', unit: '%', digits: 1 },
+  { key: 'exitedPct', label: 'Left the model', unit: '%', digits: 1 },
+  { key: 'residualPct', label: 'Residually trapped', unit: '%', digits: 1 },
+  { key: 'dissolvedPct', label: 'Dissolved', unit: '%', digits: 1 },
+  { key: 'structuralPct', label: 'Structurally trapped', unit: '%', digits: 1 },
+  { key: 'freePct', label: 'Free plume', unit: '%', digits: 1 },
+  { key: 'footprintKm2', label: 'CO₂ footprint', unit: 'km²', digits: 0 },
+  { key: 'bhpBar', label: 'Peak pressure rise at the well', unit: 'bar', digits: 1 }
+];
+
+const simDefaultUqSpecs = scenario => VE2D.UQ_PARAMS.map(param => {
+  const base = param.key.startsWith('fault0.') ? scenario.faults[0]?.[param.key.slice(7)] : scenario[param.key];
+  const limits = param.key.startsWith('fault0.') ? VE2D.FAULT_LIMITS[param.key.slice(7)] : VE2D.LIMITS[param.key];
+  const spread = param.log ? [base / 2, base * 2] : [base * 0.7, base * 1.3];
+  const round = v => +Number(v).toPrecision(3);
+  return {
+    ...param,
+    enabled: ['permMd', 'porosity', 'sgr', 'fault0.sealCap'].includes(param.key) && base !== undefined,
+    available: base !== undefined,
+    min: round(Math.max(limits[0], Math.min(spread[0], spread[1]))),
+    max: round(Math.min(limits[1], Math.max(spread[0], spread[1], limits[0] + limits[2])))
+  };
+});
+
+const simPercentile = (sorted, p) => {
+  if (!sorted.length) return NaN;
+  const position = (sorted.length - 1) * p;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
+};
+
+const SimUncertainty = ({ scenario, onLoad, theme }) => {
+  const [specs, setSpecs] = useState(() => simDefaultUqSpecs(scenario));
+  const [runs, setRuns] = useState(50);
+  const [grid, setGrid] = useState('coarse');
+  const [seed, setSeed] = useState(1);
+  const [state, setState] = useState({ status: 'idle', done: 0, total: 0, rows: [], error: null });
+  const [metric, setMetric] = useState('leakedPct');
+  const [xParam, setXParam] = useState(null);
+  const workerRef = useRef(null);
+
+  useEffect(() => () => workerRef.current?.terminate(), []);
+  useEffect(() => setSpecs(simDefaultUqSpecs(scenario)), [scenario.faults.length]);
+
+  const active = specs.filter(spec => spec.enabled && spec.available);
+  const start = () => {
+    workerRef.current?.terminate();
+    const base = { ...scenario, grid: grid === 'same' ? scenario.grid : 'coarse' };
+    const scenarios = VE2D.sampleBatch(base, active.map(({ key, min, max, log }) => ({ key, min: Math.min(min, max), max: Math.max(min, max), log })), runs, seed);
+    try {
+      const worker = new Worker('./simulation-worker.js?v=1');
+      workerRef.current = worker;
+      worker.onmessage = ({ data }) => {
+        if (data.type === 'progress') setState(current => ({ ...current, done: data.done, total: data.total }));
+        if (data.type === 'batch-done') { setState({ status: 'ready', done: data.rows.length, total: data.rows.length, rows: data.rows, error: null }); worker.terminate(); }
+        if (data.type === 'error') setState(current => ({ ...current, status: 'error', error: data.message }));
+      };
+      setState({ status: 'running', done: 0, total: runs, rows: [], error: null });
+      setXParam(active[0]?.key || null);
+      worker.postMessage({ type: 'batch', id: 1, scenarios });
+    } catch (_) {
+      setState({ status: 'error', done: 0, total: 0, rows: [], error: 'This browser blocked the simulation worker.' });
+    }
+  };
+  const cancel = () => {
+    workerRef.current?.terminate();
+    setState(current => ({ ...current, status: 'idle' }));
+  };
+
+  const valueOf = (row, key) => key.startsWith('fault0.') ? row.scenario.faults[0]?.[key.slice(7)] : row.scenario[key];
+  const metricMeta = SIM_UQ_METRICS.find(m => m.key === metric);
+  const results = useMemo(() => {
+    if (!state.rows.length) return null;
+    const table = SIM_UQ_METRICS.map(m => {
+      const sorted = state.rows.map(r => r.summary[m.key]).sort((a, b) => a - b);
+      return { ...m, p10: simPercentile(sorted, 0.1), p50: simPercentile(sorted, 0.5), p90: simPercentile(sorted, 0.9) };
+    });
+    const params = VE2D.UQ_PARAMS.filter(p => state.rows.some(r => valueOf(r, p.key) !== valueOf(state.rows[0], p.key)));
+    const tornado = params.map(p => ({ key: p.key, label: p.label, rho: VE2D.spearman(state.rows.map(r => valueOf(r, p.key)), state.rows.map(r => r.summary[metric])) }))
+      .sort((a, b) => Math.abs(b.rho) - Math.abs(a.rho));
+    return { table, params, tornado };
+  }, [state.rows, metric]);
+
+  return (
+    <div className="sim-uq" id="sim-panel-uncertainty" role="tabpanel" aria-labelledby="sim-tab-uncertainty">
+      <aside className="sim-rail sim-uq__setup" aria-label="Uncertainty set-up">
+        <div className="sim-rail__head"><h2>Inputs to vary</h2></div>
+        <p className="sim-field__hint" style={{ padding: '0 16px 8px' }}>Each run draws its inputs by Latin hypercube sampling from these ranges; everything else is the current scenario.</p>
+        <ul className="sim-uq__params">
+          {specs.filter(spec => spec.available).map(spec => (
+            <li key={spec.key} className="sim-uq__param" data-off={!spec.enabled}>
+              <input type="checkbox" id={`sim-uq-${spec.key}`} checked={spec.enabled} onChange={event => setSpecs(current => current.map(s => s.key === spec.key ? { ...s, enabled: event.target.checked } : s))} />
+              <label htmlFor={`sim-uq-${spec.key}`}>{spec.label}</label>
+              <div className="sim-uq__range">
+                <input type="number" aria-label={`${spec.label} minimum`} value={spec.min} disabled={!spec.enabled} onChange={event => setSpecs(current => current.map(s => s.key === spec.key ? { ...s, min: Number(event.target.value) } : s))} />
+                <span>to</span>
+                <input type="number" aria-label={`${spec.label} maximum`} value={spec.max} disabled={!spec.enabled} onChange={event => setSpecs(current => current.map(s => s.key === spec.key ? { ...s, max: Number(event.target.value) } : s))} />
+                <span>{spec.unit}{spec.log ? ', log' : ''}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="sim-uq__run">
+          <SimChoice label="Runs" value={String(runs)} onChange={value => setRuns(Number(value))} options={[{ id: '25', label: '25' }, { id: '50', label: '50' }, { id: '100', label: '100' }, { id: '200', label: '200' }]} />
+          <SimChoice label="Grid" value={grid} onChange={setGrid} options={[
+            { id: 'coarse', label: '500 m (fast)', hint: 'Coarse grid; load a run to see it on the same grid.' },
+            { id: 'same', label: 'Same as simulator', hint: 'Exactly the simulator grid; slower.' }
+          ]} />
+          <SimField name="uq-seed" meta={{ label: 'Sampling seed', unit: '', digits: 0 }} value={seed} limits={[1, 9999, 1]} onChange={setSeed} />
+          {state.status === 'running'
+            ? <>
+              <div className="sim-progress" role="progressbar" aria-label="Uncertainty runs completed" aria-valuemin={0} aria-valuemax={state.total} aria-valuenow={state.done}><span style={{ width: `${100 * state.done / Math.max(1, state.total)}%` }} /></div>
+              <button type="button" className="sim-button" onClick={cancel}>Cancel ({state.done} of {state.total})</button>
+            </>
+            : <button type="button" className="sim-button sim-button--primary" disabled={!active.length} onClick={start}><i className="fas fa-play" aria-hidden="true" /> Run {runs} scenarios</button>}
+          {state.error && <p className="sim-field__feedback" role="status">{state.error}</p>}
+        </div>
+      </aside>
+      <div className="sim-uq__results">
+        {!results
+          ? <div className="sim-empty"><div><h3>No uncertainty runs yet</h3><p>Pick the inputs you are unsure about, set their ranges and run the batch. The results show the spread of outcomes and which inputs drive them.</p></div></div>
+          : <div className="sim-uq__grid">
+            <section className="sim-card" style={{ gridColumn: '1 / -1' }}>
+              <h3>Outcomes at year {scenario.years} across {state.rows.length} runs</h3>
+              <p>P10, P50 and P90 are the 10th, 50th and 90th percentiles. Choose an outcome to plot.</p>
+              <table className="sim-table">
+                <thead><tr><th>Outcome</th><th>P10</th><th>P50</th><th>P90</th></tr></thead>
+                <tbody>{results.table.map(m => (
+                  <tr key={m.key} aria-selected={metric === m.key} style={{ cursor: 'pointer', background: metric === m.key ? 'var(--sim-surface-3)' : undefined }} onClick={() => setMetric(m.key)}>
+                    <td><button type="button" className="sim-button sim-button--quiet" style={{ padding: 0, minHeight: 0 }} onClick={() => setMetric(m.key)}>{m.label}</button></td>
+                    <td>{simFormatNumber(m.p10, m.digits)} {m.unit}</td><td>{simFormatNumber(m.p50, m.digits)} {m.unit}</td><td>{simFormatNumber(m.p90, m.digits)} {m.unit}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </section>
+            <section className="sim-card">
+              <h3>{metricMeta.label}</h3>
+              <p>Distribution over the runs, in {metricMeta.unit}.</p>
+              <SimHistogram values={state.rows.map(r => r.summary[metric])} unit={metricMeta.unit} digits={metricMeta.digits} />
+            </section>
+            <section className="sim-card">
+              <h3>What drives it</h3>
+              <p>Spearman rank correlation between each input and {metricMeta.label.toLowerCase()}.</p>
+              <SimTornado items={results.tornado} />
+            </section>
+            {xParam && <section className="sim-card" style={{ gridColumn: '1 / -1' }}>
+              <h3>Runs</h3>
+              <p>Each point is one run. Select a point to open that run in the simulator.</p>
+              <div style={{ marginBottom: 10 }}>
+                <label className="sim-field__hint" htmlFor="sim-uq-x">Horizontal axis </label>
+                <select id="sim-uq-x" value={xParam} onChange={event => setXParam(event.target.value)} className="sim-button" style={{ marginLeft: 6 }}>
+                  {results.params.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                </select>
+              </div>
+              <SimScatter
+                points={state.rows.map(r => ({ x: valueOf(r, xParam), y: r.summary[metric], row: r }))}
+                xLabel={VE2D.UQ_PARAMS.find(p => p.key === xParam)?.label}
+                yLabel={`${metricMeta.label} (${metricMeta.unit})`}
+                log={VE2D.UQ_PARAMS.find(p => p.key === xParam)?.log}
+                onSelect={point => onLoad(point.row.scenario)}
+              />
+            </section>}
+          </div>}
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------- page
+
+const SimulatorPage = () => {
+  const reducedMotion = useSimReducedMotion();
+  const [scenario, setScenario] = useState(() => simDecodeScenario(window.location.search) || VE2D.normalizeScenario(VE2D.DEFAULTS));
+  const [section, setSection] = useState('simulator');
+  const [view, setView] = useState('map');
+  const [theme, setTheme] = useState(() => simStoredTheme(window.localStorage));
+  const [palette, setPalette] = useState(() => simReadPalette(null));
+  const [year, setYear] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(0);
+  const [sheet, setSheet] = useState(null);
+  const [share, setShare] = useState('Share');
+  const [layers, setLayers] = useState({ contours: true, traps: true, residual: true, dissolved: false, pressure: false, flow: true });
+  const [sectionLine, setSectionLine] = useState(null);
+  const autoplayed = useRef(false);
+  const tabRefs = useRef({});
+
+  const run = useSimSimulation(scenario);
+  // Keep showing the previous result until the new one has caught up with the
+  // current year, so edits morph instead of flashing an empty map.
+  const lastComplete = useRef(null);
+  if (run.model && run.frames.length && run.status === 'ready') lastComplete.current = run;
+  const computedYears = run.model ? Math.max(0, (run.frames.length - 1) * SIM_FRAME_YEARS) : 0;
+  const shown = run.model && (computedYears >= Math.min(year, run.model.years) || !lastComplete.current) ? run : lastComplete.current || run;
+  const model = shown.model;
+  const shownYear = model ? Math.min(year, model.years) : 0;
+  const frame = useMemo(() => simFrameAt(shown.frames, shownYear), [shown.frames, shownYear]);
+  const row = useMemo(() => simRowAt(shown.history, shownYear), [shown.history, shownYear]);
+
+  useEffect(() => {
+    const root = document.querySelector('.ve-standalone');
+    root?.setAttribute('data-theme', theme);
+    simPersistTheme(theme, window.localStorage);
+    setPalette(simReadPalette(root));
   }, [theme]);
 
-  const dismissMobilePanel = useCallback((returnFocus = true) => {
-    if (!mobilePanel) return;
-    const closingPanel = mobilePanel;
-    setMobilePanel(null);
-    if (returnFocus) requestAnimationFrame(() => focusMobilePanelTrigger(closingPanel, mobileTriggerRefs.current));
-  }, [mobilePanel]);
+  useEffect(() => {
+    const url = `${window.location.pathname}?${simEncodeScenario(scenario)}`;
+    try { window.history.replaceState(null, '', url); } catch (_) { /* file:// or sandboxed frames */ }
+  }, [scenario]);
 
-  const handleMobilePanelToggle = panel => {
-    if (mobilePanel === panel) dismissMobilePanel();
-    else setMobilePanel(toggleMobilePanel(mobilePanel, panel));
-  };
+  // One orchestrated moment: the first result plays from injection onwards.
+  useEffect(() => {
+    if (autoplayed.current || run.frames.length < 2) return;
+    autoplayed.current = true;
+    if (reducedMotion) setYear(Math.min(run.model.years, run.model.injYears + 70));
+    else setPlaying(true);
+  }, [run.frames.length, reducedMotion]);
 
   useEffect(() => {
-    const mobileQuery = window.matchMedia('(max-width: 760px)');
-    const compactQuery = window.matchMedia('(max-width: 1180px)');
-    const updateViewport = () => setResponsivePanelViewport({
-      mobile: mobileQuery.matches,
-      compact: compactQuery.matches
-    });
-    mobileQuery.addEventListener('change', updateViewport);
-    compactQuery.addEventListener('change', updateViewport);
-    return () => {
-      mobileQuery.removeEventListener('change', updateViewport);
-      compactQuery.removeEventListener('change', updateViewport);
+    if (!playing) return undefined;
+    let last = performance.now();
+    let frameId;
+    const tick = now => {
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      setYear(current => {
+        const next = current + dt * SIM_SPEEDS[speed];
+        if (run.model && next >= run.model.years) { setPlaying(false); return run.model.years; }
+        return Math.min(next, computedYears);
+      });
+      frameId = requestAnimationFrame(tick);
     };
-  }, []);
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [playing, speed, computedYears, run.model]);
 
   useEffect(() => {
-    if (mobilePanel && !presentedPanel) setMobilePanel(null);
-  }, [mobilePanel, presentedPanel]);
+    const onKey = event => {
+      if (section !== 'simulator' || event.target.closest?.('input, select, textarea, button, summary')) return;
+      if (event.code === 'Space') { event.preventDefault(); setPlaying(p => !p); }
+      if (event.key === 'ArrowRight') setYear(y => Math.min(computedYears, Math.floor(y / SIM_FRAME_YEARS + 1) * SIM_FRAME_YEARS));
+      if (event.key === 'ArrowLeft') setYear(y => Math.max(0, Math.ceil(y / SIM_FRAME_YEARS - 1) * SIM_FRAME_YEARS));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [section, computedYears]);
 
   useEffect(() => {
-    if (!presentedPanel) return undefined;
-    const releaseScroll = lockPageScroll(document);
-    const activeRail = document.getElementById(`ve-${presentedPanel}-rail`);
-    const backgroundElements = [
-      document.querySelector('.app-header--workbench'),
-      document.querySelector('.ve-scenario-bar'),
-      document.querySelector('.ve-workspace-nav'),
-      document.querySelector('.ve-action-status'),
-      document.querySelector('.ve-visualization-workspace'),
-      document.querySelector('.ve-history-sheet'),
-      document.querySelector(presentedPanel === 'inputs' ? '.ve-outcome-rail' : '.ve-input-rail')
-    ];
-    setMobilePanelBackgroundInert(backgroundElements, true);
+    if (!sheet) return undefined;
+    const onKey = event => { if (event.key === 'Escape') setSheet(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sheet]);
 
-    const getFocusableElements = () => [
-      ...(mobileTriggersRef.current?.querySelectorAll('button:not([disabled])') || []),
-      ...(activeRail?.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [contenteditable="true"], [tabindex]:not([tabindex="-1"])') || [])
-    ].filter(element => element.getClientRects().length > 0);
-
-    const handleSheetKeys = event => {
-      if (event.key === 'Escape') {
-        dismissMobilePanel();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      const wrapTarget = getMobileFocusWrapTarget(getFocusableElements(), document.activeElement, event.shiftKey);
-      if (wrapTarget) {
-        event.preventDefault();
-        wrapTarget.focus();
-      }
-    };
-    window.addEventListener('keydown', handleSheetKeys);
-    requestAnimationFrame(() => {
-      const closeButton = mobileCloseRefs.current[presentedPanel];
-      if (closeButton) closeButton.focus();
-    });
-    return () => {
-      window.removeEventListener('keydown', handleSheetKeys);
-      setMobilePanelBackgroundInert(backgroundElements, false);
-      releaseScroll();
-    };
-  }, [presentedPanel, dismissMobilePanel]);
-
-  const handleWorkspaceChange = workspace => {
-    if (mobilePanel) dismissMobilePanel(false);
-    setActiveSubTab(workspace);
+  const update = patch => setScenario(current => VE2D.normalizeScenario({ ...current, ...patch, preset: 'custom' }));
+  const applyPreset = id => {
+    if (!VE2D.PRESETS[id]) return;
+    setScenario(VE2D.normalizeScenario({ ...VE2D.DEFAULTS, ...VE2D.PRESETS[id].patch, preset: id, grid: scenario.grid }));
+    setSectionLine(null);
   };
-
-  const scenarioSignature = createScenarioSignature(scenarios[activeModel]);
-  const profileSignature = createScenarioSignature(scenarios.profile);
-  const mapSignature = createScenarioSignature(scenarios.map);
-  const lastRunSignatureRef = useRef(profileSignature);
-  const mapLastRunSignatureRef = useRef(mapSignature);
-
-  // SA/UQ uncertainty bounds configuration states (default +/- percentages)
-  // --- UQ / SA PARAMETER SELECTION CONFIG ---
-  // Each parameter the user may include in the Monte Carlo batch has a config:
-  //   enabled — participate in sampling at all
-  //   mode    — 'range' (absolute min/max) | 'percent' (+/- of nominal) | 'values' (discrete list)
-  //   percent — +/- percentage used by 'percent' mode
-  //   min/max — bounds used by 'range' mode
-  //   values  — raw text parsed to a discrete value list for 'values' mode
-  const [uqParams, setUqParams] = useState(() => {
-    const cfg = {};
-    UQ_PARAM_DEFS.forEach(d => {
-      cfg[d.key] = {
-        enabled: d.key === 'K' || d.key === 'residualTrapFraction',
-        mode: 'percent',
-        percent: d.percentDef,
-        min: roundDec(d.lo + (d.hi - d.lo) * 0.25, d.dec),
-        max: roundDec(d.hi - (d.hi - d.lo) * 0.25, d.dec),
-        values: ''
-      };
-    });
-    return cfg;
-  });
-
-  // Nominal (deterministic) value of a UQ parameter from the live UI state.
-  // Fault-grouped parameters resolve to the average across active faults.
-  const getUqNominal = (key) => {
-    switch (key) {
-      case 'K': return K;
-      case 'residualTrapFraction': return residualTrapFraction;
-      case 'porosity': return porosity;
-      case 'Q': return Q;
-      case 'injLocation': return injLocation;
-      case 'dipPercent': return dipPercent;
-      case 'amplitude': return amplitude;
-      case 'faultThreshold': {
-        const a = faults.slice(0, faultCount);
-        return a.length ? a.reduce((s, f) => s + f.thresholdHeight, 0) / a.length : 0.35;
-      }
-      case 'faultLeakRate': {
-        const a = faults.slice(0, faultCount).filter(f => !f.isSealed);
-        return a.length ? a.reduce((s, f) => s + f.leakRate, 0) / a.length : 0.14;
-      }
-      case 'faultTransmissibility': {
-        const a = faults.slice(0, faultCount);
-        return a.length ? a.reduce((s, f) => s + (f.transmissibility !== undefined ? f.transmissibility : 1.0), 0) / a.length : 1.0;
-      }
-      default: return 0;
-    }
-  };
-
-  // Patch one parameter's config; when the mode changes, seed the new mode's
-  // inputs from the current nominal (nominal ±30% for range/values).
-  const updateUqParam = (key, patch) => {
-    setUqParams(prev => {
-      const def = UQ_PARAM_DEFS.find(d => d.key === key);
-      const cur = prev[key];
-      const next = { ...cur, ...patch };
-      if (patch.mode && patch.mode !== cur.mode) {
-        const nom = getUqNominal(key);
-        if (patch.mode === 'range') {
-          next.min = roundDec(Math.min(nom * 0.7, nom * 1.3), def.dec);
-          next.max = roundDec(Math.max(nom * 0.7, nom * 1.3), def.dec);
-        } else if (patch.mode === 'values') {
-          const triple = [nom * 0.7, nom, nom * 1.3].sort((a, b) => a - b);
-          next.values = triple.map(v => String(roundDec(v, def.dec))).join(', ');
-        } else if (patch.mode === 'percent' && !isFinite(next.percent)) {
-          next.percent = def.percentDef;
-        }
-      }
-      return { ...prev, [key]: next };
+  const randomise = () => {
+    const rng = VE2D.mulberry32((Date.now() & 0xffff) + 17);
+    const pick = (min, max, step = 1) => Math.round((min + rng() * (max - min)) / step) * step;
+    update({
+      seed: pick(1, 999999),
+      dipDeg: pick(0.2, 1.4, 0.1),
+      dipAz: pick(0, 359),
+      domes: pick(0, 3),
+      domeRelief: pick(20, 120, 5),
+      roughness: pick(0, 15),
+      faults: Array.from({ length: pick(0, 2) }, () => ({
+        x: pick(4, 16, 0.5), y: pick(3, 9, 0.5), strike: pick(0, 179), length: pick(4, 12, 0.5),
+        throw: pick(0, 40), trans: pick(0, 1, 0.05), sealCap: pick(5, 40), kf: pick(0, 60)
+      }))
     });
   };
 
-  // Monte Carlo execution states
-  const [mcRunsCount, setMcRunsCount] = useState(50); // 25, 50, or 100 simulations
-  const [mcResults, setMcResults] = useState(null); // Array of realization runs
-  const [uqRunning, setUqRunning] = useState(false);
-  const [uqProgress, setUqProgress] = useState(0);
-  const [uqTargetMetric, setUqTargetMetric] = useState('leaked'); // 'leaked' (CO2 leaked mass) or 'trapped' (trapping efficiency %)
-  
-  // Solver variables (Plume thickness vector, max thickness historical)
-  const [h, setH] = useState(() => new Array(200).fill(0));
-  const [hMax, setHMax] = useState(() => new Array(200).fill(0));
-  
-  // Cumulative masses tracking state
-  const [massHistory, setMassHistory] = useState([]); // Array of { time, injected, trapped, mobile, leaked }
-  const [currentMasses, setCurrentMasses] = useState({ injected: 0, trapped: 0, mobile: 0, leaked: 0 });
-  const [mapSnapshot, setMapSnapshot] = useState({
-    time: 0,
-    h: [],
-    hMax: [],
-    masses: { injected: 0, trapped: 0, mobile: 0, leaked: 0 },
-    history: [],
-    isRunning: false,
-    speed: 1
-  });
-  const [mapCommand, setMapCommand] = useState(null);
-
-  // Reset flag / state synchronizer
-  const stateRef = useRef({ h: [], hMax: [], masses: { injected: 0, trapped: 0, mobile: 0, leaked: 0 } });
-
-  // Immutable snapshot of the live solver parameters (faults frozen at call time).
-  // Much cheaper than a JSON round-trip and safe for Time-Machine branch diffs.
-  const snapshotParams = () => {
-    const p = solverParamsRef.current;
-    return { ...p, faults: p.faults.map(f => ({ ...f })) };
+  const play = () => {
+    if (!run.model) return;
+    if (!playing && year >= run.model.years - 1e-6) setYear(0);
+    setPlaying(p => !p);
   };
-  
-  // Time travel history ref — stores full solver state at each year for back-and-forth scrubbing
-  const historyRef = useRef([]);
+  const seek = value => { setPlaying(false); setYear(Math.max(0, value)); };
 
-  // Initialize solver parameters reference to prevent interval resets on slider modifications
-  const solverParamsRef = useRef(null);
-  solverParamsRef.current = { ...profileParams, parentDX: dx };
-
-  // Compute mobile and trapped heights dynamically for SVG visualization
-  const { hMobile, hTrapped } = useMemo(() => {
-    const N = h.length;
-    const hMob = new Array(N).fill(0);
-    const hTrap = new Array(N).fill(0);
-    const R = profileParams.residualTrapFraction;
-    
-    for (let i = 0; i < N; i++) {
-      const H = h[i];
-      const hm = hMax[i];
-      // VE residual trapping model
-      const mobileVal = R < 1.0 ? Math.max(0, (H - R * hm) / (1.0 - R)) : 0;
-      hMob[i] = Math.min(H, mobileVal);
-      hTrap[i] = Math.max(0, H - hMob[i]);
-    }
-    return { hMobile: hMob, hTrapped: hTrap };
-  }, [h, hMax, profileParams.residualTrapFraction]);
-
-  const profileReplayRef = useRef(false);
-  // Rebuild only the changed model. Realization loading already builds its history.
-  useEffect(() => {
-    if (profileReplayRef.current) profileReplayRef.current = false;
-    else resetSimulation();
-  }, [profileSignature]);
-
-  // Reset simulation function
-  const resetSimulation = () => {
-    const arr = new Array(profileParams.cellCount).fill(0);
-    setH(arr);
-    setHMax(arr);
-    const initialMasses = { injected: 0, trapped: 0, mobile: 0, leaked: 0 };
-    setCurrentMasses(initialMasses);
-    setMassHistory([{ time: 0, ...initialMasses }]);
-    setSimTime(0);
-    setIsPlaying(false);
-    setIsReversing(false);
-    
-    stateRef.current = { h: [...arr], hMax: [...arr], masses: { ...initialMasses } };
-    historyRef.current = [{
-      time: 0,
-      h: [...arr],
-      hMax: [...arr],
-      masses: { ...initialMasses },
-      params: snapshotParams()
-    }];
+  const copyLink = async () => {
+    const ok = await simCopyText(window.location.href, navigator.clipboard);
+    setShare(ok ? 'Link copied' : 'Copy the address bar');
+    setTimeout(() => setShare('Share'), 2200);
+  };
+  const exportRef = useRef(null);
+  const exportInventory = () => { simDownload(simInventoryCsv(shown.history), 'co2-inventory.csv', 'text/csv'); exportRef.current?.removeAttribute('open'); };
+  const exportGrid = () => { if (frame) simDownload(simGridCsv(model, frame), `co2-grid-year-${Math.round(shownYear)}.csv`, 'text/csv'); exportRef.current?.removeAttribute('open'); };
+  const exportImage = () => {
+    exportRef.current?.removeAttribute('open');
+    const canvas = document.querySelector('.sim-view canvas[data-export]');
+    if (canvas) { canvas.toBlob(blob => blob && simDownload(blob, `co2-${view}-year-${Math.round(shownYear)}.png`)); return; }
+    const svg = document.querySelector('.sim-view svg.sim-view__svg');
+    if (svg) simDownload(new XMLSerializer().serializeToString(svg), `co2-section-year-${Math.round(shownYear)}.svg`, 'image/svg+xml');
   };
 
-  const handleRunScenario = () => {
-    resetSimulation();
-    lastRunSignatureRef.current = scenarioSignature;
-    setIsPlaying(true);
+  const onTabKey = event => {
+    const index = SIM_SECTIONS.findIndex(s => s.id === section);
+    const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    if (!delta) return;
+    event.preventDefault();
+    const next = SIM_SECTIONS[(index + delta + SIM_SECTIONS.length) % SIM_SECTIONS.length].id;
+    setSection(next);
+    tabRefs.current[next]?.focus();
   };
 
-  const sendMapCommand = type => setMapCommand(previous => ({ type, id: (previous?.id || 0) + 1 }));
-  const consumeMapCommandOnce = useCallback(handledId => {
-    setMapCommand(current => consumeMapCommand(current, handledId));
-  }, []);
-  const isMapView = activeSubTab === 'map' || activeSubTab === 'topography';
-  const resetActiveSimulation = () => isMapView ? sendMapCommand('reset') : resetSimulation();
-  const runActiveSimulation = () => {
-    if (!isMapView) {
-      handleRunScenario();
-      return;
-    }
-    mapLastRunSignatureRef.current = scenarioSignature;
-    sendMapCommand('run');
+  const loadRealization = realization => {
+    setScenario(VE2D.normalizeScenario({ ...realization, preset: 'custom' }));
+    setSection('simulator');
+    setYear(realization.years);
+    setPlaying(false);
   };
 
-  const crossSectionRunStatus = deriveRunStatus({
-    isPlaying,
-    isReversing,
-    scenarioSignature: profileSignature,
-    lastRunSignature: lastRunSignatureRef.current,
-    simTime
-  });
-  const runStatus = isMapView
-    ? deriveMapRunStatus(mapSnapshot, mapSignature, mapLastRunSignatureRef.current)
-    : crossSectionRunStatus;
-
-  // Preset Scenario Handlers
-  const applyPreset = (rawName) => {
-    const presetName = rawName === 'anticline' ? 'dome' : (rawName === 'fault' ? 'faulted' : (rawName === 'dipping' ? 'monocline' : rawName));
-    setSelectedPreset(presetName);
-    setWellY(50);
-    if (presetName === 'dome') {
-      setDipPercent(0.2);
-      setAmplitude(45);
-      setFrequency(1.5);
-      setFaultOffset(0);
-      setTerrainSeed(2201);
-      setHeterogeneity(0.22);
-      setK(1.60);
-      setPorosity(0.25);
-      setQ(2.20);
-      setInjDuration(240);
-      setFaultCount(0);
-      setResidualTrapFraction(0.30);
-    } else if (presetName === 'faulted') {
-      setDipPercent(1.2);
-      setAmplitude(15);
-      setFrequency(1);
-      setFaultOffset(1.8);
-      setTerrainSeed(7314);
-      setHeterogeneity(0.34);
-      setK(1.80);
-      setPorosity(0.22);
-      setQ(2.00);
-      setInjDuration(200);
-      setFaultCount(2);
-      setFaults([
-        { xPercent: 26, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.30, leakRate: 0.16, transmissibility: 0.8, dipSlope: -0.22 },
-        { xPercent: 50, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.45, leakRate: 0.12, transmissibility: 0.5, dipSlope: 0.25 }
-      ]);
-      setResidualTrapFraction(0.20);
-    } else if (presetName === 'monocline') {
-      setDipPercent(-2.5);
-      setAmplitude(6);
-      setFrequency(0.5);
-      setFaultOffset(0);
-      setTerrainSeed(4903);
-      setHeterogeneity(0.2);
-      setK(1.50);
-      setPorosity(0.28);
-      setQ(1.80);
-      setInjDuration(220);
-      setFaultCount(1);
-      setFaults([
-        { xPercent: 32, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 0.9, dipSlope: -0.20 }
-      ]);
-      setResidualTrapFraction(0.25);
-    } else if (presetName === 'default') {
-      setDipPercent(0.8);
-      setAmplitude(15);
-      setFrequency(1);
-      setFaultOffset(1.2);
-      setTerrainSeed(3901);
-      setHeterogeneity(0.55);
-      setK(1.70);
-      setPorosity(0.25);
-      setQ(2.30);
-      setInjDuration(240);
-      setFaultCount(2);
-      setFaults([
-        { xPercent: 28, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.35, leakRate: 0.14, transmissibility: 1.0, dipSlope: -0.22 },
-        { xPercent: 48, yStartPercent: 0, yEndPercent: 100, isSealed: false, thresholdHeight: 0.30, leakRate: 0.12, transmissibility: 1.0, dipSlope: 0.25 }
-      ]);
-      setResidualTrapFraction(0.25);
-    }
-  };
-
-  const generateRandomGrid = () => {
-    const config = createRandomGridConfig();
-    setSelectedPreset('random');
-    setTerrainSeed(config.terrainSeed);
-    setHeterogeneity(config.heterogeneity);
-    setMapCols(config.mapCols);
-    setDipPercent(config.dipPercent);
-    setAmplitude(config.amplitude);
-    setFrequency(config.frequency);
-    setFaultOffset(config.faultOffset);
-    setFaultCount(config.faultCount);
-    setFaults(config.faults);
-    setShareStatus(`Generated random grid · seed ${config.terrainSeed} · ${config.mapCols} columns · ${config.faultCount} faults`);
-  };
-
-  useEffect(() => {
-    const query = new URLSearchParams(window.location.search);
-    const tab = query.get('tab');
-    loadingModelRef.current = tab === 'profile' || (tab === 'uq' && query.get('risk') === 'profile') ? 'profile' : 'map';
-    const preset = query.get('preset');
-    if (['default', 'dome', 'faulted', 'monocline'].includes(preset)) applyPreset(preset);
-    if (preset === 'random') setSelectedPreset('random');
-    if (SIM_TABS.includes(tab)) setActiveSubTab(tab);
-    if (query.get('risk') === 'profile' || query.get('risk') === 'map') setRiskModel(query.get('risk'));
-    if (query.has('k')) setK(scenarioNumber(query, 'k', 0.1, 3.5, K));
-    if (query.has('phi')) setPorosity(scenarioNumber(query, 'phi', 0.1, 0.4, porosity));
-    if (query.has('cells')) setCellCount(scenarioNumber(query, 'cells', 50, 300, cellCount, true));
-    if (query.has('sgr')) setResidualTrapFraction(scenarioNumber(query, 'sgr', 0, 0.4, residualTrapFraction));
-    if (query.has('dip')) setDipPercent(scenarioNumber(query, 'dip', -5, 5, dipPercent));
-    if (query.has('amp')) setAmplitude(scenarioNumber(query, 'amp', 0, 50, amplitude, true));
-    if (query.has('freq')) setFrequency(scenarioNumber(query, 'freq', 0.5, 4, frequency));
-    if (query.has('slip')) setFaultOffset(scenarioNumber(query, 'slip', 0, 3, faultOffset));
-    if (query.has('q')) setQ(scenarioNumber(query, 'q', 0, 3.5, Q));
-    if (query.has('well')) setInjLocation(scenarioNumber(query, 'well', 10, 90, injLocation, true));
-    if (query.has('wellY')) setWellY(scenarioNumber(query, 'wellY', 10, 90, wellY, true));
-    if (query.has('mapCells')) setMapCols(scenarioNumber(query, 'mapCells', 24, 128, mapCols, true));
-    if (query.has('terrain')) setTerrainSeed(scenarioNumber(query, 'terrain', 0, 999999, terrainSeed, true));
-    if (query.has('hetero')) setHeterogeneity(scenarioNumber(query, 'hetero', 0, 1, heterogeneity));
-    if (query.has('stop')) setInjDuration(scenarioNumber(query, 'stop', 50, 400, injDuration, true));
-    if (query.has('faults')) setFaultCount(scenarioNumber(query, 'faults', 0, 3, faultCount, true));
-    try {
-      const decoded = JSON.parse(query.get('faultData') || 'null');
-      if (Array.isArray(decoded) && decoded.length <= 3 && decoded.every(f => f && typeof f === 'object')) {
-        setFaults(decoded.map((f, i) => ({
-          xPercent: Math.max(10, Math.min(90, Number(f.xPercent) || 30 + i * 20)),
-          yStartPercent: Math.max(0, Math.min(100, Number(f.yStartPercent) || 0)),
-          yEndPercent: Math.max(0, Math.min(100, Number.isFinite(Number(f.yEndPercent)) ? Number(f.yEndPercent) : 100)),
-          isSealed: Boolean(f.isSealed),
-          thresholdHeight: Math.max(0, Math.min(2, Number(f.thresholdHeight) || 0)),
-          leakRate: Math.max(0.01, Math.min(0.4, Number(f.leakRate) || 0.01)),
-          transmissibility: Math.max(0, Math.min(1, Number(f.transmissibility) || 0)),
-          dipSlope: Math.max(-0.5, Math.min(0.5, Number(f.dipSlope) || 0))
-        })));
-      }
-    } catch (_) { /* Invalid shared fault data falls back to the preset. */ }
-    loadingModelRef.current = null;
-  }, []);
-
-  useEffect(() => () => { if (uqWorkerRef.current) uqWorkerRef.current.terminate(); }, []);
-
-  const scenarioUrl = () => {
-    const url = new URL('./simulator.html', window.location.href);
-    const values = {
-      preset: selectedPreset, tab: activeSubTab, k: K, phi: porosity, cells: cellCount,
-      sgr: residualTrapFraction, dip: dipPercent, amp: amplitude, freq: frequency,
-      slip: faultOffset, q: Q, well: injLocation, wellY, mapCells: mapCols, stop: injDuration, faults: faultCount,
-      faultData: JSON.stringify(faults.slice(0, faultCount)),
-      terrain: terrainSeed,
-      hetero: heterogeneity,
-      risk: riskModel
-    };
-    Object.entries(values).forEach(([key, value]) => url.searchParams.set(key, String(value)));
-    return url.toString();
-  };
-
-  const copyScenarioLink = async () => {
-    const url = scenarioUrl();
-    window.history.replaceState({ simulator: true }, '', url);
-    const copied = await copyTextToClipboard(url, navigator.clipboard, text => {
-      const field = document.createElement('textarea');
-      field.value = text;
-      document.body.appendChild(field);
-      field.select();
-      try {
-        return document.execCommand('copy');
-      } finally {
-        field.remove();
-      }
-    });
-    setShareStatus(copied ? 'Scenario link copied' : 'Scenario link copy failed. Please retry.');
-    setTimeout(() => setShareStatus(''), copied ? 2400 : 3200);
-  };
-
-  const downloadBlob = (blob, filename) => {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-  };
-
-  const exportCsv = () => {
-    const csv = massBalanceCsv(activeMassHistory, activeModel, terrainSeed);
-    downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `ve-${activeModel}-mass-balance.csv`);
-  };
-
-  const exportSvg = () => {
-    if (!reservoirSvgRef.current) throw new Error('Reservoir figure is unavailable');
-    const markup = new XMLSerializer().serializeToString(reservoirSvgRef.current);
-    downloadBlob(new Blob([markup], { type: 'image/svg+xml;charset=utf-8' }), 've-simulator-reservoir.svg');
-  };
-
-  const exportCanvas = () => {
-    const canvas = document.querySelector(isMapView && activeSubTab === 'topography' ? '.ve-topography-canvas' : '#tabpanel-map canvas');
-    if (!canvas) throw new Error('Map figure is unavailable');
-    const link = document.createElement('a');
-    link.href = canvas.toDataURL('image/png');
-    link.download = `ve-${activeSubTab}-seed-${terrainSeed}.png`;
-    link.click();
-  };
-
-  const runFileAction = (action, failureMessage) => executeFileAction(action, () => {
-    setShareStatus(failureMessage);
-    setTimeout(() => setShareStatus(''), 3200);
-  });
-
-  // Geometry helpers accept an optional params object `p` so Monte Carlo
-  // realizations can vary dip/amplitude/faultOffset/faults independently of
-  // the live UI state. Passing no `p` (all render call sites) uses closure state.
-  const capRockBaseProfile = (x, p = profileParams) => {
-    const dip = 150 + x * ((p ? p.dipPercent : dipPercent) / 100.0) * 8.0; // regional dip
-    const wave = - (p ? p.amplitude : amplitude) * Math.sin((x * Math.PI / 1000.0) * (p ? p.frequency : frequency) * 2);
-    return dip + wave;
-  };
-
-  // Base unperturbed stratum profile for any yOffset
-  const stratumBaseProfile = (x, yOffset = 0, p) => {
-    return capRockBaseProfile(x, p) + yOffset;
-  };
-
-  // Computes the exact subpixel intersection (x*, y*) of a sloped fault plane with any geological stratum at depth
-  const getSimStratumFaultIntersection = (f, idx, yOffset = 0, p) => {
-    const x0 = (f.xPercent / 100.0) * 1000.0;
-    const defaultSlope = idx % 2 === 0 ? -0.22 : 0.25;
-    const slope = f.dipSlope !== undefined ? f.dipSlope : defaultSlope;
-    let x = x0;
-    for (let iter = 0; iter < 3; iter++) {
-      const y = stratumBaseProfile(x, yOffset, p);
-      x = x0 + slope * y;
-    }
-    const y = stratumBaseProfile(x, yOffset, p);
-    return { x, y, x0, slope };
-  };
-
-  // Computes intersection for caprock specifically (yOffset = 0)
-  const getSimFaultIntersection = (f, idx, p) => {
-    return getSimStratumFaultIntersection(f, idx, 0, p);
-  };
-
-  // Computes elevation for any geological stratum displaced along the sloped fault
-  const stratumY = (x, cellIdx = null, yOffset = 0, p) => {
-    const g = p || profileParams;
-    const base = stratumBaseProfile(x, yOffset, p);
-    let offset = 0;
-    const cellWidth = g.parentDX || 1000 / g.cellCount;
-    const xRef = cellIdx !== null ? (cellIdx * cellWidth + cellWidth / 2) : x;
-    
-    for (let idx = 0; idx < g.faultCount; idx++) {
-      const f = g.faults[idx];
-      const inter = getSimStratumFaultIntersection(f, idx, yOffset, g);
-      if (xRef > inter.x) {
-        const direction = idx % 2 === 0 ? 1 : -1;
-        offset += direction * g.faultOffset * 12;
-      }
-    }
-    return base + offset;
-  };
-
-  // Helper: Caprock Underside Topography Function
-  const capRockY = (x, cellIdx = null, p) => {
-    return stratumY(x, cellIdx, 0, p);
-  };
-
-  // --- SOLVER ITERATOR (FORWARD & REVERSE) ---
-  useEffect(() => {
-    if (!isPlaying && !isReversing) return;
-
-    const interval = setInterval(() => {
-      if (isPlaying) {
-        setSimTime(t => {
-          const nextTime = t + 1;
-          if (nextTime > 1000) {
-            setIsPlaying(false);
-            return t;
-          }
-
-          // Run numerical VE solver step using parameters from the ref
-          const result = runSolverStep(
-            stateRef.current.h, 
-            stateRef.current.hMax, 
-            stateRef.current.masses,
-            nextTime,
-            solverParamsRef.current
-          );
-
-          // Update local React states
-          setH(result.h);
-          setHMax(result.hMax);
-          setCurrentMasses(result.masses);
-          
-          // Append to mass history for plotting
-          if (nextTime % 5 === 0 || nextTime === 1 || nextTime === 1000) {
-            setMassHistory(history => {
-              const cleaned = history.filter(item => item.time < nextTime);
-              return [...cleaned, { time: nextTime, ...result.masses }];
-            });
-          }
-
-          // Store back in ref for next iteration
-          stateRef.current = {
-            h: result.h,
-            hMax: result.hMax,
-            masses: result.masses
-          };
-
-          // Cache historical snapshot in historyRef for time scrubbing
-          historyRef.current[nextTime] = {
-            time: nextTime,
-            h: [...result.h],
-            hMax: [...result.hMax],
-            masses: { ...result.masses },
-            params: snapshotParams()
-          };
-
-          return nextTime;
-        });
-      } else if (isReversing) {
-        setSimTime(t => {
-          const nextTime = t - 1;
-          if (nextTime < 0) {
-            setIsReversing(false);
-            return t;
-          }
-
-          // Load from history
-          const histState = historyRef.current[nextTime];
-          if (histState) {
-            setH(histState.h);
-            setHMax(histState.hMax);
-            setCurrentMasses(histState.masses);
-
-            stateRef.current = {
-              h: [...histState.h],
-              hMax: [...histState.hMax],
-              masses: { ...histState.masses }
-            };
-          }
-
-          return nextTime;
-        });
-      }
-    }, 40 / speed);
-
-    return () => clearInterval(interval);
-  }, [isPlaying, isReversing, speed]);
-
-  // Time-Travel Scrubbing Handler (Non-destructive)
-  const handleScrub = (targetTime) => {
-    setIsPlaying(false);
-    setIsReversing(false);
-    
-    const t = Math.max(0, Math.min(1000, targetTime));
-
-    // If user seeks beyond currently simulated history, dynamically advance forward to t
-    if (historyRef.current.length <= t) {
-      const p = solverParamsRef.current;
-      const newMassItems = [];
-      while (historyRef.current.length <= t) {
-        const nextYr = historyRef.current.length;
-        const lastState = historyRef.current[nextYr - 1];
-        const res = runSolverStep(lastState.h, lastState.hMax, lastState.masses, nextYr, p);
-        historyRef.current.push({
-          time: nextYr,
-          h: [...res.h],
-          hMax: [...res.hMax],
-          masses: { ...res.masses },
-          params: snapshotParams()
-        });
-        if (nextYr % 5 === 0 || nextYr === 1 || nextYr === t) {
-          newMassItems.push({ time: nextYr, ...res.masses });
-        }
-      }
-      if (newMassItems.length > 0) {
-        setMassHistory(prev => [...prev, ...newMassItems]);
-      }
-    }
-
-    const histState = historyRef.current[t];
-    if (histState) {
-      setH(histState.h);
-      setHMax(histState.hMax);
-      setCurrentMasses(histState.masses);
-      setSimTime(t);
-      
-      // Update solver references
-      stateRef.current = {
-        h: [...histState.h],
-        hMax: [...histState.hMax],
-        masses: { ...histState.masses }
-      };
-    }
-  };
-
-  // Branching Committer: Slices the future history from target time and locks in new parameters
-  const commitBranch = (targetTime = simTime) => {
-    setIsPlaying(false);
-    setIsReversing(false);
-    
-    const t = Math.max(0, Math.min(historyRef.current.length - 1, targetTime));
-    
-    // Truncate history ref after this point
-    historyRef.current = historyRef.current.slice(0, t + 1);
-    
-    // Truncate mass history for chart
-    setMassHistory(history => history.filter(item => item.time <= t));
-    
-    // Reload state
-    const histState = historyRef.current[t];
-    if (histState) {
-      setH(histState.h);
-      setHMax(histState.hMax);
-      setCurrentMasses(histState.masses);
-      
-      stateRef.current = {
-        h: [...histState.h],
-        hMax: [...histState.hMax],
-        masses: { ...histState.masses }
-      };
-    }
-  };
-
-  // Check differences between current parameters and parameters saved at simTime
-  const getParamDiff = () => {
-    if (simTime >= historyRef.current.length) return [];
-    const histState = historyRef.current[simTime];
-    if (!histState || !histState.params) return [];
-    
-    const histParams = histState.params;
-    const diffs = [];
-    
-    const checkDiff = (key, label, formatHist, formatCurr) => {
-      const vHist = histParams[key];
-      let vCurr;
-      
-      if (key === 'K') vCurr = K;
-      else if (key === 'porosity') vCurr = porosity;
-      else if (key === 'cellCount') vCurr = cellCount;
-      else if (key === 'residualTrapFraction') vCurr = residualTrapFraction;
-      else if (key === 'dipPercent') vCurr = dipPercent;
-      else if (key === 'amplitude') vCurr = amplitude;
-      else if (key === 'frequency') vCurr = frequency;
-      else if (key === 'faultOffset') vCurr = faultOffset;
-      else if (key === 'terrainSeed') vCurr = terrainSeed;
-      else if (key === 'heterogeneity') vCurr = heterogeneity;
-      else if (key === 'Q') vCurr = Q;
-      else if (key === 'injLocation') vCurr = injLocation;
-      else if (key === 'injDuration') vCurr = injDuration;
-      else if (key === 'faultCount') vCurr = faultCount;
-      
-      if (key !== 'faults' && Math.abs(vHist - vCurr) > 1e-5) {
-        diffs.push({
-          label,
-          original: formatHist(vHist),
-          current: formatCurr(vCurr)
-        });
-      }
-    };
-    
-    checkDiff('K', 'Permeability (K)', v => `${Math.round(v*1000)} mD`, v => `${Math.round(v*1000)} mD`);
-    checkDiff('porosity', 'Porosity (\u03C6)', v => `${Math.round(v*100)}%`, v => `${Math.round(v*100)}%`);
-    checkDiff('cellCount', 'Grid Cells (N)', v => v, v => v);
-    checkDiff('residualTrapFraction', 'Residual Trap (Sgr)', v => `${Math.round(v*100)}%`, v => `${Math.round(v*100)}%`);
-    checkDiff('dipPercent', 'Regional Dip', v => `${v}%`, v => `${v}%`);
-    checkDiff('amplitude', 'Anticline Height', v => `${v}px`, v => `${v}px`);
-    checkDiff('frequency', 'Anticline Count', v => v, v => v);
-    checkDiff('faultOffset', 'Fault Slip', v => `${v}x`, v => `${v}x`);
-    checkDiff('terrainSeed', 'Terrain Seed', v => v, v => v);
-    checkDiff('heterogeneity', 'Terrain Heterogeneity', v => `${Math.round(v * 100)}%`, v => `${Math.round(v * 100)}%`);
-    checkDiff('Q', 'Flow Rate (Q)', v => v, v => v);
-    checkDiff('injLocation', 'Well Location', v => `${v}%`, v => `${v}%`);
-    checkDiff('injDuration', 'Inj. Stop Year', v => `${v}y`, v => `${v}y`);
-    checkDiff('faultCount', 'Active Faults', v => v, v => v);
-    
-    if (histParams.faultCount === faultCount && faultCount > 0 && histParams.faults) {
-      for (let i = 0; i < faultCount; i++) {
-        const fHist = histParams.faults[i];
-        const fCurr = faults[i];
-        if (fHist && fCurr) {
-          const prefix = `Fault ${String.fromCharCode(65 + i)}`;
-          if (fHist.isSealed !== fCurr.isSealed) {
-            diffs.push({
-              label: `${prefix} Seal`,
-              original: fHist.isSealed ? 'Sealed' : 'Leaking',
-              current: fCurr.isSealed ? 'Sealed' : 'Leaking'
-            });
-          }
-          if (Math.abs(fHist.xPercent - fCurr.xPercent) > 1e-5) {
-            diffs.push({
-              label: `${prefix} Position`,
-              original: `${fHist.xPercent}%`,
-              current: `${fCurr.xPercent}%`
-            });
-          }
-          if (Math.abs(fHist.thresholdHeight - fCurr.thresholdHeight) > 1e-5) {
-            diffs.push({
-              label: `${prefix} Threshold`,
-              original: `${fHist.thresholdHeight} m`,
-              current: `${fCurr.thresholdHeight} m`
-            });
-          }
-          if (!fHist.isSealed && !fCurr.isSealed && Math.abs(fHist.leakRate - fCurr.leakRate) > 1e-5) {
-            diffs.push({
-              label: `${prefix} Leak Rate`,
-              original: fHist.leakRate,
-              current: fCurr.leakRate
-            });
-          }
-        }
-      }
-    }
-    
-    return diffs;
-  };
-
-  // Accessible tab switching (Left/Right arrows while focus is inside the tablist)
-  const handleTabKeys = (e) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    e.preventDefault();
-    const tabs = activeSubTab === 'profile' ? ['profile'] : MAP_TABS;
-    const idx = tabs.indexOf(activeSubTab);
-    const dir = e.key === 'ArrowRight' ? 1 : tabs.length - 1;
-    const next = tabs[(idx + dir) % tabs.length];
-    setActiveSubTab(next);
-    requestAnimationFrame(() => tabRefs.current[next] && tabRefs.current[next].focus());
-  };
-
-  // Play controls toggles
-  const handlePlayToggle = () => {
-    if (isReversing) setIsReversing(false);
-    const action = getPlaybackAction({
-      isPlaying,
-      simTime,
-      scenarioChanged: scenarioSignature !== lastRunSignatureRef.current
-    });
-    if (action === 'pause') {
-      setIsPlaying(false);
-      return;
-    }
-    if (action === 'run-scenario') {
-      handleRunScenario();
-      return;
-    }
-    if (simTime < historyRef.current.length - 1) commitBranch();
-    setIsPlaying(true);
-  };
-
-  const handlePlayReverseToggle = () => {
-    if (isPlaying) {
-      setIsPlaying(false);
-    }
-    setIsReversing(!isReversing);
-  };
-
-  const stepForward = () => {
-    setIsPlaying(false);
-    setIsReversing(false);
-    
-    const nextTime = simTime + 1;
-    if (nextTime > 1000) return;
-    
-    if (simTime < historyRef.current.length - 1) {
-      commitBranch();
-    }
-    
-    const result = runSolverStep(
-      stateRef.current.h, 
-      stateRef.current.hMax, 
-      stateRef.current.masses,
-      nextTime,
-      solverParamsRef.current
-    );
-    
-    setH(result.h);
-    setHMax(result.hMax);
-    setCurrentMasses(result.masses);
-    setSimTime(nextTime);
-    
-    if (nextTime % 5 === 0 || nextTime === 1 || nextTime === 1000) {
-      setMassHistory(history => {
-        const cleaned = history.filter(item => item.time < nextTime);
-        return [...cleaned, { time: nextTime, ...result.masses }];
-      });
-    }
-    
-    stateRef.current = {
-      h: result.h,
-      hMax: result.hMax,
-      masses: result.masses
-    };
-    
-    historyRef.current[nextTime] = {
-      time: nextTime,
-      h: [...result.h],
-      hMax: [...result.hMax],
-      masses: { ...result.masses },
-      params: snapshotParams()
-    };
-  };
-
-  const stepBackward = () => {
-    setIsPlaying(false);
-    setIsReversing(false);
-    
-    const prevTime = simTime - 1;
-    if (prevTime < 0) return;
-    
-    const histState = historyRef.current[prevTime];
-    if (histState) {
-      setH(histState.h);
-      setHMax(histState.hMax);
-      setCurrentMasses(histState.masses);
-      setSimTime(prevTime);
-      
-      stateRef.current = {
-        h: [...histState.h],
-        hMax: [...histState.hMax],
-        masses: { ...histState.masses }
-      };
-    }
-  };
-
-  // --- MONTE CARLO UQ/SA ENGINE ---
-  const runMonteCarloBatch = () => {
-    if (uqRunning) return;
-    
-    setUqRunning(true);
-    setUqProgress(0);
-    setMcResults(null);
-
-    const totalRuns = mcRunsCount;
-
-    // Capture nominal parameter values
-    const nominalK = K;
-    const nominalSgr = residualTrapFraction;
-    const nominalFaults = faults.map(f => ({ ...f }));
-    const activeFaults = nominalFaults.slice(0, faultCount);
-    const leakingFaults = activeFaults.filter(f => !f.isSealed);
-    const anyLeaking = leakingFaults.length > 0;
-
-    const nominals = {
-      K: nominalK,
-      residualTrapFraction: nominalSgr,
-      porosity: porosity,
-      Q: Q,
-      injLocation: injLocation,
-      dipPercent: dipPercent,
-      amplitude: amplitude,
-      faultThreshold: activeFaults.length ? activeFaults.reduce((s, f) => s + f.thresholdHeight, 0) / activeFaults.length : 0.35,
-      faultLeakRate: anyLeaking ? leakingFaults.reduce((s, f) => s + f.leakRate, 0) / leakingFaults.length : 0.14,
-      faultTransmissibility: activeFaults.length ? activeFaults.reduce((s, f) => s + (f.transmissibility !== undefined ? f.transmissibility : 1.0), 0) / activeFaults.length : 1.0
-    };
-
-    const defOf = (key) => UQ_PARAM_DEFS.find(d => d.key === key);
-    const sampledKeys = new Set();
-
-    // Generate parameter sets for each realization
-    const realizations = [];
-    for (let i = 0; i < totalRuns; i++) {
-      const s = {};
-      UQ_PARAM_DEFS.forEach(def => {
-        if (def.group === 'fault') return; // sampled per-fault below
-        const r = sampleUqParam(def, uqParams[def.key], nominals[def.key]);
-        s[def.key] = r.value;
-        if (r.sampled) sampledKeys.add(def.key);
-      });
-
-      const randFaults = nominalFaults.map(f => {
-        const nf = { ...f };
-        ['faultThreshold', 'faultLeakRate', 'faultTransmissibility'].forEach(key => {
-          if (faultCount === 0) return;
-          const def = defOf(key);
-          if (key === 'faultLeakRate' && (f.isSealed || !anyLeaking)) return;
-          const base = key === 'faultThreshold' ? f.thresholdHeight
-            : key === 'faultLeakRate' ? f.leakRate
-            : (f.transmissibility !== undefined ? f.transmissibility : 1.0);
-          const r = sampleUqParam(def, uqParams[key], base);
-          if (r.sampled) {
-            if (key === 'faultThreshold') nf.thresholdHeight = r.value;
-            else if (key === 'faultLeakRate') nf.leakRate = r.value;
-            else nf.transmissibility = r.value;
-            sampledKeys.add(key);
-          }
-        });
-        return nf;
-      });
-
-      realizations.push({
-        id: i,
-        K: s.K,
-        residualTrapFraction: s.residualTrapFraction,
-        porosity: s.porosity,
-        Q: s.Q,
-        injLocation: s.injLocation,
-        dipPercent: s.dipPercent,
-        amplitude: s.amplitude,
-        terrainSeed,
-        heterogeneity,
-        faults: randFaults
-      });
-    }
-
-    if (!window.Worker) {
-      setUqRunning(false);
-      setShareStatus('This browser does not support background simulation workers.');
-      return;
-    }
-    const worker = new Worker('./uq-worker.js');
-    uqWorkerRef.current = worker;
-    worker.onmessage = ({ data }) => {
-      if (data.type === 'progress') setUqProgress(data.value);
-      if (data.type === 'complete') {
-        setUqRunning(false);
-        setMcResults({ runs: data.results, sampledKeys: Array.from(sampledKeys), modelType: riskModel, scenario: scenarios[riskModel] });
-        worker.terminate();
-        uqWorkerRef.current = null;
-      }
-    };
-    worker.onerror = () => {
-      setUqRunning(false);
-      setShareStatus('Uncertainty analysis could not start. Please retry.');
-      worker.terminate();
-      uqWorkerRef.current = null;
-    };
-    worker.postMessage({
-      realizations,
-      base: {
-        modelType: riskModel,
-        cellCount,
-        frequency,
-        faultOffset,
-        injDuration,
-        faultCount,
-        parentDX: dx,
-        mapCols,
-        mapRows: Math.max(12, Math.round(mapCols * 0.6)),
-        wellY,
-        terrainSeed,
-        heterogeneity
-      }
-    });
-  };
-
-  // Helper to calculate percentiles
-  const getPercentile = (sortedArray, percentile) => {
-    if (sortedArray.length === 0) return 0;
-    const idx = Math.floor(sortedArray.length * (percentile / 100));
-    return sortedArray[Math.min(sortedArray.length - 1, idx)];
-  };
-
-  // Helper to calculate Pearson correlation coefficient
-  const computeCorrelation = (xValues, yValues) => {
-    const M = xValues.length;
-    if (M === 0) return 0;
-    const meanX = xValues.reduce((a, b) => a + b, 0) / M;
-    const meanY = yValues.reduce((a, b) => a + b, 0) / M;
-    
-    let num = 0;
-    let denX = 0;
-    let denY = 0;
-    for (let j = 0; j < M; j++) {
-      const dx = xValues[j] - meanX;
-      const dy = yValues[j] - meanY;
-      num += dx * dy;
-      denX += dx * dx;
-      denY += dy * dy;
-    }
-    if (denX === 0 || denY === 0) return 0;
-    return num / Math.sqrt(denX * denY);
-  };
-
-  // Memoized UQ statistics computations
-  const uqData = useMemo(() => {
-    if (!mcResults) return null;
-    const runs = mcResults.runs;
-
-    const vals = runs.map(r =>
-      uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency
-    );
-    const sorted = [...vals].sort((a, b) => a - b);
-
-    const p10Val = getPercentile(sorted, 10);
-    const p50Val = getPercentile(sorted, 50);
-    const p90Val = getPercentile(sorted, 90);
-
-    const findClosestRealization = (targetVal) => {
-      let closest = runs[0];
-      let minDiff = Infinity;
-      runs.forEach(r => {
-        const val = uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency;
-        const diff = Math.abs(val - targetVal);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closest = r;
-        }
-      });
-      return closest;
-    };
-    
-    const p10Realization = findClosestRealization(p10Val);
-    const p50Realization = findClosestRealization(p50Val);
-    const p90Realization = findClosestRealization(p90Val);
-
-    const minVal = sorted[0];
-    const maxVal = sorted[sorted.length - 1];
-    const range = maxVal - minVal || 1.0;
-    const numBins = 10;
-    const binWidth = range / numBins;
-    const bins = new Array(numBins).fill(0);
-    
-    vals.forEach(v => {
-      let binIdx = Math.floor((v - minVal) / binWidth);
-      if (binIdx >= numBins) binIdx = numBins - 1;
-      if (binIdx < 0) binIdx = 0;
-      bins[binIdx]++;
-    });
-    
-    const maxBinCount = Math.max(1, Math.max(...bins));
-    
-    return {
-      vals,
-      sorted,
-      minVal,
-      maxVal,
-      range,
-      bins,
-      maxBinCount,
-      binWidth,
-      p10Val,
-      p50Val,
-      p90Val,
-      p10Realization,
-      p50Realization,
-      p90Realization
-    };
-  }, [mcResults, uqTargetMetric]);
-
-  // Memoized Sensitivity correlations — only ranks parameters actually
-  // sampled in the batch (per mcResults.sampledKeys).
-  const sensitivityData = useMemo(() => {
-    if (!mcResults) return null;
-    const { runs, sampledKeys } = mcResults;
-    if (!sampledKeys || sampledKeys.length === 0) return [];
-
-    const yVals = runs.map(r =>
-      uqTargetMetric === 'leaked' ? r.finalLeaked : r.trappingEfficiency
-    );
-
-    const scalarGetters = {
-      K: r => r.params.K,
-      residualTrapFraction: r => r.params.residualTrapFraction,
-      porosity: r => r.params.porosity,
-      Q: r => r.params.Q,
-      injLocation: r => r.params.injLocation,
-      dipPercent: r => r.params.dipPercent,
-      amplitude: r => r.params.amplitude
-    };
-
-    const faultGetters = {
-      faultThreshold: r => {
-        const a = r.params.faults.slice(0, faultCount);
-        return a.length ? a.reduce((s, f) => s + f.thresholdHeight, 0) / a.length : 0;
-      },
-      faultLeakRate: r => {
-        const a = r.params.faults.slice(0, faultCount).filter(f => !f.isSealed);
-        return a.length ? a.reduce((s, f) => s + f.leakRate, 0) / a.length : 0;
-      },
-      faultTransmissibility: r => {
-        const a = r.params.faults.slice(0, faultCount);
-        return a.length ? a.reduce((s, f) => s + (f.transmissibility !== undefined ? f.transmissibility : 1.0), 0) / a.length : 0;
-      }
-    };
-
-    return sampledKeys.map(key => {
-      const def = UQ_PARAM_DEFS.find(d => d.key === key);
-      const getter = def.group === 'fault' ? faultGetters[key] : scalarGetters[key];
-      return { label: def.label, r: computeCorrelation(runs.map(getter), yVals) };
-    }).sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
-  }, [mcResults, uqTargetMetric, faultCount]);
-
-  // Restore the exact case used by this batch, including unsampled parameters.
-  const loadUQRealization = realization => {
-    if (!realization || !mcResults) return;
-    const { modelType, scenario } = mcResults;
-    const loadedParams = { ...scenario, ...realization.params, parentDX: 1000 / scenario.cellCount };
-    setScenarios(current => ({ ...current, [modelType]: loadedParams }));
-    if (modelType === 'map') {
-      setActiveSubTab('topography');
-      setTimeout(() => sendMapCommand('run'), 0);
-      return;
-    }
-    profileReplayRef.current = true;
-    lastRunSignatureRef.current = createScenarioSignature(loadedParams);
-    const cellCount = loadedParams.cellCount;
-    // 3. Replay the realization year-by-year so the ENTIRE timeline is
-    //    scrubbable (previously only years 0 and 1000 existed, which left
-    //    the seek slider, milestones, play and scrub dead after loading).
-    let rH = new Array(cellCount).fill(0);
-    let rHMax = new Array(cellCount).fill(0);
-    let rMasses = { injected: 0, trapped: 0, mobile: 0, leaked: 0 };
-    const replayHistory = [{
-      time: 0, h: [...rH], hMax: [...rHMax], masses: { ...rMasses }, params: loadedParams
-    }];
-    const replayMassHistory = [{ time: 0, ...rMasses }];
-    for (let yr = 1; yr <= 1000; yr++) {
-      const res = runSolverStep(rH, rHMax, rMasses, yr, loadedParams);
-      rH = res.h;
-      rHMax = res.hMax;
-      rMasses = res.masses;
-      replayHistory.push({
-        time: yr, h: [...res.h], hMax: [...res.hMax], masses: { ...res.masses }, params: loadedParams
-      });
-      if (yr % 5 === 0 || yr === 1) replayMassHistory.push({ time: yr, ...res.masses });
-    }
-
-    setH(rH);
-    setHMax(rHMax);
-    setCurrentMasses(rMasses);
-    setMassHistory(replayMassHistory);
-    setSimTime(1000);
-    setIsPlaying(false);
-    setIsReversing(false);
-
-    stateRef.current = {
-      h: [...rH],
-      hMax: [...rHMax],
-      masses: { ...rMasses }
-    };
-
-    historyRef.current = replayHistory;
-
-
-    setActiveSubTab('profile');
-  };
-
-  // SVG Histogram Renderer
-  const renderUQHistogram = (data) => {
-    const width = 450;
-    const height = 200;
-    const padding = { left: 40, right: 20, top: 20, bottom: 25 };
-    
-    const getX = (val) => padding.left + ((val - data.minVal) / data.range) * (width - padding.left - padding.right);
-    const getY = (count) => height - padding.bottom - (count / data.maxBinCount) * (height - padding.top - padding.bottom);
-    
-    return (
-      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
-        {[0.25, 0.5, 0.75, 1.0].map((ratio, i) => {
-          const y = getY(data.maxBinCount * ratio);
-          return (
-            <line key={i} x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="3 3"/>
-          );
-        })}
-        
-        {data.bins.map((count, idx) => {
-          const valStart = data.minVal + idx * data.binWidth;
-          const valEnd = valStart + data.binWidth;
-          const x1 = getX(valStart);
-          const x2 = getX(valEnd);
-          const y = getY(count);
-          const barWidth = Math.max(1, x2 - x1 - 1.5);
-          const barHeight = Math.max(0, height - padding.bottom - y);
-          
-          return (
-            <rect 
-              key={idx} 
-              x={x1} 
-              y={y} 
-              width={barWidth} 
-              height={barHeight} 
-              fill="rgba(124, 229, 211, 0.22)"
-              stroke="rgba(124, 229, 211, 0.5)"
-              strokeWidth="1"
-            />
-          );
-        })}
-        
-        {[
-          { label: 'P10', val: data.p10Val, color: SIM_PALETTE.sealedFault },
-          { label: 'P50', val: data.p50Val, color: SIM_PALETTE.injector },
-          { label: 'P90', val: data.p90Val, color: SIM_PALETTE.leakage }
-        ].map((p, i) => {
-          const x = getX(p.val);
-          return (
-            <g key={i}>
-              <line x1={x} y1={padding.top} x2={x} y2={height - padding.bottom} stroke={p.color} strokeWidth="1.5" strokeDasharray="4 3"/>
-              <circle cx={x} cy={padding.top} r="3.5" fill={p.color} />
-              <text x={x} y={padding.top - 5} fill={p.color} fontSize="8.5" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
-                {p.label}
-              </text>
-            </g>
-          );
-        })}
-        
-        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
-        <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
-        
-        <text x={padding.left} y={height - 8} fill="rgba(255,255,255,0.4)" fontSize="8.5" textAnchor="start" fontFamily="monospace">
-          {data.minVal.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
-        </text>
-        <text x={width - padding.right} y={height - 8} fill="rgba(255,255,255,0.4)" fontSize="8.5" textAnchor="end" fontFamily="monospace">
-          {data.maxVal.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
-        </text>
-      </svg>
-    );
-  };
-
-  // SVG Sensitivity Tornado Renderer (height adapts to number of parameters)
-  const renderUQSensitivity = (data) => {
-    const width = 450;
-    const padding = { left: 140, right: 30, top: 25, bottom: 20 };
-    const barHeight = 24;
-    const gap = 16;
-    const height = padding.top + padding.bottom + Math.max(1, data.length) * (barHeight + gap) - gap;
-    
-    const centerOffset = padding.left + (width - padding.left - padding.right) / 2;
-    const halfPlotWidth = (width - padding.left - padding.right) / 2;
-    
-    const getX = (r) => centerOffset + r * halfPlotWidth;
-
-    return (
-      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
-        {[-1.0, -0.5, 0, 0.5, 1.0].map((tick, i) => {
-          const x = getX(tick);
-          return (
-            <g key={i}>
-              <line x1={x} y1={padding.top - 5} x2={x} y2={height - padding.bottom} stroke={tick === 0 ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.05)"} strokeWidth={tick === 0 ? "1" : "0.5"} strokeDasharray={tick === 0 ? "none" : "3 3"}/>
-              <text x={x} y={padding.top - 12} fill="rgba(255,255,255,0.35)" fontSize="8" textAnchor="middle" fontFamily="monospace">
-                {tick > 0 ? `+${tick.toFixed(1)}` : tick.toFixed(1)}
-              </text>
-            </g>
-          );
-        })}
-        
-        {data.map((item, idx) => {
-          const y = padding.top + idx * (barHeight + gap);
-          const xStart = item.r >= 0 ? centerOffset : getX(item.r);
-          const xEnd = item.r >= 0 ? getX(item.r) : centerOffset;
-          const rectWidth = Math.max(1, xEnd - xStart);
-          const color = item.r >= 0 ? SIM_PALETTE.sealedFault : SIM_PALETTE.leakage;
-          const fill = item.r >= 0 ? 'rgba(124, 229, 211, 0.25)' : 'rgba(255, 113, 138, 0.25)';
-          
-          return (
-            <g key={idx}>
-              <text x={padding.left - 10} y={y + barHeight/2 + 3} fill="rgba(255,255,255,0.85)" fontSize="9.5" textAnchor="end" fontFamily="sans-serif">
-                {item.label}
-              </text>
-              
-              <rect 
-                x={xStart} 
-                y={y} 
-                width={rectWidth} 
-                height={barHeight} 
-                fill={fill} 
-                stroke={color} 
-                strokeWidth="1"
-                rx="3"
-              />
-              
-              <text 
-                x={item.r >= 0 ? xEnd + 6 : xStart - 6} 
-                y={y + barHeight/2 + 3} 
-                fill={color} 
-                fontSize="9" 
-                fontWeight="bold" 
-                textAnchor={item.r >= 0 ? 'start' : 'end'} 
-                fontFamily="monospace"
-              >
-                {item.r.toFixed(2)}
-              </text>
-            </g>
-          );
-        })}
-        
-        <line x1={padding.left} y1={padding.top - 5} x2={padding.left} y2={height - padding.bottom} stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
-      </svg>
-    );
-  };
-
-  // Solver implementation
-  const runSolverStep = (currentH, currentHMax, masses, currentFrame, params) => {
-    const {
-      K,
-      porosity,
-      cellCount,
-      Q,
-      injLocation,
-      injDuration,
-      faultCount,
-      faults,
-      residualTrapFraction,
-      boundaryCondition = 'initial-pressure',
-      parentDX
-    } = params;
-
-    const N = cellCount;
-    const dx = parentDX || (1000.0 / N);
-    let nextH = [...currentH];
-    let nextHMax = [...currentHMax];
-    let { injected, trapped, mobile, leaked } = masses;
-
-    // 25 explicit substeps per model year for a stable educational animation
-    const substeps = 25;
-    const dt = 1.0 / substeps;
-
-    // Physical coordinate depth array (scaled by 1/15)
-    const zt = new Array(N).fill(0);
-    for (let i = 0; i < N; i++) {
-      zt[i] = capRockY(i * dx + dx / 2.0, i, params) / 15.0;
-    }
-
-    // Run explicit finite volume integration substeps
-    for (let step = 0; step < substeps; step++) {
-      // 1. Partition total height into mobile and trapped components for each cell (VE physics)
-      const hMob = new Array(N).fill(0);
-      for (let i = 0; i < N; i++) {
-        const H = nextH[i];
-        const hm = nextHMax[i];
-        const R = residualTrapFraction;
-        const mobileVal = R < 1.0 ? Math.max(0, (H - R * hm) / (1.0 - R)) : 0;
-        hMob[i] = Math.min(H, mobileVal);
-      }
-
-      // 2. Compute first-order upwind fluxes using only the mobile thickness
-      const fluxes = new Array(N - 1).fill(0);
-      for (let i = 0; i < N - 1; i++) {
-        const zL = zt[i] + nextH[i];
-        const zR = zt[i + 1] + nextH[i + 1];
-        const grad = (zR - zL) / (dx / 5.0);
-        const hFace = grad > 0 ? hMob[i + 1] : hMob[i];
-        
-        // Find if a fault is located at this grid boundary and apply its transmissibility multiplier
-        let transMult = 1.0;
-        for (let idx = 0; idx < faultCount; idx++) {
-          const f = faults[idx];
-          if (f) {
-            const inter = getSimFaultIntersection(f, idx, params);
-            const cellFaultIdx = Math.round(inter.x / dx);
-            if (cellFaultIdx - 1 === i) {
-              if (f.isSealed) {
-                transMult = 0.0; // Infinite sealed barrier
-              } else {
-                transMult = f.transmissibility !== undefined ? f.transmissibility : 1.0;
-              }
-              break;
-            }
-          }
-        }
-        
-        let rawFlux = - (K / porosity) * hFace * grad * 0.08 * transMult;
-        
-        // Practical flux cap: no more than 30% of upstream mobile height per substep
-        if (rawFlux > 0) {
-          rawFlux = Math.min(rawFlux, (0.30 * hMob[i]) / dt);
-        } else {
-          rawFlux = Math.max(rawFlux, - (0.30 * hMob[i + 1]) / dt);
-        }
-        fluxes[i] = rawFlux;
-      }
-
-      // Boundary fluxes: fixed initial-pressure ghosts (open) or zero flux (closed)
-      const openBoundary = boundaryCondition !== 'closed';
-      const boundaryFluxes = new Array(N).fill(0);
-      if (openBoundary) {
-        for (const edge of [0, N - 1]) {
-          const gradient = hMob[edge] / Math.max(1, (dx / 2.0) / 5.0);
-          const rawFlux = (K / porosity) * hMob[edge] * gradient * 0.08;
-          boundaryFluxes[edge] = Math.min(rawFlux, (0.30 * hMob[edge]) / dt);
-        }
-      }
-      const H_res = 175.0 / 15.0; // 11.667 m physical maximum thickness of reservoir sandstone bed
-      const hTmp = [...nextH];
-      for (let i = 0; i < N; i++) {
-        const fL = i === 0 ? 0 : fluxes[i - 1];
-        const fR = i === N - 1 ? 0 : fluxes[i];
-        hTmp[i] = Math.max(0, Math.min(H_res, nextH[i] + dt * (fL - fR - boundaryFluxes[i])));
-      }
-      leaked += dt * (boundaryFluxes[0] + boundaryFluxes[N - 1]) * porosity * (dx / 5.0);
-
-      // Injection: Smooth wellbore Gaussian kernel over adjacent cells to prevent point singularity
-      const cellInjIdx = Math.floor((injLocation / 100.0) * N);
-      if (Q > 0 && currentFrame <= injDuration) {
-        const dVolInj = Q * dt;
-        const kernel = [0.10, 0.20, 0.40, 0.20, 0.10];
-        for (let offset = -2; offset <= 2; offset++) {
-          const cIdx = Math.max(0, Math.min(N - 1, cellInjIdx + offset));
-          hTmp[cIdx] = Math.min(H_res, hTmp[cIdx] + (dVolInj * kernel[offset + 2]) / (porosity * (dx / 5.0)));
-        }
-        injected += dVolInj;
-      }
-
-      // Fault Leaks: threshold-pressure/spill-height capillary barrier
-      for (let idx = 0; idx < faultCount; idx++) {
-        const f = faults[idx];
-        if (!f.isSealed) {
-          const inter = getSimFaultIntersection(f, idx, params);
-          const cellFaultIdx = Math.round(inter.x / dx);
-          const boundedIdx = Math.max(0, Math.min(N - 1, cellFaultIdx));
-          
-          // Leakage occurs only if CO2 column height H exceeds the threshold
-          if (hTmp[boundedIdx] > f.thresholdHeight) {
-            const overpressure = hTmp[boundedIdx] - f.thresholdHeight;
-            const leakHeight = Math.min(overpressure, f.leakRate * dt * 0.8);
-            hTmp[boundedIdx] -= leakHeight;
-            leaked += leakHeight * porosity * (dx / 5.0);
-          }
-        }
-      }
-
-      nextH = hTmp.map(val => Math.max(0, Math.min(H_res, val)));
-      for (let i = 0; i < N; i++) {
-        if (nextH[i] > nextHMax[i]) nextHMax[i] = Math.min(H_res, nextH[i]);
-      }
-    }
-
-    // Mass distribution calculation (Exact integral of fluid volume)
-    let mobileSum = 0;
-    let trappedSum = 0;
-    
-    for (let i = 0; i < N; i++) {
-      const H = nextH[i];
-      const hm = nextHMax[i];
-      const R = residualTrapFraction;
-      const mobileVal = R < 1.0 ? Math.max(0, (H - R * hm) / (1.0 - R)) : 0;
-      const hMob = Math.min(H, mobileVal);
-      const hTrap = Math.max(0, H - hMob);
-      
-      mobileSum += hMob * (dx / 5.0) * porosity;
-      trappedSum += hTrap * (dx / 5.0) * porosity;
-    }
-
-    return {
-      h: nextH,
-      hMax: nextHMax,
-      masses: {
-        injected: parseFloat(injected.toFixed(2)),
-        trapped: parseFloat(trappedSum.toFixed(2)),
-        mobile: parseFloat(mobileSum.toFixed(2)),
-        leaked: parseFloat(leaked.toFixed(2))
-      }
-    };
-  };
-
-  // --- NODE-BASED RIBBON BUILDER (Zero Sawteeth Guaranteed) ---
-  const buildSmoothRibbon = (topElevationFn, botElevationFn, kStart, kEnd) => {
-    if (kStart > kEnd) return "";
-    
-    let path = "";
-    const { cellCount } = profileParams;
-    for (let k = kStart; k <= kEnd; k++) {
-      const x = k * dx;
-      const isFault = k > 0 && k < cellCount && Math.abs(capRockY(x, k - 1) - capRockY(x, k)) > 0.1;
-      
-      if (k === kStart) {
-        const y0 = topElevationFn(k, isFault ? 'right' : 'avg');
-        path = `M ${x} ${y0}`;
-      } else if (isFault) {
-        const yL = topElevationFn(k, 'left');
-        const yR = topElevationFn(k, 'right');
-        path += ` L ${x} ${yL} L ${x} ${yR}`;
-      } else {
-        const y = topElevationFn(k, 'avg');
-        path += ` L ${x} ${y}`;
-      }
-    }
-    
-    for (let k = kEnd; k >= kStart; k--) {
-      const x = k * dx;
-      const isFault = k > 0 && k < cellCount && Math.abs(capRockY(x, k - 1) - capRockY(x, k)) > 0.1;
-      
-      if (isFault) {
-        const yR = botElevationFn(k, 'right');
-        const yL = botElevationFn(k, 'left');
-        path += ` L ${x} ${yR} L ${x} ${yL}`;
-      } else {
-        const y = botElevationFn(k, 'avg');
-        path += ` L ${x} ${y}`;
-      }
-    }
-    
-    path += " Z";
-    return path;
-  };
-
-  const getSimNodeValue = (arr, k, side = 'avg') => {
-    if (!arr) return 0;
-    const N = arr.length;
-    if (k <= 0) return arr[0];
-    if (k >= N) return arr[N - 1];
-    if (side === 'left') return arr[k - 1];
-    if (side === 'right') return arr[k];
-    return 0.5 * (arr[k - 1] + arr[k]);
-  };
-
-  // Helper to find the active continuous domain with sub-grid zero-tapered tip nodes
-  const getSimActiveBounds = (nodeValueFn, N, eps = 0.001) => {
-    let kFirst = -1, kLast = -1;
-    for (let k = 0; k <= N; k++) {
-      const val = nodeValueFn(k);
-      if (val > eps) {
-        if (kFirst === -1) kFirst = k;
-        kLast = k;
-      }
-    }
-    if (kFirst === -1) return null;
-    const kStart = Math.max(0, kFirst - 1);
-    const kEnd = Math.min(N, kLast + 1);
-    return { kStart, kEnd };
-  };
-
-  // Swept Residual Trapping Footprint (hTrapped)
-  // Fringe thickness modulated by entry pressure: higher P_e => thinner imbibe transition (Brooks-Corey)
-  const getSweptResidualSimPath = () => {
-    const { cellCount, hasCapillaryFringe, fringeScale, entryPressure } = profileParams;
-    const N = cellCount;
-    const scale = 15.0;
-    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.25 * (15.0 / entryPressure) : 0;
-    
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hTrapped, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    
-    return buildSmoothRibbon(
-      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k),
-      (k, side) => {
-        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-        const hTrp = getSimNodeValue(hTrapped, k, side);
-        const f = fringePx * Math.min(1.0, hTrp * 1.5);
-        return Math.min(yBotMax, yTop + hTrp * scale + f);
-      },
-      bounds.kStart, bounds.kEnd
-    );
-  };
-
-  // Active Flowing Mobile Plume (hMobile)
-  const getActiveMobileSimPath = () => {
-    const { cellCount, hasCapillaryFringe, fringeScale, entryPressure } = profileParams;
-    const N = cellCount;
-    const scale = 15.0;
-    const fringePx = hasCapillaryFringe ? fringeScale * 15.0 * 0.35 * (15.0 / entryPressure) : 0;
-    
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hMobile, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    
-    return buildSmoothRibbon(
-      (k, side) => capRockY(k * dx, side === 'left' ? k - 1 : k),
-      (k, side) => {
-        const yTop = capRockY(k * dx, side === 'left' ? k - 1 : k);
-        const yBotMax = stratumY(k * dx, side === 'left' ? k - 1 : k, 175);
-        const hMob = getSimNodeValue(hMobile, k, side);
-        const f = fringePx * Math.min(1.0, hMob * 1.8);
-        return Math.min(yBotMax, yTop + hMob * scale + f);
-      },
-      bounds.kStart, bounds.kEnd
-    );
-  };
-
-  // Maximum Historic Gas Saturation Boundary (hMax Swept Footprint Dashed Line)
-  const getMaxHgLinePath = () => {
-    const { cellCount, hasCapillaryFringe, fringeScale, entryPressure } = profileParams;
-    const N = cellCount;
-    const scale = 15.0;
-    const bounds = getSimActiveBounds(k => getSimNodeValue(hMax, k, 'avg'), N, 0.001);
-    if (!bounds) return "";
-    
-    let path = "";
-    for (let k = bounds.kStart; k <= bounds.kEnd; k++) {
-      const x = k * dx;
-      const isFault = k > 0 && k < cellCount && Math.abs(capRockY(x, k - 1) - capRockY(x, k)) > 0.1;
-      if (k === bounds.kStart) {
-        const yTop = capRockY(x, isFault ? k : k);
-        const yBotMax = stratumY(x, isFault ? k : k, 175);
-        const y0 = Math.min(yBotMax, yTop + getSimNodeValue(hMax, k, isFault ? 'right' : 'avg') * scale);
-        path = `M ${x} ${y0}`;
-      } else if (isFault) {
-        const yTopL = capRockY(x, k - 1);
-        const yBotMaxL = stratumY(x, k - 1, 175);
-        const yTopR = capRockY(x, k);
-        const yBotMaxR = stratumY(x, k, 175);
-        const yL = Math.min(yBotMaxL, yTopL + getSimNodeValue(hMax, k, 'left') * scale);
-        const yR = Math.min(yBotMaxR, yTopR + getSimNodeValue(hMax, k, 'right') * scale);
-        path += ` L ${x} ${yL} L ${x} ${yR}`;
-      } else {
-        const yTop = capRockY(x, k);
-        const yBotMax = stratumY(x, k, 175);
-        const y = Math.min(yBotMax, yTop + getSimNodeValue(hMax, k, 'avg') * scale);
-        path += ` L ${x} ${y}`;
-      }
-    }
-    return path;
-  };
-
-  // Build the three heavy plume geometry strings once per state/param change
-  // instead of twice per render (they were previously invoked for both the
-  // emptiness check and the path data on every tick).
-  const plumePaths = useMemo(() => ({
-    swept: getSweptResidualSimPath(),
-    mobile: getActiveMobileSimPath(),
-    maxEnv: getMaxHgLinePath()
-  }), [hMobile, hTrapped, hMax, profileParams]);
-
-  // Reservoir Conformable Grid block columns
-  const reservoirBlocks = useMemo(() => {
-    const blocks = [];
-    const N = profileParams.cellCount;
-    
-    for (let i = 0; i < N; i++) {
-      const x1 = i * dx;
-      const x2 = (i + 1) * dx;
-      const yt1 = capRockY(x1, i);
-      const yt2 = capRockY(x2, i);
-      const yb1 = stratumY(x1, i, 175);
-      const yb2 = stratumY(x2, i, 175);
-      
-      // Permeability noise mapping for sandstone heterogeneity
-      const permFactor = 0.5 + 0.5 * Math.sin(i * 12.7 + 1.1);
-      const r = Math.floor(28 + permFactor * 18);
-      const g = Math.floor(34 + permFactor * 16);
-      const b = Math.floor(54 + permFactor * 22);
-      const colFill = `rgb(${r}, ${g}, ${b})`;
-      
-      blocks.push({
-        points: `${x1},${yt1} ${x2},${yt2} ${x2},${yb2} ${x1},${yb1}`,
-        fill: colFill,
-        x1, yt1, x2, yt2, yb1, yb2
-      });
-    }
-    return blocks;
-  }, [profileParams]);
-
-  // --- Dynamic SVG Chart Drawing ---
-  const renderSVGChart = (chartMasses, chartHistory, chartTime) => {
-    const width = 450;
-    const height = 210;
-    const padding = { left: 45, right: 15, top: 15, bottom: 25 };
-    
-    const maxVal = Math.max(10, Math.max(chartMasses.injected, chartMasses.mobile + chartMasses.trapped + chartMasses.leaked) * 1.08);
-    
-    // Scale helper
-    const getX = (t) => padding.left + (t / 1000.0) * (width - padding.left - padding.right);
-    const getY = (val) => height - padding.bottom - (val / maxVal) * (height - padding.top - padding.bottom);
-    
-    let pathInj = "", pathTrap = "", pathMob = "", pathLeak = "";
-    
-    if (chartHistory.length > 0) {
-      pathInj = `M ${getX(chartHistory[0].time)} ${getY(chartHistory[0].injected)}`;
-      pathTrap = `M ${getX(chartHistory[0].time)} ${getY(chartHistory[0].trapped)}`;
-      pathMob = `M ${getX(chartHistory[0].time)} ${getY(chartHistory[0].mobile)}`;
-      pathLeak = `M ${getX(chartHistory[0].time)} ${getY(chartHistory[0].leaked)}`;
-      
-      for (let idx = 1; idx < chartHistory.length; idx++) {
-        const pt = chartHistory[idx];
-        pathInj += ` L ${getX(pt.time)} ${getY(pt.injected)}`;
-        pathTrap += ` L ${getX(pt.time)} ${getY(pt.trapped)}`;
-        pathMob += ` L ${getX(pt.time)} ${getY(pt.mobile)}`;
-        pathLeak += ` L ${getX(pt.time)} ${getY(pt.leaked)}`;
-      }
-    }
-    
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {/* Interactive Top Legend Pill Bar with Live Numerical Readouts */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', fontSize: 10.5, padding: '2px 4px' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 2, background: '#ffffff', opacity: 0.6, borderTop: '1px dashed #fff' }} />
-            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Injected:</span>
-            <strong style={{ color: '#fff', fontFamily: 'monospace' }}>{formatMass(chartMasses.injected)}</strong>
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 2.5, background: SIM_PALETTE.mobile }} />
-            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Mobile:</span>
-            <strong style={{ color: SIM_PALETTE.mobile, fontFamily: 'monospace' }}>{formatMass(chartMasses.mobile)}</strong>
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 2.5, background: SIM_PALETTE.trapped }} />
-            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Trapped:</span>
-            <strong style={{ color: SIM_PALETTE.trapped, fontFamily: 'monospace' }}>{formatMass(chartMasses.trapped)}</strong>
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 10, height: 2.5, background: SIM_PALETTE.leakage }} />
-            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Leaked:</span>
-            <strong style={{ color: SIM_PALETTE.leakage, fontFamily: 'monospace' }}>{formatMass(chartMasses.leaked)}</strong>
-          </span>
-        </div>
-
-        <svg role="img" aria-labelledby="mass-chart-title mass-chart-desc" width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
-          <title id="mass-chart-title">CO₂ mass balance through year {chartTime}</title>
-          <desc id="mass-chart-desc">Line chart of injected, mobile, trapped, and leaked model mass over simulation time.</desc>
-          {/* Y Grid axis */}
-          {[0.25, 0.5, 0.75, 1.0].map((ratio, i) => {
-            const val = maxVal * ratio;
-            const y = getY(val);
-            return (
-              <g key={i}>
-                <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="3 3"/>
-                <text x={padding.left - 8} y={y + 3} fill="rgba(255,255,255,0.45)" fontSize="8.5" textAnchor="end" fontFamily="monospace">
-                  {Math.round(val)}
-                </text>
-              </g>
-            );
-          })}
-          
-          {/* X axis year labels */}
-          {[0, 200, 400, 600, 800, 1000].map((t, i) => {
-            const x = getX(t);
-            return (
-              <text key={i} x={x} y={height - 8} fill="rgba(255,255,255,0.45)" fontSize="8.5" textAnchor="middle" fontFamily="monospace">
-                {t}y
-              </text>
-            );
-          })}
-          
-          {/* Plot Lines */}
-          {pathInj && <path d={pathInj} fill="none" stroke="#ffffff" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.6"/>}
-          {pathMob && <path d={pathMob} fill="none" stroke={SIM_PALETTE.mobile} strokeWidth="2" style={{ filter: 'drop-shadow(0 0 2px rgba(231,139,255,0.35))' }}/>}
-          {pathTrap && <path d={pathTrap} fill="none" stroke={SIM_PALETTE.trapped} strokeWidth="1.8"/>}
-          {pathLeak && <path d={pathLeak} fill="none" stroke={SIM_PALETTE.leakage} strokeWidth="2"/>}
-          
-          {/* Vertical line indicator for current simTime */}
-          <line 
-            x1={getX(chartTime)}
-            y1={padding.top} 
-            x2={getX(chartTime)}
-            y2={height - padding.bottom} 
-            stroke={SIM_PALETTE.sealedFault}
-            strokeWidth="1.2" 
-            strokeDasharray="2 2"
-            opacity="0.8"
-          />
-          <circle cx={getX(chartTime)} cy={padding.top} r="3" fill={SIM_PALETTE.sealedFault} />
-          
-          {/* Axes borders */}
-          <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
-          <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
-        </svg>
-        <table className="sr-only">
-          <caption>Current CO₂ mass balance at year {chartTime}</caption>
-          <thead><tr><th>Injected</th><th>Mobile</th><th>Trapped</th><th>Leaked</th></tr></thead>
-          <tbody><tr><td>{chartMasses.injected}</td><td>{chartMasses.mobile}</td><td>{chartMasses.trapped}</td><td>{chartMasses.leaked}</td></tr></tbody>
-        </table>
-      </div>
-    );
-  };
-
-  const activeResults = selectActiveResults(
-    activeSubTab,
-    { time: simTime, masses: currentMasses, history: massHistory },
-    mapSnapshot
-  );
-  const activeTime = activeResults.time;
-  const activeMasses = activeResults.masses;
-  const activeMassHistory = activeResults.history;
-
-  const presetButton = (id, label, icon) => (
-    <button
-      key={id}
-      onClick={() => applyPreset(id)}
-      style={{
-        background: selectedPreset === id ? 'rgba(100, 255, 218, 0.16)' : 'rgba(255, 255, 255, 0.05)',
-        border: `1px solid ${selectedPreset === id ? '#64ffda' : 'rgba(255, 255, 255, 0.12)'}`,
-        color: selectedPreset === id ? '#64ffda' : 'rgba(255, 255, 255, 0.75)',
-        padding: '5px 10px',
-        borderRadius: '7px',
-        fontSize: '11px',
-        cursor: 'pointer',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '5px',
-        fontWeight: selectedPreset === id ? 600 : 400,
-        outline: 'none',
-        transition: 'all 0.15s ease'
-      }}
-    >
-      <i className={icon} style={{ fontSize: '10px' }} />
-      {label}
-    </button>
-  );
+  const line = sectionLine || (model ? simDefaultSectionLine(model) : null);
+  const statusText = run.status === 'computing' ? `Computing… year ${computedYears}` : run.status === 'error' ? 'Run failed' : 'Up to date';
+  const viewProps = { model, frame, palette, theme, layers, reducedMotion, scenario: shown.scenario || scenario, year: shownYear, playing };
 
   return (
-    <div
-      className="simulator-page-wrapper"
-      role={presentedPanel ? 'dialog' : undefined}
-      aria-modal={presentedPanel ? 'true' : undefined}
-      aria-label={presentedPanel ? `${presentedPanel === 'inputs' ? 'Inputs' : 'Outcomes'} panel` : undefined}
-    >
-      {/* --- COLLAPSIBLE TIME-TRAVEL SIDEBAR --- */}
-      {sidebarOpen && activeSubTab === 'profile' && <aside className="ve-history-sheet" aria-label="Simulation timeline">
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#64ffda', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <i className="fas fa-history" style={{ fontSize: 14 }} /> Timeline
-          </h3>
-          <button 
-            onClick={() => setSidebarOpen(false)} 
-            aria-label="Close timeline panel"
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 16 }}
-            title="Close panel"
-          >
-            <i className="fas fa-times" />
-          </button>
+    <div className="sim">
+      <header className="sim-appbar">
+        <div className="sim-title">
+          <h1>CO₂ Storage Simulator</h1>
+          <p>Vertical-equilibrium model of plume migration, trapping and leakage in a saline aquifer</p>
         </div>
-
-        {/* Current State / Mode Status Card */}
-        {(() => {
-          const isPast = simTime < historyRef.current.length - 1;
-          const paramDiffs = sidebarOpen ? getParamDiff() : [];
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
-              
-              {/* Mode indicator badge */}
-              <div style={{ 
-                background: isPast ? 'rgba(246, 196, 83, 0.1)' : 'rgba(124, 229, 211, 0.1)',
-                border: `1px solid ${isPast ? 'rgba(246, 196, 83, 0.3)' : 'rgba(124, 229, 211, 0.3)'}`,
-                padding: '12px 14px', 
-                borderRadius: 12,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 5
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 'bold', color: isPast ? SIM_PALETTE.injector : '#64ffda' }}>
-                  <span style={{ 
-                    width: 8, height: 8, borderRadius: '50%', 
-                    background: isPast ? SIM_PALETTE.injector : '#64ffda',
-                    boxShadow: `0 0 8px ${isPast ? SIM_PALETTE.injector : '#64ffda'}`,
-                    animation: 'pulseFlare 1.5s infinite'
-                  }} />
-                  {isPast ? `VIEWING PAST \u00B7 YEAR ${simTime}` : `SIMULATING \u00B7 YEAR ${simTime}`}
-                </div>
-                <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.65)', lineHeight: 1.4 }}>
-                  {isPast 
-                    ? `Viewing history at Year ${simTime}. Changes to sliders will configure a branch starting from this point.` 
-                    : `Simulating in real-time. Drag the timeline scrub slider to travel back to previous years.`
-                  }
-                </div>
-              </div>
-
-              {/* Branching Actions */}
-              {isPast && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', padding: 12, borderRadius: 12 }}>
-                  <button 
-                    onClick={() => { commitBranch(); lastRunSignatureRef.current = scenarioSignature; handlePlayToggle(); }}
-                    style={{
-                      background: SIM_PALETTE.active,
-                      border: 'none',
-                      color: '#000',
-                      padding: '8px 12px',
-                      borderRadius: 8,
-                      fontSize: 11.5,
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6,
-                      transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1)'
-                    }}
-                  >
-                    <i className="fas fa-code-branch" /> Branch & Run (Yr {simTime})
-                  </button>
-                  
-                  <button 
-                    onClick={() => handleScrub(historyRef.current.length - 1)}
-                    style={{
-                      background: 'none',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      color: 'rgba(255,255,255,0.8)',
-                      padding: '6px 12px',
-                      borderRadius: 8,
-                      fontSize: 11,
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6,
-                      transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1)'
-                    }}
-                  >
-                    <i className="fas fa-fast-forward" /> Return to Present (Yr {historyRef.current.length - 1})
-                  </button>
-                </div>
-              )}
-
-              {/* Precise Time Controls */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={{ fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', fontWeight: 'bold' }}>Time Controls</span>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.05)', padding: 8, borderRadius: 10 }}>
-                  
-                  {/* Step Back */}
-                  <button onClick={stepBackward} aria-label="Step back 1 year" style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', opacity: simTime > 0 ? 0.8 : 0.3 }} disabled={simTime === 0} title="Step Back 1 Year">
-                    <i className="fas fa-step-backward" style={{ fontSize: 10 }} />
-                  </button>
-                  
-                  {/* Play Reverse */}
-                  <button onClick={handlePlayReverseToggle} aria-label={isReversing ? 'Pause reverse playback' : 'Play backward'} style={{ background: 'none', border: 'none', color: isReversing ? SIM_PALETTE.leakage : '#64ffda', cursor: 'pointer' }} title={isReversing ? "Pause" : "Play Reverse"}>
-                    <i className={`fas ${isReversing ? 'fa-pause' : 'fa-play fa-flip-horizontal'}`} style={{ fontSize: 11 }} />
-                  </button>
-                  
-                  {/* Pause */}
-                  <button 
-                    onClick={() => { setIsPlaying(false); setIsReversing(false); }} 
-                    aria-label="Pause simulation"
-                    style={{ background: 'none', border: 'none', color: (!isPlaying && !isReversing) ? SIM_PALETTE.injector : '#fff', cursor: 'pointer' }}
-                    title="Pause"
-                  >
-                    <i className="fas fa-pause" style={{ fontSize: 11 }} />
-                  </button>
-                  
-                  {/* Play Forward */}
-                  <button onClick={handlePlayToggle} aria-label={isPlaying ? 'Pause simulation' : 'Play simulation forward'} style={{ background: 'none', border: 'none', color: isPlaying ? SIM_PALETTE.active : '#64ffda', cursor: 'pointer' }} title={isPlaying ? "Pause" : "Play Forward"}>
-                    <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`} style={{ fontSize: 11 }} />
-                  </button>
-                  
-                  {/* Step Forward */}
-                  <button onClick={stepForward} aria-label="Step forward 1 year" style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', opacity: simTime < 1000 ? 0.8 : 0.3 }} disabled={simTime >= 1000} title="Step Forward 1 Year">
-                    <i className="fas fa-step-forward" style={{ fontSize: 10 }} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Parameter Differences Card */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
-                <span style={{ fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', fontWeight: 'bold' }}>Branch Parameters</span>
-                <div style={{ 
-                  background: 'rgba(0,0,0,0.2)', 
-                  border: '1px solid rgba(255,255,255,0.05)', 
-                  borderRadius: 12, 
-                  padding: 12,
-                  maxHeight: '220px',
-                  overflowY: 'auto',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8
-                }}>
-                  {paramDiffs.length > 0 ? (
-                    paramDiffs.map((diff, i) => (
-                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10.5, borderBottom: i < paramDiffs.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', paddingBottom: 6 }}>
-                        <span style={{ color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>{diff.label}</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'monospace' }}>
-                          <span style={{ color: SIM_PALETTE.leakage, textDecoration: 'line-through' }}>{diff.original}</span>
-                          <span style={{ color: 'rgba(255,255,255,0.4)' }}><i className="fas fa-arrow-right" style={{ fontSize: 8 }} /></span>
-                          <span style={{ color: SIM_PALETTE.active, fontWeight: 'bold' }}>{diff.current}</span>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: '15px 0' }}>
-                      {isPast 
-                        ? 'Parameters match the original run. Tweak physical sliders below to define a new branch configuration.' 
-                        : 'Simulating on main branch. Scroll down and modify parameters in real-time.'
-                      }
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Milestone Checkpoint Tree */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={{ fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', fontWeight: 'bold' }}>Milestones</span>
-                <div style={{ 
-                  background: 'rgba(0,0,0,0.15)', 
-                  border: '1px solid rgba(255,255,255,0.03)', 
-                  borderRadius: 12, 
-                  padding: '12px 14px',
-                  maxHeight: '220px',
-                  overflowY: 'auto',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 0,
-                  position: 'relative'
-                }}>
-                  {/* Vertical progress line overlay */}
-                  <div style={{ 
-                    position: 'absolute', left: 19, top: 20, bottom: 20, 
-                    width: 2, background: 'rgba(255,255,255,0.06)' 
-                  }} />
-
-                  {[0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000].map((m, idx) => {
-                    const maxSimulated = historyRef.current.length - 1;
-                    const isSimulated = m <= maxSimulated;
-                    const isCurrent = m === simTime;
-                    
-                    return (
-                      <button
-                        key={idx}
-                        onClick={() => handleScrub(m)}
-                        aria-label={`Jump to year ${m}${isCurrent ? ' (current)' : ''}`}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 12,
-                          padding: '6px 0',
-                          background: 'none',
-                          border: 'none',
-                          color: 'inherit',
-                          font: 'inherit',
-                          textAlign: 'left',
-                          width: '100%',
-                          cursor: 'pointer',
-                          opacity: isCurrent ? 1 : isSimulated ? 0.9 : 0.6
-                        }}
-                      >
-                        {/* Circle node */}
-                        <div style={{ 
-                          width: 12, height: 12, borderRadius: '50%',
-                          background: isCurrent ? SIM_PALETTE.active : isSimulated ? SIM_PALETTE.capillary : 'rgba(100,255,218,0.2)',
-                          border: isCurrent ? '2px solid #fff' : isSimulated ? '2px solid transparent' : '1px dashed rgba(100,255,218,0.6)',
-                          boxShadow: isCurrent ? `0 0 6px ${SIM_PALETTE.active}` : 'none',
-                          zIndex: 2,
-                          transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }} />
-                        
-                        {/* Text label */}
-                        <span style={{ 
-                          fontSize: 11.5, 
-                          fontFamily: 'monospace',
-                          color: isCurrent ? SIM_PALETTE.active : isSimulated ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)',
-                          fontWeight: isCurrent ? 'bold' : 'normal'
-                        }}>
-                          Year {m} {isCurrent && '\u2190'}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-            </div>
-          );
-        })()}
-      </aside>}
-
-      {/* Dynamic responsive layout style element */}
-      <style>{`
-        .sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-        @media (max-width: 768px) {
-          .sim-tab-header { overflow-x: auto; align-items: stretch !important; }
-          .sim-tab-header [role="tablist"] { min-width: max-content; }
-          .sim-tab-status { display: none; }
-          .sim-hud-legend { position: static !important; flex: 0 0 auto; width: 100%; max-width: 100%; overflow-x: auto; right: auto !important; top: auto !important; border-radius: 0 !important; pointer-events: auto !important; white-space: nowrap; scrollbar-width: none !important; }
-          .sim-hud-legend > span { flex: 0 0 auto; }
-          .sim-tab-header, .sim-hud-legend {
-            scrollbar-width: none !important;
-            -ms-overflow-style: none !important;
-          }
-          .sim-tab-header::-webkit-scrollbar, .sim-hud-legend::-webkit-scrollbar {
-            width: 0 !important;
-            height: 0 !important;
-            display: none !important;
-            background: transparent !important;
-          }
-          .sim-tab-header::-webkit-scrollbar-thumb, .sim-hud-legend::-webkit-scrollbar-thumb,
-          .sim-tab-header::-webkit-scrollbar-track, .sim-hud-legend::-webkit-scrollbar-track {
-            background: transparent !important;
-            display: none !important;
-          }
-          .sim-playback { left: 8px !important; right: 8px !important; gap: 7px !important; padding: 8px 10px !important; }
-          .sim-playback input[type="range"] { min-width: 48px; }
-          .uq-config-grid, .uq-results-grid, .uq-percentile-grid { grid-template-columns: 1fr !important; }
-          .sim-stat-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          .control-panel > summary { cursor: pointer; }
-        }
-      `}</style>
-
-      <section className="ve-scenario-bar" aria-label="Scenario controls">
-        <div className="ve-presets" aria-label="Reservoir presets">
-          {[
-            ['default', 'Default'],
-            ['dome', 'Anticline'],
-            ['faulted', 'Faulted trap'],
-            ['monocline', 'Dipping layer']
-          ].map(([id, label]) => (
-            <button key={id} className={selectedPreset === id ? 'is-active' : ''} onClick={() => applyPreset(id)}>{label}</button>
+        <div className="sim-sections" role="tablist" aria-label="Simulator sections" onKeyDown={onTabKey}>
+          {SIM_SECTIONS.map(item => (
+            <button key={item.id} id={`sim-tab-${item.id}`} ref={el => { tabRefs.current[item.id] = el; }} type="button" role="tab"
+              aria-selected={section === item.id} aria-controls={`sim-panel-${item.id}`} tabIndex={section === item.id ? 0 : -1}
+              onClick={() => setSection(item.id)}>{item.label}</button>
           ))}
-          <button
-            className={`ve-random-grid-button${selectedPreset === 'random' ? ' is-active' : ''}`}
-            onClick={generateRandomGrid}
-            aria-label="Generate random 2D grid with faults"
-            title="Generate a reproducible heterogeneous grid with finite faults"
-          >
-            <i className="fas fa-dice" aria-hidden="true" /> Random grid
+        </div>
+        <div className="sim-actions">
+          <span className="sim-status-pill" data-state={run.status} role="status">{statusText}</span>
+          {section === 'simulator' && <button type="button" className="sim-button sim-inputs-trigger" onClick={() => setSheet('inputs')} aria-expanded={sheet === 'inputs'} aria-controls="sim-inputs"><i className="fas fa-sliders" aria-hidden="true" /><span className="sim-button__label">Inputs</span></button>}
+          <button type="button" className="sim-button" onClick={copyLink} aria-label="Copy a link to this scenario"><i className="fas fa-link" aria-hidden="true" /><span className="sim-button__label">{share}</span></button>
+          <details className="sim-menu" ref={exportRef}>
+            <summary className="sim-button" aria-label="Export"><i className="fas fa-download" aria-hidden="true" /><span className="sim-button__label">Export</span></summary>
+            <div className="sim-menu__panel">
+              <button type="button" onClick={exportInventory}>Inventory through time <small>CSV</small></button>
+              <button type="button" onClick={exportGrid} disabled={!frame}>Grid at this year <small>CSV</small></button>
+              <button type="button" onClick={exportImage}>Current view <small>{view === 'section' ? 'SVG' : 'PNG'}</small></button>
+            </div>
+          </details>
+          <button type="button" className="sim-icon-button" onClick={() => setTheme(t => t === 'night' ? 'day' : 'night')} aria-label={theme === 'night' ? 'Switch to the day theme' : 'Switch to the night theme'}>
+            <i className="fas fa-circle-half-stroke" aria-hidden="true" />
           </button>
         </div>
-        <span className={`ve-run-status ve-run-status--${runStatus.toLowerCase().replace(/\s+/g, '-')}`} role="status">{runStatus}</span>
-        <button className="ve-reset-button" onClick={resetActiveSimulation}>Reset</button>
-        <button className="ve-share-button" onClick={copyScenarioLink}>Copy scenario link</button>
-        <details className="ve-export-menu">
-          <summary>Export</summary>
-          <button onClick={() => runFileAction(exportCsv, 'Mass balance export failed. Please retry.')}>Mass balance CSV</button>
-          {isMapView ? <button onClick={() => runFileAction(exportCanvas, 'Map export failed. Please retry.')}>View PNG</button> : <button onClick={() => runFileAction(exportSvg, 'Reservoir export failed. Please retry.')}>Reservoir SVG</button>}
-        </details>
-        <button
-          className="ve-theme-toggle"
-          aria-label={`Dark mode ${theme === 'dark' ? 'on' : 'off'}`}
-          aria-pressed={theme === 'dark'}
-          onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}
-        >
-          <i className={theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon'} aria-hidden="true" /> Dark mode
-        </button>
-        <button className="ve-run-button" onClick={runActiveSimulation}>Run scenario</button>
-      </section>
-      <nav className="ve-workspace-nav" aria-label="Simulator workspace">
-        <button aria-current={isMapView ? 'page' : undefined} onClick={() => handleWorkspaceChange('topography')}>2D / 3D simulator</button>
-        <button aria-current={activeSubTab === 'profile' ? 'page' : undefined} onClick={() => handleWorkspaceChange('profile')}>1D cross-section simulator</button>
-        <button aria-current={activeSubTab === 'uq' ? 'page' : undefined} onClick={() => handleWorkspaceChange('uq')}>Risk analysis</button>
-        <button aria-current={activeSubTab === 'guide' ? 'page' : undefined} onClick={() => handleWorkspaceChange('guide')}>Methodology</button>
-      </nav>
-      <span className="ve-action-status" role="status" aria-live="polite">{shareStatus}</span>
+      </header>
 
-      {VISUALIZATION_TABS.includes(activeSubTab) && <div
-        ref={mobileTriggersRef}
-        className="ve-mobile-panel-triggers"
-        role="group"
-        aria-label="Workbench panels"
-        data-panel-open={Boolean(presentedPanel)}
-      >
-        <button
-          type="button"
-          ref={element => { mobileTriggerRefs.current.inputs = element; }}
-          aria-controls="ve-input-rail"
-          aria-expanded={presentedPanel === 'inputs'}
-          onClick={() => handleMobilePanelToggle('inputs')}
-        >
-          <i className="fas fa-sliders-h" aria-hidden="true" /> Inputs
-        </button>
-        <button
-          type="button"
-          ref={element => { mobileTriggerRefs.current.outcomes = element; }}
-          aria-controls="ve-outcome-rail"
-          aria-expanded={presentedPanel === 'outcomes'}
-          onClick={() => handleMobilePanelToggle('outcomes')}
-        >
-          <i className="fas fa-chart-line" aria-hidden="true" /> Outcomes
-        </button>
-      </div>}
-
-      {presentedPanel && VISUALIZATION_TABS.includes(activeSubTab) && <button
-        type="button"
-        className="ve-mobile-panel-backdrop"
-        tabIndex={-1}
-        aria-label={`Close ${presentedPanel} panel`}
-        onClick={() => dismissMobilePanel()}
-      />}
-
-      {/* --- MAIN LAYOUT GRID --- */}
-      <div className="ve-workbench" data-workspace={activeSubTab}>
-        <InputRail
-          data-mobile-open={presentedPanel === 'inputs'}
-          inert={presentedPanel === 'outcomes' ? '' : undefined}
-          closeRef={element => { mobileCloseRefs.current.inputs = element; }}
-          onClose={dismissMobilePanel}
-        >
-          <div className="ve-rail-heading">
-            <h2>{isMapView ? 'Map simulator inputs' : '1D cross-section inputs'}</h2>
-            <span className="ve-rail-mode">{isMapView ? '2D / 3D' : '1D'}</span>
-          </div>
-
-          <section className="ve-input-group">
-            <h3>Injection</h3>
-            <div>
-              <ParameterField label="Flow rate (Q)" unit="kt/yr" min={0} max={3.5} step={0.1} value={Q} onChange={setQ} />
-              <ParameterField label={isMapView ? 'Well X location' : 'Well location'} unit="%" min={10} max={90} step={5} value={injLocation} onChange={setInjLocation} />
-              <ParameterField label="Injection stop year" unit="y" min={50} max={400} step={10} value={injDuration} onChange={setInjDuration} />
-            </div>
-          </section>
-
-          <section className="ve-input-group">
-            <h3>Rock properties</h3>
-            <div>
-              <ParameterField label="Permeability (K)" unit="×10³ mD" min={0.1} max={3.5} step={0.1} value={K} onChange={setK} />
-              <ParameterField label="Porosity (φ)" unit="fraction" min={0.1} max={0.4} step={0.05} value={porosity} onChange={setPorosity} />
-              <ParameterField label="Residual trap (Sgr)" unit="fraction" min={0} max={0.4} step={0.05} value={residualTrapFraction} onChange={setResidualTrapFraction} />
-            </div>
-          </section>
-
-          <section className="ve-input-group">
-            <h3>Structure</h3>
-            <div>
-              <ParameterField label="Regional dip" unit="%" min={-5} max={5} step={0.5} value={dipPercent} onChange={setDipPercent} />
-              <ParameterField label="Anticline height" unit="px" min={0} max={50} step={5} value={amplitude} onChange={setAmplitude} />
-              <ParameterField label="Anticline count" unit="" min={0.5} max={4} step={0.5} value={frequency} onChange={setFrequency} />
-              <ParameterField label="Fault slip" unit="×" min={0} max={3} step={0.2} value={faultOffset} onChange={setFaultOffset} />
-              {isMapView && <ParameterField label="Terrain heterogeneity" unit="fraction" min={0} max={1} step={0.05} value={heterogeneity} onChange={setHeterogeneity} />}
-            </div>
-          </section>
-
-          <section className="ve-fault-section">
-            <h3>Faults</h3>
-            <div className="ve-fault-count">
-              <span>Active faults</span>
-              <div>
-                {[0, 1, 2, 3].map(count => (
-                  <button key={count} className={faultCount === count ? 'is-active' : ''} onClick={() => setFaultCount(count)}>{count}</button>
-                ))}
-              </div>
-            </div>
-            {faults.slice(0, faultCount).map((fault, index) => (
-              <div className="ve-fault-editor" key={index}>
-                <div className="ve-fault-heading">
-                  <strong>Fault {String.fromCharCode(65 + index)}</strong>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={fault.isSealed}
-                      onChange={event => {
-                        const next = faults.map(f => ({ ...f }));
-                        next[index].isSealed = event.target.checked;
-                        setFaults(next);
-                      }}
-                    />
-                    Sealed
-                  </label>
+      {section === 'simulator' && (
+        <div className="sim-workbench" id="sim-panel-simulator" role="tabpanel" aria-labelledby="sim-tab-simulator">
+          <aside className="sim-rail sim-rail--inputs" id="sim-inputs" data-open={sheet === 'inputs'} aria-label="Scenario inputs">
+            <SimInputs scenario={scenario} onChange={update} onPreset={applyPreset} onRandom={randomise} onClose={() => setSheet(null)} />
+          </aside>
+          <div className="sim-sheet-backdrop" data-open={sheet === 'inputs'} onClick={() => setSheet(null)} aria-hidden="true" />
+          <section className="sim-stage" aria-label="Reservoir views">
+            <div className="sim-view">
+              {model && view === 'map' && <SimMapView {...viewProps} line={line} onLine={setSectionLine} onWell={(x, y) => update({ wellX: x, wellY: y })} />}
+              {model && view === '3d' && <SimBlockView {...viewProps} />}
+              {model && view === 'section' && <SimSectionView {...viewProps} line={line} />}
+              {!model && <div className="sim-view-note" style={{ top: '45%', left: 0, right: 0, textAlign: 'center' }}>{run.status === 'error' ? run.error : 'Building the reservoir model…'}</div>}
+              <div className="sim-overlay">
+                <div className="sim-segmented" role="group" aria-label="View">
+                  {SIM_VIEWS.map(item => <button key={item.id} type="button" aria-pressed={view === item.id} onClick={() => setView(item.id)}>{item.label}</button>)}
                 </div>
-                <ParameterField label="Position" unit="%" min={10} max={90} step={5} value={fault.xPercent} onChange={value => {
-                  const next = faults.map(f => ({ ...f }));
-                  next[index].xPercent = value;
-                  setFaults(next);
-                }} />
-                {isMapView && <ParameterField label="Y start" unit="%" min={0} max={100} step={5} value={fault.yStartPercent ?? 0} onChange={value => {
-                  const next = faults.map(f => ({ ...f }));
-                  next[index].yStartPercent = value;
-                  setFaults(next);
-                }} />}
-                {isMapView && <ParameterField label="Y end" unit="%" min={0} max={100} step={5} value={fault.yEndPercent ?? 100} onChange={value => {
-                  const next = faults.map(f => ({ ...f }));
-                  next[index].yEndPercent = value;
-                  setFaults(next);
-                }} />}
-                <ParameterField label="Capillary threshold" unit="m" min={0} max={2} step={0.1} value={fault.thresholdHeight} onChange={value => {
-                  const next = faults.map(f => ({ ...f }));
-                  next[index].thresholdHeight = value;
-                  setFaults(next);
-                }} />
-                <ParameterField label="Horizontal transmissibility" unit="fraction" min={0} max={1} step={0.05} value={fault.transmissibility ?? 1} onChange={value => {
-                  const next = faults.map(f => ({ ...f }));
-                  next[index].transmissibility = value;
-                  setFaults(next);
-                }} />
-                {!fault.isSealed && <ParameterField label="Leakage rate" unit="scaled" min={0.01} max={0.4} step={0.02} value={fault.leakRate} onChange={value => {
-                  const next = faults.map(f => ({ ...f }));
-                  next[index].leakRate = value;
-                  setFaults(next);
-                }} />}
-              </div>
-            ))}
-          </section>
-
-          {!isMapView && <section className="ve-input-group">
-            <div className="ve-toggle-heading">
-              <h3>Capillary behavior</h3>
-              <label><input type="checkbox" checked={hasCapillaryFringe} onChange={event => setHasCapillaryFringe(event.target.checked)} /> Enable fringe</label>
-            </div>
-            {hasCapillaryFringe && <div>
-              <ParameterField label="Fringe height (h_c)" unit="m" min={0.1} max={3} step={0.1} value={fringeScale} onChange={setFringeScale} />
-              <ParameterField label="Entry-pressure scale" unit="kPa" min={5} max={40} step={1} value={entryPressure} onChange={setEntryPressure} />
-            </div>}
-          </section>}
-
-          <section className="ve-input-group">
-            <h3>Grid detail</h3>
-            <div>
-              {!isMapView && <ParameterField label="Grid cells (N)" unit="cells" min={50} max={300} step={10} value={cellCount} onChange={setCellCount} />}
-              {isMapView && <ParameterField label="Well Y location" unit="%" min={10} max={90} step={5} value={wellY} onChange={setWellY} />}
-              {isMapView && <ParameterField label="2D grid resolution" unit="columns" min={24} max={128} step={8} value={mapCols} onChange={setMapCols} />}
-              {isMapView && <ParameterField label="Terrain seed" unit="" min={0} max={999999} step={1} value={terrainSeed} onChange={setTerrainSeed} />}
-            </div>
-          </section>
-        </InputRail>
-
-        <VisualizationWorkspace>
-          
-          {/* Reservoir Visualizer SVG Window */}
-          <div className="sim-reservoir-card" style={{
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
-            border: '1px solid rgba(100,255,218,0.18)',
-            borderRadius: 20,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.30)',
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            minHeight: 450,
-            position: 'relative'
-          }}>
-            {/* Tabbed Header */}
-            <div className="sim-tab-header" style={{
-              padding: '0 10px', 
-              borderBottom: '1px solid rgba(255,255,255,0.06)', 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              background: 'rgba(0,0,0,0.15)',
-              minHeight: '48px'
-            }}>
-              <div style={{ display: 'flex', gap: 4 }} role="tablist" aria-label="Simulator views" onKeyDown={handleTabKeys}>
-                {activeSubTab === 'profile' ? <button
-                  ref={el => { tabRefs.current.profile = el; }}
-                  onClick={() => setActiveSubTab('profile')}
-                  role="tab"
-                  id="tab-profile"
-                  aria-selected={activeSubTab === 'profile'}
-                  aria-controls="tabpanel-profile"
-                  tabIndex={activeSubTab === 'profile' ? 0 : -1}
-                  style={{
-                    background: 'rgba(100, 255, 218, 0.08)',
-                    border: 'none',
-                    borderBottom: '2px solid #64ffda',
-                    color: '#64ffda',
-                    padding: '12px 16px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    letterSpacing: '0.05em',
-                    textTransform: 'uppercase',
-                    cursor: 'pointer',
-                    transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease'
-                  }}
-                >
-                  <i className="fas fa-project-diagram" style={{ marginRight: 6 }} /> 1D Cross-section
-                </button> : <>
-                <button
-                  ref={el => { tabRefs.current.map = el; }}
-                  onClick={() => setActiveSubTab('map')}
-                  role="tab"
-                  id="tab-map"
-                  aria-selected={activeSubTab === 'map'}
-                  aria-controls="tabpanel-map"
-                  tabIndex={activeSubTab === 'map' ? 0 : -1}
-                  style={{
-                    background: activeSubTab === 'map' ? 'rgba(100, 255, 218, 0.08)' : 'none',
-                    border: 'none',
-                    borderBottom: activeSubTab === 'map' ? '2px solid #64ffda' : '2px solid transparent',
-                    color: activeSubTab === 'map' ? '#64ffda' : 'rgba(255,255,255,0.6)',
-                    padding: '12px 16px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    letterSpacing: '0.05em',
-                    textTransform: 'uppercase',
-                    cursor: 'pointer',
-                    transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease'
-                  }}
-                >
-                  <i className="fas fa-map" style={{ marginRight: 6 }} /> 2D Map
-                </button>
-                <button
-                  ref={el => { tabRefs.current.topography = el; }}
-                  onClick={() => setActiveSubTab('topography')}
-                  role="tab"
-                  id="tab-topography"
-                  aria-selected={activeSubTab === 'topography'}
-                  aria-controls="tabpanel-topography"
-                  tabIndex={activeSubTab === 'topography' ? 0 : -1}
-                  style={{
-                    background: activeSubTab === 'topography' ? 'rgba(100, 255, 218, 0.08)' : 'none',
-                    border: 'none',
-                    borderBottom: activeSubTab === 'topography' ? '2px solid #64ffda' : '2px solid transparent',
-                    color: activeSubTab === 'topography' ? '#64ffda' : 'rgba(255,255,255,0.6)',
-                    padding: '12px 16px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    letterSpacing: '0.05em',
-                    textTransform: 'uppercase',
-                    cursor: 'pointer',
-                    transition: 'background-color 140ms ease, border-color 140ms ease, color 140ms ease'
-                  }}
-                >
-                  <i className="fas fa-cube" style={{ marginRight: 6 }} /> 3D Topography
-                </button>
-                </>}
-              </div>
-              <div className="sim-tab-status" style={{ paddingRight: 8 }}>
-                {activeSubTab === 'profile' ? (
-                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Year {simTime} / 1000 · {profileParams.boundaryCondition === 'closed' ? 'Closed boundary' : OPEN_BOUNDARY_LABEL}</span>
-                ) : activeSubTab === 'map' ? (
-                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>x–y plume-height model</span>
-                ) : activeSubTab === 'topography' ? (
-                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>interactive grid topography</span>
-                ) : activeSubTab === 'uq' ? (
-                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Monte Carlo Analysis</span>
-                ) : (
-                  <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)' }}>Methodology Guide</span>
-                )}
-              </div>
-            </div>
-
-            {/* Inner Content Switcher */}
-            {(() => {
-              if (activeSubTab === 'profile') {
-                return (
-                  <div id="tabpanel-profile" role="tabpanel" aria-labelledby="tab-profile" style={{ flex: 1, position: 'relative', display: 'flex', background: '#101a2a' }}>
-                    {/* Floating HUD Legend */}
-                    <div className="sim-hud-legend" style={{
-                      position: 'absolute', top: 12, right: 12,
-                      display: 'flex', gap: 12, alignItems: 'center',
-                      background: 'rgba(0,0,0,0.50)', backdropFilter: 'blur(10px)',
-                      WebkitBackdropFilter: 'blur(10px)',
-                      border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20,
-                      padding: '5px 12px', fontSize: 10, color: 'rgba(255,255,255,0.85)',
-                      zIndex: 5, pointerEvents: 'none'
-                    }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: 2, background: SIM_PALETTE.mobile }} /> Mobile CO₂ (S_g → 0.90)
-                        </span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: 2, background: SIM_PALETTE.trapped, border: '1px solid #4a3270' }} /> Trapped Gas (S_gr ≈ 0.25)
-                      </span>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                          <span style={{ width: 14, height: 0, borderTop: `2px dashed ${SIM_PALETTE.sealedFault}` }} /> Max Envelope (h_max)
-                      </span>
-                      {hasCapillaryFringe && (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: 2, background: `linear-gradient(180deg, ${SIM_PALETTE.capillary}, ${SIM_PALETTE.capillaryDeep}, ${SIM_PALETTE.brine})`, border: `1px solid ${SIM_PALETTE.capillary}` }} /> Capillary Fringe
-                        </span>
-                      )}
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: 2, background: SIM_PALETTE.brine }} /> Brine (S_w = 1.0)
-                      </span>
-                    </div>
-
-              <svg ref={reservoirSvgRef} role="img" aria-labelledby="reservoir-title reservoir-desc" viewBox="0 0 1000 450" preserveAspectRatio="none" style={{ width: '100%', height: '100%', pointerEvents: 'auto' }}>
-                <title id="reservoir-title">CO₂ plume migration cross-section at year {simTime}</title>
-                <desc id="reservoir-desc">Educational reservoir cross-section showing caprock, brine, mobile and trapped CO₂, injection well, and {faultCount} active faults.</desc>
-                <defs>
-                  <clipPath id="caprock-clipper">
-                    <path d={`M 0 ${reservoirBlocks[0] ? reservoirBlocks[0].yt1 : capRockY(0)} ` + 
-                      reservoirBlocks.map(b => `L ${b.x2} ${b.yt2}`).join(" ") + 
-                      ` L 1000 ${stratumY(1000, cellCount - 1, 175)} ` +
-                      Array.from({ length: cellCount + 1 }, (_, idx) => {
-                        const k = cellCount - idx;
-                        const x = k * dx;
-                        return `L ${x} ${stratumY(x, Math.max(0, k - 1), 175)}`;
-                      }).join(" ") + ` Z`}
-                    />
-                  </clipPath>
-                  
-                  <linearGradient id="plume-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f3c4ff" stopOpacity="0.95"/>
-                    <stop offset="40%" stopColor="#e78bff" stopOpacity="0.85"/>
-                    <stop offset="100%" stopColor="#9b5bd1" stopOpacity="0.75"/>
-                  </linearGradient>
-                  
-                  <linearGradient id="trapped-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6d4ca3" stopOpacity="0.90"/>
-                    <stop offset="100%" stopColor="#2d2048" stopOpacity="0.70"/>
-                  </linearGradient>
-
-                  {/* Active mobile supercritical flow gradient (orchid -> violet) */}
-                  <linearGradient id="active-mobile-sim-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f3c4ff" stopOpacity="0.98"/>
-                    <stop offset="45%" stopColor="#e78bff" stopOpacity="0.95"/>
-                    <stop offset="70%" stopColor="#c477f0" stopOpacity="0.92"/>
-                    <stop offset="88%" stopColor="#9b5bd1" stopOpacity="0.90"/>
-                    <stop offset="100%" stopColor="#6d4ca3" stopOpacity="0.85"/>
-                  </linearGradient>
-
-                  {/* Residual trapped gas swept footprint gradient (dusk violet) */}
-                  <linearGradient id="residual-trapped-sim-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6d4ca3" stopOpacity="0.90"/>
-                    <stop offset="45%" stopColor="#573b82" stopOpacity="0.82"/>
-                    <stop offset="78%" stopColor="#3f2d61" stopOpacity="0.72"/>
-                    <stop offset="100%" stopColor="#2d2048" stopOpacity="0.55"/>
-                  </linearGradient>
-                  
-                  {/* Capillary Fringe Transition Gradient (Green -> Aqua -> Native Aquifer Brine Blue) */}
-                  <linearGradient id="fringe-sim-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3bbfa3" stopOpacity="0.80"/>
-                    <stop offset="50%" stopColor="#267f95" stopOpacity="0.60"/>
-                    <stop offset="85%" stopColor="#1e5c78" stopOpacity="0.35"/>
-                    <stop offset="100%" stopColor="#162d54" stopOpacity="0.10"/>
-                  </linearGradient>
-
-                  <linearGradient id="brine-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#162d54" stopOpacity="0.85"/>
-                    <stop offset="100%" stopColor="#091a34" stopOpacity="0.95"/>
-                  </linearGradient>
-
-                  {/* Steel Well Casing Gradient */}
-                  <linearGradient id="well-gradient" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#475569"/>
-                    <stop offset="30%" stopColor="#cbd5e1"/>
-                    <stop offset="70%" stopColor="#94a3b8"/>
-                    <stop offset="100%" stopColor="#334155"/>
-                  </linearGradient>
-
-                  {/* Wellhead Christmas Tree Gradient */}
-                  <linearGradient id="wellhead-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f6c453"/>
-                    <stop offset="100%" stopColor="#d58f2d"/>
-                  </linearGradient>
-
-                  {/* Injection Source Flare Glow */}
-                  <radialGradient id="inj-flare-glow" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor="#a6f7cf" stopOpacity="0.9"/>
-                    <stop offset="45%" stopColor="#60d9ad" stopOpacity="0.5"/>
-                    <stop offset="100%" stopColor="#a6f7cf" stopOpacity="0"/>
-                  </radialGradient>
-                </defs>
-
-                {/* Conforming caprock layer (solid brown) */}
-                <path d={`M 0 0 L 1000 0 L 1000 ${capRockY(1000, cellCount - 1)} ` + Array.from({ length: cellCount + 1 }, (_, idx) => {
-                  const k = cellCount - idx;
-                  const x = k * dx;
-                  return `L ${x} ${capRockY(x, Math.max(0, k - 1))}`;
-                }).join(" ") + ` Z`} fill="#282030" stroke="rgba(255,255,255,0.02)"/>
-                
-                {/* Reservoir Sandstone conforming blocks with subtle geological permeability texture */}
-                {reservoirBlocks.map((b, idx) => (
-                  <polygon key={idx} points={b.points} fill={b.fill} stroke="rgba(0,0,0,0.06)" strokeWidth="0.5"/>
-                ))}
-
-                {/* Smooth continuous Native Brine Water layer across entire aquifer body */}
-                <path 
-                  d={`M 0 ${reservoirBlocks[0] ? reservoirBlocks[0].yt1 : capRockY(0)} ` + 
-                     reservoirBlocks.map(b => `L ${b.x2} ${b.yt2}`).join(" ") + 
-                     ` L 1000 ${stratumY(1000, cellCount - 1, 175)} ` +
-                     Array.from({ length: cellCount + 1 }, (_, idx) => {
-                       const k = cellCount - idx;
-                       const x = k * dx;
-                       return `L ${x} ${stratumY(x, Math.max(0, k - 1), 175)}`;
-                     }).join(" ") + ` Z`} 
-                  fill="url(#brine-grad)"
-                  opacity="0.88"
-                />
-
-                {/* Well injection casing visual inside reservoir column */}
-                {(() => {
-                  const cellInjIdx = Math.floor((injLocation / 100.0) * cellCount);
-                  const b = reservoirBlocks[cellInjIdx];
-                  if (!b) return null;
-                  return (
-                    <rect x={b.x1 + dx/2.0 - 2} y={b.yt1} width="4" height={b.yb1 - b.yt1} fill="rgba(255,255,255,0.2)"/>
-                  );
-                })()}
-
-                {/* CO2 Plume Multiphase Fluid Body */}
-                <g clipPath="url(#caprock-clipper)">
-                  {/* 1. Swept Residual Trapped Gas Footprint (S_gr) */}
-                  {plumePaths.swept && (
-                    <path d={plumePaths.swept} fill="url(#residual-trapped-sim-grad)" opacity="0.92" />
-                  )}
-
-                  {/* 2. Active Flowing Mobile Plume (S_max) */}
-                  {plumePaths.mobile && (
-                    <path d={plumePaths.mobile} fill="url(#active-mobile-sim-grad)" opacity="0.98" />
-                  )}
-
-                  {/* 3. Maximum Historic Gas Saturation Boundary (hMax Swept Footprint Dashed Line) */}
-                  {plumePaths.maxEnv && (
-                    <path 
-                      d={plumePaths.maxEnv} 
-                      fill="none" 
-                       stroke={SIM_PALETTE.sealedFault}
-                      strokeWidth="1.4" 
-                      strokeDasharray="5 3.5" 
-                      opacity="0.85" 
-                    />
-                  )}
-                </g>
-
-                {/* Aquifer boundary bottom seal */}
-                <path d={`M 0 ${stratumY(0, 0, 175)} ` + Array.from({ length: cellCount + 1 }, (_, idx) => {
-                  const x = idx * dx;
-                  return `L ${x} ${stratumY(x, Math.min(cellCount - 1, idx), 175)}`;
-                }).join(" ")} stroke="rgba(0,0,0,0.3)" strokeWidth="1" fill="none"/>
-
-                {/* Injection Well Riser, Perforations, and Source Flare */}
-                {(() => {
-                  const cellInjIdx = Math.floor((injLocation / 100.0) * cellCount);
-                  const xWell = cellInjIdx * dx + dx / 2.0;
-                  const yCap = capRockY(xWell);
-                  const yBase = stratumY(xWell, cellInjIdx, 175);
-                  const perfTop = yCap + 20;
-                  const perfBottom = Math.min(yBase - 15, yCap + 95);
-                  const isInjecting = Q > 0 && isPlaying && simTime <= injDuration;
-                  
-                  return (
-                    <g className="sim-wellbore" role="group" aria-label={`Injection well at ${injLocation}%`}>
-                      {/* Surface wellhead Christmas tree valve assembly */}
-                      <rect x={xWell - 7} y="0" width="14" height="12" rx="2" fill="url(#wellhead-grad)" stroke="#fff" strokeWidth="0.8" />
-                      <line x1={xWell - 11} y1="6" x2={xWell + 11} y2="6" stroke={SIM_PALETTE.injector} strokeWidth="2.5" strokeLinecap="round" />
-                      <circle cx={xWell} cy="6" r="2.5" fill="#fff" />
-
-                      {/* Borehole outer casing shadow */}
-                      <line x1={xWell} y1="12" x2={xWell} y2={perfBottom} stroke="rgba(0,0,0,0.4)" strokeWidth="6" />
-
-                      {/* Vertical steel casing tubing */}
-                      <line x1={xWell} y1="12" x2={xWell} y2={perfBottom} stroke="url(#well-gradient)" strokeWidth="3.5" strokeLinecap="round" />
-
-                      {/* Injection Perforations (Interval slots) */}
-                      {Array.from({ length: 6 }).map((_, pIdx) => {
-                        const py = perfTop + pIdx * ((perfBottom - perfTop) / 5);
-                        return (
-                          <line 
-                            key={`perf-${pIdx}`} 
-                            x1={xWell - 6} 
-                            y1={py} 
-                            x2={xWell + 6} 
-                            y2={py} 
-                            stroke={isInjecting ? SIM_PALETTE.active : 'rgba(255,255,255,0.7)'}
-                            strokeWidth="1.6" 
-                            strokeLinecap="round" 
-                          />
-                        );
-                      })}
-
-                      {/* Active Injection Source Flare / Supercritical bubbles */}
-                      {isInjecting && (
-                        <g>
-                          {/* Radial flare glow at perforation interval */}
-                          <circle cx={xWell} cy={(perfTop + perfBottom) / 2} r="22" fill="url(#inj-flare-glow)" />
-                          <circle cx={xWell} cy={(perfTop + perfBottom) / 2} r="5" fill="#fff" opacity="0.95" />
-
-                          {/* Flow bubbles in tubing */}
-                          {[0, 0.3, 0.6, 0.9].map((delay, idx) => (
-                            <circle 
-                              key={idx} 
-                              cx={xWell} 
-                              cy={12 + (yCap - 12) * (idx / 3.0)} 
-                              r="2" 
-                              fill={SIM_PALETTE.active}
-                              style={{ animation: `streakRise 1.5s linear ${delay}s infinite` }}
-                            />
-                          ))}
-                        </g>
-                      )}
-                    </g>
-                  );
-                })()}
-
-                {/* Fault Lines (Dynamic sloped representation intersecting caprock exactly at fault throw) */}
-                {Array.from({ length: faultCount }).map((_, idx) => {
-                  const f = faults[idx];
-                  const inter = getSimFaultIntersection(f, idx);
-                  const color = f.isSealed ? SIM_PALETTE.sealedFault : SIM_PALETTE.transmissiveFault;
-                  const yStart = 0;
-                  const yEnd = 450;
-                  const xStart = inter.x0 + inter.slope * yStart;
-                  const xEnd = inter.x0 + inter.slope * yEnd;
-                  return (
-                    <g key={idx}>
-                      <line x1={xStart} y1={yStart} x2={xEnd} y2={yEnd} stroke={color} strokeWidth="1.2" strokeDasharray="3 3" opacity="0.6"/>
-                    </g>
-                  );
-                })}
-
-                {/* Leaking CO2 conduit stream ascending along the sloped fault plane.
-                    Rendered whenever the plume height exceeds the spill threshold,
-                    so scrubbed/paused states stay visually consistent with the physics. */}
-                {Array.from({ length: faultCount }).map((_, idx) => {
-                  const f = faults[idx];
-                  if (f.isSealed) return null;
-                  const inter = getSimFaultIntersection(f, idx);
-                  const cellIdx = Math.round(cellCount * (inter.x / 1000.0));
-                  const boundedIdx = Math.max(0, Math.min(cellCount - 1, cellIdx));
-                  
-                  // Flow activates ONLY when total plume height exceeds spill threshold height
-                  if (h[boundedIdx] > f.thresholdHeight) {
-                    const travelY = -65; // Traverses through the overlying seal
-                    const travelX = inter.slope * travelY;
-                    const xTop = inter.x + travelX;
-                    const yTop = inter.y + travelY;
-
-                    return (
-                      <g key={`fl-group-${idx}`}>
-                        {/* Active conduit flow filament */}
-                        <line 
-                          x1={inter.x} 
-                          y1={inter.y} 
-                          x2={xTop} 
-                          y2={yTop} 
-                          stroke={SIM_PALETTE.leakage}
-                          strokeWidth="1.5" 
-                          strokeDasharray="4 3" 
-                          opacity="0.8" 
-                          style={{ animation: 'conduitFlow 1s linear infinite' }}
-                        />
-                        {/* Micro-fluid Pulses */}
-                        {[0, 0.6, 1.2, 1.8].map((delay, i) => (
-                          <circle 
-                            key={`fl-${idx}-${i}`} 
-                            cx={inter.x} 
-                            cy={inter.y} 
-                            r="1.6" 
-                            fill={SIM_PALETTE.leakage}
-                            style={{
-                              opacity: 0,
-                              '--travel-x': `${travelX}px`,
-                              '--travel-y': `${travelY}px`,
-                              animation: 'faultRiseTilted 2.0s cubic-bezier(0.25, 0.46, 0.45, 0.94) ' + delay + 's infinite'
-                            }}
-                          />
-                        ))}
-                      </g>
-                    );
-                  }
-                  return null;
-                })}
-
-                {/* Label legends */}
-                <text x="30" y={capRockY(30) - 10} fill="rgba(255,255,255,0.4)" fontSize="9" letterSpacing="0.1em" textTransform="uppercase" fontFamily="monospace">Caprock Seal</text>
-                <text x="30" y={capRockY(30) + 80} fill="rgba(255,255,255,0.4)" fontSize="9" letterSpacing="0.1em" textTransform="uppercase" fontFamily="monospace">Sandstone Aquifer</text>
-                
-                <defs>
-                  <linearGradient id="well-gradient" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#222"/>
-                    <stop offset="50%" stopColor="#ccc"/>
-                    <stop offset="100%" stopColor="#222"/>
-                  </linearGradient>
-                </defs>
-              </svg>
-
-              <div className="ve-playback-bar" aria-label="Simulation playback">
-                {/* Play Reverse */}
-                <button 
-                  onClick={handlePlayReverseToggle} 
-                  aria-label={isReversing ? 'Pause reverse playback' : 'Play backward'}
-                  style={{ background: 'none', border: 'none', color: isReversing ? SIM_PALETTE.leakage : '#64ffda', cursor: 'pointer' }}
-                  title={isReversing ? "Pause Reverse" : "Reverse Play"}
-                >
-                  <i className={`fas ${isReversing ? 'fa-pause' : 'fa-play fa-flip-horizontal'}`} style={{ fontSize: 13 }}/>
-                </button>
-                {/* Play/Pause Forward */}
-                <button 
-                  onClick={handlePlayToggle} 
-                  aria-label={isPlaying ? 'Pause simulation' : 'Play simulation forward'}
-                  style={{ background: 'none', border: 'none', color: isPlaying ? SIM_PALETTE.active : '#64ffda', cursor: 'pointer' }}
-                  title={isPlaying ? "Pause" : "Play Forward"}
-                >
-                  <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`} style={{ fontSize: 13 }}/>
-                </button>
-                {/* Step Backward */}
-                <button 
-                  onClick={stepBackward} 
-                  aria-label="Step 1 year backward"
-                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}
-                  title="Step 1 Year Backward"
-                >
-                  <i className="fas fa-step-backward" style={{ fontSize: 10 }}/>
-                </button>
-                {/* Step Forward */}
-                <button 
-                  onClick={stepForward} 
-                  aria-label="Step 1 year forward"
-                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}
-                  title="Step 1 Year Forward"
-                >
-                  <i className="fas fa-step-forward" style={{ fontSize: 10 }}/>
-                </button>
-                {/* Reset */}
-                <button onClick={resetSimulation} aria-label="Reset simulation" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }} title="Reset Simulation">
-                  <i className="fas fa-redo" style={{ fontSize: 11 }}/>
-                </button>
-                <button onClick={() => setSidebarOpen(true)} aria-label="Open simulation timeline">Timeline</button>
-                <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.2)' }}/>
-                
-                {/* Seek Year indicator */}
-                <span style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'rgba(255,255,255,0.7)', minWidth: 50 }}>
-                  Yr {simTime}
-                </span>
-
-                {/* Seek Timeline Range Slider */}
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="1000"
-                  step="1"
-                  value={simTime}
-                  aria-label="Seek simulation year"
-                  onChange={e => handleScrub(parseInt(e.target.value))}
-                  style={{
-                    flex: 1,
-                    background: 'rgba(255,255,255,0.15)',
-                    borderRadius: 2,
-                    cursor: 'pointer',
-                    accentColor: '#64ffda'
-                  }}
-                  title="Drag to seek/reverse simulation time"
-                />
-
-                <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.2)' }}/>
-                {/* Speed toggle */}
-                <button onClick={() => setSpeed(s => s === 1 ? 2 : s === 2 ? 4 : 1)} style={{ background: 'none', border: 'none', color: '#64ffda', cursor: 'pointer', fontSize: 10, fontWeight: 'bold' }}>
-                  {speed}x
-                </button>
-              </div>
-            </div>
-          );
-                } else if (activeSubTab === 'map' || activeSubTab === 'topography') {
-                  return null;
-                } else if (activeSubTab === 'uq') {
-          return (
-              <section className="ve-risk-workspace" aria-labelledby="risk-title">
-                <header className="ve-workspace-heading">
-                  <div>
-                    <h1 id="risk-title">Risk analysis · {riskModel === 'map' ? '2D / 3D map' : '1D cross-section'}</h1>
-                    <p>Use the selected simulator path as the nominal case.</p>
-                  </div>
-                  <button className="ve-run-button" onClick={runMonteCarloBatch} disabled={uqRunning}>
-                    {uqRunning ? `Running ${uqProgress}%` : 'Run uncertainty analysis'}
-                  </button>
-                </header>
-                <div className="ve-risk-layout">
-                  <aside className="ve-risk-config" aria-label="Uncertainty configuration">
-                  <div className="ve-risk-model-picker" role="group" aria-label="Risk analysis model">
-                    <span>Run risk on</span>
-                    <button type="button" aria-pressed={riskModel === 'map'} disabled={uqRunning} onClick={() => { setRiskModel('map'); setMcResults(null); }}>2D / 3D map</button>
-                    <button type="button" aria-pressed={riskModel === 'profile'} disabled={uqRunning} onClick={() => { setRiskModel('profile'); setMcResults(null); }}>1D cross-section</button>
-                  </div>
-                  <div className="ve-uq-parameters" style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Uncertainty Parameters</span>
-                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', marginTop: -6 }}>
-                      Select parameters, then pick an absolute range, a &plusmn;% band, or discrete values.
-                    </span>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, maxHeight: 380, overflowY: 'auto', paddingRight: 4 }}>
-                      {UQ_PARAM_DEFS
-                        .filter(def => !(def.group === 'fault' && faultCount === 0))
-                        .filter(def => !(def.key === 'faultLeakRate' && !faults.slice(0, faultCount).some(f => !f.isSealed)))
-                        .map(def => (
-                          <UQParamConfig
-                            key={def.key}
-                            def={def}
-                            cfg={uqParams[def.key]}
-                            onChange={patch => updateUqParam(def.key, patch)}
-                          />
-                        ))}
-                    </div>
-                  </div>
-                  
-                  <div className="ve-uq-settings" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                     <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Simulation Settings</span>
-                     
-                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                       <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)' }}>Run count</span>
-                       <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
-                         {[25, 50, 100].map(cnt => (
-                           <button
-                             key={cnt}
-                             onClick={() => setMcRunsCount(cnt)}
-                             aria-pressed={mcRunsCount === cnt}
-                             style={{
-                               background: mcRunsCount === cnt ? 'rgba(100,255,218,0.2)' : 'rgba(255,255,255,0.05)',
-                               border: `1px solid ${mcRunsCount === cnt ? '#64ffda' : 'rgba(255,255,255,0.12)'}`,
-                               color: mcRunsCount === cnt ? '#64ffda' : 'azure',
-                               padding: '5px 12px',
-                               borderRadius: 6,
-                               fontSize: 11,
-                               fontWeight: 'bold',
-                               cursor: 'pointer'
-                             }}
-                           >
-                             {cnt} runs
-                           </button>
-                         ))}
-                       </div>
-                     </div>
-
-                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                       <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)' }}>Target metric</span>
-                       <select 
-                         value={uqTargetMetric} 
-                         onChange={e => setUqTargetMetric(e.target.value)}
-                         aria-label="Target metric"
-                         style={{
-                           background: 'rgba(0,0,0,0.3)',
-                           border: '1px solid rgba(255,255,255,0.15)',
-                           color: '#fff',
-                           padding: '7px 10px',
-                           borderRadius: 8,
-                           fontSize: 11,
-                           cursor: 'pointer'
-                         }}
-                       >
-                         <option value="leaked">Leaked mass (kt)</option>
-                         <option value="trapped">Trapping efficiency</option>
-                       </select>
-                     </div>
-                  </div>
-                  </aside>
-                  <div className="ve-risk-results">
-                    {uqRunning && (
-                      <div className="ve-uq-progress">
-                        <span>Running batch</span>
-                        <span>{uqProgress}%</span>
-                        <progress className="ve-uq-progress-meter" value={uqProgress} max="100" aria-label="Uncertainty analysis progress" />
-                      </div>
-                    )}
-
-                {/* RESULTS VIEW */}
-                {uqData ? (
-                   <div className="ve-uq-results-content" style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
-                    
-                    <div className="uq-results-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <span className="ve-chart-title" style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>
-                          Uncertainty Distribution ({uqTargetMetric === 'leaked' ? 'CO₂ Leaked Mass' : 'Trapping Efficiency'})
-                        </span>
-                        {renderUQHistogram(uqData)}
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <span className="ve-chart-title" style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>
-                          Parameter Correlation Coefficients (Pearson r)
-                        </span>
-                        {sensitivityData && sensitivityData.length > 0 ? renderUQSensitivity(sensitivityData) : (
-                          <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.18)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)', fontSize: 10.5, color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: 16 }}>
-                            No parameters were varied in this batch.
-                            <br />Enable at least one uncertainty parameter and re-run.
-                          </div>
-                        )}
-                      </div>
-
-                    </div>
-
-                    <div className="ve-uq-percentiles" style={{
-                      background: 'rgba(255,255,255,0.02)', 
-                      border: '1px solid rgba(255,255,255,0.05)',
-                      borderRadius: 14,
-                      padding: 12,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 8
-                    }}>
-                      <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>P10 / P50 / P90 Outcomes</span>
-                      <div className="uq-percentile-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                        
-                        {/* P10 */}
-                        <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <div className="ve-uq-percentile-label" style={{ fontSize: 9.5, fontWeight: 'bold' }}>P10 &middot; {uqTargetMetric === 'leaked' ? 'optimistic' : 'conservative'}</div>
-                            <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
-                              {uqData.p10Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
-                            </div>
-                          </div>
-                          <button className="ve-uq-realization"
-                            onClick={() => loadUQRealization(uqData.p10Realization)}
-                          >
-                            Load realization
-                          </button>
-                        </div>
-                        
-                        {/* P50 */}
-                        <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <div className="ve-uq-percentile-label" style={{ fontSize: 9.5, fontWeight: 'bold' }}>P50 &middot; median</div>
-                            <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
-                              {uqData.p50Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
-                            </div>
-                          </div>
-                          <button className="ve-uq-realization"
-                            onClick={() => loadUQRealization(uqData.p50Realization)}
-                          >
-                            Load realization
-                          </button>
-                        </div>
-                        
-                        {/* P90 */}
-                        <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 10, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <div className="ve-uq-percentile-label" style={{ fontSize: 9.5, fontWeight: 'bold' }}>P90 &middot; {uqTargetMetric === 'leaked' ? 'conservative' : 'optimistic'}</div>
-                            <div style={{ fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace', marginTop: 2 }}>
-                              {uqData.p90Val.toFixed(1)}{uqTargetMetric === 'leaked' ? ' kt' : '%'}
-                            </div>
-                          </div>
-                          <button className="ve-uq-realization"
-                            onClick={() => loadUQRealization(uqData.p90Realization)}
-                          >
-                            Load realization
-                          </button>
-                        </div>
-
-                       </div>
-                     </div>
-
-                   </div>
-                 ) : (
-                   <div className="ve-uq-empty" style={{
-                     flex: 1, 
-                     display: 'flex', 
-                     flexDirection: 'column', 
-                     justifyContent: 'center', 
-                     alignItems: 'center', 
-                     background: 'rgba(0,0,0,0.1)', 
-                     border: '1px dashed rgba(255,255,255,0.08)',
-                     borderRadius: 14,
-                     padding: 40,
-                     textAlign: 'center'
-                   }}>
-                     <i className="fas fa-calculator" style={{ fontSize: 36, color: 'rgba(255,255,255,0.15)', marginBottom: 15 }} />
-                     <h4 style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>No results yet</h4>
-                      <p style={{ margin: '6px 0 0', fontSize: 11.5, color: 'rgba(255,255,255,0.45)', maxWidth: 380 }}>
-                        Select which parameters to vary, define each range or set of values, then run the batch simulator to generate risk distributions and sensitivity analyses.
-                      </p>
-                   </div>
-                 )}
-                  </div>
+                <div className="sim-overlay__right">
+                  {view !== 'section' && <SimLayersMenu layers={layers} onChange={setLayers} view={view} />}
                 </div>
-              </section>
-               );
-             } else {
-               return (
-                  <section className="ve-methodology-workspace" aria-labelledby="methodology-title">
-                    <header className="ve-workspace-heading"><h1 id="methodology-title">Methodology</h1></header>
-                    <GuidePage isEmbedded={true} />
-                  </section>
-               );
-             }
-            })()}
-            <div className="ve-map-workspace" hidden={activeSubTab !== 'map' && activeSubTab !== 'topography'}>
-              <div hidden={activeSubTab !== 'map'}>
-                <Ve2DMapPanel
-                  K={K}
-                  porosity={porosity}
-                  residualTrapFraction={residualTrapFraction}
-                  dipPercent={dipPercent}
-                  amplitude={amplitude}
-                  frequency={frequency}
-                  faultOffset={faultOffset}
-                  terrainSeed={terrainSeed}
-                  heterogeneity={heterogeneity}
-                  Q={Q}
-                  injLocation={injLocation}
-                  injDuration={injDuration}
-                  faultCount={faultCount}
-                  faults={faults}
-                  mapCols={mapCols}
-                  wellY={wellY}
-                  {...mapParams}
-                  preset={mapParams.selectedPreset}
-                  command={mapCommand}
-                  onCommandConsumed={consumeMapCommandOnce}
-                  onRun={runActiveSimulation}
-                  onReset={resetActiveSimulation}
-                  onSnapshot={setMapSnapshot}
-                />
               </div>
+              {model && <SimLegend view={view} layers={layers} model={model} />}
             </div>
-            <div id="tabpanel-topography" role="tabpanel" aria-labelledby="tab-topography" hidden={activeSubTab !== 'topography'}>
-              <Ve3DTopographyPanel
-                mapSnapshot={mapSnapshot}
-                mapCols={mapParams.mapCols}
-                mapRows={Math.max(12, Math.round(mapParams.mapCols * 0.6))}
-                faultCount={mapParams.faultCount}
-                faults={mapParams.faults}
-                injLocation={mapParams.injLocation}
-                wellY={mapParams.wellY}
-                boundaryCondition={mapParams.boundaryCondition}
-                onMapCommand={sendMapCommand}
-              />
-            </div>
-            </div>
-
-          {/* Model honesty footnote — scaled toy model disclosure */}
-          <p style={{ margin: '-8px 6px 0', fontSize: 10.5, lineHeight: 1.5, color: 'rgba(255,255,255,0.45)' }}>
-            Educational {isMapView ? 'x–y plan-view' : 'cross-section'} Vertical-Equilibrium model &middot; scaled units (1 kt = one model mass unit) &middot; buoyancy-driven, viscosity-free gravity tongue with simplified faults. The Methodology tab separates reference theory from the implemented scheme.
-          </p>
-
-          {/* Sub-grid containing Parameters (Left) and Faults (Right) directly below Reservoir Grid */}
-        </VisualizationWorkspace>
-
-        {/* RIGHT COLUMN: Mass Balance Analytics & Charting Window */}
-        {(activeSubTab === 'profile' || isMapView) && <OutcomeRail
-          data-mobile-open={presentedPanel === 'outcomes'}
-          inert={presentedPanel === 'inputs' ? '' : undefined}
-          closeRef={element => { mobileCloseRefs.current.outcomes = element; }}
-          onClose={dismissMobilePanel}
-        >
-          {/* Mass Balance Analytics Panel */}
-          <div className="ve-outcome-content">
-            <div className="ve-rail-heading"><h2>Live outcome</h2><span>Year {activeTime}</span></div>
-            <dl className="ve-metric-list">
-              <div><dt>Injected</dt><dd>{formatMass(activeMasses.injected)}</dd></div>
-              <div><dt>Mobile</dt><dd>{formatMass(activeMasses.mobile)}</dd></div>
-              <div><dt>Residually trapped</dt><dd>{formatMass(activeMasses.trapped)}</dd></div>
-              <div className={activeMasses.leaked > 0 ? 'is-danger' : ''}><dt>Leaked</dt><dd>{formatMass(activeMasses.leaked)}</dd></div>
-            </dl>
-            {/* Live Chart Rendering */}
-            {renderSVGChart(activeMasses, activeMassHistory, activeTime)}
-
-            {/* Real-time Storage Efficiency Trapping Mechanism Progress Bars */}
-            <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12 }}>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 'bold' }}>Storage Efficiency</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                <ProgressBar label="Structural Trapping (Mobile)" pct={activeMasses.injected > 0 ? (activeMasses.mobile / activeMasses.injected) * 100 : 0} color={SIM_PALETTE.mobile}/>
-                <ProgressBar label="Residual Capillary Trapping" pct={activeMasses.injected > 0 ? (activeMasses.trapped / activeMasses.injected) * 100 : 0} color={SIM_PALETTE.trapped}/>
-                <ProgressBar label="Cumulative Leaked Fraction" pct={activeMasses.injected > 0 ? (activeMasses.leaked / activeMasses.injected) * 100 : 0} color={SIM_PALETTE.leakage}/>
-              </div>
-            </div>
-          </div>
-        </OutcomeRail>}
-      </div>
+            <SimTransport year={shownYear} years={model?.years || scenario.years} injYears={model?.injYears || scenario.injYears} computedYears={computedYears}
+              playing={playing} speed={speed} onPlay={play} onSeek={seek} onSpeed={() => setSpeed(s => (s + 1) % SIM_SPEEDS.length)} />
+          </section>
+          <aside className="sim-rail sim-rail--outcomes" aria-label="Outcomes">
+            <SimOutcomes model={model} row={row} frame={frame} run={shown} history={shown.history} year={shownYear} onSeek={seek} />
+          </aside>
+        </div>
+      )}
+      {section === 'uncertainty' && <SimUncertainty scenario={scenario} onLoad={loadRealization} theme={theme} />}
+      {section === 'method' && (
+        <div className="sim-method" id="sim-panel-method" role="tabpanel" aria-labelledby="sim-tab-method">
+          <GuidePage />
+        </div>
+      )}
     </div>
   );
 };
 
-const InputRail = ({ children, closeRef, onClose, ...props }) => <aside
-  {...props}
-  id="ve-input-rail"
-  className="ve-input-rail"
-  aria-label="Scenario inputs"
->
-  <button type="button" className="ve-mobile-panel-close" ref={closeRef} onClick={onClose} aria-label="Close inputs panel"><i className="fas fa-times" aria-hidden="true" /></button>
-  {children}
-</aside>;
-const VisualizationWorkspace = ({ children }) => <section className="ve-visualization-workspace" aria-label="Reservoir visualization">{children}</section>;
-const OutcomeRail = ({ children, closeRef, onClose, ...props }) => <aside
-  {...props}
-  id="ve-outcome-rail"
-  className="ve-outcome-rail"
-  aria-label="Simulation outcomes"
->
-  <button type="button" className="ve-mobile-panel-close" ref={closeRef} onClick={onClose} aria-label="Close outcomes panel"><i className="fas fa-times" aria-hidden="true" /></button>
-  {children}
-</aside>;
-
-const ParameterField = ({ label, value, min, max, step, unit, format = v => v, onChange }) => {
-  const [feedback, setFeedback] = useState('');
-  const feedbackId = React.useId();
-  const setValue = raw => {
-    const result = normalizeParameterInput(raw, min, max);
-    setFeedback(result.message);
-    if (result.value === null) return;
-    onChange(result.value);
-  };
-  return (
-    <label className="ve-parameter-field">
-      <span className="ve-parameter-heading"><span>{label}</span><span className="ve-parameter-value"><input type="number" value={value} min={min} max={max} step={step} aria-describedby={feedback ? feedbackId : undefined} aria-invalid={feedback ? 'true' : undefined} onChange={event => setValue(event.target.value)} /><span>{unit}</span></span></span>
-      {feedback && <span id={feedbackId} className="ve-parameter-feedback" role="status">{feedback}</span>}
-      <input type="range" aria-label={label} value={value} min={min} max={max} step={step} onChange={event => setValue(event.target.value)} />
-      <span className="sr-only">Displayed value {format(value)} {unit}</span>
-    </label>
-  );
-};
-
-// Stat numeric display helper component
-const StatBox = ({ label, value, color, opacity }) => {
-  return (
-    <div style={{
-      background: 'rgba(0,0,0,0.12)',
-      border: '1px solid rgba(255,255,255,0.04)',
-      borderRadius: 10,
-      padding: '8px 4px',
-      textAlign: 'center'
-    }}>
-      <div style={{ fontSize: 9, textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 'bold', color: color, fontFamily: 'monospace', opacity: opacity }}>
-        {value}
-      </div>
-    </div>
-  );
-};
-
-// Storage Efficiency Progress Bar helper component
-const ProgressBar = ({ label, pct, color }) => {
-  // Cap at 100%
-  const clampedPct = Math.max(0, Math.min(100, pct));
-  return (
-    <div style={{ fontSize: 11 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-        <span style={{ color: 'rgba(255,255,255,0.7)' }}>{label}</span>
-        <span style={{ color: color, fontWeight: 'bold' }}>{Math.round(clampedPct)}%</span>
-      </div>
-      <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
-        <div style={{ width: `${clampedPct}%`, height: '100%', background: color, borderRadius: 2 }}/>
-      </div>
-    </div>
-  );
-};
-
-// Bind to window object for Babel execution scope
 Object.assign(window, { SimulatorPage });

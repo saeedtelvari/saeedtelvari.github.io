@@ -3,35 +3,37 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Sa'eed Telvari - PhD Candidate in Petroleum Engineering at Heriot-Watt University. Interactive Vertical Equilibrium (VE) CO2 storage simulator and UQ dashboard.">
-  <title>VE Simulator | Sa'eed Telvari</title>
+  <meta name="description" content="CO₂ storage simulator by Sa'eed Telvari: a vertical-equilibrium model of plume migration, structural, residual and dissolution trapping, fault leakage and pressure build-up in a saline aquifer, with uncertainty analysis.">
+  <title>CO₂ Storage Simulator | Sa'eed Telvari</title>
   <link rel="canonical" href="https://saeedtelvari.github.io/simulator.html">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Interactive VE CO₂ Storage Simulator | Sa'eed Telvari">
-  <meta property="og:description" content="Explore plume migration, residual trapping, structural uncertainty, and fault leakage with an educational vertical-equilibrium model.">
+  <meta property="og:title" content="CO₂ Storage Simulator | Sa'eed Telvari">
+  <meta property="og:description" content="Watch a CO₂ plume migrate, get trapped, dissolve or leak in a vertical-equilibrium model of a saline aquifer, in SI units with a visible mass balance.">
   <meta property="og:url" content="https://saeedtelvari.github.io/simulator.html">
   <meta property="og:image" content="https://saeedtelvari.github.io/assets/social-preview.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Interactive Vertical Equilibrium CO₂ storage simulator">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Interactive VE CO₂ Storage Simulator">
-  <meta name="twitter:description" content="An educational browser model for CO₂ plume migration and trapping.">
+  <meta name="twitter:title" content="CO₂ Storage Simulator">
+  <meta name="twitter:description" content="A vertical-equilibrium model of CO₂ plume migration, trapping and leakage that runs in the browser.">
   <meta name="twitter:image" content="https://saeedtelvari.github.io/assets/social-preview.jpg">
-  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Interactive VE CO₂ Storage Simulator","url":"https://saeedtelvari.github.io/simulator.html","applicationCategory":"EducationalApplication","operatingSystem":"Any modern web browser","author":{"@type":"Person","name":"Sa'eed Telvari"}}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"CO₂ Storage Simulator","url":"https://saeedtelvari.github.io/simulator.html","applicationCategory":"EducationalApplication","operatingSystem":"Any modern web browser","author":{"@type":"Person","name":"Sa'eed Telvari"}}</script>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:wght@400;600;700&family=Arizonia&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;500&family=Arizonia&display=swap">
   <link rel="stylesheet" href="./colors_and_type.css">
   <link rel="stylesheet" href="./simulator-workbench.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
   <link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js">
   <link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js">
-  <link rel="preload" as="script" href="./simulator-bundle.js?v=18">
-  <link rel="preload" as="script" href="./bundle.js?v=13.1">
+  <link rel="preload" as="script" href="./simulator-bundle.js?v=19">
+  <link rel="preload" as="script" href="./bundle.js?v=13.2">
   <link rel="icon" href="./assets/logo-minimalist.webp" type="image/webp">
   <script>
     window.__pageLoadStart = Date.now();
@@ -71,7 +73,7 @@
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body {
-      background: linear-gradient(135deg, #211d34 0%, #1c2645 50%, #1d416e 100%);
+      background: #0b1120;
       font-family: 'Montserrat', system-ui, sans-serif;
       overflow-x: hidden;
     }
@@ -163,12 +165,12 @@
 <body>
   <div id="app-loader" class="ve-app-loader" role="status" aria-live="polite">
     <img src="./assets/logo-minimalist.webp" alt="" width="28" height="28">
-    <span>Loading VE Simulator…</span>
+    <span>Loading the CO₂ Storage Simulator…</span>
   </div>
 
   <div id="root" data-page="simulator"></div>
 
-    <script src="simulator-bundle.js?v=18"></script>
-  <script src="bundle.js?v=13.1" onload="window.__loadTick && window.__loadTick(90)"></script>
+    <script src="simulator-bundle.js?v=19"></script>
+  <script src="bundle.js?v=13.2" onload="window.__loadTick && window.__loadTick(90)"></script>
 </body>
 </html>

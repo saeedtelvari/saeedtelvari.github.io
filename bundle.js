@@ -494,7 +494,7 @@ const Header = ({
     href: './index.html#publications'
   }, {
     id: 'simulator',
-    label: 'VE Simulator',
+    label: 'CO₂ Simulator',
     href: './simulator.html'
   }, {
     id: 'contact',
@@ -573,14 +573,14 @@ const Header = ({
           border-color: #64ffda;
         }
         .hamburger-btn.workbench {
-          background: #fff;
+          background: var(--ve-surface);
           border-color: var(--ve-border);
           color: var(--ve-ink);
           backdrop-filter: none;
           transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
         }
         .hamburger-btn.workbench:hover {
-          background: #f3f6f8;
+          background: var(--ve-accent-soft);
           border-color: var(--ve-border);
         }
         .mobile-drawer-backdrop {
@@ -626,7 +626,7 @@ const Header = ({
           transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1);
         }
         .mobile-drawer-panel.workbench {
-          background: #fff;
+          background: var(--ve-surface);
           border-left: 1px solid var(--ve-border);
           box-shadow: none;
           transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -651,7 +651,7 @@ const Header = ({
       alignItems: 'center',
       justifyContent: 'space-between',
       transition: isWorkbench ? 'none' : 'all 0.4s ease',
-      background: isWorkbench ? '#ffffff' : scrolled ? siteScrolledBackground : siteTopBackground,
+      background: isWorkbench ? 'var(--ve-surface)' : scrolled ? siteScrolledBackground : siteTopBackground,
       backdropFilter: isWorkbench ? 'none' : scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)',
       WebkitBackdropFilter: isWorkbench ? 'none' : scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)',
       borderBottom: isWorkbench ? '1px solid var(--ve-border)' : siteBorderBottom,
@@ -2245,7 +2245,7 @@ const Sky = () => {
   }), /*#__PURE__*/React.createElement("g", {
     clipPath: "url(#highland-ridge-clip)"
   }, /*#__PURE__*/React.createElement("path", {
-    d: "M540 41L517 76L489 104L453 121L499 96L533 82L560 111L594 125L568 53Z M846 27L825 61L792 89L747 112L795 96L830 80L866 116L902 126L880 44Z M1290 46L1265 75L1238 104L1197 130L1260 109L1294 91L1333 123L1357 129L1336 73Z",
+    d: "M540 41L517 76L489 104L453 121L499 96L533 82L560 111L594 125L568 53Z\r M846 27L825 61L792 89L747 112L795 96L830 80L866 116L902 126L880 44Z\r M1290 46L1265 75L1238 104L1197 130L1260 109L1294 91L1333 123L1357 129L1336 73Z",
     fill: "#111e2b",
     opacity: ".64"
   }), /*#__PURE__*/React.createElement("path", {
