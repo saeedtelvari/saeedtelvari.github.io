@@ -18,7 +18,7 @@ const simParseColor = color => {
 const simMixRgb = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 const simRgba = (rgb, alpha = 1) => `rgba(${Math.round(rgb[0])},${Math.round(rgb[1])},${Math.round(rgb[2])},${alpha})`;
 
-// Single-hue indigo ramp, 0 = shallow (light) to 1 = deep (dark), identical in every view.
+// Depth ramp of the active palette, 0 = shallow (light) to 1 = deep (dark), identical in every view.
 const simDepthColor = (stops, t) => {
   const x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
   const i = Math.min(stops.length - 2, Math.floor(x));

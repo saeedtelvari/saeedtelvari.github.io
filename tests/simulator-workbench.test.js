@@ -15,8 +15,8 @@ const loadHelpers = () => {
   const context = { React: {}, VE2D, URLSearchParams };
   vm.runInNewContext(`${prelude}
 this.helpers = { simEncodeScenario, simDecodeScenario, simInventoryCsv, simGridCsv, simApplyWorkerMessage, simInitialRun,
-  simFrameAt, simRowAt, simFormatMass, simFormatPercent, simStoredTheme, simDefaultSectionLine, simMessages, SIM_INVENTORY,
-  simStartRun, simNextYear };`, context);
+  simFrameAt, simRowAt, simFormatMass, simFormatPercent, simStoredTheme, simStoredPalette, simDefaultSectionLine, simMessages, SIM_INVENTORY,
+  SIM_PALETTES, simStartRun, simNextYear };`, context);
   return context.helpers;
 };
 const h = loadHelpers();
@@ -135,14 +135,40 @@ test('a blocked storage falls back to the night theme', () => {
   assert.equal(h.simStoredTheme(null), 'night');
 });
 
-test('inventory classes keep the validated colour tokens in both themes', () => {
+test('every palette defines a full night and day token set, Earth by default', () => {
   const css = read('simulator-workbench.css');
-  const night = { dissolved: '#3b82d4', residual: '#cf5f9e', structural: '#c08417', free: '#23a07a', exited: '#8270e0', leaked: '#d94a3f' };
-  const day = { dissolved: '#2f74c4', residual: '#c24d8f', structural: '#a8700a', free: '#178a66', exited: '#6e5bd0', leaked: '#c93a30' };
-  const dayBlock = css.slice(css.indexOf('.ve-standalone[data-theme="day"]'));
-  for (const [key, color] of Object.entries(night)) assert.match(css, new RegExp(`--sim-c-${key}: ${color};`), `night ${key}`);
-  for (const [key, color] of Object.entries(day)) assert.match(dayBlock, new RegExp(`--sim-c-${key}: ${color};`), `day ${key}`);
+  const blockOf = selector => {
+    const start = css.indexOf(`${selector} {`);
+    assert.ok(start >= 0, `missing ${selector}`);
+    return css.slice(start, css.indexOf('}', start));
+  };
+  assert.deepEqual(plain(h.SIM_PALETTES.map(p => p.id)), ['earth', 'shoreline', 'aurora', 'thin-section', 'cyanotype']);
+  for (const { id } of h.SIM_PALETTES) {
+    const night = id === 'earth' ? '.ve-standalone' : `.ve-standalone[data-palette="${id}"]`;
+    const day = id === 'earth' ? '.ve-standalone[data-theme="day"]' : `.ve-standalone[data-palette="${id}"][data-theme="day"]`;
+    for (const selector of [night, day]) {
+      const block = blockOf(selector);
+      for (const item of h.SIM_INVENTORY) assert.match(block, new RegExp(`${item.color}: #[0-9a-f]{6};`), `${selector} ${item.key}`);
+      for (const key of ['free', 'structural', 'residual', 'dissolved', 'leaked']) assert.match(block, new RegExp(`--sim-glow-${key}: #`), `${selector} glow ${key}`);
+      for (let i = 0; i < 7; i++) assert.match(block, new RegExp(`--sim-depth-${i}: #`), `${selector} depth ${i}`);
+      for (const token of ['--sim-bg', '--sim-ink', '--sim-accent', '--sim-rock-aquifer', '--sim-contour']) assert.ok(block.includes(`${token}:`), `${selector} ${token}`);
+    }
+  }
+  // The root sets its own ink, ground and type, so no site-wide body colour leaks in.
+  for (const declaration of ['color: var(--sim-ink);', 'background: var(--sim-bg);', 'font-family: var(--sim-font-ui);']) {
+    assert.ok(blockOf('.ve-standalone').includes(declaration), declaration);
+  }
+  // Earth's validated inventory colours are the defaults.
+  const earth = { dissolved: '#32a0c5', residual: '#c1628a', structural: '#426bce', free: '#00a392', exited: '#8861a4', leaked: '#d64a33' };
+  for (const [key, color] of Object.entries(earth)) assert.match(blockOf('.ve-standalone'), new RegExp(`--sim-c-${key}: ${color};`), `Earth night ${key}`);
   assert.deepEqual(plain(h.SIM_INVENTORY.map(item => item.key)), ['dissolved', 'residual', 'structural', 'free', 'exited', 'leaked']);
+});
+
+test('an unknown or blocked stored palette falls back to Earth', () => {
+  assert.equal(h.simStoredPalette({ getItem() { throw new Error('blocked'); } }), 'earth');
+  assert.equal(h.simStoredPalette({ getItem: () => 'aurora' }), 'aurora');
+  assert.equal(h.simStoredPalette({ getItem: () => 'indigo' }), 'earth');
+  assert.equal(h.simStoredPalette(null), 'earth');
 });
 
 test('motion is restrained and switched off for reduced-motion users', () => {

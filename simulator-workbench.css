@@ -1,51 +1,53 @@
 /* CO2 Storage Simulator — "night survey" design system.
-   Chrome is neutral; colour is reserved for data (inventory classes, depth, pressure). */
+   Chrome is neutral; colour is reserved for data (inventory classes, depth, pressure).
+   Palettes (data-palette on .ve-standalone): Earth (default), Shoreline, Aurora,
+   Thin section and Cyanotype, each with night and day tokens. Every set passed the
+   categorical checks (lightness band, chroma floor, CVD and normal-vision separation,
+   contrast) for its inventory colours; status colours (danger, warning) stay fixed. */
 
 .ve-standalone {
-  /* Night (default) */
-  --sim-bg: #0b1120;
-  --sim-surface: #111a2e;
-  --sim-surface-2: #18233b;
-  --sim-surface-3: #1f2c48;
-  --sim-rule: #26324d;
-  --sim-rule-strong: #34446a;
-  --sim-ink: #e8ecf4;
-  --sim-ink-muted: #9aa6bf;
-  --sim-ink-faint: #6f7b96;
-  --sim-accent: #f2c66d;
-  --sim-accent-ink: #1b1405;
-  --sim-accent-soft: rgba(242, 198, 109, 0.14);
-  --sim-focus: #f2c66d;
+  /* Earth, night (default) */
+  --sim-bg: #120e0b;
+  --sim-surface: #1a1511;
+  --sim-surface-2: #221c17;
+  --sim-surface-3: #2c241d;
+  --sim-rule: #352b23;
+  --sim-rule-strong: #4a3c30;
+  --sim-ink: #f4ede3;
+  --sim-ink-muted: #bcae9c;
+  --sim-ink-faint: #8d7f6e;
+  --sim-accent: #e8a15a;
+  --sim-accent-ink: #1e1206;
+  --sim-accent-soft: rgba(232, 161, 90, 0.14);
+  --sim-focus: #e8a15a;
   --sim-danger: #ff8b80;
   --sim-warning: #f2c66d;
 
-  --sim-c-dissolved: #3b82d4;
-  --sim-c-residual: #cf5f9e;
-  --sim-c-structural: #c08417;
-  --sim-c-free: #23a07a;
-  --sim-c-exited: #8270e0;
-  --sim-c-leaked: #d94a3f;
-  /* Brighter steps of the same hues for luminous layers on the dark stage. */
-  --sim-glow-free: #4fe0b0;
-  --sim-glow-structural: #f0b649;
-  --sim-glow-residual: #ee8ac2;
-  --sim-glow-dissolved: #6fb0ff;
-  --sim-glow-leaked: #ff6b5e;
+  --sim-c-dissolved: #32a0c5;
+  --sim-c-residual: #c1628a;
+  --sim-c-structural: #426bce;
+  --sim-c-free: #00a392;
+  --sim-c-exited: #8861a4;
+  --sim-c-leaked: #d64a33;
+  --sim-glow-free: #38e8d1;
+  --sim-glow-structural: #6a99ff;
+  --sim-glow-residual: #ff99c2;
+  --sim-glow-dissolved: #79e0ff;
+  --sim-glow-leaked: #ff6247;
 
-  /* Indigo depth ramp: shallow (light) to deep (dark). */
-  --sim-depth-0: #a8a4de;
-  --sim-depth-1: #8783c6;
-  --sim-depth-2: #6864aa;
-  --sim-depth-3: #4d4a8c;
-  --sim-depth-4: #37366e;
-  --sim-depth-5: #262753;
-  --sim-depth-6: #181a37;
-  --sim-contour: rgba(232, 236, 244, 0.32);
-  --sim-stage: #0a0f1c;
-  --sim-rock-cap: #555a74;
-  --sim-rock-aquifer: #3a4670;
-  --sim-rock-base: #232a42;
-  --sim-rock-over: #10162a;
+  --sim-depth-0: #c0a684;
+  --sim-depth-1: #a58b6d;
+  --sim-depth-2: #8b7157;
+  --sim-depth-3: #725742;
+  --sim-depth-4: #59402e;
+  --sim-depth-5: #41291c;
+  --sim-depth-6: #2a140a;
+  --sim-contour: rgba(244, 237, 227, 0.3);
+  --sim-stage: #0f0c09;
+  --sim-rock-cap: #5e5348;
+  --sim-rock-aquifer: #59402e;
+  --sim-rock-base: #2a140a;
+  --sim-rock-over: #17120e;
 
   --sim-ease: cubic-bezier(0.23, 1, 0.32, 1);
   --sim-font-ui: 'Open Sans', system-ui, sans-serif;
@@ -71,47 +73,412 @@
 }
 
 .ve-standalone[data-theme="day"] {
-  --sim-bg: #eef1f5;
-  --sim-surface: #ffffff;
-  --sim-surface-2: #f5f7fa;
-  --sim-surface-3: #e9edf3;
-  --sim-rule: #d9dee7;
-  --sim-rule-strong: #c2c9d6;
-  --sim-ink: #172033;
-  --sim-ink-muted: #556075;
-  --sim-ink-faint: #7a8498;
-  --sim-accent: #9a6200;
+  /* Earth, day */
+  --sim-bg: #f3eee7;
+  --sim-surface: #fffdf9;
+  --sim-surface-2: #f8f3ec;
+  --sim-surface-3: #efe7dc;
+  --sim-rule: #e2d8ca;
+  --sim-rule-strong: #cdbfad;
+  --sim-ink: #2a2019;
+  --sim-ink-muted: #6b5d4f;
+  --sim-ink-faint: #8a7b6b;
+  --sim-accent: #a4521b;
   --sim-accent-ink: #ffffff;
-  --sim-accent-soft: rgba(154, 98, 0, 0.1);
-  --sim-focus: #9a6200;
+  --sim-accent-soft: rgba(164, 82, 27, 0.1);
+  --sim-focus: #a4521b;
   --sim-danger: #b4232a;
   --sim-warning: #8a5a00;
 
-  --sim-c-dissolved: #2f74c4;
-  --sim-c-residual: #c24d8f;
-  --sim-c-structural: #a8700a;
-  --sim-c-free: #178a66;
-  --sim-c-exited: #6e5bd0;
-  --sim-c-leaked: #c93a30;
-  --sim-glow-free: #178a66;
-  --sim-glow-structural: #b07a10;
-  --sim-glow-residual: #c24d8f;
-  --sim-glow-dissolved: #2f74c4;
-  --sim-glow-leaked: #c93a30;
+  --sim-c-dissolved: #0082a9;
+  --sim-c-residual: #b14576;
+  --sim-c-structural: #2d54bc;
+  --sim-c-free: #008f7f;
+  --sim-c-exited: #784d96;
+  --sim-c-leaked: #c83c25;
+  --sim-glow-free: #008f7f;
+  --sim-glow-structural: #2d54bc;
+  --sim-glow-residual: #b14576;
+  --sim-glow-dissolved: #0082a9;
+  --sim-glow-leaked: #c83c25;
 
-  --sim-depth-0: #f1f0fb;
-  --sim-depth-1: #d9d6f2;
-  --sim-depth-2: #bcb8e3;
-  --sim-depth-3: #9b97cf;
-  --sim-depth-4: #7c78b8;
-  --sim-depth-5: #605d9c;
-  --sim-depth-6: #48467e;
-  --sim-contour: rgba(23, 32, 51, 0.38);
-  --sim-stage: #f8f9fc;
-  --sim-rock-cap: #b9bccb;
-  --sim-rock-aquifer: #e4d9c0;
-  --sim-rock-base: #8f8a80;
-  --sim-rock-over: #eceef3;
+  --sim-depth-0: #f9edd9;
+  --sim-depth-1: #e3d2bc;
+  --sim-depth-2: #cdb7a1;
+  --sim-depth-3: #b89d87;
+  --sim-depth-4: #a3846e;
+  --sim-depth-5: #8f6b57;
+  --sim-depth-6: #7a5341;
+  --sim-contour: rgba(42, 32, 25, 0.38);
+  --sim-stage: #fbf8f3;
+  --sim-rock-cap: #c9bfb2;
+  --sim-rock-aquifer: #cdb7a1;
+  --sim-rock-base: #8f6b57;
+  --sim-rock-over: #f5f0e9;
+  color-scheme: light;
+}
+
+.ve-standalone[data-palette="shoreline"] {
+  /* Shoreline, night */
+  --sim-bg: #07131c;
+  --sim-surface: #0d1d29;
+  --sim-surface-2: #13283a;
+  --sim-surface-3: #1a3449;
+  --sim-rule: #21384b;
+  --sim-rule-strong: #2e4b63;
+  --sim-ink: #eef4f3;
+  --sim-ink-muted: #9fb5bf;
+  --sim-ink-faint: #728b98;
+  --sim-accent: #ecd9b5;
+  --sim-accent-ink: #1d1408;
+  --sim-accent-soft: rgba(236, 217, 181, 0.14);
+  --sim-focus: #ecd9b5;
+  --sim-danger: #ff8b80;
+  --sim-warning: #f2c66d;
+
+  --sim-c-dissolved: #3a84ca;
+  --sim-c-residual: #2da892;
+  --sim-c-structural: #b19100;
+  --sim-c-free: #bc461e;
+  --sim-c-exited: #746fbe;
+  --sim-c-leaked: #ca3056;
+  --sim-glow-free: #ff7f55;
+  --sim-glow-structural: #fbd530;
+  --sim-glow-residual: #6adcc4;
+  --sim-glow-dissolved: #80caff;
+  --sim-glow-leaked: #ef4069;
+
+  --sim-depth-0: #baa88b;
+  --sim-depth-1: #8d977b;
+  --sim-depth-2: #668276;
+  --sim-depth-3: #4e696d;
+  --sim-depth-4: #2f4e5b;
+  --sim-depth-5: #15344a;
+  --sim-depth-6: #051a38;
+  --sim-contour: rgba(238, 244, 243, 0.3);
+  --sim-stage: #06111a;
+  --sim-rock-cap: #4a5a66;
+  --sim-rock-aquifer: #2f4e5b;
+  --sim-rock-base: #051a38;
+  --sim-rock-over: #0b1822;
+}
+
+.ve-standalone[data-palette="shoreline"][data-theme="day"] {
+  /* Shoreline, day */
+  --sim-bg: #eef3f4;
+  --sim-surface: #ffffff;
+  --sim-surface-2: #f5f8f9;
+  --sim-surface-3: #e7eef0;
+  --sim-rule: #d6e0e3;
+  --sim-rule-strong: #bfcdd2;
+  --sim-ink: #10222b;
+  --sim-ink-muted: #4f6570;
+  --sim-ink-faint: #728690;
+  --sim-accent: #1d6b86;
+  --sim-accent-ink: #ffffff;
+  --sim-accent-soft: rgba(29, 107, 134, 0.1);
+  --sim-focus: #1d6b86;
+  --sim-danger: #b4232a;
+  --sim-warning: #8a5a00;
+
+  --sim-c-dissolved: #166eb9;
+  --sim-c-residual: #008f7a;
+  --sim-c-structural: #a58a07;
+  --sim-c-free: #a42f00;
+  --sim-c-exited: #6b64ba;
+  --sim-c-leaked: #b51446;
+  --sim-glow-free: #a42f00;
+  --sim-glow-structural: #a58a07;
+  --sim-glow-residual: #008f7a;
+  --sim-glow-dissolved: #166eb9;
+  --sim-glow-leaked: #b51446;
+
+  --sim-depth-0: #f8edd8;
+  --sim-depth-1: #d3ddc8;
+  --sim-depth-2: #b1cabf;
+  --sim-depth-3: #99b4b8;
+  --sim-depth-4: #7398a7;
+  --sim-depth-5: #527b97;
+  --sim-depth-6: #3b5c87;
+  --sim-contour: rgba(16, 34, 43, 0.38);
+  --sim-stage: #f7fafb;
+  --sim-rock-cap: #c2cbd0;
+  --sim-rock-aquifer: #b1cabf;
+  --sim-rock-base: #527b97;
+  --sim-rock-over: #eef3f4;
+  color-scheme: light;
+}
+
+.ve-standalone[data-palette="aurora"] {
+  /* Aurora, night */
+  --sim-bg: #060b16;
+  --sim-surface: #0c1424;
+  --sim-surface-2: #121d31;
+  --sim-surface-3: #19263f;
+  --sim-rule: #1f2d47;
+  --sim-rule-strong: #2c3e60;
+  --sim-ink: #eef3fb;
+  --sim-ink-muted: #9eacc6;
+  --sim-ink-faint: #6f7d99;
+  --sim-accent: #ffd27a;
+  --sim-accent-ink: #1a1204;
+  --sim-accent-soft: rgba(255, 210, 122, 0.14);
+  --sim-focus: #ffd27a;
+  --sim-danger: #ff8b80;
+  --sim-warning: #f2c66d;
+
+  --sim-c-dissolved: #00a8b7;
+  --sim-c-residual: #ab3f84;
+  --sim-c-structural: #bb8b00;
+  --sim-c-free: #007e43;
+  --sim-c-exited: #7461b6;
+  --sim-c-leaked: #cf4040;
+  --sim-glow-free: #47f4a3;
+  --sim-glow-structural: #ffc73a;
+  --sim-glow-residual: #fe7ccb;
+  --sim-glow-dissolved: #2eebfc;
+  --sim-glow-leaked: #fc5855;
+
+  --sim-depth-0: #b1c0cd;
+  --sim-depth-1: #92a2b1;
+  --sim-depth-2: #748496;
+  --sim-depth-3: #57687c;
+  --sim-depth-4: #3d4c62;
+  --sim-depth-5: #243249;
+  --sim-depth-6: #0d1a32;
+  --sim-contour: rgba(238, 243, 251, 0.3);
+  --sim-stage: #050a14;
+  --sim-rock-cap: #4f5868;
+  --sim-rock-aquifer: #3d4c62;
+  --sim-rock-base: #0d1a32;
+  --sim-rock-over: #0a1120;
+}
+
+.ve-standalone[data-palette="aurora"][data-theme="day"] {
+  /* Aurora, day */
+  --sim-bg: #eef2f8;
+  --sim-surface: #ffffff;
+  --sim-surface-2: #f5f7fb;
+  --sim-surface-3: #e8edf5;
+  --sim-rule: #d8dfeb;
+  --sim-rule-strong: #c1cbdb;
+  --sim-ink: #121a2b;
+  --sim-ink-muted: #526079;
+  --sim-ink-faint: #76829a;
+  --sim-accent: #8a5a00;
+  --sim-accent-ink: #ffffff;
+  --sim-accent-soft: rgba(138, 90, 0, 0.1);
+  --sim-focus: #8a5a00;
+  --sim-danger: #b4232a;
+  --sim-warning: #8a5a00;
+
+  --sim-c-dissolved: #009fac;
+  --sim-c-residual: #94296f;
+  --sim-c-structural: #b08505;
+  --sim-c-free: #006c3a;
+  --sim-c-exited: #6750ab;
+  --sim-c-leaked: #c53637;
+  --sim-glow-free: #006c3a;
+  --sim-glow-structural: #b08505;
+  --sim-glow-residual: #94296f;
+  --sim-glow-dissolved: #009fac;
+  --sim-glow-leaked: #c53637;
+
+  --sim-depth-0: #eaf3fb;
+  --sim-depth-1: #cdd9e5;
+  --sim-depth-2: #b1bfcf;
+  --sim-depth-3: #97a6b9;
+  --sim-depth-4: #7d8ea4;
+  --sim-depth-5: #65758f;
+  --sim-depth-6: #4e5e7a;
+  --sim-contour: rgba(18, 26, 43, 0.38);
+  --sim-stage: #f7f9fc;
+  --sim-rock-cap: #c5cad6;
+  --sim-rock-aquifer: #b1bfcf;
+  --sim-rock-base: #65758f;
+  --sim-rock-over: #eef1f6;
+  color-scheme: light;
+}
+
+.ve-standalone[data-palette="thin-section"] {
+  /* Thin section, night */
+  --sim-bg: #08080a;
+  --sim-surface: #111114;
+  --sim-surface-2: #18181c;
+  --sim-surface-3: #212127;
+  --sim-rule: #27272e;
+  --sim-rule-strong: #35353e;
+  --sim-ink: #f2f2f4;
+  --sim-ink-muted: #a9a9b4;
+  --sim-ink-faint: #787884;
+  --sim-accent: #e9e3d3;
+  --sim-accent-ink: #16130b;
+  --sim-accent-soft: rgba(233, 227, 211, 0.14);
+  --sim-focus: #e9e3d3;
+  --sim-danger: #ff8b80;
+  --sim-warning: #f2c66d;
+
+  --sim-c-dissolved: #49ab64;
+  --sim-c-residual: #b53c7f;
+  --sim-c-structural: #b19100;
+  --sim-c-free: #366bd3;
+  --sim-c-exited: #a382ca;
+  --sim-c-leaked: #dc5426;
+  --sim-glow-free: #5492ff;
+  --sim-glow-structural: #fdd506;
+  --sim-glow-residual: #fc65b6;
+  --sim-glow-dissolved: #5edb81;
+  --sim-glow-leaked: #ff6c39;
+
+  --sim-depth-0: #b8b7b3;
+  --sim-depth-1: #9a9995;
+  --sim-depth-2: #7d7c79;
+  --sim-depth-3: #61605d;
+  --sim-depth-4: #474643;
+  --sim-depth-5: #2e2d2b;
+  --sim-depth-6: #171614;
+  --sim-contour: rgba(242, 242, 244, 0.3);
+  --sim-stage: #060607;
+  --sim-rock-cap: #4a4a52;
+  --sim-rock-aquifer: #474643;
+  --sim-rock-base: #171614;
+  --sim-rock-over: #0d0d10;
+}
+
+.ve-standalone[data-palette="thin-section"][data-theme="day"] {
+  /* Thin section, day */
+  --sim-bg: #f4f4f5;
+  --sim-surface: #ffffff;
+  --sim-surface-2: #f7f7f8;
+  --sim-surface-3: #ececef;
+  --sim-rule: #dedee3;
+  --sim-rule-strong: #c7c7cf;
+  --sim-ink: #18181c;
+  --sim-ink-muted: #5a5a66;
+  --sim-ink-faint: #7c7c88;
+  --sim-accent: #3d3d47;
+  --sim-accent-ink: #ffffff;
+  --sim-accent-soft: rgba(61, 61, 71, 0.1);
+  --sim-focus: #3d3d47;
+  --sim-danger: #b4232a;
+  --sim-warning: #8a5a00;
+
+  --sim-c-dissolved: #2a904b;
+  --sim-c-residual: #ab3276;
+  --sim-c-structural: #a28700;
+  --sim-c-free: #285cc2;
+  --sim-c-exited: #aa6ab4;
+  --sim-c-leaked: #ca4b20;
+  --sim-glow-free: #285cc2;
+  --sim-glow-structural: #a28700;
+  --sim-glow-residual: #ab3276;
+  --sim-glow-dissolved: #2a904b;
+  --sim-glow-leaked: #ca4b20;
+
+  --sim-depth-0: #efeeeb;
+  --sim-depth-1: #d4d4d1;
+  --sim-depth-2: #bab9b7;
+  --sim-depth-3: #a1a09d;
+  --sim-depth-4: #888784;
+  --sim-depth-5: #706f6d;
+  --sim-depth-6: #595856;
+  --sim-contour: rgba(24, 24, 28, 0.38);
+  --sim-stage: #fafafa;
+  --sim-rock-cap: #c8c8ce;
+  --sim-rock-aquifer: #bab9b7;
+  --sim-rock-base: #706f6d;
+  --sim-rock-over: #f1f1f3;
+  color-scheme: light;
+}
+
+.ve-standalone[data-palette="cyanotype"] {
+  /* Cyanotype, night */
+  --sim-bg: #0b2340;
+  --sim-surface: #10294a;
+  --sim-surface-2: #153257;
+  --sim-surface-3: #1b3b64;
+  --sim-rule: #23466f;
+  --sim-rule-strong: #2f5785;
+  --sim-ink: #f3f8ff;
+  --sim-ink-muted: #adc4e2;
+  --sim-ink-faint: #839dbe;
+  --sim-accent: #ffe08a;
+  --sim-accent-ink: #241a04;
+  --sim-accent-soft: rgba(255, 224, 138, 0.14);
+  --sim-focus: #ffe08a;
+  --sim-danger: #ff8b80;
+  --sim-warning: #f2c66d;
+
+  --sim-c-dissolved: #00a6ba;
+  --sim-c-residual: #c26300;
+  --sim-c-structural: #c64998;
+  --sim-c-free: #b19100;
+  --sim-c-exited: #008f8f;
+  --sim-c-leaked: #de3b3d;
+  --sim-glow-free: #ffdb1f;
+  --sim-glow-structural: #f767c1;
+  --sim-glow-residual: #ff9639;
+  --sim-glow-dissolved: #c2f2fa;
+  --sim-glow-leaked: #fc4447;
+
+  --sim-depth-0: #a9d2e5;
+  --sim-depth-1: #8bb7cf;
+  --sim-depth-2: #6e9cba;
+  --sim-depth-3: #5281a5;
+  --sim-depth-4: #386790;
+  --sim-depth-5: #214e7c;
+  --sim-depth-6: #0a3467;
+  --sim-contour: rgba(243, 248, 255, 0.3);
+  --sim-stage: #0a203b;
+  --sim-rock-cap: #5b7396;
+  --sim-rock-aquifer: #386790;
+  --sim-rock-base: #0a3467;
+  --sim-rock-over: #0e2645;
+}
+
+.ve-standalone[data-palette="cyanotype"][data-theme="day"] {
+  /* Cyanotype, day */
+  --sim-bg: #eaf1f8;
+  --sim-surface: #ffffff;
+  --sim-surface-2: #f4f8fc;
+  --sim-surface-3: #e3ecf6;
+  --sim-rule: #d0deec;
+  --sim-rule-strong: #b6c9de;
+  --sim-ink: #0b2340;
+  --sim-ink-muted: #46607e;
+  --sim-ink-faint: #6b829e;
+  --sim-accent: #0d4f8b;
+  --sim-accent-ink: #ffffff;
+  --sim-accent-soft: rgba(13, 79, 139, 0.1);
+  --sim-focus: #0d4f8b;
+  --sim-danger: #b4232a;
+  --sim-warning: #8a5a00;
+
+  --sim-c-dissolved: #008b9e;
+  --sim-c-residual: #be6517;
+  --sim-c-structural: #ab2f80;
+  --sim-c-free: #a28700;
+  --sim-c-exited: #00958f;
+  --sim-c-leaked: #c21725;
+  --sim-glow-free: #a28700;
+  --sim-glow-structural: #ab2f80;
+  --sim-glow-residual: #be6517;
+  --sim-glow-dissolved: #008b9e;
+  --sim-glow-leaked: #c21725;
+
+  --sim-depth-0: #dbf3ff;
+  --sim-depth-1: #b8d9ec;
+  --sim-depth-2: #98c0da;
+  --sim-depth-3: #79a6c8;
+  --sim-depth-4: #5c8cb7;
+  --sim-depth-5: #4272a6;
+  --sim-depth-6: #2a5894;
+  --sim-contour: rgba(11, 35, 64, 0.38);
+  --sim-stage: #f6f9fd;
+  --sim-rock-cap: #bfcbdb;
+  --sim-rock-aquifer: #98c0da;
+  --sim-rock-base: #4272a6;
+  --sim-rock-over: #edf2f8;
   color-scheme: light;
 }
 
@@ -318,6 +685,36 @@
 
 .sim-menu__panel button:hover { background: var(--sim-surface-3); }
 .sim-menu__panel small { color: var(--sim-ink-faint); }
+
+/* Palette picker: a radio group of swatches (rock ramp with three CO2 colours). */
+.sim-palettes .sim-menu__panel { min-width: 260px; margin: 0; }
+.sim-palette-option {
+  position: relative;
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  color: var(--sim-ink);
+  font: 600 13px/1.3 var(--sim-font-ui);
+  cursor: pointer;
+}
+.sim-palette-option:hover { background: var(--sim-surface-3); }
+.sim-palette-option[data-active="true"] { background: var(--sim-accent-soft); box-shadow: inset 0 0 0 1px var(--sim-accent); }
+.sim-palette-option:focus-within { outline: 2px solid var(--sim-focus); outline-offset: 1px; }
+.sim-palette-option input { position: absolute; opacity: 0; pointer-events: none; }
+.sim-palette-option small { display: block; font-weight: 400; }
+.sim-palette-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  height: 26px;
+  padding: 0 4px;
+  border-radius: 5px;
+}
+.sim-palette-swatch i { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.4); }
 
 @keyframes sim-pop {
   from { opacity: 0; transform: scale(0.96); }

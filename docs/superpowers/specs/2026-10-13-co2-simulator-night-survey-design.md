@@ -129,9 +129,20 @@ only for primary actions, the selected tab marker, the scrubber thumb and focus.
 | Leaked through faults | `#d94a3f` | `#c93a30` |
 
 Map/3D/section layers use the same hue families (lighter "glow" steps allowed for the plume
-on the dark stage). Depth (top structure) is a single-hue indigo ramp, light = shallow,
+on the dark stage). Depth (top structure) is the active palette's rock ramp, light = shallow,
 dark = deep, in every view. Pressure build-up uses an amber sequential ramp. Status
 messages use icons + labels.
+
+**Palettes (revised 2026-10-13 after review).** The table above was the original indigo
+set. Viewers now pick a palette in the header (stored per browser, like night/day); each
+re-themes the rock ramp, wall rock, contours, CO₂ classes and chrome together, with a night
+and a day token set: **Earth** (default: sandstone-to-umber rock, gemstone CO₂ on basalt
+chrome), **Shoreline** (sand-to-navy rock, coastal signal colours), **Aurora** (moonlit
+steel rock, aurora colours), **Thin section** (quartz greys, interference colours) and
+**Cyanotype** (blueprint blues, warm inks). Every set passed the categorical checks for its
+inventory colours in its mode, and its plume overlays clear ΔE 14 against the shallow half
+of its own rock ramp (Cyanotype's dissolved layer, off by default, excepted). Status
+colours (danger, warning) stay fixed across palettes.
 
 ### 4.3 Typography
 
@@ -268,7 +279,7 @@ aligned to output times and the end of injection. Snapshots every 5 years.
 
 ## 6. Views
 
-**Map** — structure map: indigo depth ramp with hillshade, labelled contours (marching
+**Map** — structure map: depth ramp with hillshade, labelled contours (marching
 squares), faults with downthrown ticks (solid sealing, dashed partially sealing, red pulse
 where leaking now), trap outlines (amber dashed) and spill points, free plume (green, opacity
 by thickness), structural part (amber), residual zone (magenta hatch), dissolved (blue tint,

@@ -27,6 +27,16 @@ const SIM_INVENTORY = [
 const SIM_FRAME_YEARS = 5;
 const SIM_SPEEDS = [25, 60, 150];
 const SIM_THEME_KEY = 'co2-simulator-theme';
+const SIM_PALETTE_KEY = 'co2-simulator-palette';
+// Colour palettes (data-palette on the root; tokens in simulator-workbench.css). The
+// previews show four steps of the night rock ramp and three CO₂ colours.
+const SIM_PALETTES = [
+  { id: 'earth', label: 'Earth', hint: 'Sandstone rock, gemstone CO₂', ramp: ['#c0a684', '#8b7157', '#59402e', '#2a140a'], fluids: ['#38e8d1', '#6a99ff', '#ff99c2'] },
+  { id: 'shoreline', label: 'Shoreline', hint: 'Sand-to-navy rock, coastal CO₂', ramp: ['#baa88b', '#668276', '#2f4e5b', '#051a38'], fluids: ['#ff7f55', '#fbd530', '#6adcc4'] },
+  { id: 'aurora', label: 'Aurora', hint: 'Moonlit rock, aurora CO₂', ramp: ['#b1c0cd', '#748496', '#3d4c62', '#0d1a32'], fluids: ['#47f4a3', '#ffc73a', '#fe7ccb'] },
+  { id: 'thin-section', label: 'Thin section', hint: 'Quartz greys, interference colours', ramp: ['#b8b7b3', '#7d7c79', '#474643', '#171614'], fluids: ['#5492ff', '#fdd506', '#fc65b6'] },
+  { id: 'cyanotype', label: 'Cyanotype', hint: 'Blueprint blues, warm inks', ramp: ['#a9d2e5', '#6e9cba', '#386790', '#0a3467'], fluids: ['#ffdb1f', '#f767c1', '#ff9639'] }
+];
 const SIM_FAULT_KEYS = ['x', 'y', 'strike', 'length', 'throw', 'trans', 'sealCap', 'kf'];
 // Typical fracture margin above hydrostatic (fracture ~0.16 bar/m, brine ~0.105 bar/m).
 const SIM_FRACTURE_MARGIN_BAR_PER_M = 0.055;
@@ -162,6 +172,19 @@ const simStoredTheme = storage => {
 
 const simPersistTheme = (theme, storage) => {
   try { storage?.setItem(SIM_THEME_KEY, theme); } catch (_) { /* storage blocked: the choice lasts for this visit */ }
+};
+
+const simStoredPalette = storage => {
+  try {
+    const value = storage?.getItem(SIM_PALETTE_KEY);
+    return SIM_PALETTES.some(option => option.id === value) ? value : 'earth';
+  } catch (_) {
+    return 'earth';
+  }
+};
+
+const simPersistPalette = (id, storage) => {
+  try { storage?.setItem(SIM_PALETTE_KEY, id); } catch (_) { /* storage blocked: the choice lasts for this visit */ }
 };
 
 const simCopyText = async (text, clipboard) => {
@@ -784,6 +807,7 @@ const SimulatorPage = () => {
   const [section, setSection] = useState('simulator');
   const [view, setView] = useState('map');
   const [theme, setTheme] = useState(() => simStoredTheme(window.localStorage));
+  const [paletteId, setPaletteId] = useState(() => simStoredPalette(window.localStorage));
   const [palette, setPalette] = useState(() => simReadPalette(null));
   const [year, setYear] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -810,9 +834,11 @@ const SimulatorPage = () => {
   useEffect(() => {
     const root = document.querySelector('.ve-standalone');
     root?.setAttribute('data-theme', theme);
+    root?.setAttribute('data-palette', paletteId);
     simPersistTheme(theme, window.localStorage);
+    simPersistPalette(paletteId, window.localStorage);
     setPalette(simReadPalette(root));
-  }, [theme]);
+  }, [theme, paletteId]);
 
   useEffect(() => {
     const url = `${window.location.pathname}?${simEncodeScenario(scenario)}`;
@@ -888,6 +914,8 @@ const SimulatorPage = () => {
     setTimeout(() => setShare('Share'), 2200);
   };
   const exportRef = useRef(null);
+  const paletteRef = useRef(null);
+  const choosePalette = id => { setPaletteId(id); paletteRef.current?.removeAttribute('open'); };
   const exportInventory = () => { simDownload(simInventoryCsv(shown.history), 'co2-inventory.csv', 'text/csv'); exportRef.current?.removeAttribute('open'); };
   const exportGrid = () => { if (frame) simDownload(simGridCsv(model, frame), `co2-grid-year-${Math.round(shownYear)}.csv`, 'text/csv'); exportRef.current?.removeAttribute('open'); };
   const exportImage = () => {
@@ -945,6 +973,21 @@ const SimulatorPage = () => {
               <button type="button" onClick={exportGrid} disabled={!frame}>Grid at this year <small>CSV</small></button>
               <button type="button" onClick={exportImage}>Current view <small>{view === 'section' ? 'SVG' : 'PNG'}</small></button>
             </div>
+          </details>
+          <details className="sim-menu sim-palettes" ref={paletteRef}>
+            <summary className="sim-button" aria-label="Colour palette"><i className="fas fa-palette" aria-hidden="true" /><span className="sim-button__label">Palette</span></summary>
+            <fieldset className="sim-menu__panel">
+              <legend className="sim-sr-only">Colour palette</legend>
+              {SIM_PALETTES.map(option => (
+                <label key={option.id} className="sim-palette-option" data-active={option.id === paletteId}>
+                  <input type="radio" name="sim-palette" value={option.id} checked={option.id === paletteId} onChange={() => choosePalette(option.id)} />
+                  <span className="sim-palette-swatch" style={{ background: `linear-gradient(90deg, ${option.ramp.join(', ')})` }} aria-hidden="true">
+                    {option.fluids.map(color => <i key={color} style={{ background: color }} />)}
+                  </span>
+                  <span>{option.label}<small>{option.hint}</small></span>
+                </label>
+              ))}
+            </fieldset>
           </details>
           <button type="button" className="sim-icon-button" onClick={() => setTheme(t => t === 'night' ? 'day' : 'night')} aria-label={theme === 'night' ? 'Switch to the day theme' : 'Switch to the night theme'}>
             <i className="fas fa-circle-half-stroke" aria-hidden="true" />
