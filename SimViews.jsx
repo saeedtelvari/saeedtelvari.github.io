@@ -849,7 +849,7 @@ const SimBlockView = ({ model, frame, palette, layers, reducedMotion, year, scen
   const velocity = useRef({ azimuth: 0, elevation: 0 });
   const animation = useRef(0);
 
-  const depthAt = useMemo(() => (x, y) => VE2D.topDepth(x, y, scenario), [scenario]);
+  const depthAt = useMemo(() => VE2D.depthField(scenario), [scenario]);
   const geometry = useMemo(() => SimBlock3D.buildGeometry(model, depthAt), [model, depthAt]);
   const wellDepth = useMemo(() => depthAt(model.wellX, model.wellY), [model, depthAt]);
   const box = useMemo(() => SimBlock3D.sceneBox(geometry, model, exaggeration, wellDepth), [geometry, model, exaggeration, wellDepth]);
@@ -1078,6 +1078,7 @@ const SimSectionView = ({ model, frame, palette, scenario, line, layers, reduced
   const [sizeRef, size] = simUseSize();
   const data = useMemo(() => {
     if (!line || !frame) return null;
+    const depthAt = VE2D.depthField(scenario);
     const samples = 360;
     const length = Math.hypot(line.x1 - line.x0, line.y1 - line.y0) || 1;
     const points = [];
@@ -1085,7 +1086,7 @@ const SimSectionView = ({ model, frame, palette, scenario, line, layers, reduced
       const t = s / samples;
       const x = Math.max(1, Math.min(model.Lx - 1, line.x0 + (line.x1 - line.x0) * t));
       const y = Math.max(1, Math.min(model.Ly - 1, line.y0 + (line.y1 - line.y0) * t));
-      const zt = VE2D.topDepth(x, y, scenario);
+      const zt = depthAt(x, y);
       const spill = simSampleField(model, model.zSpill, x, y);
       points.push({
         d: t * length, x, y, zt,

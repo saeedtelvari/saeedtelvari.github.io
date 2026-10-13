@@ -73,9 +73,24 @@ const GuidePage = () => {
         <p>
           The aquifer covers 20 × 12 km on a Cartesian grid of 500, 250 or 167 m cells. Its top surface, the base of the
           caprock, is an analytic depth field <SimTex tex="z_t(x,y)" /> (positive down) made of a regional dip plane,
-          seeded elliptical domes, multi-octave roughness and normal faults. A fault displaces its hanging wall (to the
-          right of its strike) by a throw that is largest at mid-length and zero at the tips, decaying away from the fault.
-          The aquifer has a uniform thickness <SimTex tex="H" />.
+          Gaussian domes elongated along the regional strike, caprock roughness and normal faults. The roughness is an
+          anisotropic Gaussian random field with a self-affine spectrum (Hurst exponent 0.8, wavelengths from 8 km down to
+          500 m), stretched 2.5 times along strike and built as a sum of random Fourier modes; the roughness input is its RMS
+          height. A fault's throw is largest at mid-length and zero at the tips. Facing along strike, the hanging wall is on
+          the right: it drops by 70 % of the throw while the footwall rises by 30 %, both decaying away from the fault over a
+          fifth of its length, so a footwall crest closes against its fault. The aquifer has a uniform
+          thickness <SimTex tex="H" />.
+        </p>
+        <p>
+          <strong>New random structure</strong> draws one of three settings so that dip, folds, faults and fault rock agree.
+          Tilted fault blocks: two or three synthetic normal faults with a common strike and beds dipping away from them,
+          with the injector down-dip of a footwall crest. Faulted dome: a closure elongated along strike, cut by small
+          crestal faults whose hanging walls face the crest, with the injector on its down-dip flank. Undulating homocline:
+          a steeper dip with 8–18 m of RMS roughness and at most one small fault. Throw grows with fault
+          length, <SimTex tex="D = \gamma L" /> with <SimTex tex="\gamma" /> between 0.002 and 0.015. Each fault's shale gouge ratio
+          sets its rock: permeability and thickness (throw / 66) after Manzocchi et al. (1999) give the cross-fault
+          multiplier for 250 m cells, and the calibration of Bretan et al. (2003) gives the CO₂ column the fault holds.
+          About one fault in three is a vertical conduit.
         </p>
 
         <h2 id="m-equations">Plume equation</h2>
@@ -213,10 +228,13 @@ const GuidePage = () => {
         <ul>
           <li>Barnes, Lehman and Mulla (2014). Priority-flood: an optimal depression-filling algorithm. <em>Computers &amp; Geosciences</em> 62.</li>
           <li>Bennion and Bachu (2008). Drainage and imbibition relative permeability relationships for supercritical CO₂/brine. <em>SPE Reservoir Evaluation &amp; Engineering</em> 11(3).</li>
+          <li>Bretan, Yielding and Jones (2003). Using calibrated shale gouge ratio to estimate hydrocarbon column heights. <em>AAPG Bulletin</em> 87(3).</li>
           <li>Gasda, Nordbotten and Celia (2009). Vertical equilibrium with sub-scale analytical methods for geological CO₂ sequestration. <em>Computational Geosciences</em> 13.</li>
           <li>Hesse, Orr and Tchelepi (2008). Gravity currents with residual trapping. <em>Journal of Fluid Mechanics</em> 611.</li>
+          <li>Kim and Sanderson (2005). The relationship between displacement and length of faults: a review. <em>Earth-Science Reviews</em> 68.</li>
           <li>Lee, Efendiev and Tchelepi (2015). Hybrid upwind discretization of nonlinear two-phase flow with gravity. <em>Advances in Water Resources</em> 82.</li>
           <li>MacMinn, Szulczewski and Juanes (2011). CO₂ migration in saline aquifers. Part 2: capillary and solubility trapping. <em>Journal of Fluid Mechanics</em> 688.</li>
+          <li>Manzocchi, Walsh, Nell and Yielding (1999). Fault transmissibility multipliers for flow simulation models. <em>Petroleum Geoscience</em> 5.</li>
           <li>Neufeld et al. (2010). Convective dissolution of carbon dioxide in saline aquifers. <em>Geophysical Research Letters</em> 37.</li>
           <li>Nilsen, Lie and Andersen (2016). Fully-implicit simulation of vertical-equilibrium models with hysteresis and capillary fringe. <em>Computational Geosciences</em> 20.</li>
           <li>Nordbotten and Celia (2006). Similarity solutions for fluid injection into confined aquifers. <em>Journal of Fluid Mechanics</em> 561.</li>

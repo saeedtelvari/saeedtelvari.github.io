@@ -488,3 +488,158 @@ test('simulated period snaps to its 50-year step so the run ends on a snapshot',
   assert.equal(VE2D.normalizeScenario({ years: 1033 }).years, 1050);
   assert.equal(VE2D.normalizeScenario({ years: 1010 }).years, 1000);
 });
+
+// ---------------------------------------------------------------- random geology
+
+test('a normal fault lifts its footwall and drops its hanging wall, both close to the fault', () => {
+  const scenario = flat({ faults: [{ x: 10, y: 6, strike: 0, length: 8, throw: 30, trans: 1, sealCap: 0, kf: 0 }] });
+  const offset = x => VE2D.topDepth(x, 6000, scenario) - scenario.depth;
+  near(offset(10001), 21, 0.1, 'hanging wall drops 70 % of the throw');
+  near(offset(9999), -9, 0.1, 'footwall rises 30 % of the throw');
+  assert.ok(Math.abs(offset(18000)) < 3 && Math.abs(offset(2000)) < 3, 'one fault length away both offsets are below a tenth of the throw');
+});
+
+test('fault strike follows the right-hand rule round the full circle', () => {
+  const scenario = flat({ faults: [{ x: 10, y: 6, strike: 270, length: 8, throw: 30, trans: 1, sealCap: 0, kf: 0 }] });
+  assert.equal(scenario.faults[0].strike, 270, 'strikes up to 359° are kept');
+  assert.ok(VE2D.topDepth(10000, 6001, scenario) > VE2D.topDepth(10000, 5999, scenario) + 25, 'striking west, the hanging wall is to the north');
+});
+
+test('domes are elongated along the regional strike', () => {
+  for (const dipAz of [90, 30]) {
+    const model = VE2D.buildModel(flat({ domes: 1, domeRelief: 60, dipAz }));
+    const { x, y } = model.domes[0];
+    const strike = (dipAz - 90) * Math.PI / 180;
+    const at = (along, across) => model.depthAt(
+      x + along * Math.sin(strike) + across * Math.cos(strike),
+      y + along * Math.cos(strike) - across * Math.sin(strike));
+    assert.ok(at(2000, 0) < at(0, 2000) - 5, `shallower along strike than across it (dip azimuth ${dipAz}°)`);
+  }
+});
+
+test('caprock roughness is a random field with the requested RMS height, elongated along strike', () => {
+  const seeds = [1, 2, 3, 4, 5, 6, 7, 8];
+  let rms = 0;
+  let along = 0;
+  let across = 0;
+  for (const seed of seeds) {
+    const scenario = flat({ seed, roughness: 10, dipAz: 90 });
+    const depthAt = VE2D.depthField(scenario);
+    let sum = 0;
+    let sum2 = 0;
+    let count = 0;
+    for (let y = 250; y < 12000; y += 500) {
+      for (let x = 250; x < 20000; x += 500) {
+        const z = depthAt(x, y) - scenario.depth;
+        sum += z;
+        sum2 += z * z;
+        count++;
+        // The strike runs north–south when the caprock deepens to the east.
+        along += (depthAt(x, y + 800) - scenario.depth - z) ** 2;
+        across += (depthAt(x + 800, y) - scenario.depth - z) ** 2;
+      }
+    }
+    rms += Math.sqrt(sum2 / count - (sum / count) ** 2) / seeds.length;
+  }
+  near(rms, 10, 2, 'RMS height averaged over realisations');
+  assert.ok(along < 0.6 * across, 'undulations vary more slowly along strike than across it');
+});
+
+test('fault rock follows the shale gouge ratio (Manzocchi permeability, Bretan column height)', () => {
+  const seal = VE2D.faultSeal(50, 0.2, 500, 350);
+  near(seal.trans, 0.16024, 5e-5, 'multiplier for 50 m throw, SGR 0.2, 500 mD sand, 250 m cells');
+  near(seal.sealCap, 50.70, 0.01, 'column held at SGR 0.2');
+  assert.ok(VE2D.faultSeal(100, 0.2, 500, 350).trans < seal.trans, 'more throw, thicker gouge, lower transmissibility');
+  assert.ok(VE2D.faultSeal(50, 0.35, 500, 350).sealCap > seal.sealCap, 'more clay holds a taller column');
+});
+
+test('random structures are reproducible, named and inside the input limits', () => {
+  const styles = new Set();
+  for (let seed = 1; seed <= 60; seed++) {
+    const patch = VE2D.randomStructure(seed);
+    assert.deepEqual(VE2D.randomStructure(seed), patch, 'same seed, same structure');
+    assert.ok(VE2D.RANDOM_STYLES[patch.preset], `named style (${patch.preset})`);
+    styles.add(patch.preset);
+    const scenario = VE2D.normalizeScenario({ ...VE2D.DEFAULTS, ...patch });
+    for (const key of Object.keys(patch)) if (key !== 'faults') assert.equal(scenario[key], patch[key], `${key} within limits`);
+    patch.faults.forEach((fault, i) => {
+      assert.deepEqual(scenario.faults[i], fault, 'fault within limits');
+      const ratio = fault.throw / (fault.length * 1000);
+      assert.ok(fault.throw === 150 || (ratio > 0.0015 && ratio < 0.02), `throw scales with length (D/L ${ratio})`);
+    });
+  }
+  assert.equal(styles.size, Object.keys(VE2D.RANDOM_STYLES).length, 'every style occurs');
+});
+
+test('random fault blocks are one set of synthetic faults with the beds dipping away from them', () => {
+  const gap = (a, b) => Math.abs(((a - b) % 360 + 540) % 360 - 180);
+  for (let seed = 1; seed <= 20; seed++) {
+    const patch = VE2D.randomStructure(seed, VE2D.DEFAULTS, 'random-fault-blocks');
+    assert.ok(patch.faults.length >= 2, 'at least two faults');
+    const strike = patch.faults[0].strike;
+    for (const fault of patch.faults) assert.ok(gap(fault.strike, strike) <= 12, 'hanging walls on the same side');
+    assert.ok(gap(patch.dipAz, strike - 90) <= 15, 'blocks tilt away from their faults');
+  }
+});
+
+// Fill and spill from a cell, as in co2lab: climb to a crest, fill its trap, leave through
+// its spill point and climb again, adding up the closure met on the way.
+const capacityUpDip = (model, start) => {
+  const { nx, ny, mx, my, zt } = model;
+  const { traps, trapId } = model.traps;
+  const filled = new Set();
+  const climb = from => {
+    for (let cell = from; ;) {
+      const i = cell % nx;
+      const j = (cell - i) / nx;
+      let next = cell;
+      const consider = (c, open) => { if (open && !filled.has(trapId[c]) && zt[c] < zt[next]) next = c; };
+      consider(cell - 1, i > 0 && mx[j * (nx + 1) + i] > 0);
+      consider(cell + 1, i < nx - 1 && mx[j * (nx + 1) + i + 1] > 0);
+      consider(cell - nx, j > 0 && my[j * nx + i] > 0);
+      consider(cell + nx, j < ny - 1 && my[(j + 1) * nx + i] > 0);
+      if (next === cell) return cell;
+      cell = next;
+    }
+  };
+  let total = 0;
+  for (let cell = start; ;) {
+    const id = trapId[climb(cell)];
+    if (id < 0 || filled.has(id)) return total;
+    filled.add(id);
+    total += traps[id].capacity;
+    if (traps[id].spillCell < 0) return total;
+    cell = traps[id].spillCell;
+  }
+};
+
+test('random domes and fault blocks put a trap up-dip of the injector', () => {
+  for (const style of ['random-dome', 'random-fault-blocks']) {
+    for (let seed = 1; seed <= 12; seed++) {
+      const model = VE2D.buildModel({ ...VE2D.DEFAULTS, ...VE2D.randomStructure(seed, VE2D.DEFAULTS, style), grid: 'coarse' });
+      const mass = capacityUpDip(model, model.well) * model.p.rhoG;
+      assert.ok(mass > 1e9, `${style} seed ${seed}: ${(mass / 1e9).toFixed(2)} Mt of closure on the spill route from the well`);
+    }
+  }
+});
+
+test('random homoclines hold CO2 in many small traps', () => {
+  for (let seed = 1; seed <= 6; seed++) {
+    const model = VE2D.buildModel({ ...VE2D.DEFAULTS, ...VE2D.randomStructure(seed, VE2D.DEFAULTS, 'random-homocline') });
+    assert.ok(model.traps.traps.length >= 5, `seed ${seed}: ${model.traps.traps.length} traps`);
+  }
+});
+
+test('the rough-surface preset forms many small structural traps', () => {
+  const model = VE2D.buildModel({ ...VE2D.DEFAULTS, ...VE2D.PRESETS.rough.patch });
+  assert.ok(model.traps.traps.length >= 8, `${model.traps.traps.length} traps`);
+});
+
+test('the anticline preset fills its dome to the spill point', () => {
+  const scenario = { ...VE2D.DEFAULTS, ...VE2D.PRESETS.anticline.patch, grid: 'coarse' };
+  const model = VE2D.buildModel(scenario);
+  const largest = Math.max(...model.traps.traps.map(trap => trap.capacity)) * model.p.rhoG;
+  const result = VE2D.run(scenario, { keepSnapshots: false });
+  const peak = Math.max(...result.history.map(row => row.structural));
+  assert.ok(peak > 0.9 * largest, `structural peak ${(peak / 1e9).toFixed(1)} Mt of ${(largest / 1e9).toFixed(1)} Mt closure`);
+});

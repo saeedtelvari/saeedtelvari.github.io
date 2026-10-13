@@ -190,12 +190,32 @@ as "left the model". Closed: no-flow; pressure builds up through compressibility
 
 ### 5.5 Faults
 
-Trace through a point, with strike and length. Throw displaces the hanging wall (tapered at
-tips). Faces crossed by a trace get `m = T_mult · max(0, 1 − throw/H)` (juxtaposition).
+Trace through a point, with strike (0–359°, right-hand rule: hanging wall on the right) and
+length. Throw is parabolic along strike (zero at the tips); the hanging wall drops by 70 % of it
+and the footwall rises by 30 %, both decaying over L/5 from the trace, so footwall crests close
+against their faults (revised 2026-10-13). Faces crossed by a trace get
+`m = T_mult · max(0, 1 − throw/H)` (juxtaposition).
 Vertical leakage per cell: `Q_leak = L_c w (k_f k_rg*/μ_g) Δρ g [(h − h_th)/L_cap + 1]` for
 `h > h_th`, limited so the column cannot drop below h_th; L_c = trace length inside the
 cell (grid independent); w = 5 m fault-zone width; L_cap = 100 m caprock thickness.
 Inputs: seal capacity h_th (m of CO₂ column) and fault-zone permeability k_f (mD).
+
+### 5.5a Top surface and random structures (revised 2026-10-13 after review)
+
+Domes are Gaussian closures elongated along the regional strike (±15°); the first is the main
+closure, any others are smaller satellites. Roughness is an anisotropic Gaussian random field
+with a self-affine spectrum (Hurst 0.8, wavelengths 8 km–500 m), stretched 2.5× along strike,
+summed from 48 random Fourier modes and scaled so the input is the RMS height.
+`randomStructure(seed)` replaces independent uniform draws with one of three settings whose
+inputs agree: **tilted fault blocks** (2–3 synthetic faults sharing a strike, beds dipping away
+from them, injector down-dip of a footwall crest), **faulted dome** (closure along strike with
+crestal faults whose hanging walls face the crest, injector on the down-dip flank) and
+**undulating homocline** (0.5–1.5° dip, 8–18 m RMS roughness, at most one small fault). Throw
+follows D = γL; each fault's shale gouge ratio sets its transmissibility multiplier
+(Manzocchi et al. 1999, 250 m cells) and seal capacity (Bretan et al. 2003). Tests check that
+every dome and fault-block realisation meets at least 1 Mt of closure along the fill-and-spill
+route from the injector. Presets were retuned so each still does what its description says
+(default seed 1443, F1 seal capacity 26 m, anticline relief 40 m, rough-surface RMS 10 m).
 
 ### 5.6 Dissolution
 
@@ -233,7 +253,7 @@ aligned to output times and the end of injection. Snapshots every 5 years.
 | Reference depth (top) | 1500 m | display only |
 | Regional dip / direction | 0.6° / 90° | 0–3°, 0–360° |
 | Domes / relief | 1 / 40 m | 0–4, 0–150 m |
-| Roughness | 4 m | 0–40 m |
+| Roughness (RMS) | 4 m | 0–40 m |
 | ρ_CO2, ρ_brine | 700, 1050 kg/m³ | 400–900, 1000–1200 |
 | μ_CO2, μ_brine | 0.055, 0.6 mPa·s | 0.02–0.1, 0.3–1.5 |
 | S_wr, S_gr, k_rg* | 0.27, 0.20, 0.5 | co2lab Johansen; Bennion & Bachu range |

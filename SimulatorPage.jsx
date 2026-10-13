@@ -271,10 +271,10 @@ const SIM_FIELDS = {
   porosity: { label: 'Porosity', unit: '', digits: 2 },
   thickness: { label: 'Aquifer thickness', unit: 'm', digits: 0 },
   dipDeg: { label: 'Regional dip', unit: '°', digits: 1 },
-  dipAz: { label: 'Dip direction', unit: '° from N', digits: 0, hint: 'Direction in which the caprock deepens; CO₂ rises the other way.' },
+  dipAz: { label: 'Dip direction', unit: '° from N', digits: 0, hint: 'Direction in which the caprock deepens; CO₂ rises the other way. Domes and undulations run along strike, across it.' },
   domes: { label: 'Domes', unit: '', digits: 0 },
   domeRelief: { label: 'Dome relief', unit: 'm', digits: 0 },
-  roughness: { label: 'Caprock roughness', unit: 'm', digits: 0, hint: 'Small undulations that hold CO₂ in many small traps.' },
+  roughness: { label: 'Caprock roughness', unit: 'm', digits: 0, hint: 'RMS height of undulations elongated along strike. They hold CO₂ in many small traps.' },
   sgr: { label: 'Residual CO₂ saturation', unit: '', digits: 2, hint: 'Fraction of pore space left as trapped CO₂ when brine returns.' },
   swr: { label: 'Residual brine saturation', unit: '', digits: 2 },
   krg: { label: 'CO₂ relative permeability', unit: '', digits: 2, hint: 'End-point value at residual brine saturation.' },
@@ -289,7 +289,7 @@ const SIM_FIELDS = {
 const SIM_FAULT_FIELDS = {
   x: { label: 'Centre, east', unit: 'km', digits: 1 },
   y: { label: 'Centre, north', unit: 'km', digits: 1 },
-  strike: { label: 'Strike', unit: '° from N', digits: 0 },
+  strike: { label: 'Strike', unit: '° from N', digits: 0, hint: 'Facing along strike, the hanging wall is on the right.' },
   length: { label: 'Length', unit: 'km', digits: 1 },
   throw: { label: 'Throw', unit: 'm', digits: 0, hint: 'Vertical offset; a throw above the aquifer thickness seals the fault.' },
   trans: { label: 'Cross-fault transmissibility', unit: '', digits: 2, hint: '0 seals the fault, 1 is no barrier.' },
@@ -315,7 +315,7 @@ const useSimSimulation = scenario => {
       }
       if (!workerRef.current) {
         try {
-          const worker = new Worker('./simulation-worker.js?v=1');
+          const worker = new Worker('./simulation-worker.js?v=2');
           worker.onmessage = ({ data }) => {
             if (data.type === 'done' || data.type === 'error') busyRef.current = false;
             setRun(current => simApplyWorkerMessage(current, data));
@@ -440,7 +440,8 @@ const SimInputs = ({ scenario, onChange, onPreset, onRandom, onClose }) => {
   const field = key => <SimField key={key} name={key} meta={SIM_FIELDS[key]} value={scenario[key]} limits={VE2D.LIMITS[key]} onChange={value => onChange({ [key]: value })} />;
   const setFault = (index, patch) => onChange({ faults: scenario.faults.map((fault, i) => i === index ? { ...fault, ...patch } : fault) });
   const presetIds = Object.keys(VE2D.PRESETS);
-  const preset = VE2D.PRESETS[scenario.preset];
+  const random = VE2D.RANDOM_STYLES[scenario.preset];
+  const preset = VE2D.PRESETS[scenario.preset] || random;
   return (
     <>
       <div className="sim-rail__head">
@@ -451,6 +452,7 @@ const SimInputs = ({ scenario, onChange, onPreset, onRandom, onClose }) => {
         <label className="sim-sr-only" htmlFor="sim-preset">Scenario</label>
         <select id="sim-preset" value={preset ? scenario.preset : 'custom'} onChange={event => onPreset(event.target.value)}>
           {presetIds.map(id => <option key={id} value={id}>{VE2D.PRESETS[id].label}</option>)}
+          {random && <option value={scenario.preset}>{`Random: ${random.label}`}</option>}
           {!preset && <option value="custom">Custom</option>}
         </select>
         <p>{preset ? preset.description : 'Your own combination of inputs. Share it with the link button.'}</p>
@@ -654,7 +656,7 @@ const SimUncertainty = ({ scenario, onLoad, theme, hidden }) => {
     const base = { ...scenario, grid: grid === 'same' ? scenario.grid : 'coarse' };
     const scenarios = VE2D.sampleBatch(base, active.map(({ key, min, max, log }) => ({ key, min: Math.min(min, max), max: Math.max(min, max), log })), runs, seed);
     try {
-      const worker = new Worker('./simulation-worker.js?v=1');
+      const worker = new Worker('./simulation-worker.js?v=2');
       workerRef.current = worker;
       worker.onmessage = ({ data }) => {
         if (data.type === 'progress') setState(current => ({ ...current, done: data.done, total: data.total }));
@@ -866,22 +868,9 @@ const SimulatorPage = () => {
     setScenario(VE2D.normalizeScenario({ ...VE2D.DEFAULTS, ...VE2D.PRESETS[id].patch, preset: id, grid: scenario.grid }));
     setSectionLine(null);
   };
-  const randomise = () => {
-    const rng = VE2D.mulberry32((Date.now() & 0xffff) + 17);
-    const pick = (min, max, step = 1) => Math.round((min + rng() * (max - min)) / step) * step;
-    update({
-      seed: pick(1, 999999),
-      dipDeg: pick(0.2, 1.4, 0.1),
-      dipAz: pick(0, 359),
-      domes: pick(0, 3),
-      domeRelief: pick(20, 120, 5),
-      roughness: pick(0, 15),
-      faults: Array.from({ length: pick(0, 2) }, () => ({
-        x: pick(4, 16, 0.5), y: pick(3, 9, 0.5), strike: pick(0, 179), length: pick(4, 12, 0.5),
-        throw: pick(0, 40), trans: pick(0, 1, 0.05), sealCap: pick(5, 40), kf: pick(0, 60)
-      }))
-    });
-  };
+  // A new realisation of a randomly drawn geological setting; the injector moves with it.
+  const randomise = () => setScenario(current =>
+    VE2D.normalizeScenario({ ...current, ...VE2D.randomStructure(1 + Math.floor(Math.random() * 999999), current) }));
 
   const play = () => {
     if (!run.model) return;

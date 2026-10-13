@@ -57,7 +57,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
   const FAULT_LIMITS = Object.freeze({
     x: [0, 20, 0.1],
     y: [0, 12, 0.1],
-    strike: [0, 179, 1],
+    strike: [0, 359, 1],
     length: [0.5, 30, 0.5],
     throw: [0, 150, 1],
     trans: [0, 1, 0.05],
@@ -73,7 +73,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     length: 8,
     throw: 12,
     trans: 0.4,
-    sealCap: 10,
+    sealCap: 26,
     kf: 20
   });
   const DEFAULTS = Object.freeze({
@@ -81,7 +81,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     grid: 'standard',
     boundary: 'open',
     years: 1000,
-    seed: 3901,
+    seed: 1443,
     rateMt: 1,
     injYears: 30,
     wellX: 14,
@@ -129,7 +129,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       patch: {
         dipDeg: 0.4,
         domes: 1,
-        domeRelief: 110,
+        domeRelief: 40,
         roughness: 2,
         faults: []
       }
@@ -170,7 +170,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       patch: {
         dipDeg: 0.5,
         domes: 0,
-        roughness: 20,
+        roughness: 10,
         faults: []
       }
     }
@@ -206,40 +206,62 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     const value = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453;
     return value - Math.floor(value);
   };
-  const smoothNoise = (x, y, seed) => {
-    const x0 = Math.floor(x);
-    const y0 = Math.floor(y);
-    const smooth = value => value * value * (3 - 2 * value);
-    const sx = smooth(x - x0);
-    const sy = smooth(y - y0);
-    const n00 = hashNoise(x0, y0, seed);
-    const n10 = hashNoise(x0 + 1, y0, seed);
-    const n01 = hashNoise(x0, y0 + 1, seed);
-    const n11 = hashNoise(x0 + 1, y0 + 1, seed);
-    const top = n00 + (n10 - n00) * sx;
-    return top + (n01 + (n11 - n01) * sx - top) * sy;
-  };
 
-  // Multi-octave value noise in [-1, 1]; coordinates in units of the domain height.
-  const roughnessField = (u, v, seed) => {
-    let value = 0;
-    let weight = 0;
-    let amplitude = 1;
-    for (let octave = 0; octave < 5; octave++) {
-      const scale = 1.6 * 2 ** octave;
-      value += (smoothNoise(u * scale, v * scale, seed + octave * 101) - 0.5) * 2 * amplitude;
-      weight += amplitude;
-      amplitude *= 0.55;
-    }
-    return value / weight;
-  };
+  // Map angle (from +x, anticlockwise) of the regional strike, at right angles to the dip
+  // direction. Domes and caprock undulations are elongated along it.
+  const strikeAngle = scenario => Math.PI - scenario.dipAz * Math.PI / 180;
+
+  // Gaussian domes elongated along strike (±15°). The first is the main closure; any others
+  // are smaller satellites.
   const domeCentres = scenario => Array.from({
     length: scenario.domes
-  }, (_, index) => ({
-    x: (0.12 + 0.76 * hashNoise(index * 2.1, 0.4, scenario.seed + 503)) * LX,
-    y: (0.15 + 0.7 * hashNoise(index * 2.9, 0.8, scenario.seed + 547)) * LY,
-    angle: hashNoise(index * 3.7, 1.2, scenario.seed + 571) * Math.PI
-  }));
+  }, (_, index) => {
+    const hash = (a, b, salt) => hashNoise(index * a, b, scenario.seed + salt);
+    const main = index === 0;
+    return {
+      x: (0.12 + 0.76 * hash(2.1, 0.4, 503)) * LX,
+      y: (0.15 + 0.7 * hash(2.9, 0.8, 547)) * LY,
+      angle: strikeAngle(scenario) + (hash(3.7, 1.2, 571) - 0.5) * Math.PI / 6,
+      along: 2400 * (main ? 0.85 + 0.45 * hash(4.3, 1.6, 593) : 0.55 + 0.35 * hash(4.3, 1.6, 593)),
+      across: 1600 * (main ? 0.7 + 0.3 * hash(5.1, 2.0, 613) : 0.45 + 0.2 * hash(5.1, 2.0, 613)),
+      relief: main ? 1 : 0.35 + 0.45 * hash(5.9, 2.4, 631)
+    };
+  });
+
+  // Caprock roughness: an anisotropic Gaussian random field with a self-affine spectrum
+  // (Hurst exponent 0.8, wavelengths 8 km to 500 m), stretched 2.5 times along strike. It is
+  // a sum of random Fourier modes, one per equal step in log wavenumber (amplitude k^-H),
+  // scaled to unit variance, so the roughness input is the RMS height in metres.
+  const ROUGH = Object.freeze({
+    modes: 48,
+    longest: 8000,
+    shortest: 500,
+    hurst: 0.8,
+    stretch: 2.5
+  });
+  const roughModes = scenario => {
+    const rng = mulberry32(scenario.seed + 7919);
+    const angle = strikeAngle(scenario);
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const modes = new Float64Array(4 * ROUGH.modes);
+    let variance = 0;
+    for (let m = 0; m < ROUGH.modes; m++) {
+      const k = 2 * Math.PI / (ROUGH.longest * (ROUGH.shortest / ROUGH.longest) ** ((m + rng()) / ROUGH.modes));
+      const direction = 2 * Math.PI * rng();
+      const along = k * Math.cos(direction) / ROUGH.stretch;
+      const across = k * Math.sin(direction);
+      modes.set([along * cos - across * sin, along * sin + across * cos, 2 * Math.PI * rng(), k ** -ROUGH.hurst], 4 * m);
+      variance += k ** (-2 * ROUGH.hurst) / 2;
+    }
+    for (let m = 3; m < modes.length; m += 4) modes[m] /= Math.sqrt(variance);
+    return modes;
+  };
+  const roughnessAt = (modes, x, y) => {
+    let value = 0;
+    for (let m = 0; m < modes.length; m += 4) value += modes[m + 3] * Math.cos(modes[m] * x + modes[m + 1] * y + modes[m + 2]);
+    return value;
+  };
   const faultFrame = fault => {
     const strike = fault.strike * Math.PI / 180;
     const along = [Math.sin(strike), Math.cos(strike)];
@@ -252,8 +274,11 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     };
   };
 
-  // Parabolic throw profile along strike (zero at the tips). The hanging wall, to the
-  // right of the strike direction, is downthrown; the offset decays away from the fault.
+  // Normal-fault displacement. The throw is parabolic along strike (zero at the tips). The
+  // hanging wall, to the right of the strike direction (right-hand rule), drops by 70 % of
+  // it and the footwall rises by 30 %; both decay away from the fault over a fifth of its
+  // length, so each footwall crest is a closure against its fault.
+  const FOOTWALL_SHARE = 0.3;
   const faultThrowAt = (fault, frame, x, y) => {
     const dx = x - frame.cx;
     const dy = y - frame.cy;
@@ -263,8 +288,8 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
   };
   const faultOffset = (fault, frame, x, y) => {
     const side = (x - frame.cx) * frame.normal[0] + (y - frame.cy) * frame.normal[1];
-    if (side <= 0) return 0;
-    return faultThrowAt(fault, frame, x, y) * Math.exp(-side / (1.5 * frame.half));
+    const offset = faultThrowAt(fault, frame, x, y) * Math.exp(-Math.abs(side) / (0.4 * frame.half));
+    return side > 0 ? (1 - FOOTWALL_SHARE) * offset : -FOOTWALL_SHARE * offset;
   };
   const topDepth = (x, y, scenario, cache) => {
     const azimuth = scenario.dipAz * Math.PI / 180;
@@ -276,14 +301,26 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       const dy = y - dome.y;
       const along = dx * Math.cos(dome.angle) + dy * Math.sin(dome.angle);
       const across = -dx * Math.sin(dome.angle) + dy * Math.cos(dome.angle);
-      depth -= scenario.domeRelief * Math.exp(-0.5 * ((along / 2400) ** 2 + (across / 1600) ** 2));
+      depth -= scenario.domeRelief * dome.relief * Math.exp(-0.5 * ((along / dome.along) ** 2 + (across / dome.across) ** 2));
     }
-    if (scenario.roughness > 0) depth += scenario.roughness * roughnessField(x / LY, y / LY, scenario.seed);
+    if (scenario.roughness > 0) depth += scenario.roughness * roughnessAt(cache?.rough || roughModes(scenario), x, y);
     const frames = cache?.frames || scenario.faults.map(faultFrame);
     scenario.faults.forEach((fault, index) => {
       depth += faultOffset(fault, frames[index], x, y);
     });
     return depth;
+  };
+  const depthCache = scenario => ({
+    domes: domeCentres(scenario),
+    frames: scenario.faults.map(faultFrame),
+    rough: roughModes(scenario)
+  });
+
+  // The top-surface depth of one (normalised) scenario as a function of x and y in metres,
+  // with its domes, fault frames and roughness modes computed once.
+  const depthField = scenario => {
+    const cache = depthCache(scenario);
+    return (x, y) => topDepth(x, y, scenario, cache);
   };
 
   // Segment p–q against the fault trace; returns the along-strike parameter t in [-1, 1] or null.
@@ -331,10 +368,7 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
       disCap: scenario.disCap,
       open: scenario.boundary === 'open'
     };
-    const cache = {
-      domes: domeCentres(scenario),
-      frames: scenario.faults.map(faultFrame)
-    };
+    const cache = depthCache(scenario);
     const depthAt = (x, y) => topDepth(x, y, scenario, cache);
     const xc = Float64Array.from({
       length: nx
@@ -1367,6 +1401,142 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     };
   };
 
+  // ------------------------------------------------------------------ random structures
+
+  // Fault rock from the shale gouge ratio (SGR) of the faulted interval: permeability (mD)
+  // and thickness (throw / 66) after Manzocchi et al. (1999), giving the cross-fault
+  // multiplier between two 250 m cells (the standard grid), and the CO2 column the fault
+  // rock holds from the Bretan et al. (2003) calibration for burial above 3 km.
+  const faultSeal = (throwM, sgr, permMd, dRho) => {
+    const kf = 10 ** (0.4 - 4 * sgr - 0.25 * Math.log10(Math.max(1, throwM)) * (1 - sgr) ** 5);
+    return {
+      trans: 1 / (1 + throwM / 66 / 250 * Math.max(0, permMd / kf - 1)),
+      sealCap: 10 ** (100 * sgr / 27 - 0.5) * BAR / (dRho * GRAVITY)
+    };
+  };
+  const RANDOM_STYLES = Object.freeze({
+    'random-fault-blocks': {
+      label: 'Tilted fault blocks',
+      description: 'Parallel normal faults tilt the aquifer into blocks. CO₂ rises to the crest of its block, against the fault up-dip.'
+    },
+    'random-dome': {
+      label: 'Faulted dome',
+      description: 'A closure elongated along strike, often cut by small crestal faults, with the injector on its down-dip flank.'
+    },
+    'random-homocline': {
+      label: 'Undulating homocline',
+      description: 'A dipping aquifer whose caprock undulates along strike. Rising CO₂ fills many small traps on its way up-dip.'
+    }
+  });
+
+  // A random structure from one geological setting, so that dip, folds, faults and fault
+  // rock agree: a fault set shares the regional strike, throw grows with length (D = γL),
+  // seals follow the shale gouge ratio and the injector sits down-dip of the main closure.
+  const randomStructure = (seed, base = DEFAULTS, style) => {
+    const rng = mulberry32(seed);
+    const between = (min, max) => min + (max - min) * rng();
+    const logBetween = (min, max) => Math.exp(between(Math.log(min), Math.log(max)));
+    const round = (value, digits = 1) => +value.toFixed(digits);
+    const unit = azimuth => [Math.sin(azimuth * Math.PI / 180), Math.cos(azimuth * Math.PI / 180)];
+    const styles = Object.keys(RANDOM_STYLES);
+    const drawn = styles[Math.floor(rng() * styles.length)];
+    const kind = RANDOM_STYLES[style] ? style : drawn;
+    const fault = (x, y, strike, length, gamma) => {
+      const throwM = Math.min(150, Math.round(gamma * length * KM));
+      const seal = faultSeal(throwM, between(0.12, 0.4), base.permMd, base.rhoBrine - base.rhoCo2);
+      return {
+        x: round(clamp(x, 0.5, 19.5)),
+        y: round(clamp(y, 0.5, 11.5)),
+        strike: (Math.round(strike) % 360 + 360) % 360,
+        length: round(length),
+        throw: throwM,
+        trans: round(seal.trans, 2),
+        sealCap: Math.min(200, Math.round(seal.sealCap)),
+        kf: rng() < 0.3 ? Math.round(logBetween(5, 60)) : 0
+      };
+    };
+    const well = (x, y) => ({
+      wellX: round(clamp(x, 1.5, 18.5)),
+      wellY: round(clamp(y, 1.5, 10.5))
+    });
+    if (kind === 'random-fault-blocks') {
+      // Domino blocks: the faults dip one way and the beds the other, so each block rises
+      // to a footwall crest against the next fault up-dip. The injector sits in the block
+      // down-dip of the fault nearest the centre.
+      const strike = between(0, 360);
+      const along = unit(strike);
+      const hanging = unit(strike + 90);
+      const spacing = between(5, 7.5);
+      const width = Math.abs(hanging[0]) * LX / KM + Math.abs(hanging[1]) * LY / KM;
+      const count = Math.min(3, 1 + Math.floor(0.75 * width / spacing));
+      const faults = Array.from({
+        length: count
+      }, (_, k) => {
+        const offset = (k - (count - 1) / 2) * spacing + between(-0.5, 0.5);
+        const shift = between(-2, 2);
+        return fault(10 + offset * hanging[0] + shift * along[0], 6 + offset * hanging[1] + shift * along[1], strike + between(-4, 4), between(8, 16), logBetween(0.007, 0.015));
+      });
+      const host = faults.reduce((best, f) => Math.hypot(f.x - 10, f.y - 6) < Math.hypot(best.x - 10, best.y - 6) ? f : best);
+      const distance = between(2.5, 3.5);
+      return {
+        preset: kind,
+        seed,
+        dipDeg: round(between(0.4, 1)),
+        dipAz: Math.round(strike + 270 + between(-3, 3)) % 360,
+        domes: 0,
+        roughness: Math.round(between(1, 4)),
+        faults,
+        ...well(host.x - distance * hanging[0], host.y - distance * hanging[1])
+      };
+    }
+    const dipAz = Math.floor(rng() * 360);
+    const down = unit(dipAz);
+    if (kind === 'random-dome') {
+      // Crestal faults strike along the dome with their hanging walls facing the crest: one
+      // fault, or a pair bounding a crestal graben.
+      const domes = rng() < 0.35 ? 2 : 1;
+      const [main] = domeCentres({
+        seed,
+        domes: 1,
+        dipAz
+      });
+      const crestal = rng();
+      const faults = (crestal < 0.3 ? [] : crestal < 0.6 ? [rng() < 0.5 ? -1 : 1] : [-1, 1]).map(side => {
+        const offset = side * between(0.3, 1);
+        const shift = between(-1, 1);
+        return fault(main.x / KM + offset * down[0] + shift * down[1], main.y / KM + offset * down[1] - shift * down[0], dipAz + 90 * side + between(-8, 8), between(3, 7), logBetween(0.002, 0.006));
+      });
+      const distance = between(2.5, 3.5);
+      return {
+        preset: kind,
+        seed,
+        dipDeg: round(between(0.2, 0.8)),
+        dipAz,
+        domes,
+        domeRelief: 5 * Math.round(between(50, 140) / 5),
+        roughness: Math.round(between(1, 5)),
+        faults,
+        ...well(main.x / KM + distance * down[0], main.y / KM + distance * down[1])
+      };
+    }
+
+    // Homocline: the injector sits down-dip of the centre so the plume crosses the
+    // undulations on its way up.
+    const faults = rng() < 0.5 ? [] : [fault(between(5, 15), between(3, 9), dipAz + (rng() < 0.5 ? -90 : 90) + between(-20, 20), between(3, 8), logBetween(0.002, 0.006))];
+    const along = between(-3, 3);
+    return {
+      preset: kind,
+      seed,
+      dipDeg: round(between(0.5, 1.5)),
+      dipAz,
+      domes: rng() < 0.3 ? 1 : 0,
+      domeRelief: 5 * Math.round(between(15, 40) / 5),
+      roughness: Math.round(between(8, 18)),
+      faults,
+      ...well(10 + 5 * down[0] + along * down[1], 6 + 5 * down[1] - along * down[0])
+    };
+  };
+
   // ------------------------------------------------------------------ uncertainty
 
   // Inputs the uncertainty study may vary. `fault0.*` addresses the first fault.
@@ -1542,10 +1712,13 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     MAX_FAULTS,
     normalizeScenario,
     topDepth,
+    depthField,
     buildModel,
-    roughnessField,
     trapAnalysis,
     contourSegments,
+    RANDOM_STYLES,
+    randomStructure,
+    faultSeal,
     createState,
     advance,
     kpis,
@@ -2618,9 +2791,13 @@ const GuidePage = () => {
     id: "m-geometry"
   }, "Geometry"), /*#__PURE__*/React.createElement("p", null, "The aquifer covers 20 \xD7 12 km on a Cartesian grid of 500, 250 or 167 m cells. Its top surface, the base of the caprock, is an analytic depth field ", /*#__PURE__*/React.createElement(SimTex, {
     tex: "z_t(x,y)"
-  }), " (positive down) made of a regional dip plane, seeded elliptical domes, multi-octave roughness and normal faults. A fault displaces its hanging wall (to the right of its strike) by a throw that is largest at mid-length and zero at the tips, decaying away from the fault. The aquifer has a uniform thickness ", /*#__PURE__*/React.createElement(SimTex, {
+  }), " (positive down) made of a regional dip plane, Gaussian domes elongated along the regional strike, caprock roughness and normal faults. The roughness is an anisotropic Gaussian random field with a self-affine spectrum (Hurst exponent 0.8, wavelengths from 8 km down to 500 m), stretched 2.5 times along strike and built as a sum of random Fourier modes; the roughness input is its RMS height. A fault's throw is largest at mid-length and zero at the tips. Facing along strike, the hanging wall is on the right: it drops by 70 % of the throw while the footwall rises by 30 %, both decaying away from the fault over a fifth of its length, so a footwall crest closes against its fault. The aquifer has a uniform thickness ", /*#__PURE__*/React.createElement(SimTex, {
     tex: "H"
-  }), "."), /*#__PURE__*/React.createElement("h2", {
+  }), "."), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "New random structure"), " draws one of three settings so that dip, folds, faults and fault rock agree. Tilted fault blocks: two or three synthetic normal faults with a common strike and beds dipping away from them, with the injector down-dip of a footwall crest. Faulted dome: a closure elongated along strike, cut by small crestal faults whose hanging walls face the crest, with the injector on its down-dip flank. Undulating homocline: a steeper dip with 8\u201318 m of RMS roughness and at most one small fault. Throw grows with fault length, ", /*#__PURE__*/React.createElement(SimTex, {
+    tex: "D = \\gamma L"
+  }), " with ", /*#__PURE__*/React.createElement(SimTex, {
+    tex: "\\gamma"
+  }), " between 0.002 and 0.015. Each fault's shale gouge ratio sets its rock: permeability and thickness (throw / 66) after Manzocchi et al. (1999) give the cross-fault multiplier for 250 m cells, and the calibration of Bretan et al. (2003) gives the CO\u2082 column the fault holds. About one fault in three is a vertical conduit."), /*#__PURE__*/React.createElement("h2", {
     id: "m-equations"
   }, "Plume equation"), /*#__PURE__*/React.createElement("p", null, "Under vertical equilibrium, buoyancy separates CO\u2082 from brine much faster than the plume spreads, so each column holds a mobile CO\u2082 layer of thickness ", /*#__PURE__*/React.createElement(SimTex, {
     tex: "h"
@@ -2709,7 +2886,7 @@ const GuidePage = () => {
     tex: symbol
   })), /*#__PURE__*/React.createElement("td", null, value), /*#__PURE__*/React.createElement("td", null, note))))), /*#__PURE__*/React.createElement("h2", {
     id: "m-references"
-  }, "References"), /*#__PURE__*/React.createElement("ul", null, /*#__PURE__*/React.createElement("li", null, "Barnes, Lehman and Mulla (2014). Priority-flood: an optimal depression-filling algorithm. ", /*#__PURE__*/React.createElement("em", null, "Computers & Geosciences"), " 62."), /*#__PURE__*/React.createElement("li", null, "Bennion and Bachu (2008). Drainage and imbibition relative permeability relationships for supercritical CO\u2082/brine. ", /*#__PURE__*/React.createElement("em", null, "SPE Reservoir Evaluation & Engineering"), " 11(3)."), /*#__PURE__*/React.createElement("li", null, "Gasda, Nordbotten and Celia (2009). Vertical equilibrium with sub-scale analytical methods for geological CO\u2082 sequestration. ", /*#__PURE__*/React.createElement("em", null, "Computational Geosciences"), " 13."), /*#__PURE__*/React.createElement("li", null, "Hesse, Orr and Tchelepi (2008). Gravity currents with residual trapping. ", /*#__PURE__*/React.createElement("em", null, "Journal of Fluid Mechanics"), " 611."), /*#__PURE__*/React.createElement("li", null, "Lee, Efendiev and Tchelepi (2015). Hybrid upwind discretization of nonlinear two-phase flow with gravity. ", /*#__PURE__*/React.createElement("em", null, "Advances in Water Resources"), " 82."), /*#__PURE__*/React.createElement("li", null, "MacMinn, Szulczewski and Juanes (2011). CO\u2082 migration in saline aquifers. Part 2: capillary and solubility trapping. ", /*#__PURE__*/React.createElement("em", null, "Journal of Fluid Mechanics"), " 688."), /*#__PURE__*/React.createElement("li", null, "Neufeld et al. (2010). Convective dissolution of carbon dioxide in saline aquifers. ", /*#__PURE__*/React.createElement("em", null, "Geophysical Research Letters"), " 37."), /*#__PURE__*/React.createElement("li", null, "Nilsen, Lie and Andersen (2016). Fully-implicit simulation of vertical-equilibrium models with hysteresis and capillary fringe. ", /*#__PURE__*/React.createElement("em", null, "Computational Geosciences"), " 20."), /*#__PURE__*/React.createElement("li", null, "Nordbotten and Celia (2006). Similarity solutions for fluid injection into confined aquifers. ", /*#__PURE__*/React.createElement("em", null, "Journal of Fluid Mechanics"), " 561."), /*#__PURE__*/React.createElement("li", null, "Nordbotten and Celia (2012). ", /*#__PURE__*/React.createElement("em", null, "Geological Storage of CO\u2082: Modeling Approaches for Large-Scale Simulation"), ". Wiley."), /*#__PURE__*/React.createElement("li", null, "Peaceman (1978). Interpretation of well-block pressures in numerical reservoir simulation. ", /*#__PURE__*/React.createElement("em", null, "SPE Journal"), " 18(3)."))));
+  }, "References"), /*#__PURE__*/React.createElement("ul", null, /*#__PURE__*/React.createElement("li", null, "Barnes, Lehman and Mulla (2014). Priority-flood: an optimal depression-filling algorithm. ", /*#__PURE__*/React.createElement("em", null, "Computers & Geosciences"), " 62."), /*#__PURE__*/React.createElement("li", null, "Bennion and Bachu (2008). Drainage and imbibition relative permeability relationships for supercritical CO\u2082/brine. ", /*#__PURE__*/React.createElement("em", null, "SPE Reservoir Evaluation & Engineering"), " 11(3)."), /*#__PURE__*/React.createElement("li", null, "Bretan, Yielding and Jones (2003). Using calibrated shale gouge ratio to estimate hydrocarbon column heights. ", /*#__PURE__*/React.createElement("em", null, "AAPG Bulletin"), " 87(3)."), /*#__PURE__*/React.createElement("li", null, "Gasda, Nordbotten and Celia (2009). Vertical equilibrium with sub-scale analytical methods for geological CO\u2082 sequestration. ", /*#__PURE__*/React.createElement("em", null, "Computational Geosciences"), " 13."), /*#__PURE__*/React.createElement("li", null, "Hesse, Orr and Tchelepi (2008). Gravity currents with residual trapping. ", /*#__PURE__*/React.createElement("em", null, "Journal of Fluid Mechanics"), " 611."), /*#__PURE__*/React.createElement("li", null, "Kim and Sanderson (2005). The relationship between displacement and length of faults: a review. ", /*#__PURE__*/React.createElement("em", null, "Earth-Science Reviews"), " 68."), /*#__PURE__*/React.createElement("li", null, "Lee, Efendiev and Tchelepi (2015). Hybrid upwind discretization of nonlinear two-phase flow with gravity. ", /*#__PURE__*/React.createElement("em", null, "Advances in Water Resources"), " 82."), /*#__PURE__*/React.createElement("li", null, "MacMinn, Szulczewski and Juanes (2011). CO\u2082 migration in saline aquifers. Part 2: capillary and solubility trapping. ", /*#__PURE__*/React.createElement("em", null, "Journal of Fluid Mechanics"), " 688."), /*#__PURE__*/React.createElement("li", null, "Manzocchi, Walsh, Nell and Yielding (1999). Fault transmissibility multipliers for flow simulation models. ", /*#__PURE__*/React.createElement("em", null, "Petroleum Geoscience"), " 5."), /*#__PURE__*/React.createElement("li", null, "Neufeld et al. (2010). Convective dissolution of carbon dioxide in saline aquifers. ", /*#__PURE__*/React.createElement("em", null, "Geophysical Research Letters"), " 37."), /*#__PURE__*/React.createElement("li", null, "Nilsen, Lie and Andersen (2016). Fully-implicit simulation of vertical-equilibrium models with hysteresis and capillary fringe. ", /*#__PURE__*/React.createElement("em", null, "Computational Geosciences"), " 20."), /*#__PURE__*/React.createElement("li", null, "Nordbotten and Celia (2006). Similarity solutions for fluid injection into confined aquifers. ", /*#__PURE__*/React.createElement("em", null, "Journal of Fluid Mechanics"), " 561."), /*#__PURE__*/React.createElement("li", null, "Nordbotten and Celia (2012). ", /*#__PURE__*/React.createElement("em", null, "Geological Storage of CO\u2082: Modeling Approaches for Large-Scale Simulation"), ". Wiley."), /*#__PURE__*/React.createElement("li", null, "Peaceman (1978). Interpretation of well-block pressures in numerical reservoir simulation. ", /*#__PURE__*/React.createElement("em", null, "SPE Journal"), " 18(3)."))));
 };
 Object.assign(window, {
   GuidePage
@@ -4314,7 +4491,7 @@ const SimBlockView = ({
     elevation: 0
   });
   const animation = useRef(0);
-  const depthAt = useMemo(() => (x, y) => VE2D.topDepth(x, y, scenario), [scenario]);
+  const depthAt = useMemo(() => VE2D.depthField(scenario), [scenario]);
   const geometry = useMemo(() => SimBlock3D.buildGeometry(model, depthAt), [model, depthAt]);
   const wellDepth = useMemo(() => depthAt(model.wellX, model.wellY), [model, depthAt]);
   const box = useMemo(() => SimBlock3D.sceneBox(geometry, model, exaggeration, wellDepth), [geometry, model, exaggeration, wellDepth]);
@@ -4695,6 +4872,7 @@ const SimSectionView = ({
   const [sizeRef, size] = simUseSize();
   const data = useMemo(() => {
     if (!line || !frame) return null;
+    const depthAt = VE2D.depthField(scenario);
     const samples = 360;
     const length = Math.hypot(line.x1 - line.x0, line.y1 - line.y0) || 1;
     const points = [];
@@ -4702,7 +4880,7 @@ const SimSectionView = ({
       const t = s / samples;
       const x = Math.max(1, Math.min(model.Lx - 1, line.x0 + (line.x1 - line.x0) * t));
       const y = Math.max(1, Math.min(model.Ly - 1, line.y0 + (line.y1 - line.y0) * t));
-      const zt = VE2D.topDepth(x, y, scenario);
+      const zt = depthAt(x, y);
       const spill = simSampleField(model, model.zSpill, x, y);
       points.push({
         d: t * length,
@@ -5497,7 +5675,7 @@ const SIM_FIELDS = {
     label: 'Dip direction',
     unit: '° from N',
     digits: 0,
-    hint: 'Direction in which the caprock deepens; CO₂ rises the other way.'
+    hint: 'Direction in which the caprock deepens; CO₂ rises the other way. Domes and undulations run along strike, across it.'
   },
   domes: {
     label: 'Domes',
@@ -5513,7 +5691,7 @@ const SIM_FIELDS = {
     label: 'Caprock roughness',
     unit: 'm',
     digits: 0,
-    hint: 'Small undulations that hold CO₂ in many small traps.'
+    hint: 'RMS height of undulations elongated along strike. They hold CO₂ in many small traps.'
   },
   sgr: {
     label: 'Residual CO₂ saturation',
@@ -5584,7 +5762,8 @@ const SIM_FAULT_FIELDS = {
   strike: {
     label: 'Strike',
     unit: '° from N',
-    digits: 0
+    digits: 0,
+    hint: 'Facing along strike, the hanging wall is on the right.'
   },
   length: {
     label: 'Length',
@@ -5634,7 +5813,7 @@ const useSimSimulation = scenario => {
       }
       if (!workerRef.current) {
         try {
-          const worker = new Worker('./simulation-worker.js?v=1');
+          const worker = new Worker('./simulation-worker.js?v=2');
           worker.onmessage = ({
             data
           }) => {
@@ -5828,7 +6007,8 @@ const SimInputs = ({
     } : fault)
   });
   const presetIds = Object.keys(VE2D.PRESETS);
-  const preset = VE2D.PRESETS[scenario.preset];
+  const random = VE2D.RANDOM_STYLES[scenario.preset];
+  const preset = VE2D.PRESETS[scenario.preset] || random;
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "sim-rail__head"
   }, /*#__PURE__*/React.createElement("h2", null, "Scenario"), /*#__PURE__*/React.createElement("button", {
@@ -5851,7 +6031,9 @@ const SimInputs = ({
   }, presetIds.map(id => /*#__PURE__*/React.createElement("option", {
     key: id,
     value: id
-  }, VE2D.PRESETS[id].label)), !preset && /*#__PURE__*/React.createElement("option", {
+  }, VE2D.PRESETS[id].label)), random && /*#__PURE__*/React.createElement("option", {
+    value: scenario.preset
+  }, `Random: ${random.label}`), !preset && /*#__PURE__*/React.createElement("option", {
     value: "custom"
   }, "Custom")), /*#__PURE__*/React.createElement("p", null, preset ? preset.description : 'Your own combination of inputs. Share it with the link button.'), /*#__PURE__*/React.createElement("div", {
     className: "sim-scenario__row"
@@ -6230,7 +6412,7 @@ const SimUncertainty = ({
       log
     })), runs, seed);
     try {
-      const worker = new Worker('./simulation-worker.js?v=1');
+      const worker = new Worker('./simulation-worker.js?v=2');
       workerRef.current = worker;
       worker.onmessage = ({
         data
@@ -6619,30 +6801,11 @@ const SimulatorPage = () => {
     }));
     setSectionLine(null);
   };
-  const randomise = () => {
-    const rng = VE2D.mulberry32((Date.now() & 0xffff) + 17);
-    const pick = (min, max, step = 1) => Math.round((min + rng() * (max - min)) / step) * step;
-    update({
-      seed: pick(1, 999999),
-      dipDeg: pick(0.2, 1.4, 0.1),
-      dipAz: pick(0, 359),
-      domes: pick(0, 3),
-      domeRelief: pick(20, 120, 5),
-      roughness: pick(0, 15),
-      faults: Array.from({
-        length: pick(0, 2)
-      }, () => ({
-        x: pick(4, 16, 0.5),
-        y: pick(3, 9, 0.5),
-        strike: pick(0, 179),
-        length: pick(4, 12, 0.5),
-        throw: pick(0, 40),
-        trans: pick(0, 1, 0.05),
-        sealCap: pick(5, 40),
-        kf: pick(0, 60)
-      }))
-    });
-  };
+  // A new realisation of a randomly drawn geological setting; the injector moves with it.
+  const randomise = () => setScenario(current => VE2D.normalizeScenario({
+    ...current,
+    ...VE2D.randomStructure(1 + Math.floor(Math.random() * 999999), current)
+  }));
   const play = () => {
     if (!run.model) return;
     const finished = year >= run.model.years - 1e-6 || run.status !== 'computing' && year >= computedYears;

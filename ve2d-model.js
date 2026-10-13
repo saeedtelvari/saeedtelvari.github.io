@@ -49,7 +49,7 @@
   const FAULT_LIMITS = Object.freeze({
     x: [0, 20, 0.1],
     y: [0, 12, 0.1],
-    strike: [0, 179, 1],
+    strike: [0, 359, 1],
     length: [0.5, 30, 0.5],
     throw: [0, 150, 1],
     trans: [0, 1, 0.05],
@@ -59,13 +59,13 @@
   const INTEGER_KEYS = new Set(['years', 'seed', 'injYears', 'domes', 'dipAz']);
   const MAX_FAULTS = 3;
 
-  const DEFAULT_FAULT = Object.freeze({ x: 9.5, y: 6, strike: 12, length: 8, throw: 12, trans: 0.4, sealCap: 10, kf: 20 });
+  const DEFAULT_FAULT = Object.freeze({ x: 9.5, y: 6, strike: 12, length: 8, throw: 12, trans: 0.4, sealCap: 26, kf: 20 });
   const DEFAULTS = Object.freeze({
     preset: 'dome-fault',
     grid: 'standard',
     boundary: 'open',
     years: 1000,
-    seed: 3901,
+    seed: 1443,
     rateMt: 1,
     injYears: 30,
     wellX: 14,
@@ -106,7 +106,7 @@
     anticline: {
       label: 'Anticline trap',
       description: 'A large dome up-dip of the injector fills to its spill point and then spills.',
-      patch: { dipDeg: 0.4, domes: 1, domeRelief: 110, roughness: 2, faults: [] }
+      patch: { dipDeg: 0.4, domes: 1, domeRelief: 40, roughness: 2, faults: [] }
     },
     'sealed-block': {
       label: 'Sealed fault block',
@@ -122,7 +122,7 @@
     rough: {
       label: 'Rough top surface',
       description: 'Small undulations in the caprock create many small structural traps.',
-      patch: { dipDeg: 0.5, domes: 0, roughness: 20, faults: [] }
+      patch: { dipDeg: 0.5, domes: 0, roughness: 10, faults: [] }
     }
   });
 
@@ -159,39 +159,55 @@
     return value - Math.floor(value);
   };
 
-  const smoothNoise = (x, y, seed) => {
-    const x0 = Math.floor(x);
-    const y0 = Math.floor(y);
-    const smooth = value => value * value * (3 - 2 * value);
-    const sx = smooth(x - x0);
-    const sy = smooth(y - y0);
-    const n00 = hashNoise(x0, y0, seed);
-    const n10 = hashNoise(x0 + 1, y0, seed);
-    const n01 = hashNoise(x0, y0 + 1, seed);
-    const n11 = hashNoise(x0 + 1, y0 + 1, seed);
-    const top = n00 + (n10 - n00) * sx;
-    return top + (n01 + (n11 - n01) * sx - top) * sy;
-  };
+  // Map angle (from +x, anticlockwise) of the regional strike, at right angles to the dip
+  // direction. Domes and caprock undulations are elongated along it.
+  const strikeAngle = scenario => Math.PI - scenario.dipAz * Math.PI / 180;
 
-  // Multi-octave value noise in [-1, 1]; coordinates in units of the domain height.
-  const roughnessField = (u, v, seed) => {
-    let value = 0;
-    let weight = 0;
-    let amplitude = 1;
-    for (let octave = 0; octave < 5; octave++) {
-      const scale = 1.6 * (2 ** octave);
-      value += (smoothNoise(u * scale, v * scale, seed + octave * 101) - 0.5) * 2 * amplitude;
-      weight += amplitude;
-      amplitude *= 0.55;
+  // Gaussian domes elongated along strike (±15°). The first is the main closure; any others
+  // are smaller satellites.
+  const domeCentres = scenario => Array.from({ length: scenario.domes }, (_, index) => {
+    const hash = (a, b, salt) => hashNoise(index * a, b, scenario.seed + salt);
+    const main = index === 0;
+    return {
+      x: (0.12 + 0.76 * hash(2.1, 0.4, 503)) * LX,
+      y: (0.15 + 0.7 * hash(2.9, 0.8, 547)) * LY,
+      angle: strikeAngle(scenario) + (hash(3.7, 1.2, 571) - 0.5) * Math.PI / 6,
+      along: 2400 * (main ? 0.85 + 0.45 * hash(4.3, 1.6, 593) : 0.55 + 0.35 * hash(4.3, 1.6, 593)),
+      across: 1600 * (main ? 0.7 + 0.3 * hash(5.1, 2.0, 613) : 0.45 + 0.2 * hash(5.1, 2.0, 613)),
+      relief: main ? 1 : 0.35 + 0.45 * hash(5.9, 2.4, 631)
+    };
+  });
+
+  // Caprock roughness: an anisotropic Gaussian random field with a self-affine spectrum
+  // (Hurst exponent 0.8, wavelengths 8 km to 500 m), stretched 2.5 times along strike. It is
+  // a sum of random Fourier modes, one per equal step in log wavenumber (amplitude k^-H),
+  // scaled to unit variance, so the roughness input is the RMS height in metres.
+  const ROUGH = Object.freeze({ modes: 48, longest: 8000, shortest: 500, hurst: 0.8, stretch: 2.5 });
+
+  const roughModes = scenario => {
+    const rng = mulberry32(scenario.seed + 7919);
+    const angle = strikeAngle(scenario);
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const modes = new Float64Array(4 * ROUGH.modes);
+    let variance = 0;
+    for (let m = 0; m < ROUGH.modes; m++) {
+      const k = 2 * Math.PI / (ROUGH.longest * (ROUGH.shortest / ROUGH.longest) ** ((m + rng()) / ROUGH.modes));
+      const direction = 2 * Math.PI * rng();
+      const along = k * Math.cos(direction) / ROUGH.stretch;
+      const across = k * Math.sin(direction);
+      modes.set([along * cos - across * sin, along * sin + across * cos, 2 * Math.PI * rng(), k ** -ROUGH.hurst], 4 * m);
+      variance += k ** (-2 * ROUGH.hurst) / 2;
     }
-    return value / weight;
+    for (let m = 3; m < modes.length; m += 4) modes[m] /= Math.sqrt(variance);
+    return modes;
   };
 
-  const domeCentres = scenario => Array.from({ length: scenario.domes }, (_, index) => ({
-    x: (0.12 + 0.76 * hashNoise(index * 2.1, 0.4, scenario.seed + 503)) * LX,
-    y: (0.15 + 0.7 * hashNoise(index * 2.9, 0.8, scenario.seed + 547)) * LY,
-    angle: hashNoise(index * 3.7, 1.2, scenario.seed + 571) * Math.PI
-  }));
+  const roughnessAt = (modes, x, y) => {
+    let value = 0;
+    for (let m = 0; m < modes.length; m += 4) value += modes[m + 3] * Math.cos(modes[m] * x + modes[m + 1] * y + modes[m + 2]);
+    return value;
+  };
 
   const faultFrame = fault => {
     const strike = fault.strike * Math.PI / 180;
@@ -199,8 +215,12 @@
     return { cx: fault.x * KM, cy: fault.y * KM, half: fault.length * KM / 2, along, normal: [along[1], -along[0]] };
   };
 
-  // Parabolic throw profile along strike (zero at the tips). The hanging wall, to the
-  // right of the strike direction, is downthrown; the offset decays away from the fault.
+  // Normal-fault displacement. The throw is parabolic along strike (zero at the tips). The
+  // hanging wall, to the right of the strike direction (right-hand rule), drops by 70 % of
+  // it and the footwall rises by 30 %; both decay away from the fault over a fifth of its
+  // length, so each footwall crest is a closure against its fault.
+  const FOOTWALL_SHARE = 0.3;
+
   const faultThrowAt = (fault, frame, x, y) => {
     const dx = x - frame.cx;
     const dy = y - frame.cy;
@@ -211,8 +231,8 @@
 
   const faultOffset = (fault, frame, x, y) => {
     const side = (x - frame.cx) * frame.normal[0] + (y - frame.cy) * frame.normal[1];
-    if (side <= 0) return 0;
-    return faultThrowAt(fault, frame, x, y) * Math.exp(-side / (1.5 * frame.half));
+    const offset = faultThrowAt(fault, frame, x, y) * Math.exp(-Math.abs(side) / (0.4 * frame.half));
+    return side > 0 ? (1 - FOOTWALL_SHARE) * offset : -FOOTWALL_SHARE * offset;
   };
 
   const topDepth = (x, y, scenario, cache) => {
@@ -225,12 +245,21 @@
       const dy = y - dome.y;
       const along = dx * Math.cos(dome.angle) + dy * Math.sin(dome.angle);
       const across = -dx * Math.sin(dome.angle) + dy * Math.cos(dome.angle);
-      depth -= scenario.domeRelief * Math.exp(-0.5 * ((along / 2400) ** 2 + (across / 1600) ** 2));
+      depth -= scenario.domeRelief * dome.relief * Math.exp(-0.5 * ((along / dome.along) ** 2 + (across / dome.across) ** 2));
     }
-    if (scenario.roughness > 0) depth += scenario.roughness * roughnessField(x / LY, y / LY, scenario.seed);
+    if (scenario.roughness > 0) depth += scenario.roughness * roughnessAt(cache?.rough || roughModes(scenario), x, y);
     const frames = cache?.frames || scenario.faults.map(faultFrame);
     scenario.faults.forEach((fault, index) => { depth += faultOffset(fault, frames[index], x, y); });
     return depth;
+  };
+
+  const depthCache = scenario => ({ domes: domeCentres(scenario), frames: scenario.faults.map(faultFrame), rough: roughModes(scenario) });
+
+  // The top-surface depth of one (normalised) scenario as a function of x and y in metres,
+  // with its domes, fault frames and roughness modes computed once.
+  const depthField = scenario => {
+    const cache = depthCache(scenario);
+    return (x, y) => topDepth(x, y, scenario, cache);
   };
 
   // Segment p–q against the fault trace; returns the along-strike parameter t in [-1, 1] or null.
@@ -279,7 +308,7 @@
       disCap: scenario.disCap,
       open: scenario.boundary === 'open'
     };
-    const cache = { domes: domeCentres(scenario), frames: scenario.faults.map(faultFrame) };
+    const cache = depthCache(scenario);
     const depthAt = (x, y) => topDepth(x, y, scenario, cache);
 
     const xc = Float64Array.from({ length: nx }, (_, i) => (i + 0.5) * dx);
@@ -1084,6 +1113,122 @@
     return { modelView, snapshots, history, truncated, steps: state.steps, scenario: model.scenario };
   };
 
+  // ------------------------------------------------------------------ random structures
+
+  // Fault rock from the shale gouge ratio (SGR) of the faulted interval: permeability (mD)
+  // and thickness (throw / 66) after Manzocchi et al. (1999), giving the cross-fault
+  // multiplier between two 250 m cells (the standard grid), and the CO2 column the fault
+  // rock holds from the Bretan et al. (2003) calibration for burial above 3 km.
+  const faultSeal = (throwM, sgr, permMd, dRho) => {
+    const kf = 10 ** (0.4 - 4 * sgr - 0.25 * Math.log10(Math.max(1, throwM)) * (1 - sgr) ** 5);
+    return {
+      trans: 1 / (1 + throwM / 66 / 250 * Math.max(0, permMd / kf - 1)),
+      sealCap: 10 ** (100 * sgr / 27 - 0.5) * BAR / (dRho * GRAVITY)
+    };
+  };
+
+  const RANDOM_STYLES = Object.freeze({
+    'random-fault-blocks': {
+      label: 'Tilted fault blocks',
+      description: 'Parallel normal faults tilt the aquifer into blocks. CO₂ rises to the crest of its block, against the fault up-dip.'
+    },
+    'random-dome': {
+      label: 'Faulted dome',
+      description: 'A closure elongated along strike, often cut by small crestal faults, with the injector on its down-dip flank.'
+    },
+    'random-homocline': {
+      label: 'Undulating homocline',
+      description: 'A dipping aquifer whose caprock undulates along strike. Rising CO₂ fills many small traps on its way up-dip.'
+    }
+  });
+
+  // A random structure from one geological setting, so that dip, folds, faults and fault
+  // rock agree: a fault set shares the regional strike, throw grows with length (D = γL),
+  // seals follow the shale gouge ratio and the injector sits down-dip of the main closure.
+  const randomStructure = (seed, base = DEFAULTS, style) => {
+    const rng = mulberry32(seed);
+    const between = (min, max) => min + (max - min) * rng();
+    const logBetween = (min, max) => Math.exp(between(Math.log(min), Math.log(max)));
+    const round = (value, digits = 1) => +value.toFixed(digits);
+    const unit = azimuth => [Math.sin(azimuth * Math.PI / 180), Math.cos(azimuth * Math.PI / 180)];
+    const styles = Object.keys(RANDOM_STYLES);
+    const drawn = styles[Math.floor(rng() * styles.length)];
+    const kind = RANDOM_STYLES[style] ? style : drawn;
+    const fault = (x, y, strike, length, gamma) => {
+      const throwM = Math.min(150, Math.round(gamma * length * KM));
+      const seal = faultSeal(throwM, between(0.12, 0.4), base.permMd, base.rhoBrine - base.rhoCo2);
+      return {
+        x: round(clamp(x, 0.5, 19.5)),
+        y: round(clamp(y, 0.5, 11.5)),
+        strike: (Math.round(strike) % 360 + 360) % 360,
+        length: round(length),
+        throw: throwM,
+        trans: round(seal.trans, 2),
+        sealCap: Math.min(200, Math.round(seal.sealCap)),
+        kf: rng() < 0.3 ? Math.round(logBetween(5, 60)) : 0
+      };
+    };
+    const well = (x, y) => ({ wellX: round(clamp(x, 1.5, 18.5)), wellY: round(clamp(y, 1.5, 10.5)) });
+
+    if (kind === 'random-fault-blocks') {
+      // Domino blocks: the faults dip one way and the beds the other, so each block rises
+      // to a footwall crest against the next fault up-dip. The injector sits in the block
+      // down-dip of the fault nearest the centre.
+      const strike = between(0, 360);
+      const along = unit(strike);
+      const hanging = unit(strike + 90);
+      const spacing = between(5, 7.5);
+      const width = Math.abs(hanging[0]) * LX / KM + Math.abs(hanging[1]) * LY / KM;
+      const count = Math.min(3, 1 + Math.floor(0.75 * width / spacing));
+      const faults = Array.from({ length: count }, (_, k) => {
+        const offset = (k - (count - 1) / 2) * spacing + between(-0.5, 0.5);
+        const shift = between(-2, 2);
+        return fault(10 + offset * hanging[0] + shift * along[0], 6 + offset * hanging[1] + shift * along[1],
+          strike + between(-4, 4), between(8, 16), logBetween(0.007, 0.015));
+      });
+      const host = faults.reduce((best, f) => Math.hypot(f.x - 10, f.y - 6) < Math.hypot(best.x - 10, best.y - 6) ? f : best);
+      const distance = between(2.5, 3.5);
+      return {
+        preset: kind, seed, dipDeg: round(between(0.4, 1)), dipAz: Math.round(strike + 270 + between(-3, 3)) % 360,
+        domes: 0, roughness: Math.round(between(1, 4)), faults,
+        ...well(host.x - distance * hanging[0], host.y - distance * hanging[1])
+      };
+    }
+
+    const dipAz = Math.floor(rng() * 360);
+    const down = unit(dipAz);
+    if (kind === 'random-dome') {
+      // Crestal faults strike along the dome with their hanging walls facing the crest: one
+      // fault, or a pair bounding a crestal graben.
+      const domes = rng() < 0.35 ? 2 : 1;
+      const [main] = domeCentres({ seed, domes: 1, dipAz });
+      const crestal = rng();
+      const faults = (crestal < 0.3 ? [] : crestal < 0.6 ? [rng() < 0.5 ? -1 : 1] : [-1, 1]).map(side => {
+        const offset = side * between(0.3, 1);
+        const shift = between(-1, 1);
+        return fault(main.x / KM + offset * down[0] + shift * down[1], main.y / KM + offset * down[1] - shift * down[0],
+          dipAz + 90 * side + between(-8, 8), between(3, 7), logBetween(0.002, 0.006));
+      });
+      const distance = between(2.5, 3.5);
+      return {
+        preset: kind, seed, dipDeg: round(between(0.2, 0.8)), dipAz, domes,
+        domeRelief: 5 * Math.round(between(50, 140) / 5), roughness: Math.round(between(1, 5)), faults,
+        ...well(main.x / KM + distance * down[0], main.y / KM + distance * down[1])
+      };
+    }
+
+    // Homocline: the injector sits down-dip of the centre so the plume crosses the
+    // undulations on its way up.
+    const faults = rng() < 0.5 ? [] : [fault(between(5, 15), between(3, 9),
+      dipAz + (rng() < 0.5 ? -90 : 90) + between(-20, 20), between(3, 8), logBetween(0.002, 0.006))];
+    const along = between(-3, 3);
+    return {
+      preset: kind, seed, dipDeg: round(between(0.5, 1.5)), dipAz, domes: rng() < 0.3 ? 1 : 0,
+      domeRelief: 5 * Math.round(between(15, 40) / 5), roughness: Math.round(between(8, 18)), faults,
+      ...well(10 + 5 * down[0] + along * down[1], 6 + 5 * down[1] - along * down[0])
+    };
+  };
+
   // ------------------------------------------------------------------ uncertainty
 
   // Inputs the uncertainty study may vary. `fault0.*` addresses the first fault.
@@ -1202,7 +1347,8 @@
   return {
     YEAR, MT, MD, BAR, KM, GRAVITY, LX, LY, GRIDS,
     LIMITS, FAULT_LIMITS, DEFAULTS, PRESETS, MAX_FAULTS,
-    normalizeScenario, topDepth, buildModel, roughnessField, trapAnalysis, contourSegments,
+    normalizeScenario, topDepth, depthField, buildModel, trapAnalysis, contourSegments,
+    RANDOM_STYLES, randomStructure, faultSeal,
     createState, advance, kpis, inventory, run,
     UQ_PARAMS, mulberry32, latinHypercube, spearman, sampleBatch, summarize, runBatch
   };

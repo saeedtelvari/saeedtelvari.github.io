@@ -1,7 +1,7 @@
 // simulation-worker.js — runs VE2D scenarios and uncertainty batches off the main thread.
 // Protocol in:  { type: 'run', id, scenario } | { type: 'batch', id, scenarios }
 // Protocol out: model, frame (snapshot + new history rows), done, progress, batch-done, error.
-importScripts('./ve2d-model.js?v=2');
+importScripts('./ve2d-model.js?v=3');
 
 self.onmessage = ({ data }) => {
   const { type, id } = data;
