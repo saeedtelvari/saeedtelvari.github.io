@@ -1505,11 +1505,11 @@ const HeroSection = React.memo(({
     y2: "580",
     gradientUnits: "userSpaceOnUse"
   }, /*#__PURE__*/React.createElement("stop", {
-    stopColor: "#263038",
+    stopColor: "#1d150f",
     stopOpacity: "0"
   }), /*#__PURE__*/React.createElement("stop", {
     offset: "1",
-    stopColor: "#263038"
+    stopColor: "#1d150f"
   }))), /*#__PURE__*/React.createElement("rect", {
     width: "1000",
     height: "580",
@@ -3016,20 +3016,25 @@ Object.assign(window, {
 });
 
 // File: GeologicalDescent.jsx
-// A continuous material cutaway, from the hero's aquifer to crystalline basement.
+// A continuous material cutaway, from the hero's aquifer to crystalline basement. The rock is
+// drawn below the hero, behind every section sheet and the footer (the last measured height).
 const GeologicalDescent = ({
   children
 }) => {
   const rootRef = React.useRef(null);
-  const [heights, setHeights] = React.useState([1100, 1500, 850, 240]);
+  const [heights, setHeights] = React.useState([1100, 900, 1500, 850, 240]);
+  // Photographic textures load once the rock scrolls into view; flat colours stand in until then.
+  const [texturesOn, setTexturesOn] = React.useState(false);
   React.useEffect(() => {
-    const sections = [...rootRef.current.querySelectorAll('.section-panel'), rootRef.current.querySelector('footer')];
+    // Captured once: a resize callback can still arrive after React has detached the ref.
+    const root = rootRef.current;
+    const sections = [...root.querySelectorAll('.section-panel'), root.querySelector('footer')];
     const measure = () => {
       const next = sections.map(section => Math.round(section.offsetHeight));
       setHeights(previous => next.some((height, i) => height !== previous[i]) ? next : previous);
       // Compensate for the SVG's horizontal scaling so mineral grains stay round.
-      const width = rootRef.current.clientWidth;
-      if (width) rootRef.current.querySelectorAll('.descent-material').forEach(pattern => {
+      const width = root.clientWidth;
+      if (width) root.querySelectorAll('.descent-material').forEach(pattern => {
         const tileWidth = 840 * 1440 / width;
         pattern.setAttribute('width', tileWidth);
         pattern.querySelector('.descent-tile').setAttribute('transform', `scale(${tileWidth / 840} 1)`);
@@ -3037,36 +3042,47 @@ const GeologicalDescent = ({
     };
     const sizes = new ResizeObserver(measure);
     sections.forEach(section => sizes.observe(section));
-    sizes.observe(rootRef.current);
+    sizes.observe(root);
     measure();
     const visibility = new IntersectionObserver(entries => {
       entries.forEach(entry => {
         entry.target.dataset.visible = String(entry.isIntersecting);
       });
     });
-    rootRef.current.querySelectorAll('.descent-motion').forEach(element => visibility.observe(element));
+    root.querySelectorAll('.descent-motion').forEach(element => visibility.observe(element));
+    const textures = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      setTexturesOn(() => true);
+      textures.disconnect();
+    }, {
+      rootMargin: '0px 0px -5% 0px'
+    });
+    textures.observe(root.querySelector('.geological-descent-art') || root);
     return () => {
       sizes.disconnect();
       visibility.disconnect();
+      textures.disconnect();
     };
   }, []);
-  const [about, research, contact, footer] = heights;
-  const total = about + research + contact + footer;
+  const footer = heights[heights.length - 1];
+  const lastSection = heights[heights.length - 2];
+  const total = heights.reduce((sum, height) => sum + height, 0);
   const materials = ['shale', 'sandstone', 'sandstone', 'siltstone', 'limestone', 'shale', 'sandstone', 'dolomite', 'shale', 'siltstone', 'sandstone', 'limestone', 'limestone', 'shale', 'sandstone', 'siltstone', 'shale', 'dolomite', 'sandstone', 'siltstone', 'shale', 'limestone', 'sandstone', 'dolomite', 'shale', 'sandstone', 'siltstone', 'dolomite', 'shale', 'limestone', 'shale', 'sandstone', 'sandstone', 'siltstone', 'limestone', 'shale', 'dolomite', 'sandstone', 'shale', 'sandstone', 'basement'];
+  // Earth-graded flat colours: the whole bed before its texture loads, and a light tint after.
   const colors = {
-    shale: '#303637',
-    sandstone: '#887353',
-    siltstone: '#63574b',
-    limestone: '#87847a',
-    dolomite: '#958b74',
-    basement: '#786c65'
+    shale: '#2e2925',
+    sandstone: '#7a6347',
+    siltstone: '#5f5044',
+    limestone: '#7a7468',
+    dolomite: '#857a64',
+    basement: '#6e625a'
   };
   const random = seed => {
     const n = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
     return n - Math.floor(n);
   };
   const weights = materials.slice(0, -1).map((_, i) => .45 + random(i + 8) * 1.4);
-  const basementLevel = about + research + contact * .42;
+  const basementLevel = total - footer - lastSection * .58;
   const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
   const levels = [0];
   weights.forEach(weight => levels.push(levels[levels.length - 1] + weight / weightTotal * basementLevel));
@@ -3146,8 +3162,8 @@ const GeologicalDescent = ({
   const beds = profiles.slice(0, -1).map((points, i) => trace(points) + 'L' + [...profiles[i + 1]].reverse().map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L') + 'Z');
   const middle = (i, x) => (boundaryY(i, x) + boundaryY(i + 1, x)) / 2;
   const bedAt = (material, y) => materials.reduce((best, rock, i) => rock === material && Math.abs(levels[i] - y) < Math.abs(levels[best] - y) ? i : best, materials.indexOf(material));
-  const sandstoneBed = bedAt('sandstone', about * .22);
-  const lowerSandstone = bedAt('sandstone', about + research * .68);
+  const sandstoneBed = bedAt('sandstone', heights[0] * .22);
+  const lowerSandstone = bedAt('sandstone', heights[0] + heights[1] * .68);
   // Brittle carbonate intervals and granite host the fault/joint clusters.
   const fracturedBeds = [4, 12, 27, materials.length - 1];
   const fractureCounts = {
@@ -3227,7 +3243,7 @@ const GeologicalDescent = ({
     height: "840",
     patternUnits: "userSpaceOnUse"
   }, /*#__PURE__*/React.createElement("image", {
-    href: `./assets/geology-${material}.webp?v=2`,
+    href: texturesOn ? `./assets/geology-${material}.webp?v=2` : undefined,
     width: "840",
     height: "840",
     preserveAspectRatio: "none"
@@ -3303,32 +3319,32 @@ const GeologicalDescent = ({
     x2: "0",
     y2: "1"
   }, /*#__PURE__*/React.createElement("stop", {
-    stopColor: "#263038"
+    stopColor: "#1d150f"
   }), /*#__PURE__*/React.createElement("stop", {
     offset: "1",
-    stopColor: "#263038",
+    stopColor: "#1d150f",
     stopOpacity: "0"
   })), /*#__PURE__*/React.createElement("linearGradient", {
     id: "descent-reading-veil"
   }, /*#__PURE__*/React.createElement("stop", {
-    stopColor: "#13212b",
-    stopOpacity: ".3"
+    stopColor: "#120e0b",
+    stopOpacity: ".45"
   }), /*#__PURE__*/React.createElement("stop", {
     offset: ".2",
-    stopColor: "#13212b",
-    stopOpacity: ".48"
+    stopColor: "#120e0b",
+    stopOpacity: ".6"
   }), /*#__PURE__*/React.createElement("stop", {
     offset: ".8",
-    stopColor: "#13212b",
-    stopOpacity: ".48"
+    stopColor: "#120e0b",
+    stopOpacity: ".6"
   }), /*#__PURE__*/React.createElement("stop", {
     offset: "1",
-    stopColor: "#13212b",
-    stopOpacity: ".3"
+    stopColor: "#120e0b",
+    stopOpacity: ".45"
   }))), /*#__PURE__*/React.createElement("rect", {
     width: "1440",
     height: total,
-    fill: "#151b1f"
+    fill: "#120e0b"
   }), materials.map((material, i) => /*#__PURE__*/React.createElement("g", {
     key: i
   }, /*#__PURE__*/React.createElement("path", {
@@ -3448,7 +3464,7 @@ const GeologicalDescent = ({
   }, /*#__PURE__*/React.createElement("path", {
     d: `M${x} ${middle(bed, x)}l108 -4`,
     fill: "none",
-    stroke: "#aac5ca",
+    stroke: "#d8cfc4",
     strokeOpacity: ".12",
     strokeWidth: "1"
   }), [0, 1, 2].map(i => /*#__PURE__*/React.createElement("ellipse", {
@@ -3458,7 +3474,7 @@ const GeologicalDescent = ({
     cy: middle(bed, x),
     rx: "3",
     ry: "1.1",
-    fill: "#bad4d8",
+    fill: "#e2d9cd",
     style: {
       animationDelay: `${-i * 1.1 - n * 9}s`
     }
@@ -3477,561 +3493,254 @@ Object.assign(window, {
 });
 
 // File: HomeSections.jsx
-// HomeSections.jsx — About, Research, Publications, Projects, News, Contact
+// HomeSections.jsx — the homepage below the hero: research, projects, publications, contact.
+// Facts come from site-content.js, which the CV shares.
 
 // [destructured React]
 
-/* =====================================================
-   Research & Background (About + Activity)
-   ===================================================== */
-const RECENT_ACTIVITIES = [{
-  date: 'September 2026',
-  month: '2026-09',
-  venue: 'InterPore UK Chapter Conference',
-  desc: 'Gave an oral presentation on compositional VE modelling for CO₂ storage and co-chaired a multiphase-flow session.'
-}, {
-  date: 'May 2026',
-  month: '2026-05',
-  venue: 'InterPore 2026',
-  desc: 'Gave an oral presentation on VE modelling of CO₂ migration in depleted reservoirs.'
-}, {
-  date: 'March 2026',
-  month: '2026-03',
-  venue: 'MATLAB/MRST workshop series',
-  desc: 'Co-organised the series and led a hands-on session building a flow simulator with MRST.'
-}, {
-  date: 'October 2025',
-  month: '2025-10',
-  venue: 'EAGE GET 2025',
-  desc: 'Presented a poster on three-phase VE simulation of CO₂, methane and brine flow.'
-}];
-const RecentActivity = () => {
-  const [expanded, setExpanded] = useState(false);
-  const initialCount = 4;
-  const items = expanded ? RECENT_ACTIVITIES : RECENT_ACTIVITIES.slice(0, initialCount);
-  return /*#__PURE__*/React.createElement("div", {
-    className: "recent-activity-panel"
-  }, /*#__PURE__*/React.createElement("h3", {
-    className: "activity-panel-title"
-  }, "Recent activity"), /*#__PURE__*/React.createElement("ol", {
-    className: "activity-track",
-    role: "list"
-  }, items.map(item => /*#__PURE__*/React.createElement("li", {
-    key: item.month,
-    className: "activity-entry"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "activity-entry-content"
-  }, /*#__PURE__*/React.createElement("time", {
-    className: "activity-date",
-    dateTime: item.month
-  }, item.date), /*#__PURE__*/React.createElement("h4", {
-    className: "activity-venue"
-  }, item.venue), /*#__PURE__*/React.createElement("p", {
-    className: "activity-desc"
-  }, item.desc))))), RECENT_ACTIVITIES.length > initialCount && /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "activity-toggle-btn pressable",
-    onClick: () => setExpanded(!expanded),
-    "aria-expanded": expanded
-  }, /*#__PURE__*/React.createElement("i", {
-    className: `fas fa-chevron-${expanded ? 'up' : 'down'}`,
-    style: {
-      fontSize: 11
-    }
-  }), /*#__PURE__*/React.createElement("span", null, expanded ? 'Show recent activity' : 'View earlier activity')));
+// ---- copy helper (pure; tests/site-content.test.js evaluates this block)
+const siteCopy = async (text, clipboard) => {
+  try {
+    if (!clipboard || !clipboard.writeText) return false;
+    await clipboard.writeText(text);
+    return true;
+  } catch (error) {
+    return false;
+  }
 };
-const AboutSection = ({
-  onNavigate
+// ---- end copy helper
+
+// "Copied" / "Copy failed" for two seconds, announced politely.
+const useCopyStatus = () => {
+  const [status, setStatus] = useState({});
+  const copy = async (key, text) => {
+    const ok = await siteCopy(text, navigator.clipboard);
+    setStatus(previous => ({
+      ...previous,
+      [key]: ok ? 'Copied' : 'Copy failed'
+    }));
+    setTimeout(() => setStatus(previous => ({
+      ...previous,
+      [key]: ''
+    })), 2000);
+  };
+  return [status, copy];
+};
+const SiteSection = ({
+  id,
+  title,
+  children
+}) => /*#__PURE__*/React.createElement("section", {
+  id: id,
+  className: "section-panel",
+  "aria-labelledby": `${id}-title`
+}, /*#__PURE__*/React.createElement("div", {
+  className: "sheet"
+}, /*#__PURE__*/React.createElement("h2", {
+  id: `${id}-title`,
+  className: "section-title"
+}, title), children));
+const SITE_THEMES = [['VE models for depleted gas fields', 'Three-phase CO₂–methane–brine VE with a black-oil approximation, checked against compositional simulation and up to 100× faster.'], ['Storage screening under uncertainty', 'Ensembles of fast VE runs, such as the 28-case ensemble study in MuPSI.'], ['Machine learning for upscaling and digital rock', 'CNNs that upscale permeability tensors and predict two-phase flow properties from micro-CT images.']];
+const ActivityList = ({
+  items = SITE_ACTIVITY,
+  initial = 5
 }) => {
-  const handleNav = (id, e) => {
-    if (e) e.preventDefault();
-    if (onNavigate) {
-      onNavigate(id);
-    } else if (window.__onNavigate) {
-      window.__onNavigate(id);
-    } else if (id === 'simulator') {
-      window.location.href = './simulator.html';
-    } else {
-      const el = document.getElementById(id);
-      if (el) el.scrollIntoView({
-        behavior: 'smooth'
-      });
-    }
-  };
-  return /*#__PURE__*/React.createElement(SectionPanel, null, /*#__PURE__*/React.createElement("div", {
-    className: "dossier-masthead"
-  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("h2", {
-    className: "dossier-headline"
-  }, "Research & background"), /*#__PURE__*/React.createElement("p", {
-    className: "dossier-subtitle"
-  }, "Reservoir simulation, geological CO\u2082 storage and scientific machine learning."))), /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
-    className: "about-intro-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "about-persona-row"
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? items : items.slice(0, initial);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "activity"
   }, /*#__PURE__*/React.createElement("h3", {
-    className: "about-name"
-  }, "Sa\u2019eed Telvari"), /*#__PURE__*/React.createElement("div", {
-    className: "about-affiliation"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "affiliation-primary"
-  }, "PhD Researcher \xB7 James Watt Scholarship recipient"), /*#__PURE__*/React.createElement("span", {
-    className: "affiliation-secondary"
-  }, "Institute of GeoEnergy Engineering, Edinburgh"))), /*#__PURE__*/React.createElement("div", {
-    className: "about-lead-copy"
-  }, /*#__PURE__*/React.createElement("p", null, "I\u2019m a PhD researcher in petroleum engineering, developing computational models for ", /*#__PURE__*/React.createElement("strong", null, "CO\u2082 storage in depleted gas reservoirs"), ". I focus on ", /*#__PURE__*/React.createElement("strong", null, "Vertical Equilibrium (VE) methods"), ", which simplify the vertical description of fluid flow to reduce simulation cost."), /*#__PURE__*/React.createElement("p", null, "I\u2019m interested in which physical processes a model needs to represent, where simplifications are appropriate, and when more detailed simulation is needed.")), /*#__PURE__*/React.createElement("div", {
-    className: "about-actions-strip"
-  }, /*#__PURE__*/React.createElement("a", {
-    href: "./simulator.html",
-    onClick: e => handleNav('simulator', e),
-    className: "btn-sim-prominent pressable",
-    title: "Launch interactive Vertical Equilibrium simulator"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-play",
-    style: {
-      fontSize: 10
-    }
-  }), /*#__PURE__*/React.createElement("span", null, "Try the VE simulator")), /*#__PURE__*/React.createElement("a", {
-    href: "#publications",
-    onClick: e => handleNav('publications', e),
-    className: "btn-text-action pressable"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-book-open",
-    style: {
-      fontSize: 11,
-      color: '#64ffda'
-    }
-  }), /*#__PURE__*/React.createElement("span", null, "View publications"))))), /*#__PURE__*/React.createElement("div", {
-    className: "about-grid-2col"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "about-main-column"
-  }, /*#__PURE__*/React.createElement(Reveal, {
-    delay: "reveal-delay-1"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "about-block"
-  }, /*#__PURE__*/React.createElement("h4", {
-    className: "about-block-title"
-  }, "Current research"), /*#__PURE__*/React.createElement("p", {
-    className: "about-body-text"
-  }, "Depleted gas reservoirs still contain ", /*#__PURE__*/React.createElement("strong", null, "natural gas and water"), ", so modelling injected CO\u2082 is more complex than treating them as empty storage space."), /*#__PURE__*/React.createElement("p", {
-    className: "about-body-text"
-  }, "I develop VE models of CO\u2082 movement and compare them with ", /*#__PURE__*/React.createElement("strong", null, "three-dimensional compositional simulations"), ". I assess how well these reduced-order models capture gas migration, where their assumptions break down, and how they can support studies requiring many simulation runs."))), /*#__PURE__*/React.createElement(Reveal, {
-    delay: "reveal-delay-2"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "about-block"
-  }, /*#__PURE__*/React.createElement("h4", {
-    className: "about-block-title"
-  }, "Academic background"), /*#__PURE__*/React.createElement("p", {
-    className: "about-body-text"
-  }, "I earned my B.Sc. and M.Sc. in Petroleum Engineering at ", /*#__PURE__*/React.createElement("strong", null, "Amirkabir University of Technology"), ". My master\u2019s research explored machine-learning-assisted ", /*#__PURE__*/React.createElement("strong", null, "fracture permeability upscaling"), " using three-dimensional convolutional neural networks."), /*#__PURE__*/React.createElement("p", {
-    className: "about-body-text"
-  }, "This work informs my broader interest in combining physics-based simulation with data-driven methods for subsurface modelling."))), /*#__PURE__*/React.createElement(Reveal, {
-    delay: "reveal-delay-3"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "about-methods-compact"
-  }, /*#__PURE__*/React.createElement("h4", {
-    className: "about-block-title",
-    style: {
-      marginBottom: 12
-    }
-  }, "Methods & tools"), /*#__PURE__*/React.createElement("div", {
-    className: "methods-entry"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "methods-category"
-  }, "Modelling"), /*#__PURE__*/React.createElement("span", {
-    className: "methods-content"
-  }, "Vertical Equilibrium", /*#__PURE__*/React.createElement("span", {
-    className: "method-dot"
-  }, "\xA0\xB7"), " Multiphase flow", /*#__PURE__*/React.createElement("span", {
-    className: "method-dot"
-  }, "\xA0\xB7"), " Compositional simulation", /*#__PURE__*/React.createElement("span", {
-    className: "method-dot"
-  }, "\xA0\xB7"), " Permeability upscaling", /*#__PURE__*/React.createElement("span", {
-    className: "method-dot"
-  }, "\xA0\xB7"), " Scientific machine learning")), /*#__PURE__*/React.createElement("div", {
-    className: "methods-entry",
-    style: {
-      marginTop: 10
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "methods-category"
-  }, "Programming & simulation"), /*#__PURE__*/React.createElement("span", {
-    className: "methods-content"
-  }, "MATLAB", /*#__PURE__*/React.createElement("span", {
-    className: "method-dot"
-  }, "\xA0\xB7"), " Python", /*#__PURE__*/React.createElement("span", {
-    className: "method-dot"
-  }, "\xA0\xB7"), " Julia", /*#__PURE__*/React.createElement("span", {
-    className: "method-dot"
-  }, "\xA0\xB7"), " MRST", /*#__PURE__*/React.createElement("span", {
-    className: "method-dot"
-  }, "\xA0\xB7"), " JutulDarcy"))))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Reveal, {
-    delay: "reveal-delay-1"
-  }, /*#__PURE__*/React.createElement(RecentActivity, null)))));
-};
-
-/* =====================================================
-   Publications — Interactive Publication Terminal (Crystalline Strata)
-   ===================================================== */
-const PUBLICATIONS = [{
-  id: 'pub-ve-co2',
-  category: 'co2',
-  badge: 'preprint',
-  badgeLabel: 'Preprint · EarthArXiv',
-  badgeClass: 'pub-badge-preprint',
-  title: 'A Vertical Equilibrium Model for CO\u2082 Migration in Depleted Gas Fields',
-  authors: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("strong", {
-    style: {
-      color: '#64ffda'
-    }
-  }, "Telvari, S."), ", Ramachandran, H., Wang, G., & Doster, F. (2026)"),
-  venue: 'EarthArXiv preprint · 2026',
-  keyContribution: 'A VE model reproduces large-scale CO\u2082 and methane migration while running up to two orders of magnitude faster than full 3D simulation in the reported cases.',
-  abstract: 'This EarthArXiv preprint develops a reduced-order model of CO\u2082, methane and brine flow in depleted gas reservoirs and compares it with three-dimensional compositional simulations.',
-  link: 'https://doi.org/10.31223/X5P49D',
-  doi: '10.31223/X5P49D',
-  bibtex: `@article{telvari2026vertical,
-  title={A Vertical Equilibrium Model for CO2 Migration in Depleted Gas Fields},
-  author={Telvari, Sa'eed and Ramachandran, Harish and Wang, Gang and Doster, Florian},
-  journal={EarthArXiv},
-  year={2026},
-  doi={10.31223/X5P49D}
-}`
-}, {
-  id: 'pub-spe-2026',
-  category: 'upscaling',
-  badge: 'published',
-  badgeLabel: 'Peer-Reviewed · SPE Journal',
-  badgeClass: 'pub-badge-journal',
-  title: 'Accelerated Permeability Upscaling: A CNN Approach',
-  authors: /*#__PURE__*/React.createElement(React.Fragment, null, "Sayyafzadeh, M., ", /*#__PURE__*/React.createElement("strong", {
-    style: {
-      color: '#64ffda'
-    }
-  }, "Telvari, S."), ", Gu\xE9rillot, D., & Sharifi, M. (2026)"),
-  venue: 'SPE Journal, 31(04), 2242–2260 · 2026',
-  keyContribution: 'Convolutional neural networks achieve 100–400× computational acceleration over fine-scale Darcy flow upscaling in heterogeneous formations.',
-  abstract: 'A novel convolutional neural network approach for rapid permeability upscaling in heterogeneous reservoirs, achieving 100-400\u00d7 computational speedup compared to traditional flow-based methods.',
-  link: 'https://onepetro.org/SJ/article-abstract/31/04/2242/795099/Accelerated-Permeability-Upscaling-A-Convolutional',
-  doi: '10.2118/218018-PA',
-  bibtex: `@article{sayyafzadeh2026accelerated,
-  title={Accelerated Permeability Upscaling: A CNN Approach},
-  author={Sayyafzadeh, Mohammad and Telvari, Sa'eed and Gu{\'e}rillot, Dominique and Sharifi, Mohammad},
-  journal={SPE Journal},
-  volume={31},
-  number={04},
-  pages={2242--2260},
-  year={2026},
-  publisher={Society of Petroleum Engineers}
-}`
-}, {
-  id: 'pub-eage-2025',
-  category: 'co2',
-  badge: 'conference',
-  badgeLabel: 'Conference · EAGE GET',
-  badgeClass: 'pub-badge-conf',
-  title: 'Three-Phase VE Simulation of CO\u2082\u2013Methane\u2013Brine Flow in Reservoirs',
-  authors: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("strong", {
-    style: {
-      color: '#64ffda'
-    }
-  }, "Telvari, S."), ", Ramachandran, H., Wang, G., & Doster, F. (2025)"),
-  venue: 'Sixth EAGE Global Energy Transition Conference & Exhibition (GET 2025) — Poster Presentation',
-  keyContribution: 'Formulates three-phase CO\u2082–CH\u2084–brine vertical equilibria to capture residual cushion-gas mixing during carbon sequestration in partially depleted gas reservoirs.',
-  abstract: 'An extended abstract presenting a Vertical Equilibrium (VE) model for simulating three-phase CO\u2082\u2013methane\u2013brine flow in depleted gas reservoirs, enabling efficient large-scale simulation of CO\u2082 storage with residual methane interactions.',
-  link: 'https://doi.org/10.3997/2214-4609.202521145',
-  doi: '10.3997/2214-4609.202521145',
-  bibtex: `@inproceedings{telvari2025three,
-  title={Three-Phase VE Simulation of CO2--Methane--Brine Flow in Reservoirs},
-  author={Telvari, Sa'eed and Ramachandran, Harish and Wang, Gang and Doster, Florian},
-  booktitle={Sixth EAGE Global Energy Transition Conference & Exhibition},
-  year={2025},
-  doi={10.3997/2214-4609.202521145}
-}`
-}, {
-  id: 'pub-awr-2023',
-  category: 'rock',
-  badge: 'published',
-  badgeLabel: 'Peer-Reviewed · Adv. Water Res.',
-  badgeClass: 'pub-badge-journal',
-  title: 'Prediction of two-phase flow properties for digital sandstones using 3D convolutional neural networks',
-  authors: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("strong", {
-    style: {
-      color: '#64ffda'
-    }
-  }, "Telvari, S."), ", Sayyafzadeh, M., Siavashi, J., & Sharifi, M. (2023)"),
-  venue: 'Advances in Water Resources, 176, 104442 · 2023',
-  keyContribution: 'Predicts relative permeability and capillary pressure curves directly from 3D micro-CT imagery without costly pore-network or lattice-Boltzmann simulations.',
-  abstract: 'Developed a 3D CNN architecture for predicting relative permeability and capillary pressure curves directly from micro-CT images, eliminating the need for expensive pore-network modeling.',
-  link: 'https://doi.org/10.1016/j.advwatres.2023.104442',
-  doi: '10.1016/j.advwatres.2023.104442',
-  bibtex: `@article{telvari2023prediction,
-  title={Prediction of two-phase flow properties for digital sandstones using 3D convolutional neural networks},
-  author={Telvari, Sa'eed and Sayyafzadeh, Mohammad and Siavashi, Javad and Sharifi, Mohammad},
-  journal={Advances in Water Resources},
-  volume={176},
-  pages={104442},
-  year={2023},
-  publisher={Elsevier},
-  doi={10.1016/j.advwatres.2023.104442}
-}`
-}];
-const DOMAIN_FILTERS = [{
-  id: 'all',
-  label: 'All Research'
-}, {
-  id: 'co2',
-  label: 'CO\u2082 & VE Modeling'
-}, {
-  id: 'rock',
-  label: 'Digital Rock Physics'
-}, {
-  id: 'upscaling',
-  label: 'Permeability Upscaling & ML'
-}];
-const PublicationsList = () => {
-  const [activeFilter, setActiveFilter] = useState('all');
-  const [copiedId, setCopiedId] = useState(null);
-  const [showAll, setShowAll] = useState(false);
-  const filteredPubs = activeFilter === 'all' ? PUBLICATIONS : PUBLICATIONS.filter(p => p.category === activeFilter);
-  const visiblePubs = showAll ? filteredPubs : filteredPubs.slice(0, 2);
-  const handleCopyBibtex = p => {
-    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(p.bibtex.trim()).then(() => {
-        setCopiedId(p.id);
-        setTimeout(() => setCopiedId(null), 1800);
-      }).catch(() => {});
-    }
-  };
-  return /*#__PURE__*/React.createElement(SectionPanel, null, /*#__PURE__*/React.createElement("div", {
-    className: "pub-terminal-header"
-  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("h2", {
-    className: "dossier-headline"
-  }, "Publications"), /*#__PURE__*/React.createElement("p", {
-    className: "dossier-subtitle"
-  }, "Peer-reviewed articles, conference proceedings and open preprints on reduced-order Vertical Equilibrium, 3D micro-CT characterisation and machine-learning upscaling."))), /*#__PURE__*/React.createElement(Reveal, {
-    delay: "reveal-delay-1"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "pub-filter-bar",
-    role: "tablist",
-    "aria-label": "Publication topic filter"
-  }, DOMAIN_FILTERS.map(f => {
-    const count = f.id === 'all' ? PUBLICATIONS.length : PUBLICATIONS.filter(p => p.category === f.id).length;
-    const isActive = activeFilter === f.id;
-    return /*#__PURE__*/React.createElement("button", {
-      key: f.id,
-      role: "tab",
-      "aria-selected": isActive,
-      className: `pub-filter-pill ${isActive ? 'active' : ''}`,
-      onClick: () => {
-        setActiveFilter(f.id);
-        setShowAll(false);
-      }
-    }, /*#__PURE__*/React.createElement("span", null, f.label), /*#__PURE__*/React.createElement("span", {
-      className: "pub-filter-count"
-    }, count));
-  }))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 20
-    }
-  }, visiblePubs.map((p, i) => /*#__PURE__*/React.createElement(Reveal, {
-    key: p.id,
-    delay: `reveal-delay-${i % 2 + 1}`
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "pub-card-elevated"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "pub-card-top"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: `pub-badge-pill ${p.badgeClass}`
-  }, p.badgeLabel), /*#__PURE__*/React.createElement("span", {
-    className: "pub-doi"
-  }, "DOI: ", p.doi)), /*#__PURE__*/React.createElement("h3", {
-    className: "pub-card-title"
-  }, p.title), /*#__PURE__*/React.createElement("p", {
-    className: "pub-authors-line"
-  }, p.authors), /*#__PURE__*/React.createElement("p", {
-    className: "pub-venue-line"
-  }, p.venue), /*#__PURE__*/React.createElement("div", {
-    className: "pub-key-contribution"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "pub-key-contribution-label"
-  }, "Key contribution"), /*#__PURE__*/React.createElement("p", {
-    className: "pub-key-contribution-text"
-  }, p.keyContribution)), /*#__PURE__*/React.createElement("details", {
-    className: "pub-abstract"
-  }, /*#__PURE__*/React.createElement("summary", null, "Read abstract"), /*#__PURE__*/React.createElement("p", {
-    className: "pub-abstract-text"
-  }, p.abstract)), /*#__PURE__*/React.createElement("div", {
-    className: "pub-actions-bar"
-  }, p.link && /*#__PURE__*/React.createElement("a", {
-    href: p.link,
-    target: "_blank",
-    rel: "noreferrer",
-    className: "btn-doi-view"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-external-link-alt",
-    style: {
-      fontSize: 11
-    }
-  }), "Read publication"), /*#__PURE__*/React.createElement("button", {
-    className: "btn-cite-copy",
-    onClick: () => handleCopyBibtex(p),
-    "aria-label": `Copy BibTeX citation for ${p.title}`
-  }, /*#__PURE__*/React.createElement("i", {
-    className: copiedId === p.id ? "fas fa-check" : "far fa-copy",
-    style: {
-      color: copiedId === p.id ? '#64ffda' : 'inherit'
-    }
-  }), /*#__PURE__*/React.createElement("span", null, copiedId === p.id ? "Citation Copied!" : "Copy BibTeX"), copiedId === p.id && /*#__PURE__*/React.createElement("span", {
-    className: "cite-tooltip-badge"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-check"
-  }), " BibTeX copied to clipboard"))))))), filteredPubs.length > 2 && /*#__PURE__*/React.createElement("div", {
-    className: "pub-view-more-container"
-  }, /*#__PURE__*/React.createElement("button", {
+    className: "activity__title"
+  }, "Recent activity"), /*#__PURE__*/React.createElement("ol", {
+    className: "activity__list",
+    id: "activity-list"
+  }, shown.map(item => /*#__PURE__*/React.createElement("li", {
+    key: `${item.month}-${item.title}`,
+    className: "activity__item"
+  }, /*#__PURE__*/React.createElement("time", {
+    dateTime: item.month
+  }, item.date), /*#__PURE__*/React.createElement("h4", null, item.title), /*#__PURE__*/React.createElement("p", null, item.body)))), items.length > initial && /*#__PURE__*/React.createElement("button", {
     type: "button",
-    className: "pub-view-more-btn pressable",
-    onClick: () => setShowAll(prev => !prev),
-    "aria-expanded": showAll
-  }, /*#__PURE__*/React.createElement("i", {
-    className: `fas ${showAll ? 'fa-chevron-up' : 'fa-chevron-down'}`,
-    style: {
-      fontSize: 11
-    }
-  }), /*#__PURE__*/React.createElement("span", null, showAll ? 'Show fewer publications' : `View more publications (${filteredPubs.length - 2} remaining)`))));
+    className: "btn btn--quiet btn--small",
+    "aria-expanded": expanded,
+    "aria-controls": "activity-list",
+    onClick: () => setExpanded(!expanded)
+  }, expanded ? 'Show recent activity only' : 'Show earlier activity'));
 };
-
-/* =====================================================
-   Contact — Collaboration Terminal & Academic Office (Mantle Strata)
-   ===================================================== */
-const VERIFIED_PROFILES = [{
-  icon: 'fas fa-graduation-cap',
-  label: 'Google Scholar',
-  meta: 'Citation Index & Academic Metrics',
-  url: 'https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en&inst=16061989973938494330'
-}, {
-  icon: 'fas fa-id-badge',
-  label: 'ORCID Registry',
-  meta: '0000-0002-4896-295X (Verified)',
-  url: 'https://orcid.org/0000-0002-4896-295X'
-}, {
-  icon: 'fab fa-linkedin',
-  label: 'LinkedIn Profile',
-  meta: 'Professional Network & Research Updates',
-  url: 'https://www.linkedin.com/in/stelvari/'
-}, {
-  icon: 'fab fa-github',
-  label: 'GitHub Codebases',
-  meta: 'Open-Source Solvers & Scientific Repos',
-  url: 'https://github.com/saeedtelvari'
-}];
-const ContactSection = () => {
-  const [copiedEmail, setCopiedEmail] = useState(false);
-  const [localTime, setLocalTime] = useState('');
-  useEffect(() => {
-    const updateTime = () => {
-      try {
-        const timeStr = new Intl.DateTimeFormat('en-GB', {
-          timeZone: 'Europe/London',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        }).format(new Date());
-        setLocalTime(timeStr);
-      } catch (e) {
-        setLocalTime('10:00');
-      }
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 30000);
-    return () => clearInterval(interval);
-  }, []);
-  const copyEmail = () => {
-    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText('st4014@hw.ac.uk').then(() => {
-        setCopiedEmail(true);
-        setTimeout(() => setCopiedEmail(false), 2200);
-      }).catch(() => {});
-    }
-  };
-  return /*#__PURE__*/React.createElement(SectionPanel, null, /*#__PURE__*/React.createElement("div", {
-    className: "collab-terminal-header"
-  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("h2", {
-    className: "dossier-headline"
-  }, "Contact & collaboration"), /*#__PURE__*/React.createElement("p", {
-    className: "dossier-subtitle"
-  }, "Open to collaborations in computational reservoir simulation and industrial CCUS storage assessment, and invitations to scientific seminars."))), /*#__PURE__*/React.createElement("div", {
-    className: "collab-console-grid"
-  }, /*#__PURE__*/React.createElement(Reveal, null, /*#__PURE__*/React.createElement("div", {
-    className: "collab-hero-tile"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
-    className: "contact-card-title"
-  }, "Get in touch"), /*#__PURE__*/React.createElement("p", {
-    className: "contact-card-copy"
-  }, "For preprints, research enquiries or questions about Vertical Equilibrium code, reach me at my institutional email."), /*#__PURE__*/React.createElement("div", {
-    className: "email-copy-action-box"
-  }, /*#__PURE__*/React.createElement("a", {
-    className: "contact-email",
-    href: "mailto:st4014@hw.ac.uk"
-  }, "st4014@hw.ac.uk"), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn-cite-copy",
-    onClick: copyEmail,
-    "aria-label": "Copy email address"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: copiedEmail ? 'fas fa-check' : 'far fa-copy',
-    "aria-hidden": "true"
-  }), /*#__PURE__*/React.createElement("span", {
-    "aria-live": "polite"
-  }, copiedEmail ? 'Copied' : 'Copy')))), /*#__PURE__*/React.createElement("div", {
-    className: "office-telemetry-pill"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-map-marker-alt",
-    style: {
-      color: '#a8d1c8'
-    }
-  }), /*#__PURE__*/React.createElement("span", null, "Institute of GeoEnergy Engineering \xB7 Heriot-Watt University, Edinburgh, UK"), /*#__PURE__*/React.createElement("span", {
-    className: "office-time-clock"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "far fa-clock"
-  }), " ", localTime || '10:00', " UK Time")))), /*#__PURE__*/React.createElement(Reveal, {
-    delay: "reveal-delay-1"
+const ResearchSection = () => /*#__PURE__*/React.createElement(SiteSection, {
+  id: "research",
+  title: "Research"
+}, /*#__PURE__*/React.createElement("div", {
+  className: "research"
+}, /*#__PURE__*/React.createElement("div", {
+  className: "research__main"
+}, /*#__PURE__*/React.createElement("p", {
+  className: "lead"
+}, "I\u2019m a PhD candidate in Petroleum Engineering at Heriot-Watt University. I study how injected CO\u2082 migrates through depleted gas reservoirs, and how to simulate it quickly at field scale."), /*#__PURE__*/React.createElement("p", null, "My main tool is the vertical-equilibrium (VE) model, which assumes that CO\u2082, methane and brine separate vertically under buoyancy. That reduces a 3D reservoir model to 2D and makes it fast enough for screening, uncertainty quantification and optimisation studies. I build these models in MRST, apply them to depleted gas fields in the MuPSI project, and teach MRST\u2019s rapid-prototyping framework at Heriot-Watt."), /*#__PURE__*/React.createElement("h3", null, "Themes"), /*#__PURE__*/React.createElement("dl", {
+  className: "themes"
+}, SITE_THEMES.map(([term, detail]) => /*#__PURE__*/React.createElement("div", {
+  key: term
+}, /*#__PURE__*/React.createElement("dt", null, term), /*#__PURE__*/React.createElement("dd", null, detail)))), /*#__PURE__*/React.createElement("h3", null, "Methods and tools"), /*#__PURE__*/React.createElement("p", {
+  className: "methods"
+}, "VE modelling, multiphase and compositional simulation, permeability upscaling and scientific machine learning, in MATLAB and MRST, Python, and Julia with JutulDarcy."), /*#__PURE__*/React.createElement("h3", null, "Background"), /*#__PURE__*/React.createElement("p", null, "BSc and MSc in Petroleum Engineering from Amirkabir University of Technology, Tehran, focused on reservoir simulation and machine learning for upscaling and digital rock.")), /*#__PURE__*/React.createElement("aside", {
+  className: "research__aside",
+  "aria-label": "Recent activity"
+}, /*#__PURE__*/React.createElement(ActivityList, null))));
+const ProjectsSection = () => {
+  const [feature, ...others] = SITE_PROJECTS;
+  return /*#__PURE__*/React.createElement(SiteSection, {
+    id: "projects",
+    title: "Projects"
+  }, /*#__PURE__*/React.createElement("article", {
+    className: "project-feature"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "verified-profiles-grid"
-  }, VERIFIED_PROFILES.map((p, idx) => /*#__PURE__*/React.createElement("a", {
-    key: idx,
-    href: p.url,
-    target: "_blank",
-    rel: "noreferrer",
-    className: "verified-profile-card pressable"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "verified-profile-icon"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: p.icon
+    className: "project-feature__text"
+  }, /*#__PURE__*/React.createElement("h3", null, feature.title), /*#__PURE__*/React.createElement("p", null, feature.body), /*#__PURE__*/React.createElement("p", {
+    className: "project-links"
+  }, feature.links.map(link => /*#__PURE__*/React.createElement("a", {
+    key: link.href,
+    className: "text-link",
+    href: link.href
+  }, link.label)))), /*#__PURE__*/React.createElement("img", {
+    className: "project-feature__shot",
+    src: feature.image.src,
+    width: feature.image.width,
+    height: feature.image.height,
+    alt: feature.image.alt,
+    loading: "lazy",
+    decoding: "async"
   })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      minWidth: 0
-    }
+    className: "project-list"
+  }, others.map(project => /*#__PURE__*/React.createElement("article", {
+    key: project.id,
+    className: "project"
+  }, /*#__PURE__*/React.createElement("h3", null, project.title, project.meta && /*#__PURE__*/React.createElement("span", {
+    className: "project__meta"
+  }, project.meta)), /*#__PURE__*/React.createElement("p", null, project.body)))));
+};
+const SiteAuthors = ({
+  authors
+}) => /*#__PURE__*/React.createElement("p", {
+  className: "pub__authors"
+}, authors.map((name, i) => /*#__PURE__*/React.createElement(React.Fragment, {
+  key: name
+}, i > 0 && ', ', name === 'Telvari, S.' ? /*#__PURE__*/React.createElement("strong", null, name) : name)));
+const PublicationsSection = () => {
+  const [status, copy] = useCopyStatus();
+  return /*#__PURE__*/React.createElement(SiteSection, {
+    id: "publications",
+    title: "Publications"
+  }, /*#__PURE__*/React.createElement("ol", {
+    className: "pubs"
+  }, SITE_PUBLICATIONS.map(pub => /*#__PURE__*/React.createElement("li", {
+    key: pub.id,
+    className: "pub"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "pub__year"
+  }, pub.year), /*#__PURE__*/React.createElement("div", {
+    className: "pub__body"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "pub__title"
+  }, /*#__PURE__*/React.createElement("a", {
+    href: pub.url,
+    target: "_blank",
+    rel: "noreferrer"
+  }, pub.title)), /*#__PURE__*/React.createElement(SiteAuthors, {
+    authors: pub.authors
+  }), /*#__PURE__*/React.createElement("p", {
+    className: "pub__venue"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "pub__status"
+  }, pub.status), pub.venue), /*#__PURE__*/React.createElement("p", {
+    className: "pub__summary"
+  }, pub.summary), /*#__PURE__*/React.createElement("div", {
+    className: "pub__actions"
+  }, /*#__PURE__*/React.createElement("a", {
+    className: "btn btn--quiet btn--small",
+    href: pub.url,
+    target: "_blank",
+    rel: "noreferrer"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "external",
+    size: 15
+  }), "DOI ", pub.doi), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn btn--quiet btn--small",
+    onClick: () => copy(pub.id, pub.bibtex),
+    "aria-label": `Copy BibTeX for ${pub.title}`
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: status[pub.id] === 'Copied' ? 'check' : 'copy',
+    size: 15
+  }), status[pub.id] || 'Copy BibTeX'), /*#__PURE__*/React.createElement("span", {
+    className: "visually-hidden",
+    "aria-live": "polite"
+  }, status[pub.id] ? `${status[pub.id]}: BibTeX for ${pub.title}` : '')))))), /*#__PURE__*/React.createElement("p", {
+    className: "pubs__more"
+  }, "Citations and new work: ", /*#__PURE__*/React.createElement("a", {
+    href: SITE_LINKS.scholar,
+    target: "_blank",
+    rel: "noreferrer"
+  }, "Google Scholar"), " and", ' ', /*#__PURE__*/React.createElement("a", {
+    href: SITE_LINKS.orcid,
+    target: "_blank",
+    rel: "noreferrer"
+  }, "ORCID"), "."));
+};
+const SITE_CONTACT_PROFILES = [['scholar', 'Google Scholar', 'Publications and citations', SITE_LINKS.scholar], ['orcid', 'ORCID', SITE_LINKS.orcidId, SITE_LINKS.orcid], ['github', 'GitHub', SITE_LINKS.githubUser, SITE_LINKS.github], ['linkedin', 'LinkedIn', SITE_LINKS.linkedinUser, SITE_LINKS.linkedin]];
+const ContactSection = () => {
+  const [status, copy] = useCopyStatus();
+  return /*#__PURE__*/React.createElement(SiteSection, {
+    id: "contact",
+    title: "Contact"
   }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 14.5,
-      fontWeight: 700,
-      color: '#fff',
-      margin: '0 0 2px'
-    }
-  }, p.label), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: '#c8d0d6',
-      lineHeight: 1.6
-    }
-  }, p.meta))))))));
+    className: "contact"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "contact__main"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "lead"
+  }, "For collaborations, preprints or questions about VE models and the simulator, email me."), /*#__PURE__*/React.createElement("div", {
+    className: "contact__email"
+  }, /*#__PURE__*/React.createElement("a", {
+    href: `mailto:${SITE_LINKS.email}`
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "mail",
+    size: 18
+  }), SITE_LINKS.email), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn btn--quiet btn--small",
+    onClick: () => copy('email', SITE_LINKS.email),
+    "aria-label": "Copy email address"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: status.email === 'Copied' ? 'check' : 'copy',
+    size: 15
+  }), status.email || 'Copy'), /*#__PURE__*/React.createElement("span", {
+    className: "visually-hidden",
+    "aria-live": "polite"
+  }, status.email ? `${status.email}: email address` : '')), /*#__PURE__*/React.createElement("p", {
+    className: "contact__address"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "pin",
+    size: 16
+  }), "Institute of GeoEnergy Engineering, Heriot-Watt University, Edinburgh, UK")), /*#__PURE__*/React.createElement("ul", {
+    className: "contact__profiles"
+  }, SITE_CONTACT_PROFILES.map(([icon, label, detail, href]) => /*#__PURE__*/React.createElement("li", {
+    key: icon
+  }, /*#__PURE__*/React.createElement("a", {
+    href: href,
+    target: "_blank",
+    rel: "noreferrer"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: icon,
+    size: 18
+  }), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("strong", null, label), /*#__PURE__*/React.createElement("small", null, detail))))))));
 };
 Object.assign(window, {
-  AboutSection,
-  PublicationsList,
-  ContactSection
+  ResearchSection,
+  ProjectsSection,
+  PublicationsSection,
+  ContactSection,
+  ActivityList,
+  siteCopy
 });
 
 // File: CVPage.jsx
@@ -4717,25 +4426,15 @@ const SiteHome = () => {
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SkipLink, null), /*#__PURE__*/React.createElement(Header, {
     active: active,
     onNavigate: navigate
-  }), /*#__PURE__*/React.createElement("main", {
+  }), /*#__PURE__*/React.createElement(GeologicalDescent, null, /*#__PURE__*/React.createElement("main", {
     id: "main-content",
     tabIndex: -1
   }, /*#__PURE__*/React.createElement(SubsurfaceHero, {
     onNavigate: navigate
-  }), /*#__PURE__*/React.createElement(GeologicalDescent, null, /*#__PURE__*/React.createElement("div", {
-    id: "research"
-  }), /*#__PURE__*/React.createElement(AboutSection, {
-    onNavigate: navigate
-  }), /*#__PURE__*/React.createElement("div", {
-    id: "publications"
-  }), /*#__PURE__*/React.createElement(PublicationsList, {
-    onNavigate: navigate
-  }), /*#__PURE__*/React.createElement("div", {
-    id: "contact"
-  }), /*#__PURE__*/React.createElement(ContactSection, null), /*#__PURE__*/React.createElement(Footer, {
+  }), /*#__PURE__*/React.createElement(ResearchSection, null), /*#__PURE__*/React.createElement(ProjectsSection, null), /*#__PURE__*/React.createElement(PublicationsSection, null), /*#__PURE__*/React.createElement(ContactSection, null)), /*#__PURE__*/React.createElement(Footer, {
     onNavigate: navigate,
     geological: true
-  }))));
+  })));
 };
 const CVStandalone = () => {
   const navigate = (id, event) => siteNavigate('cv', id, event);

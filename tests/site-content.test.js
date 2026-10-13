@@ -34,3 +34,11 @@ test('wording rules the user set on 2026-10-13', () => {
   const months = content.SITE_ACTIVITY.map(a => a.month);
   assert.deepEqual(months, [...months].sort().reverse(), 'activity is newest first');
 });
+
+test('copy reports failure instead of claiming success', async () => {
+  const src = fs.readFileSync(path.join(root, 'HomeSections.jsx'), 'utf8');
+  const siteCopy = new Function(src.slice(src.indexOf('// ---- copy helper'), src.indexOf('// ---- end copy helper')) + '\nreturn siteCopy;')();
+  assert.equal(await siteCopy('x', { writeText: async () => {} }), true);
+  assert.equal(await siteCopy('x', { writeText: async () => { throw new Error('denied'); } }), false);
+  assert.equal(await siteCopy('x', undefined), false);
+});

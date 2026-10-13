@@ -32,8 +32,8 @@ has('CVPage.jsx', /window\.print\(\)/, 'CV page print action must invoke browser
 has('CVPage.jsx', /Print \/ Save as PDF/, 'CV page must offer browser print and PDF export');
 has('CVPage.jsx', /Selected Publications/, 'CV page needs evidence beyond education and skills');
 
-has('HomeSections.jsx', /Telvari[^\n]+Ramachandran[^\n]+Wang[^\n]+Doster/, 'three-phase publication metadata must be corrected');
-has('HomeSections.jsx', /EarthArXiv preprint[^\n]*2026|2026[^\n]*EarthArXiv preprint/, 'EarthArXiv preprint year must be 2026');
+has('site-content.js', /Telvari[^\n]+Ramachandran[^\n]+Wang[^\n]+Doster/, 'three-phase publication metadata must be corrected');
+has('site-content.js', /year: 2026,\s*title: 'A Vertical Equilibrium Model[^']*'[\s\S]*?venue: 'EarthArXiv preprint'/, 'EarthArXiv preprint year must be 2026');
 
 has('GuidePage.jsx', /educational model/i, 'guide must state the simulator scope accurately');
 lacks('GuidePage.jsx', /schemes running inside the simulator/, 'guide must not claim unimplemented constitutive laws are running');
