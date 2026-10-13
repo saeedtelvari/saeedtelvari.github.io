@@ -1,198 +1,83 @@
-const assert = require('node:assert/strict');
 const test = require('node:test');
+const assert = require('node:assert/strict');
+const VE2D = require('../ve2d-model.js');
 
-let model = {};
-try {
-  model = require('../ve2d-model.js');
-} catch (_) {
-  // The first TDD run intentionally exercises the missing module contract.
-}
+const flat = patch => VE2D.normalizeScenario({
+  dipDeg: 0, domes: 0, roughness: 0, faults: [], ...patch
+});
+const near = (actual, expected, tolerance, message) =>
+  assert.ok(Math.abs(actual - expected) <= tolerance, `${message}: ${actual} vs ${expected} (±${tolerance})`);
 
-const createVe2dState = model.createVe2dState || (() => null);
-const stepVe2d = model.stepVe2d || (() => null);
+// ---------------------------------------------------------------- Task 1
 
-const baseParams = {
-  width: 1000,
-  height: 600,
-  permeability: 1.7,
-  porosity: 0.25,
-  residualTrapFraction: 0,
-  injectionRate: 0,
-  injectionDuration: 0,
-  wellX: 50,
-  wellY: 50,
-  dipX: 0,
-  dipY: 0,
-  structureAmplitude: 0,
-  structureFrequency: 1,
-  faults: []
-};
-
-test('exports the 2D VE solver API', () => {
-  assert.equal(typeof model.createVe2dState, 'function');
-  assert.equal(typeof model.stepVe2d, 'function');
+test('normalizeScenario fills defaults and clamps geometry', () => {
+  const fault = { x: 9, y: 6, strike: 0, length: 6, throw: 10, trans: 0.5, sealCap: 10, kf: 10 };
+  const scenario = VE2D.normalizeScenario({ rateMt: 99, wellX: -5, porosity: 'abc', faults: [fault, fault, fault, fault, fault] });
+  assert.equal(scenario.rateMt, VE2D.LIMITS.rateMt[1]);
+  assert.equal(scenario.wellX, VE2D.LIMITS.wellX[0]);
+  assert.equal(scenario.porosity, VE2D.DEFAULTS.porosity);
+  assert.equal(scenario.faults.length, 3);
+  assert.equal(VE2D.normalizeScenario({ grid: 'huge', boundary: 'sideways' }).grid, VE2D.DEFAULTS.grid);
+  assert.equal(VE2D.normalizeScenario({ boundary: 'sideways' }).boundary, VE2D.DEFAULTS.boundary);
+  assert.deepEqual(VE2D.normalizeScenario({}), VE2D.normalizeScenario(VE2D.DEFAULTS));
 });
 
-test('one model year conserves an injected mass of 2 units', () => {
-  const initial = createVe2dState({ cols: 9, rows: 9 });
-  const next = initial && stepVe2d(initial, {
-    ...baseParams,
-    injectionRate: 2,
-    injectionDuration: 10
-  }, 1);
-
-  assert.ok(next, 'solver must return the next state');
-  const accounted = next.masses.mobile + next.masses.trapped + next.masses.leaked;
-  assert.ok(Math.abs(next.masses.injected - 2) < 1e-9);
-  assert.ok(Math.abs(accounted - 2) < 0.01);
-});
-
-test('default model boundaries are open to initial pressure while closed mode retains the plume', () => {
-  const seed = () => {
-    const state = createVe2dState({ cols: 6, rows: 6 });
-    state.h[3 * 6] = 2;
-    state.hMax[3 * 6] = 2;
-    return state;
-  };
-  const open = stepVe2d(seed(), baseParams, 1);
-  const closed = stepVe2d(seed(), { ...baseParams, boundaryCondition: 'closed' }, 1);
-
-  assert.ok(open.masses.leaked > 0, 'initial-pressure boundary must accept outflow');
-  assert.equal(closed.masses.leaked, 0, 'closed boundary must not leak mass');
-  assert.ok(open.masses.mobile + open.masses.trapped < closed.masses.mobile + closed.masses.trapped);
-});
-
-test('a centered plume spreads in both x and y directions', () => {
-  const initial = createVe2dState({ cols: 7, rows: 7 });
-  if (initial) {
-    const center = 3 * 7 + 3;
-    initial.h[center] = 1;
-    initial.hMax[center] = 1;
+test('every preset normalises to a complete scenario', () => {
+  for (const [id, preset] of Object.entries(VE2D.PRESETS)) {
+    const scenario = VE2D.normalizeScenario({ ...VE2D.DEFAULTS, ...preset.patch, preset: id });
+    assert.ok(preset.label && preset.description, `${id} needs a label and description`);
+    for (const key of Object.keys(VE2D.LIMITS)) assert.ok(Number.isFinite(scenario[key]), `${id}.${key}`);
   }
-  const next = initial && stepVe2d(initial, baseParams, 1);
-
-  assert.ok(next, 'solver must return the next state');
-  assert.ok(next.h[3 * 7 + 2] > 0, 'plume must spread west');
-  assert.ok(next.h[3 * 7 + 4] > 0, 'plume must spread east');
-  assert.ok(next.h[2 * 7 + 3] > 0, 'plume must spread north');
-  assert.ok(next.h[4 * 7 + 3] > 0, 'plume must spread south');
 });
 
-test('a sealed fault blocks transfer across its line', () => {
-  const seed = () => {
-    const state = createVe2dState({ cols: 6, rows: 3 });
-    if (state) {
-      state.h[1 * 6 + 2] = 1;
-      state.hMax[1 * 6 + 2] = 1;
-    }
-    return state;
-  };
-  const open = stepVe2d(seed(), {
-    ...baseParams,
-    faults: [{ xPercent: 50, dipSlope: 0, isSealed: false, transmissibility: 1 }]
-  }, 1);
-  const sealed = stepVe2d(seed(), {
-    ...baseParams,
-    faults: [{ xPercent: 50, dipSlope: 0, isSealed: true, transmissibility: 1 }]
-  }, 1);
-
-  assert.ok(open, 'solver must return the open-fault state');
-  assert.ok(sealed, 'solver must return the sealed-fault state');
-  assert.ok(open.h[1 * 6 + 3] > 0, 'open fault must permit cross-fault flow');
-  assert.equal(sealed.h[1 * 6 + 3], 0);
+test('regional dip of one degree drops 349 m across 20 km', () => {
+  const scenario = flat({ dipDeg: 1, dipAz: 90 });
+  near(VE2D.topDepth(20000, 6000, scenario) - VE2D.topDepth(0, 6000, scenario), 349.1, 1, 'east-west relief');
+  near(VE2D.topDepth(10000, 0, scenario) - VE2D.topDepth(10000, 12000, scenario), 0, 1e-9, 'no north-south relief');
+  near(VE2D.topDepth(10000, 6000, scenario), scenario.depth, 1e-9, 'reference depth at the centre');
 });
 
-test('finite fault segments only affect cells inside their y extent', () => {
-  const seed = () => {
-    const state = createVe2dState({ cols: 6, rows: 3 });
-    state.h[1 * 6 + 2] = 1;
-    state.hMax[1 * 6 + 2] = 1;
-    return state;
-  };
-  const sealedSegment = stepVe2d(seed(), {
-    ...baseParams,
-    faults: [{ xPercent: 50, yStartPercent: 0, yEndPercent: 30, isSealed: true, transmissibility: 1 }]
-  }, 1);
-
-  assert.ok(sealedSegment.h[1 * 6 + 3] > 0, 'a fault segment away from the plume must not block transfer');
-  assert.equal(model.faultCoversY({ yStartPercent: 20, yEndPercent: 60 }, 300, 600), true);
-  assert.equal(model.faultCoversY({ yStartPercent: 20, yEndPercent: 60 }, 500, 600), false);
+test('fault throw offsets the hanging wall and vanishes at the tips', () => {
+  const scenario = flat({ faults: [{ x: 10, y: 6, strike: 0, length: 6, throw: 30, trans: 1, sealCap: 0, kf: 0 }] });
+  const east = VE2D.topDepth(10001, 6000, scenario);
+  const west = VE2D.topDepth(9999, 6000, scenario);
+  near(east - west, 30, 0.1, 'throw at mid-length');
+  near(VE2D.topDepth(10001, 9000, scenario) - VE2D.topDepth(9999, 9000, scenario), 0, 1e-6, 'zero throw at the tip');
+  near(VE2D.topDepth(10001, 12000, scenario) - VE2D.topDepth(9999, 12000, scenario), 0, 1e-9, 'no offset beyond the tip');
 });
 
-test('seeded terrain noise is deterministic and adds relief when enabled', () => {
-  const params = { ...baseParams, width: 1000, height: 600, terrainSeed: 42, heterogeneity: 0.9 };
-  const a = model.topDepth(250, 180, params);
-  const b = model.topDepth(250, 180, params);
-  const flat = model.topDepth(250, 180, { ...params, heterogeneity: 0 });
-
-  assert.equal(a, b);
-  assert.notEqual(a, flat);
-  assert.notEqual(model.terrainNoise(0.25, 0.3, 42), model.terrainNoise(0.75, 0.3, 42));
+test('buildModel gives SI geometry and transmissibility on the selected grid', () => {
+  for (const [grid, nx, ny] of [['coarse', 40, 24], ['standard', 80, 48], ['fine', 120, 72]]) {
+    const model = VE2D.buildModel(flat({ grid }));
+    assert.equal(model.nx, nx);
+    assert.equal(model.ny, ny);
+    near(model.dx, 20000 / nx, 1e-9, 'dx');
+    assert.equal(model.zt.length, nx * ny);
+    assert.equal(model.tx.length, (nx + 1) * ny);
+    assert.equal(model.ty.length, nx * (ny + 1));
+    near(model.tx[1], model.p.k * model.dy / model.dx, 1e-30, 'interior TPFA transmissibility');
+    near(model.tx[0], model.p.k * model.dy / (model.dx / 2), 1e-30, 'boundary half-cell transmissibility');
+  }
 });
 
-test('regional dip treats UI values as percentages', () => {
-  const params = { ...baseParams, dipX: 2, structureAmplitude: 0, heterogeneity: 0 };
-  assert.equal(model.topDepth(1000, 300, params) - model.topDepth(0, 300, params), 0.08);
+test('fault crossings scale face transmissibility by seal and juxtaposition', () => {
+  const sealed = VE2D.buildModel(flat({ faults: [{ x: 10, y: 6, strike: 0, length: 30, throw: 0, trans: 0, sealCap: 0, kf: 0 }] }));
+  const half = VE2D.buildModel(flat({ thickness: 50, faults: [{ x: 10, y: 6, strike: 0, length: 30, throw: 25, trans: 1, sealCap: 0, kf: 0 }] }));
+  const crossing = j => j * (sealed.nx + 1) + sealed.nx / 2;
+  for (let j = 0; j < sealed.ny; j++) assert.equal(sealed.mx[crossing(j)], 0, `sealed row ${j}`);
+  near(half.mx[crossing(24)], 0.5, 1e-3, 'half the thickness juxtaposed');
+  assert.equal(half.mx[crossing(24) - 3], 1, 'faces away from the fault are untouched');
 });
 
-test('seeded terrain waves vary across both axes', () => {
-  const field = model.terrainWaveField;
-  assert.notEqual(field(0.2, 0.4, 42), field(0.8, 0.4, 42));
-  assert.notEqual(field(0.2, 0.2, 42), field(0.2, 0.8, 42));
-  assert.equal(field(0.35, 0.65, 42), field(0.35, 0.65, 42));
-  assert.ok(Math.abs(model.terrainFeatureField(0.35, 0.65, 42)) <= 1);
+test('fault trace length is apportioned to cells independently of the grid', () => {
+  for (const grid of ['coarse', 'standard', 'fine']) {
+    const model = VE2D.buildModel(flat({ grid, faults: [{ x: 9.3, y: 6.1, strike: 23, length: 8, throw: 5, trans: 1, sealCap: 5, kf: 50 }] }));
+    const total = model.leakCells.reduce((sum, cell) => sum + cell.length, 0);
+    near(total, 8000, 160, `${grid} trace length`);
+  }
 });
 
-test('structural highs are localized domes rather than repeating bands', () => {
-  const field = model.structuralDomeField;
-  assert.ok(field(0.5, 0.5, 1, 42) > field(0.05, 0.05, 1, 42));
-  assert.notEqual(field(0.25, 0.5, 2, 42), field(0.5, 0.25, 2, 42));
-});
-
-test('fault throw is a sharp local step limited to the fault segment', () => {
-  const params = {
-    width: 1000,
-    height: 600,
-    structureAmplitude: 0,
-    heterogeneity: 0,
-    faultOffset: 2,
-    faults: [{ xPercent: 50, yStartPercent: 30, yEndPercent: 70, dipSlope: 0 }]
-  };
-  const insideLeft = model.topDepth(250, 300, params);
-  const insideRight = model.topDepth(750, 300, params);
-  const outsideLeft = model.topDepth(250, 120, params);
-  const outsideRight = model.topDepth(750, 120, params);
-  assert.ok(Math.abs(insideRight - insideLeft - 1.6) < 1e-9);
-  assert.equal(outsideRight - outsideLeft, 0);
-});
-
-test('finite fault endpoints taper over a visible transition instead of forming a step', () => {
-  const params = {
-    width: 1000,
-    height: 600,
-    structureAmplitude: 0,
-    heterogeneity: 0,
-    faultOffset: 2,
-    faults: [{ xPercent: 50, yStartPercent: 30, yEndPercent: 70, dipSlope: 0 }]
-  };
-  const nearStart = model.topDepth(750, 210, params) - model.topDepth(250, 210, params);
-  const plateau = model.topDepth(750, 300, params) - model.topDepth(250, 300, params);
-
-  assert.ok(nearStart > 0);
-  assert.ok(nearStart < plateau * 0.4);
-});
-
-test('fault displacement stops when its trace exits the model boundary', () => {
-  const params = {
-    width: 1000,
-    height: 600,
-    structureAmplitude: 0,
-    heterogeneity: 0,
-    faultOffset: 2,
-    faults: [{ xPercent: -10, yStartPercent: 0, yEndPercent: 100, dipSlope: 0 }]
-  };
-
-  assert.equal(model.faultXAtY({ xPercent: 50, dipSlope: 0.2 }, 0, 1000, 600), 440);
-  assert.equal(model.faultXAtY({ xPercent: 50, dipSlope: 0.2 }, 600, 1000, 600), 560);
-  assert.equal(model.topDepth(900, 300, params), 0);
+test('the injector sits in the cell containing the well', () => {
+  const model = VE2D.buildModel(flat({ wellX: 14.1, wellY: 6.1 }));
+  assert.equal(model.well, Math.floor(6100 / model.dy) * model.nx + Math.floor(14100 / model.dx));
 });

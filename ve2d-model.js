@@ -1,21 +1,157 @@
+// ve2d-model.js — sharp-interface vertical-equilibrium (VE) model of CO2 storage in a
+// confined saline aquifer. SI units internally; scenarios use display units
+// (Mt, mD, m, km, degrees, years). Shared by the page, the worker and Node tests.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.VE2D = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  const YEAR = 365.25 * 86400;
+  const MT = 1e9;
+  const MD = 9.869233e-16;
+  const BAR = 1e5;
+  const KM = 1000;
+  const GRAVITY = 9.81;
+  const LX = 20 * KM;
+  const LY = 12 * KM;
+  const GRIDS = { coarse: [40, 24], standard: [80, 48], fine: [120, 72] };
+
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-  const depthGridCache = new Map();
 
-  const faultYBounds = (fault, height) => {
-    const start = clamp(Number(fault?.yStartPercent ?? 0), 0, 100) / 100 * height;
-    const end = clamp(Number(fault?.yEndPercent ?? 100), 0, 100) / 100 * height;
-    return [Math.min(start, end), Math.max(start, end)];
+  // [min, max, step] in display units. The UI and the normaliser share these bounds.
+  const LIMITS = Object.freeze({
+    years: [100, 2000, 50],
+    seed: [1, 999999, 1],
+    rateMt: [0.1, 5, 0.1],
+    injYears: [1, 100, 1],
+    wellX: [0.5, 19.5, 0.1],
+    wellY: [0.5, 11.5, 0.1],
+    permMd: [10, 5000, 1],
+    porosity: [0.05, 0.35, 0.01],
+    thickness: [10, 200, 1],
+    ct: [0.2, 5, 0.1],
+    rhoCo2: [400, 900, 10],
+    rhoBrine: [1000, 1200, 5],
+    muCo2: [0.02, 0.1, 0.005],
+    muBrine: [0.3, 1.5, 0.05],
+    swr: [0.05, 0.4, 0.01],
+    sgr: [0, 0.4, 0.01],
+    krg: [0.1, 1, 0.05],
+    disRate: [0, 2, 0.05],
+    disCap: [0, 80, 1],
+    depth: [800, 3000, 50],
+    dipDeg: [0, 3, 0.1],
+    dipAz: [0, 359, 1],
+    domes: [0, 4, 1],
+    domeRelief: [0, 150, 5],
+    roughness: [0, 40, 1]
+  });
+  const FAULT_LIMITS = Object.freeze({
+    x: [0, 20, 0.1],
+    y: [0, 12, 0.1],
+    strike: [0, 179, 1],
+    length: [0.5, 30, 0.5],
+    throw: [0, 150, 1],
+    trans: [0, 1, 0.05],
+    sealCap: [0, 200, 1],
+    kf: [0, 1000, 1]
+  });
+  const INTEGER_KEYS = new Set(['years', 'seed', 'injYears', 'domes', 'dipAz']);
+  const MAX_FAULTS = 3;
+
+  const DEFAULT_FAULT = Object.freeze({ x: 9.5, y: 6, strike: 12, length: 8, throw: 12, trans: 0.4, sealCap: 15, kf: 20 });
+  const DEFAULTS = Object.freeze({
+    preset: 'dome-fault',
+    grid: 'standard',
+    boundary: 'open',
+    years: 1000,
+    seed: 3901,
+    rateMt: 1,
+    injYears: 30,
+    wellX: 14,
+    wellY: 6,
+    permMd: 500,
+    porosity: 0.2,
+    thickness: 50,
+    ct: 1,
+    rhoCo2: 700,
+    rhoBrine: 1050,
+    muCo2: 0.055,
+    muBrine: 0.6,
+    swr: 0.27,
+    sgr: 0.2,
+    krg: 0.5,
+    disRate: 0.2,
+    disCap: 53,
+    depth: 1500,
+    dipDeg: 0.6,
+    dipAz: 90,
+    domes: 1,
+    domeRelief: 60,
+    roughness: 4,
+    faults: Object.freeze([DEFAULT_FAULT])
+  });
+
+  const PRESETS = Object.freeze({
+    'dome-fault': {
+      label: 'Dome & leaky fault',
+      description: 'CO₂ migrates up-dip past a partly sealing fault into a dome. Shows every trapping mechanism.',
+      patch: {}
+    },
+    dipping: {
+      label: 'Dipping aquifer',
+      description: 'A plain 1° slope: the plume migrates up-dip, leaving a residual trail, and dissolves.',
+      patch: { dipDeg: 1, domes: 0, roughness: 2, faults: [] }
+    },
+    anticline: {
+      label: 'Anticline trap',
+      description: 'A large dome up-dip of the injector fills to its spill point and then spills.',
+      patch: { dipDeg: 0.4, domes: 1, domeRelief: 110, roughness: 2, faults: [] }
+    },
+    'sealed-block': {
+      label: 'Sealed fault block',
+      description: 'Two sealing faults and closed boundaries: CO₂ is contained, pressure builds up.',
+      patch: {
+        boundary: 'closed', dipDeg: 0.4, domes: 0, roughness: 3, injYears: 20,
+        faults: [
+          { x: 8, y: 6, strike: 5, length: 14, throw: 40, trans: 0, sealCap: 200, kf: 0 },
+          { x: 16.5, y: 6, strike: 170, length: 14, throw: 30, trans: 0, sealCap: 200, kf: 0 }
+        ]
+      }
+    },
+    rough: {
+      label: 'Rough top surface',
+      description: 'Small undulations in the caprock create many small structural traps.',
+      patch: { dipDeg: 0.5, domes: 0, roughness: 20, faults: [] }
+    }
+  });
+
+  const normalizeFault = raw => {
+    const fault = {};
+    for (const [key, [min, max]] of Object.entries(FAULT_LIMITS)) {
+      const value = Number(raw?.[key]);
+      fault[key] = Number.isFinite(value) ? clamp(value, min, max) : DEFAULT_FAULT[key];
+    }
+    return fault;
   };
 
-  const faultCoversY = (fault, y, height) => {
-    const [minY, maxY] = faultYBounds(fault, height);
-    return y >= minY - 1e-9 && y <= maxY + 1e-9;
+  const normalizeScenario = (raw = {}) => {
+    const scenario = {
+      preset: typeof raw.preset === 'string' ? raw.preset : DEFAULTS.preset,
+      grid: Object.prototype.hasOwnProperty.call(GRIDS, raw.grid) ? raw.grid : DEFAULTS.grid,
+      boundary: raw.boundary === 'closed' || raw.boundary === 'open' ? raw.boundary : DEFAULTS.boundary
+    };
+    for (const [key, [min, max]] of Object.entries(LIMITS)) {
+      const value = Number(raw[key]);
+      const bounded = Number.isFinite(value) && raw[key] !== '' && raw[key] !== null ? clamp(value, min, max) : DEFAULTS[key];
+      scenario[key] = INTEGER_KEYS.has(key) ? Math.round(bounded) : bounded;
+    }
+    const faults = Array.isArray(raw.faults) ? raw.faults : DEFAULTS.faults;
+    scenario.faults = faults.slice(0, MAX_FAULTS).map(normalizeFault);
+    return scenario;
   };
+
+  // ------------------------------------------------------------------ geometry
 
   const hashNoise = (x, y, seed) => {
     const value = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453;
@@ -25,325 +161,206 @@
   const smoothNoise = (x, y, seed) => {
     const x0 = Math.floor(x);
     const y0 = Math.floor(y);
-    const tx = x - x0;
-    const ty = y - y0;
     const smooth = value => value * value * (3 - 2 * value);
-    const sx = smooth(tx);
-    const sy = smooth(ty);
+    const sx = smooth(x - x0);
+    const sy = smooth(y - y0);
     const n00 = hashNoise(x0, y0, seed);
     const n10 = hashNoise(x0 + 1, y0, seed);
     const n01 = hashNoise(x0, y0 + 1, seed);
     const n11 = hashNoise(x0 + 1, y0 + 1, seed);
     const top = n00 + (n10 - n00) * sx;
-    const bottom = n01 + (n11 - n01) * sx;
-    return top + (bottom - top) * sy;
+    return top + (n01 + (n11 - n01) * sx - top) * sy;
   };
 
-  const terrainNoise = (x, y, seed) => {
+  // Multi-octave value noise in [-1, 1]; coordinates in units of the domain height.
+  const roughnessField = (u, v, seed) => {
     let value = 0;
     let weight = 0;
     let amplitude = 1;
     for (let octave = 0; octave < 5; octave++) {
-      const scale = 1.5 * (2 ** octave);
-      value += smoothNoise(x * scale, y * scale, seed + octave * 101) * amplitude;
+      const scale = 1.6 * (2 ** octave);
+      value += (smoothNoise(u * scale, v * scale, seed + octave * 101) - 0.5) * 2 * amplitude;
       weight += amplitude;
-      amplitude *= 0.5;
+      amplitude *= 0.55;
     }
     return value / weight;
   };
 
-  // Seeded, anisotropic domes and basins give the surface a structural character
-  // without the repeating bands produced by a sinusoidal field.
-  const terrainFeatureField = (x, y, seed) => {
-    let value = 0;
-    for (let index = 0; index < 11; index++) {
-      const centerX = 0.08 + hashNoise(index * 1.7, 0.3, seed + 17) * 0.84;
-      const centerY = 0.08 + hashNoise(index * 2.3, 0.7, seed + 41) * 0.84;
-      const angle = hashNoise(index * 3.1, 1.1, seed + 73) * Math.PI * 2;
-      const major = 0.1 + hashNoise(index * 4.1, 1.5, seed + 101) * 0.18;
-      const minor = 0.05 + hashNoise(index * 5.3, 1.9, seed + 131) * 0.12;
-      const dx = x - centerX;
-      const dy = y - centerY;
-      const along = dx * Math.cos(angle) + dy * Math.sin(angle);
-      const across = -dx * Math.sin(angle) + dy * Math.cos(angle);
-      const amplitude = (index % 2 ? -1 : 1) * (0.45 + hashNoise(index * 6.7, 2.2, seed + 163) * 0.55);
-      value += amplitude * Math.exp(-0.5 * ((along / major) ** 2 + (across / minor) ** 2));
+  const domeCentres = scenario => Array.from({ length: scenario.domes }, (_, index) => ({
+    x: (0.12 + 0.76 * hashNoise(index * 2.1, 0.4, scenario.seed + 503)) * LX,
+    y: (0.15 + 0.7 * hashNoise(index * 2.9, 0.8, scenario.seed + 547)) * LY,
+    angle: hashNoise(index * 3.7, 1.2, scenario.seed + 571) * Math.PI
+  }));
+
+  const faultFrame = fault => {
+    const strike = fault.strike * Math.PI / 180;
+    const along = [Math.sin(strike), Math.cos(strike)];
+    return { cx: fault.x * KM, cy: fault.y * KM, half: fault.length * KM / 2, along, normal: [along[1], -along[0]] };
+  };
+
+  // Parabolic throw profile along strike (zero at the tips). The hanging wall, to the
+  // right of the strike direction, is downthrown; the offset decays away from the fault.
+  const faultThrowAt = (fault, frame, x, y) => {
+    const dx = x - frame.cx;
+    const dy = y - frame.cy;
+    const t = (dx * frame.along[0] + dy * frame.along[1]) / frame.half;
+    if (Math.abs(t) >= 1) return 0;
+    return fault.throw * (1 - t * t);
+  };
+
+  const faultOffset = (fault, frame, x, y) => {
+    const side = (x - frame.cx) * frame.normal[0] + (y - frame.cy) * frame.normal[1];
+    if (side <= 0) return 0;
+    return faultThrowAt(fault, frame, x, y) * Math.exp(-side / (1.5 * frame.half));
+  };
+
+  const topDepth = (x, y, scenario, cache) => {
+    const azimuth = scenario.dipAz * Math.PI / 180;
+    const slope = Math.tan(scenario.dipDeg * Math.PI / 180);
+    let depth = scenario.depth + slope * ((x - LX / 2) * Math.sin(azimuth) + (y - LY / 2) * Math.cos(azimuth));
+    const domes = cache?.domes || domeCentres(scenario);
+    for (const dome of domes) {
+      const dx = x - dome.x;
+      const dy = y - dome.y;
+      const along = dx * Math.cos(dome.angle) + dy * Math.sin(dome.angle);
+      const across = -dx * Math.sin(dome.angle) + dy * Math.cos(dome.angle);
+      depth -= scenario.domeRelief * Math.exp(-0.5 * ((along / 2400) ** 2 + (across / 1600) ** 2));
     }
-    return clamp(value * 0.62, -1, 1);
-  };
-
-  // Seeded multi-scale terrain field. It deliberately avoids periodic waves.
-  const terrainWaveField = (x, y, seed) => {
-    const warpX = (smoothNoise(x * 1.1 + 4.1, y * 1.1 + 8.7, seed + 19) - 0.5) * 0.18;
-    const warpY = (smoothNoise(x * 1.1 + 13.3, y * 1.1 + 2.6, seed + 43) - 0.5) * 0.18;
-    const warpedX = x + warpX;
-    const warpedY = y + warpY;
-    const rotation = hashNoise(0.7, 0.2, seed + 59) * Math.PI * 2;
-    const rotatedX = warpedX * Math.cos(rotation) - warpedY * Math.sin(rotation);
-    const rotatedY = warpedX * Math.sin(rotation) + warpedY * Math.cos(rotation);
-    const broad = terrainFeatureField(warpedX, warpedY, seed + 211);
-    const regional = terrainFeatureField(rotatedX * 0.78 + 0.2, rotatedY * 0.78 + 0.2, seed + 307);
-    const detail = (terrainNoise(warpedX * 2.4, warpedY * 2.4, seed + 401) - 0.5) * 2;
-    return clamp(broad * 0.68 + regional * 0.22 + detail * 0.1, -1, 1);
-  };
-
-  const structuralDomeField = (x, y, count, seed) => {
-    let value = 0;
-    for (let index = 0; index < count; index++) {
-      const centerX = count === 1 ? 0.5 : 0.18 + hashNoise(index * 2.1, 0.4, seed + 503) * 0.64;
-      const centerY = count === 1 ? 0.5 : 0.18 + hashNoise(index * 2.9, 0.8, seed + 547) * 0.64;
-      const angle = hashNoise(index * 3.7, 1.2, seed + 571) * Math.PI;
-      const along = (x - centerX) * Math.cos(angle) + (y - centerY) * Math.sin(angle);
-      const across = -(x - centerX) * Math.sin(angle) + (y - centerY) * Math.cos(angle);
-      value += Math.exp(-0.5 * ((along / 0.25) ** 2 + (across / 0.15) ** 2));
-    }
-    return value / count;
-  };
-
-  const createVe2dState = ({ cols = 48, rows = 30 } = {}) => {
-    cols = clamp(Math.round(cols), 6, 160);
-    rows = clamp(Math.round(rows), 6, 100);
-    const size = cols * rows;
-    return {
-      cols,
-      rows,
-      h: new Array(size).fill(0),
-      hMax: new Array(size).fill(0),
-      masses: { injected: 0, trapped: 0, mobile: 0, leaked: 0 }
-    };
-  };
-
-  const faultXAtY = (fault, y, width, height) =>
-    (Number(fault?.xPercent) || 0) / 100 * width + (Number(fault?.dipSlope) || 0) * (y - height / 2);
-
-  const faultSide = (x, y, fault, width, height) => x - faultXAtY(fault, y, width, height);
-
-  const faultDisplacement = (x, y, fault, index, params) => {
-    const [minY, maxY] = faultYBounds(fault, params.height);
-    const lineX = faultXAtY(fault, y, params.width, params.height);
-    if (y < minY || y > maxY || lineX <= 0 || lineX >= params.width || x <= lineX) return 0;
-    const segmentLength = Math.max(1, maxY - minY);
-    const taperLength = Math.min(params.height * 0.18, segmentLength * 0.45);
-    const smoothstep = value => value * value * (3 - 2 * value);
-    const startTaper = taperLength ? smoothstep(Math.max(0, Math.min(1, (y - minY) / taperLength))) : 1;
-    const endTaper = taperLength ? smoothstep(Math.max(0, Math.min(1, (maxY - y) / taperLength))) : 1;
-    return (index % 2 === 0 ? 1 : -1) * (params.faultOffset || 0) * 0.8 * Math.min(startTaper, endTaper);
-  };
-
-  const faceTransmissibility = (x1, y1, x2, y2, faults, width, height) => {
-    let multiplier = 1;
-    for (const fault of faults) {
-      const sideA = faultSide(x1, y1, fault, width, height);
-      const sideB = faultSide(x2, y2, fault, width, height);
-      if (sideA * sideB <= 0) {
-        const denominator = Math.abs(sideA) + Math.abs(sideB);
-        const crossRatio = denominator > 1e-12 ? Math.abs(sideA) / denominator : 0.5;
-        const crossY = y1 + (y2 - y1) * crossRatio;
-        if (!faultCoversY(fault, crossY, height)) continue;
-        multiplier = Math.min(multiplier, fault.isSealed ? 0 : clamp(fault.transmissibility ?? 1, 0, 1));
-      }
-    }
-    return multiplier;
-  };
-
-  const topDepth = (x, y, params) => {
-    const { width, height } = params;
-    const xn = x / width - 0.5;
-    const yn = y / height - 0.5;
-    // UI inputs are percentages; use their fractional value in the depth field.
-    const dip = xn * (params.dipX || 0) * 0.04 + yn * (params.dipY || 0) * 0.04;
-    const amplitude = (params.structureAmplitude || 0) / 15;
-    const structureCount = clamp(Math.round(params.structureFrequency || 1), 1, 4);
-    const structureSeed = Number.isFinite(Number(params.terrainSeed)) ? Number(params.terrainSeed) : 0;
-    let depth = dip - amplitude * structuralDomeField(x / width, y / height, structureCount, structureSeed);
-    const heterogeneity = clamp(Number(params.heterogeneity ?? 0), 0, 1);
-    if (heterogeneity > 0) {
-      const seed = Number.isFinite(Number(params.terrainSeed)) ? Number(params.terrainSeed) : 0;
-      const normalizedX = x / width;
-      const normalizedY = y / height;
-      const waveField = terrainWaveField(normalizedX, normalizedY, seed);
-      const fineNoise = (terrainNoise(normalizedX, normalizedY, seed) - 0.5) * 2;
-      depth += (waveField * 0.9 + fineNoise * 0.1) * heterogeneity * 3;
-    }
-    for (let i = 0; i < (params.faults || []).length; i++) {
-      depth += faultDisplacement(x, y, params.faults[i], i, params);
-    }
+    if (scenario.roughness > 0) depth += scenario.roughness * roughnessField(x / LY, y / LY, scenario.seed);
+    const frames = cache?.frames || scenario.faults.map(faultFrame);
+    scenario.faults.forEach((fault, index) => { depth += faultOffset(fault, frames[index], x, y); });
     return depth;
   };
 
-  const partition = (height, maximum, residualFraction) => {
-    const mobile = residualFraction < 1
-      ? Math.max(0, (height - residualFraction * maximum) / (1 - residualFraction))
-      : 0;
-    const boundedMobile = Math.min(height, mobile);
-    return { mobile: boundedMobile, trapped: Math.max(0, height - boundedMobile) };
+  // Segment p–q against the fault trace; returns the along-strike parameter t in [-1, 1] or null.
+  const traceCrossing = (frame, px, py, qx, qy) => {
+    const ax = frame.cx - frame.along[0] * frame.half;
+    const ay = frame.cy - frame.along[1] * frame.half;
+    const bx = frame.cx + frame.along[0] * frame.half;
+    const by = frame.cy + frame.along[1] * frame.half;
+    const rx = qx - px;
+    const ry = qy - py;
+    const sx = bx - ax;
+    const sy = by - ay;
+    const denominator = rx * sy - ry * sx;
+    if (Math.abs(denominator) < 1e-12) return null;
+    const u = ((ax - px) * sy - (ay - py) * sx) / denominator;
+    const v = ((ax - px) * ry - (ay - py) * rx) / denominator;
+    if (u < 0 || u > 1 || v < 0 || v > 1) return null;
+    return 2 * v - 1;
   };
 
-  const stepVe2d = (state, inputParams, frame) => {
-    const cols = state.cols;
-    const rows = state.rows;
-    const params = {
-      width: 1000,
-      height: 600,
-      permeability: 1.7,
-      porosity: 0.25,
-      residualTrapFraction: 0.25,
-      injectionRate: 0,
-      injectionDuration: 0,
-      wellX: 50,
-      wellY: 50,
-      dipX: 0,
-      dipY: 0,
-      structureAmplitude: 0,
-      structureFrequency: 1,
-      faultOffset: 0,
-      terrainSeed: 0,
-      heterogeneity: 0,
-      boundaryCondition: 'initial-pressure',
-      faults: [],
-      ...inputParams
+  const buildModel = rawScenario => {
+    const scenario = normalizeScenario(rawScenario);
+    const [nx, ny] = GRIDS[scenario.grid];
+    const n = nx * ny;
+    const dx = LX / nx;
+    const dy = LY / ny;
+    const H = scenario.thickness;
+    const p = {
+      k: scenario.permMd * MD,
+      phi: scenario.porosity,
+      H,
+      rhoG: scenario.rhoCo2,
+      rhoW: scenario.rhoBrine,
+      dRho: scenario.rhoBrine - scenario.rhoCo2,
+      g: GRAVITY,
+      muG: scenario.muCo2 * 1e-3,
+      muW: scenario.muBrine * 1e-3,
+      swr: scenario.swr,
+      sgr: Math.min(scenario.sgr, 0.95 - scenario.swr),
+      krg: scenario.krg,
+      ct: scenario.ct * 1e-4 / BAR,
+      rate: scenario.rateMt * MT / YEAR,
+      injEnd: scenario.injYears * YEAR,
+      tEnd: scenario.years * YEAR,
+      disRate: scenario.disRate / YEAR,
+      disCap: scenario.disCap,
+      open: scenario.boundary === 'open'
     };
-    params.faults = (params.faults || []).filter(Boolean);
-    params.porosity = clamp(params.porosity, 0.01, 0.8);
-    params.residualTrapFraction = clamp(params.residualTrapFraction, 0, 0.95);
-    const openBoundary = params.boundaryCondition !== 'closed';
+    const cache = { domes: domeCentres(scenario), frames: scenario.faults.map(faultFrame) };
+    const depthAt = (x, y) => topDepth(x, y, scenario, cache);
 
-    const dx = params.width / cols;
-    const dy = params.height / rows;
-    const scaledArea = (dx / 5) * (dy / 5);
-    const substeps = 6;
-    const dt = 1 / substeps;
-    const capacity = 12;
-    const mobility = 0.12 * clamp(params.permeability / params.porosity, 0.05, 20);
-    let h = state.h.slice();
-    const hMax = state.hMax.slice();
-    let injected = state.masses.injected;
-    let leaked = state.masses.leaked;
+    const xc = Float64Array.from({ length: nx }, (_, i) => (i + 0.5) * dx);
+    const yc = Float64Array.from({ length: ny }, (_, j) => (j + 0.5) * dy);
+    const zt = new Float64Array(n);
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) zt[j * nx + i] = depthAt(xc[i], yc[j]);
 
-    const geometryKey = JSON.stringify({
-      cols, rows, width: params.width, height: params.height, dipX: params.dipX, dipY: params.dipY,
-      structureAmplitude: params.structureAmplitude, structureFrequency: params.structureFrequency,
-      faultOffset: params.faultOffset, terrainSeed: params.terrainSeed, heterogeneity: params.heterogeneity, faults: params.faults
+    // Face multiplier: cross-fault transmissibility times the juxtaposed fraction of H.
+    const multiplier = (px, py, qx, qy) => {
+      let value = 1;
+      scenario.faults.forEach((fault, index) => {
+        const t = traceCrossing(cache.frames[index], px, py, qx, qy);
+        if (t === null) return;
+        const localThrow = fault.throw * (1 - t * t);
+        value = Math.min(value, fault.trans * Math.max(0, 1 - localThrow / H));
+      });
+      return value;
+    };
+
+    const tx = new Float64Array((nx + 1) * ny);
+    const mx = new Float64Array((nx + 1) * ny);
+    const ghostX = new Float64Array((nx + 1) * ny).fill(NaN);
+    for (let j = 0; j < ny; j++) {
+      for (let f = 0; f <= nx; f++) {
+        const index = j * (nx + 1) + f;
+        const boundary = f === 0 || f === nx;
+        tx[index] = p.k * dy / (boundary ? dx / 2 : dx);
+        mx[index] = boundary
+          ? multiplier(f === 0 ? xc[0] : xc[nx - 1], yc[j], f * dx, yc[j])
+          : multiplier(xc[f - 1], yc[j], xc[f], yc[j]);
+        if (boundary) ghostX[index] = depthAt(f * dx, yc[j]);
+      }
+    }
+    const ty = new Float64Array(nx * (ny + 1));
+    const my = new Float64Array(nx * (ny + 1));
+    const ghostY = new Float64Array(nx * (ny + 1)).fill(NaN);
+    for (let f = 0; f <= ny; f++) {
+      for (let i = 0; i < nx; i++) {
+        const index = f * nx + i;
+        const boundary = f === 0 || f === ny;
+        ty[index] = p.k * dx / (boundary ? dy / 2 : dy);
+        my[index] = boundary
+          ? multiplier(xc[i], f === 0 ? yc[0] : yc[ny - 1], xc[i], f * dy)
+          : multiplier(xc[i], yc[f - 1], xc[i], yc[f]);
+        if (boundary) ghostY[index] = depthAt(xc[i], f * dy);
+      }
+    }
+
+    // Fault-zone leakage: trace length inside each cell, so the leak rate per metre of
+    // fault does not depend on the grid.
+    const leakCells = [];
+    const faultLines = [];
+    scenario.faults.forEach((fault, faultIndex) => {
+      const frame = cache.frames[faultIndex];
+      const x0 = frame.cx - frame.along[0] * frame.half;
+      const y0 = frame.cy - frame.along[1] * frame.half;
+      const x1 = frame.cx + frame.along[0] * frame.half;
+      const y1 = frame.cy + frame.along[1] * frame.half;
+      faultLines.push([x0, y0, x1, y1]);
+      if (!(fault.kf > 0)) return;
+      const samples = Math.max(1, Math.ceil(fault.length * KM / (Math.min(dx, dy) / 20)));
+      const ds = fault.length * KM / samples;
+      const lengths = new Map();
+      for (let s = 0; s < samples; s++) {
+        const w = (s + 0.5) / samples;
+        const x = x0 + (x1 - x0) * w;
+        const y = y0 + (y1 - y0) * w;
+        if (x < 0 || x >= LX || y < 0 || y >= LY) continue;
+        const cell = Math.floor(y / dy) * nx + Math.floor(x / dx);
+        lengths.set(cell, (lengths.get(cell) || 0) + ds);
+      }
+      for (const [cell, length] of lengths) leakCells.push({ cell, length, fault: faultIndex });
     });
-    let geometry = depthGridCache.get(geometryKey);
-    if (!geometry) {
-      const cellX = new Array(h.length);
-      const cellY = new Array(h.length);
-      const cellDepth = new Array(h.length);
-      for (let index = 0; index < h.length; index++) {
-        cellX[index] = (index % cols + 0.5) * dx;
-        cellY[index] = (Math.floor(index / cols) + 0.5) * dy;
-        cellDepth[index] = topDepth(cellX[index], cellY[index], params);
-      }
-      geometry = { cellX, cellY, cellDepth };
-      depthGridCache.set(geometryKey, geometry);
-      if (depthGridCache.size > 8) depthGridCache.delete(depthGridCache.keys().next().value);
-    }
-    const { cellX, cellY, cellDepth } = geometry;
 
-    for (let substep = 0; substep < substeps; substep++) {
-      const mobile = h.map((value, index) => partition(value, hMax[index], params.residualTrapFraction).mobile);
-      const delta = new Array(h.length).fill(0);
-      let boundaryOutflow = 0;
+    const well = clamp(Math.floor(scenario.wellY * KM / dy), 0, ny - 1) * nx + clamp(Math.floor(scenario.wellX * KM / dx), 0, nx - 1);
 
-      const transfer = (from, to, distance) => {
-        const trans = faceTransmissibility(cellX[from], cellY[from], cellX[to], cellY[to], params.faults, params.width, params.height);
-        if (trans === 0) return;
-        const potentialA = cellDepth[from] + h[from];
-        const potentialB = cellDepth[to] + h[to];
-        if (Math.abs(potentialA - potentialB) < 1e-12) return;
-        const donor = potentialA > potentialB ? from : to;
-        const receiver = donor === from ? to : from;
-        const gradient = Math.abs(potentialA - potentialB) / Math.max(1, distance / 50);
-        const amount = Math.min(
-          mobile[donor] * 0.22,
-          mobility * mobile[donor] * gradient * dt * trans
-        );
-        delta[donor] -= amount;
-        delta[receiver] += amount;
-      };
-
-      for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-          const index = row * cols + col;
-          if (col + 1 < cols) transfer(index, index + 1, dx);
-          if (row + 1 < rows) transfer(index, index + cols, dy);
-          if (openBoundary && (col === 0 || col === cols - 1 || row === 0 || row === rows - 1)) {
-            const boundaryDistance = col === 0 || col === cols - 1 ? dx / 2 : dy / 2;
-            const gradient = h[index] / Math.max(1, boundaryDistance / 50);
-            const amount = Math.min(
-              mobile[index] * 0.22,
-              mobility * mobile[index] * gradient * dt
-            );
-            delta[index] -= amount;
-            boundaryOutflow += amount;
-          }
-        }
-      }
-      h = h.map((value, index) => Math.max(0, value + delta[index]));
-      leaked += boundaryOutflow * params.porosity * scaledArea;
-
-      if (params.injectionRate > 0 && frame <= params.injectionDuration) {
-        const wellCol = clamp(Math.floor((params.wellX / 100) * cols), 0, cols - 1);
-        const wellRow = clamp(Math.floor((params.wellY / 100) * rows), 0, rows - 1);
-        const cells = [];
-        let weightSum = 0;
-        for (let oy = -1; oy <= 1; oy++) {
-          for (let ox = -1; ox <= 1; ox++) {
-            const col = wellCol + ox;
-            const row = wellRow + oy;
-            if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
-            const weight = Math.exp(-(ox * ox + oy * oy));
-            cells.push({ index: row * cols + col, weight });
-            weightSum += weight;
-          }
-        }
-        const injectedThisStep = params.injectionRate * dt;
-        for (const cell of cells) {
-          h[cell.index] += (injectedThisStep * cell.weight / weightSum) / (params.porosity * scaledArea);
-        }
-        injected += injectedThisStep;
-      }
-
-      for (let index = 0; index < h.length; index++) {
-        for (const fault of params.faults) {
-          if (fault.isSealed || !fault.leakRate) continue;
-          if (!faultCoversY(fault, cellY[index], params.height)) continue;
-          const distance = Math.abs(faultSide(cellX[index], cellY[index], fault, params.width, params.height));
-          if (distance > Math.max(dx, dy) * 0.55 || h[index] <= (fault.thresholdHeight || 0)) continue;
-          const lostHeight = Math.min(h[index] - (fault.thresholdHeight || 0), fault.leakRate * dt * 0.12);
-          h[index] -= lostHeight;
-          leaked += lostHeight * params.porosity * scaledArea;
-        }
-        if (h[index] > capacity) {
-          leaked += (h[index] - capacity) * params.porosity * scaledArea;
-          h[index] = capacity;
-        }
-        hMax[index] = Math.max(hMax[index], h[index]);
-      }
-    }
-
-    let mobileMass = 0;
-    let trappedMass = 0;
-    for (let index = 0; index < h.length; index++) {
-      const phases = partition(h[index], hMax[index], params.residualTrapFraction);
-      mobileMass += phases.mobile * params.porosity * scaledArea;
-      trappedMass += phases.trapped * params.porosity * scaledArea;
-    }
-
-    return {
-      cols,
-      rows,
-      h,
-      hMax,
-      masses: {
-        injected: +injected.toFixed(4),
-        trapped: +trappedMass.toFixed(4),
-        mobile: +mobileMass.toFixed(4),
-        leaked: +leaked.toFixed(4)
-      }
-    };
+    return { scenario, nx, ny, n, dx, dy, Lx: LX, Ly: LY, area: dx * dy, H, p, xc, yc, zt, tx, ty, mx, my, ghostX, ghostY, leakCells, faultLines, well, depthAt };
   };
 
-  return { createVe2dState, stepVe2d, topDepth, faceTransmissibility, faultCoversY, faultXAtY, terrainNoise, terrainFeatureField, terrainWaveField, structuralDomeField, faultDisplacement };
+  return {
+    YEAR, MT, MD, BAR, KM, GRAVITY, LX, LY, GRIDS,
+    LIMITS, FAULT_LIMITS, DEFAULTS, PRESETS, MAX_FAULTS,
+    normalizeScenario, topDepth, buildModel, roughnessField
+  };
 });
