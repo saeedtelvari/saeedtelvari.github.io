@@ -517,9 +517,189 @@
     return Float64Array.from(out);
   };
 
+  // ------------------------------------------------------------------ dynamics
+
+  const CFL = 0.4;
+
+  const createState = model => {
+    const { n, nx, ny } = model;
+    return {
+      t: 0,
+      steps: 0,
+      h: new Float64Array(n),
+      hMax: new Float64Array(n),
+      s: new Float64Array(n),
+      md: new Float64Array(n),
+      p: new Float64Array(n),
+      ux: new Float64Array((nx + 1) * ny),
+      uy: new Float64Array(nx * (ny + 1)),
+      fx: new Float64Array((nx + 1) * ny),
+      fy: new Float64Array(nx * (ny + 1)),
+      net: new Float64Array(n),
+      rate: new Float64Array(n),
+      leaking: new Uint8Array(model.scenario.faults.length),
+      injected: 0,
+      exited: 0,
+      leaked: 0,
+      dissolved: 0,
+      pressureActive: true
+    };
+  };
+
+  // CO2 volume per area s = phi[(1 - Swr) h + Sgr (hMax - h)] -> (h, hMax).
+  const invertColumn = (p, state, c) => {
+    const s = state.s[c];
+    const drain = p.phi * (1 - p.swr);
+    const residual = p.phi * p.sgr;
+    const hMax = state.hMax[c];
+    if (s >= drain * hMax) {
+      state.h[c] = state.hMax[c] = s / drain;
+    } else if (s >= residual * hMax) {
+      state.h[c] = (s - residual * hMax) / (drain - residual);
+    } else {
+      state.h[c] = 0;
+      state.hMax[c] = residual > 0 ? s / residual : 0;
+    }
+  };
+
+  // Gas volume flux across one face (positive from side A to side B) with hybrid
+  // upwinding: the viscous part follows the total flux, buoyancy follows the phase
+  // potentials (gas from the deeper interface, brine the other way).
+  const faceFlux = (k, T, U, zetaA, zetaB, hA, hB, H, scratch) => {
+    if (hA <= 0 && hB <= 0) {
+      scratch.bound = 0;
+      return 0;
+    }
+    const a = k.a;
+    const b = k.b;
+    const dz = zetaA - zetaB;
+    let mob = 0;
+    let gravity = 0;
+    if (dz !== 0 && T > 0) {
+      const gas = a * Math.min(dz > 0 ? hA : hB, H);
+      const brine = b * Math.max(0, H - (dz > 0 ? hB : hA));
+      mob = gas + brine > 0 ? gas * brine / (gas + brine) : 0;
+      gravity = T * k.tg * dz * mob;
+    }
+    let viscous = 0;
+    if (U !== 0) {
+      const hu = Math.min(U > 0 ? hA : hB, H);
+      const gas = a * hu;
+      const brine = b * (H - hu);
+      viscous = gas + brine > 0 ? U * gas / (gas + brine) : 0;
+    }
+    scratch.bound = T * k.tg * (mob + Math.abs(dz) * (a + b)) + Math.abs(U) * k.fPrime;
+    return viscous + gravity;
+  };
+
+  const stepTransport = (model, state, dtMax) => {
+    const { nx, ny, n, p, tx, ty, mx, my, zt, ghostX, ghostY, area, H } = model;
+    const { h, s, ux, uy, fx, fy, net, rate } = state;
+    const a = p.krg / p.muG;
+    const b = 1 / p.muW;
+    const k = { a, b, tg: p.dRho * p.g, fPrime: Math.max(a / b, b / a) / H };
+    const scratch = { bound: 0 };
+    net.fill(0);
+    rate.fill(0);
+
+    for (let j = 0; j < ny; j++) {
+      for (let f = 0; f <= nx; f++) {
+        const index = j * (nx + 1) + f;
+        const T = tx[index] * mx[index];
+        if (f === 0 || f === nx) {
+          if (!p.open || T === 0) { fx[index] = 0; continue; }
+          const c = j * nx + (f === 0 ? 0 : nx - 1);
+          // Outward-positive flux from the boundary cell into its hydrostatic ghost.
+          const outward = f === 0 ? -ux[index] : ux[index];
+          const flux = faceFlux(k, T, outward, zt[c] + h[c], ghostX[index], h[c], 0, H, scratch);
+          fx[index] = f === 0 ? -flux : flux;
+          net[c] -= flux;
+          rate[c] += scratch.bound;
+          continue;
+        }
+        const L = j * nx + f - 1;
+        const R = L + 1;
+        if (T === 0) { fx[index] = 0; continue; }
+        const flux = faceFlux(k, T, ux[index], zt[L] + h[L], zt[R] + h[R], h[L], h[R], H, scratch);
+        fx[index] = flux;
+        net[L] -= flux;
+        net[R] += flux;
+        rate[L] += scratch.bound;
+        rate[R] += scratch.bound;
+      }
+    }
+    for (let f = 0; f <= ny; f++) {
+      for (let i = 0; i < nx; i++) {
+        const index = f * nx + i;
+        const T = ty[index] * my[index];
+        if (f === 0 || f === ny) {
+          if (!p.open || T === 0) { fy[index] = 0; continue; }
+          const c = (f === 0 ? 0 : ny - 1) * nx + i;
+          const outward = f === 0 ? -uy[index] : uy[index];
+          const flux = faceFlux(k, T, outward, zt[c] + h[c], ghostY[index], h[c], 0, H, scratch);
+          fy[index] = f === 0 ? -flux : flux;
+          net[c] -= flux;
+          rate[c] += scratch.bound;
+          continue;
+        }
+        const S = (f - 1) * nx + i;
+        const N = S + nx;
+        if (T === 0) { fy[index] = 0; continue; }
+        const flux = faceFlux(k, T, uy[index], zt[S] + h[S], zt[N] + h[N], h[S], h[N], H, scratch);
+        fy[index] = flux;
+        net[S] -= flux;
+        net[N] += flux;
+        rate[S] += scratch.bound;
+        rate[N] += scratch.bound;
+      }
+    }
+
+    const injecting = state.t < p.injEnd && p.rate > 0;
+    const volumeRate = injecting ? p.rate / p.rhoG : 0;
+    net[model.well] += volumeRate;
+
+    // Explicit stability: the smallest storage coefficient (imbibition) bounds the step,
+    // and one step may fill at most a tenth of the injector cell's pore volume.
+    const storage = p.phi * Math.max(1e-3, 1 - p.swr - p.sgr) * area;
+    let dt = volumeRate > 0 ? Math.min(dtMax, 0.1 * p.phi * (1 - p.swr) * H * area / volumeRate) : dtMax;
+    for (let c = 0; c < n; c++) if (rate[c] > 0) dt = Math.min(dt, CFL * storage / rate[c]);
+    // Never let a column go negative: shrink the step instead of clipping mass.
+    for (let c = 0; c < n; c++) {
+      if (net[c] < 0 && s[c] + dt * net[c] / area < 0) dt = Math.min(dt, 0.999 * s[c] * area / -net[c]);
+    }
+
+    for (let c = 0; c < n; c++) {
+      if (net[c] === 0) continue;
+      s[c] += dt * net[c] / area;
+      if (s[c] < 0) s[c] = 0;
+      invertColumn(p, state, c);
+    }
+
+    let outflow = 0;
+    if (p.open) {
+      for (let j = 0; j < ny; j++) outflow += fx[j * (nx + 1) + nx] - fx[j * (nx + 1)];
+      for (let i = 0; i < nx; i++) outflow += fy[ny * nx + i] - fy[i];
+    }
+    state.exited += outflow * dt * p.rhoG;
+    state.injected += volumeRate * dt * p.rhoG;
+    state.t += dt;
+    state.steps++;
+    return dt;
+  };
+
+  const advance = (model, state, tTarget) => {
+    const p = model.p;
+    while (state.t < tTarget * (1 - 1e-12)) {
+      let dtMax = tTarget - state.t;
+      if (state.t < p.injEnd && state.t + dtMax > p.injEnd) dtMax = p.injEnd - state.t;
+      stepTransport(model, state, dtMax);
+    }
+  };
+
   return {
     YEAR, MT, MD, BAR, KM, GRAVITY, LX, LY, GRIDS,
     LIMITS, FAULT_LIMITS, DEFAULTS, PRESETS, MAX_FAULTS,
-    normalizeScenario, topDepth, buildModel, roughnessField, trapAnalysis, contourSegments
+    normalizeScenario, topDepth, buildModel, roughnessField, trapAnalysis, contourSegments,
+    createState, advance
   };
 });

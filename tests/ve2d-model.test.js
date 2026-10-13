@@ -143,3 +143,104 @@ test('contour segments trace a level set between cell centres', () => {
   }
   near(covered, ny - 1, 1e-12, 'segments cover the full height');
 });
+
+// ---------------------------------------------------------------- Task 3
+
+const YEARS = years => years * VE2D.YEAR;
+const storedMass = (model, state) => state.s.reduce((sum, value) => sum + value, 0) * model.area * model.p.rhoG;
+const lens = (model, state, cx, cy, radius, height) => {
+  const drain = model.p.phi * (1 - model.p.swr);
+  for (let c = 0; c < model.n; c++) {
+    const x = model.xc[c % model.nx];
+    const y = model.yc[Math.floor(c / model.nx)];
+    if (Math.hypot(x - cx, y - cy) > radius) continue;
+    state.h[c] = height;
+    state.hMax[c] = height;
+    state.s[c] = drain * height;
+  }
+};
+const centroidX = (model, state) => {
+  let moment = 0;
+  let total = 0;
+  for (let c = 0; c < model.n; c++) { moment += model.xc[c % model.nx] * state.s[c]; total += state.s[c]; }
+  return moment / total;
+};
+
+test('injection and gravity spreading conserve CO2 mass exactly (open and closed)', () => {
+  for (const boundary of ['open', 'closed']) {
+    const model = VE2D.buildModel({ ...VE2D.DEFAULTS, boundary, grid: 'coarse', disRate: 0, faults: [] });
+    const state = VE2D.createState(model);
+    VE2D.advance(model, state, YEARS(300));
+    const accounted = storedMass(model, state) + state.exited + state.leaked + state.dissolved;
+    assert.ok(state.injected > 0, 'CO2 was injected');
+    assert.ok(Math.abs(state.injected - accounted) / state.injected < 1e-9, `${boundary}: ${state.injected} vs ${accounted}`);
+  }
+});
+
+test('plume thickness stays within the aquifer and below its historical maximum', () => {
+  const model = VE2D.buildModel(flat({ dipDeg: 1, rateMt: 0.1, faults: [] }));
+  const state = VE2D.createState(model);
+  model.p.rate = 0;
+  lens(model, state, 14000, 6000, 1500, 30);
+  for (const year of [5, 20, 60, 150]) {
+    VE2D.advance(model, state, YEARS(year));
+    for (let c = 0; c < model.n; c++) {
+      assert.ok(state.h[c] >= 0 && state.h[c] <= model.H + 1e-9, `h in [0, H] at year ${year}`);
+      assert.ok(state.h[c] <= state.hMax[c] + 1e-12, `h <= hMax at year ${year}`);
+    }
+  }
+});
+
+test('injection on a flat aquifer spreads symmetrically around the well', () => {
+  const model = VE2D.buildModel(flat({ boundary: 'closed', wellX: 10.1, wellY: 6.1, injYears: 30 }));
+  const state = VE2D.createState(model);
+  VE2D.advance(model, state, YEARS(20));
+  const w = model.well;
+  const scale = Math.max(...state.h);
+  for (let k = 1; k < 8; k++) {
+    near(state.h[w + k], state.h[w - k], 1e-9 * scale, `x symmetry at ${k}`);
+    near(state.h[w + k * model.nx], state.h[w - k * model.nx], 1e-9 * scale, `y symmetry at ${k}`);
+    near(state.h[w + k], state.h[w + k * model.nx], 1e-9 * scale, `x/y isotropy at ${k}`);
+  }
+});
+
+test('a thin plume migrates up-dip at the buoyant Darcy speed', () => {
+  const model = VE2D.buildModel(flat({ dipDeg: 1, dipAz: 90, thickness: 200, sgr: 0, rateMt: 0.1, injYears: 1, boundary: 'closed' }));
+  const state = VE2D.createState(model);
+  model.p.rate = 0;
+  lens(model, state, 14000, 6000, 1200, 2);
+  const x0 = centroidX(model, state);
+  VE2D.advance(model, state, YEARS(50));
+  const p = model.p;
+  const expected = p.k * p.krg * p.dRho * p.g * Math.sin(Math.PI / 180) / (p.muG * p.phi * (1 - p.swr));
+  const measured = (x0 - centroidX(model, state)) / YEARS(50);
+  assert.ok(Math.abs(measured - expected) / expected < 0.15, `centroid speed ${measured} vs ${expected} m/s`);
+});
+
+test('residual trapping leaves an immobile trail behind a migrating plume', () => {
+  const model = VE2D.buildModel(flat({ dipDeg: 1, sgr: 0.25, rateMt: 0.1, injYears: 1, boundary: 'closed' }));
+  const state = VE2D.createState(model);
+  model.p.rate = 0;
+  lens(model, state, 15000, 6000, 1000, 8);
+  const start = Math.floor(6000 / model.dy) * model.nx + Math.floor(15000 / model.dx);
+  VE2D.advance(model, state, YEARS(400));
+  const res = model.p.phi * model.p.sgr;
+  assert.ok(state.h[start] < 0.05, `mobile column left behind: ${state.h[start]}`);
+  assert.ok(state.s[start] >= res * state.hMax[start] - 1e-12, 'residual CO2 is never removed by transport');
+  let residual = 0;
+  for (let c = 0; c < model.n; c++) residual += res * (state.hMax[c] - state.h[c]);
+  assert.ok(residual / state.s.reduce((a, b) => a + b, 0) > 0.5, 'most of the plume ends up residually trapped');
+});
+
+test('open boundaries release CO2 only where its potential points outward', () => {
+  const run = x => {
+    const model = VE2D.buildModel(flat({ dipDeg: 1, dipAz: 90, sgr: 0, rateMt: 0.1, injYears: 1, boundary: 'open' }));
+    const state = VE2D.createState(model);
+    model.p.rate = 0;
+    lens(model, state, x, 6000, 600, 1);
+    VE2D.advance(model, state, YEARS(30));
+    return state.exited;
+  };
+  assert.equal(run(19800), 0, 'a thin lens at the down-dip edge stays in the model');
+  assert.ok(run(200) > 0, 'a lens at the up-dip edge leaves the model');
+});
