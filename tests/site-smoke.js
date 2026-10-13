@@ -62,7 +62,20 @@ has('build.js', /simulator-bundle\.js/, 'the heavy simulator must have a page-sp
 const simulatorBundleVersions = [...read('simulator.html').matchAll(/simulator-bundle\.js\?v=([^"']+)/g)].map(match => match[1]);
 assert.ok(simulatorBundleVersions.length >= 2, 'simulator bundle must be preloaded and executed');
 assert.equal(new Set(simulatorBundleVersions).size, 1, 'simulator preload and script URLs must use the same cache version');
-assert.equal(simulatorBundleVersions[0], '23', 'simulator page must load the current bundle version');
+assert.equal(simulatorBundleVersions[0], '24', 'simulator page must load the current bundle version');
 lacks('index.html', /simulator-bundle\.js/, 'home page must not download the simulator bundle');
 
+for (const page of ['index.html', 'cv.html']) {
+  lacks(page, /font-awesome/, page + ' uses inline icons');
+  has(page, /<script defer src="https:\/\/unpkg\.com\/react@18\.3\.1/, page + ' defers React');
+  has(page, /<noscript>/, page + ' has a no-JavaScript fallback');
+  has(page, /rel="apple-touch-icon"/, page + ' has a touch icon');
+}
+const bundleVersion = page => [...read(page).matchAll(/(?<!simulator-)bundle\.js\?v=([\d.]+)/g)].map(m => m[1]);
+const versions = new Set(['index.html', 'cv.html', 'simulator.html'].flatMap(bundleVersion));
+assert.equal(versions.size, 1, 'all pages load the same bundle.js version');
+const cssVersions = new Set(['index.html', 'cv.html', 'simulator.html'].flatMap(page => [...read(page).matchAll(/colors_and_type\.css\?v=([\d.]+)/g)].map(m => m[1])));
+assert.equal(cssVersions.size, 1, 'all pages load the same colors_and_type.css version');
+assert.ok(fs.existsSync(path.join(root, 'robots.txt')) && fs.existsSync(path.join(root, 'sitemap.xml')), 'robots.txt and sitemap.xml exist');
+has('SimulatorPage.jsx', /location\.hash === '#method'/, 'the method guide can be linked directly');
 console.log('site smoke contracts passed');

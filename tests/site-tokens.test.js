@@ -15,7 +15,7 @@ test('homepage tokens are the simulator Earth night tokens', () => {
   for (const key of shared) assert.equal(site[key], sim[key], key);
 });
 
-test('no mint, teal, aubergine, indigo or lilac in homepage sources', { todo: 'legacy sections are replaced in Tasks 6–8' }, () => {
+test('no mint, teal, aubergine, indigo or lilac in homepage sources', () => {
   const banned = /#64ffda|#4ecdc4|#0dfca2|#7ee8e2|#a8edea|#20c997|#1a8e8f|#211d34|#1c2645|#1d416e|#2b2336|#c4b5fd|rgba\(100,\s*255,\s*218|rgba\(78,\s*205,\s*196|rgba\(13,\s*252,\s*162/i;
   for (const file of ['index.html', 'cv.html', 'colors_and_type.css', 'App.jsx', 'Header.jsx', 'Footer.jsx', 'Primitives.jsx',
     'SubsurfaceHero.jsx', 'GeologicalDescent.jsx', 'HomeSections.jsx', 'CVPage.jsx', 'site-content.js']) {
