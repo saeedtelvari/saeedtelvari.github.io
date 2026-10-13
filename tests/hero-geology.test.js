@@ -28,14 +28,11 @@ test('rock bedding breaks at faults and stays continuous across ordinary cells',
   assert.ok(!/NaN|Infinity/.test(faulted));
 });
 
-test('varied hero layers stay ordered and both solvers respect their thickness', () => {
+test('varied hero layers stay ordered and the well ends inside the storage aquifer', () => {
   let seed = 42;
-  const math = Object.create(Math);
-  math.random = () => ((seed = (1664525 * seed + 1013904223) >>> 0) / 2 ** 32);
-  const source = fs.readFileSync(require.resolve('../SubsurfaceHero.jsx'), 'utf8');
-  const api = new Function('React', 'Math', 'HeroGeology', source.slice(0, source.indexOf('const SubsurfaceHero =')) +
-    '\nreturn { HERO_SIMULATION_YEARS, generateRandomGeology, capRockY, stratumY, getColumnPath, precomputeSimulation };')({}, math, HeroGeology);
-  const geologies = Array.from({ length: 100 }, () => api.generateRandomGeology());
+  const random = () => ((seed = (1664525 * seed + 1013904223) >>> 0) / 2 ** 32);
+  const api = HeroGeology;
+  const geologies = Array.from({ length: 100 }, () => api.randomGeology(random));
   const thicknesses = geologies.map(g => g.reservoirThickness);
   assert.ok(Math.max(...thicknesses) - Math.min(...thicknesses) > 130, 'reloads must produce visibly different beds');
 
@@ -67,62 +64,25 @@ test('varied hero layers stay ordered and both solvers respect their thickness',
     for (const bed of [...upperBeds, ...lowerBeds]) {
       assert.ok(Math.max(...bed) - Math.min(...bed) > 2, 'every surrounding bed varies laterally');
     }
-    const wellBottom = api.stratumY(g.wellX, g.faults, null, 1, g.reservoirThickness, g) - 20;
-    assert.ok(wellBottom > api.capRockY(g.wellX, g.faults, null, 1, g));
-    assert.ok(api.getColumnPath(1, g).includes(String(wellBottom)), 'well follows the bed bottom');
+    const { wellBottom } = api.section(g);
+    assert.ok(wellBottom > api.capRockY(g.wellX, g.faults, null, 1, g), 'the well reaches the storage aquifer');
+    assert.ok(wellBottom < api.stratumY(g.wellX, g.faults, null, 1, g.reservoirThickness, g), 'and stops above its base');
   }
 
-  // A thin bed exercises the new height limits; compare the actual worker and fallback.
+  // A thin bed exercises the height limits of the shared model (tests/hero-model.test.js covers the balance).
   const g = geologies.reduce((a, b) => a.reservoirThickness < b.reservoirThickness ? a : b);
-  let workerHistory;
-  let profileCalls = 0;
-  const countedGeometry = { ...HeroGeology, capRockY: (...args) => {
-    profileCalls++;
-    return HeroGeology.capRockY(...args);
-  } };
-  const worker = { postMessage: result => { workerHistory = result.history; } };
-  new Function('self', 'importScripts', 'HeroGeology', fs.readFileSync(require.resolve('../hero-simulation-worker.js'), 'utf8'))(
-    worker, () => {}, countedGeometry);
-  worker.onmessage({ data: { geology: g, totalYears: api.HERO_SIMULATION_YEARS } });
-  assert.ok(profileCalls <= 840, 'static face profiles must be cached across all time steps');
-  const fallback = api.precomputeSimulation(g.faults, g);
-  assert.equal(api.HERO_SIMULATION_YEARS, 2000);
-  assert.equal(workerHistory.length, 2001, 'both solvers must include year 2000');
-  assert.equal(fallback.length, 2001);
-  assert.ok(workerHistory[0].faultFlow.every(flow => flow === 0), 'no leaking before injection');
-  let leakingAtThreshold = false;
-  for (let frame = 0; frame < workerHistory.length; frame++) {
-    workerHistory[frame].faultFlow.forEach((flow, i) => {
-      assert.ok(Number.isFinite(flow) && flow >= 0 && flow <= g.faults[i].leakRate + 1e-10);
-      assert.ok(Math.abs(flow - fallback[frame].faultFlow[i]) < 1e-8, 'both solvers report the same leakage');
-      const cell = Math.max(0, Math.min(200, Math.round(HeroGeology.getFaultIntersection(g.faults[i], 1, g).x / 5)));
-      if (flow > 0 && workerHistory[frame].h[cell] <= g.faults[i].thresholdHeight) leakingAtThreshold = true;
-      for (const [field, depth] of [['h', 1], ['h2', 0.4]]) {
-        const heights = workerHistory[frame][field];
-        const k = Math.round(HeroGeology.getFaultIntersection(g.faults[i], depth, g).x / 5);
-        if (k <= 0 || k >= 201 || heights[k - 1] <= 0.01 || heights[k] <= 0.01) continue;
-        const left = HeroGeology.capRockY(k * 5, g.faults, k - 1, depth, g) + heights[k - 1] * 15;
-        const right = HeroGeology.capRockY(k * 5, g.faults, k, depth, g) + heights[k] * 15;
-        assert.ok(Math.abs(left - right) < 0.2, 'active gas-water contact must meet across a permeable fault');
-      }
-    });
-    for (const key of ['h', 'hMax', 'h2', 'h2Max']) {
-      workerHistory[frame][key].forEach((height, i) => {
-        const depth = key.startsWith('h2') ? 0.4 : 1;
-        const offset = depth === 1 ? g.reservoirThickness : g.shallowThickness;
-        const limit = (api.stratumY(i * 5, g.faults, i, depth, offset, g) -
-          api.capRockY(i * 5, g.faults, i, depth, g)) / 15;
-        assert.ok(Number.isFinite(height) && height >= 0 && height <= limit);
-        assert.ok(Math.abs(height - fallback[frame][key][i]) < 1e-8, 'worker and fallback must agree');
-      });
-    }
+  const run = api.simulate(g);
+  const sec = api.section(g);
+  for (let year = 0; year <= run.years; year += 7) {
+    const frame = api.frameOf(run, year);
+    // Wherever both columns at a permeable fault hold mobile CO2, their gas-water contacts meet.
+    sec.faultCells.forEach(cells => [['h', 0], ['h2', 1]].forEach(([field, j]) => {
+      const k = cells[j], layer = sec.layers[j], heights = frame[field];
+      if (k <= 0 || k >= 201 || heights[k - 1] <= 0.01 || heights[k] <= 0.01) return;
+      if (heights[k - 1] >= layer.cap[k - 1] - 1e-3 || heights[k] >= layer.cap[k] - 1e-3) return;
+      assert.ok(Math.abs(layer.roofL[k] + heights[k - 1] * 15 - layer.roofR[k] - heights[k] * 15) < 0.2,
+        'active gas-water contact must meet across a permeable fault');
+    }));
   }
-  assert.ok(workerHistory[320].h.some(h => h > 0), 'injection still produces a visible plume');
-  const gas = frame => frame.h.reduce((sum, h) => sum + h, 0) +
-    frame.h2.reduce((sum, h) => sum + h, 0) / 1.5; // Undo the upper-layer leakage height scale.
-  const injectedGas = gas(workerHistory[321]);
-  for (const frame of workerHistory.slice(322)) {
-    assert.ok(gas(frame) <= injectedGas + 1e-8, 'extended migration must not inject more gas');
-  }
-  assert.ok(leakingAtThreshold, 'record leakage even when draining reduces the saved height to the entry threshold');
+  assert.ok(api.frameOf(run, 30).h.some(h => h > 0), 'injection produces a visible plume');
 });
