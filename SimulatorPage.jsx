@@ -900,7 +900,8 @@ const SimulatorPage = () => {
   const exportImage = () => {
     exportRef.current?.removeAttribute('open');
     const canvas = document.querySelector('.sim-view canvas[data-export]');
-    if (canvas) { canvas.toBlob(blob => blob && simDownload(blob, `co2-${view}-year-${Math.round(shownYear)}.png`)); return; }
+    // The 3D view composites its WebGL picture with the label overlay.
+    if (canvas) { (canvas.simComposite?.() || canvas).toBlob(blob => blob && simDownload(blob, `co2-${view}-year-${Math.round(shownYear)}.png`)); return; }
     const svg = document.querySelector('.sim-view svg.sim-view__svg');
     if (svg) simDownload(new XMLSerializer().serializeToString(svg), `co2-section-year-${Math.round(shownYear)}.svg`, 'image/svg+xml');
   };

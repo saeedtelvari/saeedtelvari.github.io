@@ -250,9 +250,16 @@ by thickness), structural part (amber), residual zone (magenta hatch), dissolved
 toggle), pressure build-up contours (toggle), flow particles (toggle), injector, section line
 with draggable ends, scale bar, north arrow, km ticks.
 
-**3D** — block diagram: top-of-aquifer surface coloured like the map, side walls cut through
-overburden, caprock, aquifer (with the plume in section) and base; vertical exaggeration
-control; orbit with inertia, zoom, reset (eased).
+**3D** — block diagram (WebGL 2, revised 2026-10-13 after review): top of the aquifer with the
+caprock removed, coloured and hatched like the map. The surface is built at cell corners from
+the engine's own depth function and cut along every fault trace, so throw is a vertical scarp at
+the trace (parabolic along strike, zero at the tips) rather than a ramp across a cell; scarps
+and the four side walls show the CO₂ column in section (aquifer and base, no caprock lip);
+fault traces stay visible from the footwall side; the injector is a stem with an entry ring
+and a faint continuation into the aquifer. Depth-tested, so nothing is drawn through rock.
+Vertical exaggeration control; orbit with inertia, pan, zoom, reset (eased); the camera
+distance depends on elevation only, so orbiting never zooms; hover readout as on the map;
+north arrow, km ticks and a depth key.
 
 **Section** — slice along the section line: overburden, caprock, aquifer, base; free and
 structural plume; residual zone; dissolved tint with illustrative convective fingers; faults

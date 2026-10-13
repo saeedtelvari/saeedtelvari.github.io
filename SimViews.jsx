@@ -1,6 +1,6 @@
 // SimViews.jsx — the three synchronised views of one VE run: structure map (canvas),
-// 3D block diagram (canvas) and vertical section (SVG), plus legend, layer menu and the
-// data-driven motion layer (flow particles, injection pulse, leak beacons).
+// 3D block diagram (WebGL, sim-block3d.js) and vertical section (SVG), plus legend, layer
+// menu, readout and the data-driven motion layer (flow particles, injection pulse, leak beacons).
 
 const SIM_CAPROCK_DRAWN = 40;
 
@@ -149,8 +149,9 @@ const SimLegend = ({ view, layers, model }) => {
   if (view === 'section' || layers.dissolved) items.push({ label: 'Dissolved', swatch: 'var(--sim-c-dissolved)' });
   if (view !== 'section') {
     if (hasLeakyFault) items.push({ label: 'Leaking fault', swatch: 'var(--sim-glow-leaked)', kind: 'line' });
-    if (hasFaults) items.push({ label: 'Fault (ticks on downthrown side)', swatch: 'var(--sim-ink)', kind: 'line' });
-    if (layers.traps && hasTraps && view === 'map') items.push({ label: 'Structural trap', swatch: 'var(--sim-glow-structural)', kind: 'dash' });
+    if (hasFaults) items.push({ label: view === '3d' ? 'Fault scarp' : 'Fault (ticks on downthrown side)', swatch: 'var(--sim-ink)', kind: 'line' });
+    if (layers.traps && hasTraps) items.push({ label: 'Structural trap', swatch: 'var(--sim-glow-structural)', kind: view === 'map' ? 'dash' : 'line' });
+    if (layers.pressure && view === '3d') items.push({ label: 'Pressure build-up contours', swatch: 'var(--sim-accent)', kind: 'line' });
   }
   return (
     <div className="sim-legend" role="list" aria-label="Legend">
@@ -172,7 +173,7 @@ const SimLayersMenu = ({ layers, onChange, view }) => {
     ['dissolved', 'Dissolved CO₂'],
     ['pressure', 'Pressure build-up'],
     ['flow', 'Flow animation']
-  ].filter(([key]) => view === 'map' || !['contours', 'pressure', 'flow', 'traps'].includes(key));
+  ].filter(([key]) => view === 'map' || (view === '3d' ? key !== 'flow' : !['contours', 'pressure', 'flow', 'traps'].includes(key)));
   return (
     <details className="sim-menu sim-layers">
       <summary className="sim-button"><i className="fas fa-layer-group" aria-hidden="true" /> Layers</summary>
@@ -184,6 +185,29 @@ const SimLayersMenu = ({ layers, onChange, view }) => {
     </details>
   );
 };
+
+// ---------------------------------------------------------------- readout
+
+// Cell values under the pointer, shared by the map and the 3D view.
+const simReadoutAt = (model, frame, x, y) => {
+  const i = Math.max(0, Math.min(model.nx - 1, Math.floor(x / model.dx)));
+  const j = Math.max(0, Math.min(model.ny - 1, Math.floor(y / model.dy)));
+  const c = j * model.nx + i;
+  return { x, y, depth: model.zt[c], h: frame.h[c], residual: (frame.hMax[c] - frame.h[c]) * model.sgr / (1 - model.swr), md: frame.md[c], p: frame.p[c] };
+};
+
+const SimReadout = ({ readout, size }) => (
+  <div className="sim-readout" style={{ left: Math.min(readout.px + 16, size.width - 200), top: Math.min(readout.py + 16, size.height - 150) }}>
+    <dl>
+      <dt>Position</dt><dd>{(readout.x / 1000).toFixed(1)}, {(readout.y / 1000).toFixed(1)} km</dd>
+      <dt>Top of aquifer</dt><dd>{simFormatNumber(readout.depth)} m</dd>
+      <dt>Mobile CO₂ column</dt><dd>{readout.h.toFixed(1)} m</dd>
+      <dt>Residual CO₂</dt><dd>{readout.residual.toFixed(2)} m</dd>
+      <dt>Dissolved</dt><dd>{simFormatNumber(readout.md)} kg/m²</dd>
+      <dt>Pressure build-up</dt><dd>{(readout.p / 1e5).toFixed(2)} bar</dd>
+    </dl>
+  </div>
+);
 
 // ---------------------------------------------------------------- map
 
@@ -660,10 +684,7 @@ const SimMapView = ({ model, frame, palette, layers, reducedMotion, line, onLine
       return;
     }
     if (a.x < 0 || a.y < 0 || a.x > model.Lx || a.y > model.Ly || !frame) { setReadout(null); return; }
-    const i = Math.min(model.nx - 1, Math.floor(a.x / model.dx));
-    const j = Math.min(model.ny - 1, Math.floor(a.y / model.dy));
-    const c = j * model.nx + i;
-    setReadout({ px: a.px, py: a.py, x: a.x, y: a.y, depth: model.zt[c], h: frame.h[c], residual: (frame.hMax[c] - frame.h[c]) * model.sgr / (1 - model.swr), md: frame.md[c], p: frame.p[c] });
+    setReadout({ px: a.px, py: a.py, ...simReadoutAt(model, frame, a.x, a.y) });
   };
   const onPointerUp = () => {
     if (drag?.kind === 'well') onWell(+(drag.x / 1000).toFixed(1), +(drag.y / 1000).toFixed(1));
@@ -676,195 +697,266 @@ const SimMapView = ({ model, frame, palette, layers, reducedMotion, line, onLine
         aria-label={`Structure map at year ${Math.round(year)}: depth to the top of the aquifer with the CO₂ plume, faults and the injector. Drag the injector or the section ends A and A′.`}
         style={{ cursor }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={() => { setReadout(null); }} />
       <canvas ref={motionRef} aria-hidden="true" style={{ pointerEvents: 'none' }} />
-      {readout && !drag && (
-        <div className="sim-readout" style={{ left: Math.min(readout.px + 16, size.width - 200), top: Math.min(readout.py + 16, size.height - 150) }}>
-          <dl>
-            <dt>Position</dt><dd>{(readout.x / 1000).toFixed(1)}, {(readout.y / 1000).toFixed(1)} km</dd>
-            <dt>Top of aquifer</dt><dd>{simFormatNumber(readout.depth)} m</dd>
-            <dt>Mobile CO₂ column</dt><dd>{readout.h.toFixed(1)} m</dd>
-            <dt>Residual CO₂</dt><dd>{readout.residual.toFixed(2)} m</dd>
-            <dt>Dissolved</dt><dd>{simFormatNumber(readout.md)} kg/m²</dd>
-            <dt>Pressure build-up</dt><dd>{(readout.p / 1e5).toFixed(2)} bar</dd>
-          </dl>
-        </div>
-      )}
+      {readout && !drag && <SimReadout readout={readout} size={size} />}
     </>
   );
 };
 
 // ---------------------------------------------------------------- 3D block diagram
 
-const SIM_CAMERA = { azimuth: -0.55, elevation: 0.62, zoom: 1 };
+const SIM_CAMERA = { azimuth: -0.55, elevation: 0.62, zoom: 1, panX: 0, panY: 0 };
 
-const SimBlockView = ({ model, frame, palette, layers, reducedMotion, year }) => {
+const simUnitRgb = color => simParseColor(color).map(v => v / 255);
+
+// Free space around the block: view switcher and controls above, legend below.
+const simBlockViewport = size => ({ width: size.width, height: size.height, top: 100, bottom: size.width < 560 ? 104 : 62, side: 16 });
+
+// Labels, distance ticks, north arrow and depth key over the WebGL canvas.
+const simDrawBlockOverlay = (ctx, { cam, box, model, geometry, depthAt, wellDepth, palette, size, viewport, leaking }) => {
+  ctx.clearRect(0, 0, size.width, size.height);
+  const at = (x, y, depth, lift = 0) => {
+    const p = SimBlock3D.toDisplay(box, x, y, depth);
+    return SimBlock3D.project(cam, p[0], p[1], p[2] + lift);
+  };
+  const halo = (text, x, y, color, font, align = 'center') => {
+    ctx.font = font;
+    ctx.textAlign = align;
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = palette.stage;
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+  };
+  const floor = size.height - viewport.bottom + 4;
+
+  // Kilometre ticks along the foot of the walls that face the camera.
+  const { Lx, Ly } = model;
+  const edges = [
+    { normal: [0, -1], points: [0, 5, 10, 15, 20].map(km => [km * 1000, 0]) },
+    { normal: [0, 1], points: [0, 5, 10, 15, 20].map(km => [km * 1000, Ly]) },
+    { normal: [-1, 0], points: [0, 4, 8, 12].map(km => [0, km * 1000]) },
+    { normal: [1, 0], points: [0, 4, 8, 12].map(km => [Lx, km * 1000]) }
+  ];
+  ctx.textBaseline = 'middle';
+  const placed = [];
+  for (const edge of edges) {
+    const mid = edge.points[Math.floor(edge.points.length / 2)];
+    const toEye = [cam.eye[0] - (mid[0] - Lx / 2), cam.eye[1] - (mid[1] - Ly / 2)];
+    if (toEye[0] * edge.normal[0] + toEye[1] * edge.normal[1] <= 0) continue;
+    edge.points.forEach(([x, y], k) => {
+      const depth = depthAt(x, y) + model.H + geometry.base;
+      const p = at(x, y, depth);
+      const q = at(x + 600 * edge.normal[0], y + 600 * edge.normal[1], depth);
+      if (!p || !q) return;
+      const length = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+      const d = [(q[0] - p[0]) / length, (q[1] - p[1]) / length];
+      const tx = p[0] + d[0] * 15;
+      const ty = p[1] + d[1] * 15;
+      const along = (edge.normal[0] ? y : x) / 1000;
+      const text = k === edge.points.length - 1 ? `${along} km` : String(along);
+      ctx.font = `11px ${palette.mono}`;
+      ctx.textAlign = d[0] > 0.5 ? 'left' : d[0] < -0.5 ? 'right' : 'center';
+      const width = ctx.measureText(text).width;
+      const left = ctx.textAlign === 'left' ? tx : ctx.textAlign === 'right' ? tx - width : tx - width / 2;
+      if (ty > floor || left < 4 || left + width > size.width - 4 || placed.some(([u, v]) => Math.hypot(u - tx, v - ty) < 26)) return;
+      placed.push([tx, ty]);
+      ctx.strokeStyle = palette.inkFaint;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(p[0] + d[0] * 6, p[1] + d[1] * 6); ctx.stroke();
+      ctx.fillStyle = palette.inkFaint;
+      ctx.fillText(text, tx, ty);
+    });
+  }
+
+  // Injector name at the head of the stem, then fault names at the northern tip (as on
+  // the map) or, if that would collide with another label, at the southern tip.
+  ctx.textBaseline = 'bottom';
+  const taken = [];
+  const clear = (x, y, width) => !taken.some(([u, v, w]) => Math.abs(u - x) < (w + width) / 2 + 4 && Math.abs(v - y) < 16);
+  const head = at(model.wellX, model.wellY, wellDepth, box.stem);
+  if (head) {
+    halo('INJ-1', head[0], head[1] - 8, palette.ink, `700 12px ${palette.font}`);
+    taken.push([head[0], head[1] - 8, 40]);
+  }
+  model.faults.forEach((fault, index) => {
+    const [x0, y0, x1, y1] = model.faultLines[index];
+    const tips = [y1 >= y0 ? [x1, y1, x0, y0] : [x0, y0, x1, y1], y1 >= y0 ? [x0, y0, x1, y1] : [x1, y1, x0, y0]].map(([ax, ay, bx, by]) => {
+      for (let s = 0; s <= 40; s++) {
+        const x = ax + (bx - ax) * s / 40;
+        const y = ay + (by - ay) * s / 40;
+        if (x >= 0 && y >= 0 && x <= Lx && y <= Ly) return at(x, y, depthAt(x, y));
+      }
+      return null;
+    }).filter(Boolean);
+    const p = tips.find(tip => clear(tip[0], tip[1] - 8, 20)) || tips[0];
+    if (!p) return;
+    halo(`F${index + 1}`, p[0], p[1] - 8, leaking[index] ? palette.glowLeaked : palette.ink, `600 12px ${palette.font}`);
+    taken.push([p[0], p[1] - 8, 20]);
+  });
+
+  // North arrow, turned with the camera.
+  const centre = SimBlock3D.project(cam, cam.target[0], cam.target[1], cam.target[2]);
+  const north = SimBlock3D.project(cam, cam.target[0], cam.target[1] + 1000, cam.target[2]);
+  if (centre && north) {
+    const angle = Math.atan2(north[0] - centre[0], centre[1] - north[1]);
+    const ax = 30;
+    const ay = floor - 10;
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.rotate(angle);
+    ctx.fillStyle = palette.ink;
+    ctx.beginPath(); ctx.moveTo(0, -11); ctx.lineTo(6, 7); ctx.lineTo(0, 3); ctx.lineTo(-6, 7); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.font = `600 11px ${palette.font}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = palette.ink;
+    ctx.fillText('N', ax + 19 * Math.sin(angle), ay - 19 * Math.cos(angle));
+  }
+
+  // Depth key for the colour of the surface.
+  const keyX = 16;
+  const keyY = 66;
+  const keyWidth = size.width < 560 ? 88 : 112;
+  const gradient = ctx.createLinearGradient(keyX, 0, keyX + keyWidth, 0);
+  palette.depth.forEach((color, i) => gradient.addColorStop(i / (palette.depth.length - 1), color));
+  ctx.fillStyle = gradient;
+  ctx.fillRect(keyX, keyY + 14, keyWidth, 6);
+  ctx.font = `11px ${palette.font}`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = palette.inkMuted;
+  ctx.fillText('Top of aquifer', keyX, keyY + 9);
+  ctx.font = `11px ${palette.mono}`;
+  ctx.fillStyle = palette.inkFaint;
+  ctx.fillText(simFormatNumber(geometry.zMin), keyX, keyY + 34);
+  ctx.textAlign = 'right';
+  ctx.fillText(`${simFormatNumber(geometry.zMax)} m`, keyX + keyWidth, keyY + 34);
+};
+
+const SimBlockView = ({ model, frame, palette, layers, reducedMotion, year, scenario }) => {
   const [sizeRef, size] = simUseSize();
-  const canvasRef = useRef(null);
+  const glRef = useRef(null);
+  const overlayRef = useRef(null);
+  const renderer = useRef(null);
+  const [generation, setGeneration] = useState(0);
+  const [supported, setSupported] = useState(true);
   const [camera, setCamera] = useState(SIM_CAMERA);
   const [exaggeration, setExaggeration] = useState(25);
+  const [readout, setReadout] = useState(null);
   const pointers = useRef(new Map());
   const velocity = useRef({ azimuth: 0, elevation: 0 });
   const animation = useRef(0);
 
+  const depthAt = useMemo(() => (x, y) => VE2D.topDepth(x, y, scenario), [scenario]);
+  const geometry = useMemo(() => SimBlock3D.buildGeometry(model, depthAt), [model, depthAt]);
+  const wellDepth = useMemo(() => depthAt(model.wellX, model.wellY), [model, depthAt]);
+  const box = useMemo(() => SimBlock3D.sceneBox(geometry, model, exaggeration, wellDepth), [geometry, model, exaggeration, wellDepth]);
+  const viewport = simBlockViewport(size);
+  const colors = useMemo(() => ({
+    stage: simUnitRgb(palette.stage),
+    ramp: palette.depth.map(simUnitRgb),
+    free: simUnitRgb(palette.glowFree),
+    structural: simUnitRgb(palette.glowStructural),
+    residual: simUnitRgb(palette.glowResidual),
+    dissolved: simUnitRgb(palette.glowDissolved),
+    leak: simUnitRgb(palette.glowLeaked),
+    ink: simUnitRgb(palette.ink),
+    contourInk: simUnitRgb(palette.contour),
+    accent: simUnitRgb(palette.accent),
+    aquifer: simUnitRgb(palette.rockAquifer),
+    base: simUnitRgb(palette.rockBase)
+  }), [palette]);
+  const injecting = year < model.injYears;
+  const leaking = model.faults.map((_, i) => !!frame?.leaking?.[i]);
+
+  // One WebGL context per mount; rebuilt if the browser drops it.
+  useEffect(() => {
+    const canvas = glRef.current;
+    const start = () => {
+      try { renderer.current = SimBlock3D.createRenderer(canvas); } catch (error) { console.error(error); renderer.current = null; }
+      setSupported(!!renderer.current);
+      setGeneration(g => g + 1);
+    };
+    const lost = event => { event.preventDefault(); renderer.current = null; };
+    canvas.addEventListener('webglcontextlost', lost);
+    canvas.addEventListener('webglcontextrestored', start);
+    start();
+    return () => {
+      canvas.removeEventListener('webglcontextlost', lost);
+      canvas.removeEventListener('webglcontextrestored', start);
+      renderer.current?.dispose();
+      renderer.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    if (!renderer.current) return;
+    renderer.current.setGeometry(geometry, model);
+    renderer.current.setStatic(SimBlock3D.packStatic(model));
+  }, [geometry, model, generation]);
+  useEffect(() => {
+    if (renderer.current && frame) renderer.current.setFrame(SimBlock3D.packFrame(model, frame));
+  }, [frame, model, geometry, generation]);
+
+  const draw = time => {
+    const canvas = glRef.current;
+    if (!renderer.current || !size.width || !frame || !canvas) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const pixelWidth = Math.round(size.width * dpr);
+    const pixelHeight = Math.round(size.height * dpr);
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) { canvas.width = pixelWidth; canvas.height = pixelHeight; }
+    const cam = SimBlock3D.cameraFor(camera, box, viewport);
+    let pressure = 0;
+    if (layers.pressure) {
+      let pMax = 0;
+      for (const v of frame.p) if (v > pMax) pMax = v;
+      if (pMax > 0.2e5) pressure = simNiceStep(pMax / 1e5, 5);
+    }
+    renderer.current.render({
+      cam, box, colors, layers, time, pixelWidth, pixelHeight, pressure,
+      hatch: Math.max(120, 6.5 * cam.distance / cam.focal),
+      traces: model.faultLines,
+      depthRange: [geometry.zMin, geometry.zMax],
+      interval: layers.contours ? simContourInterval(geometry.zMax - geometry.zMin) : 0,
+      refH: Math.max(4, 0.5 * model.H),
+      H: model.H,
+      well: { x: model.wellX, y: model.wellY, top: wellDepth - box.stem / exaggeration, bottom: wellDepth + model.H, radius: 0.004 * Math.max(model.Lx, model.Ly), injecting },
+      leaking
+    });
+    simDrawBlockOverlay(simPrepareCanvas(overlayRef.current, size.width, size.height), { cam, box, model, geometry, depthAt, wellDepth, palette, size, viewport, leaking });
+  };
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
+  useEffect(() => { draw(reducedMotion ? -1 : performance.now() / 1000); },
+    [size, frame, camera, box, colors, layers, geometry, generation, injecting, reducedMotion, leaking.join()]);
+
+  // Motion only while it carries data: the injection pulse and leaking faults.
+  const animate = supported && !reducedMotion && (injecting || leaking.some(Boolean));
+  useEffect(() => {
+    if (!animate) return undefined;
+    let id = 0;
+    const loop = now => { drawRef.current(now / 1000); id = requestAnimationFrame(loop); };
+    id = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(id);
+  }, [animate]);
+
   const clampCamera = c => ({
     azimuth: ((c.azimuth + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI,
     elevation: Math.max(0.12, Math.min(1.45, c.elevation)),
-    zoom: Math.max(0.6, Math.min(3, c.zoom))
+    zoom: Math.max(0.6, Math.min(4, c.zoom)),
+    panX: Math.max(-model.Lx / 2, Math.min(model.Lx / 2, c.panX)),
+    panY: Math.max(-model.Ly / 2, Math.min(model.Ly / 2, c.panY))
   });
-
-  const mesh = useMemo(() => {
-    const stride = Math.max(1, Math.ceil(Math.max(model.nx / 80, model.ny / 48)));
-    const cols = Math.ceil(model.nx / stride);
-    const rows = Math.ceil(model.ny / stride);
-    const cell = (i, j) => Math.min(model.ny - 1, j * stride) * model.nx + Math.min(model.nx - 1, i * stride);
-    let min = Infinity;
-    let max = -Infinity;
-    for (const z of model.zt) { if (z < min) min = z; if (z > max) max = z; }
-    return { stride, cols, rows, cell, min, max };
-  }, [model]);
-
-  useEffect(() => {
-    if (!size.width || !frame) return;
-    const ctx = simPrepareCanvas(canvasRef.current, size.width, size.height);
-    const { cols, rows, cell, min, max } = mesh;
-    const { Lx, Ly, H } = model;
-    const ex = exaggeration;
-    const ca = Math.cos(camera.azimuth);
-    const sa = Math.sin(camera.azimuth);
-    const ce = Math.cos(camera.elevation);
-    const se = Math.sin(camera.elevation);
-    const project = (x, y, depth) => {
-      const X = x - Lx / 2;
-      const Y = y - Ly / 2;
-      const Z = -(depth - (min + max) / 2) * ex;
-      const rx = X * ca - Y * sa;
-      const ry = X * sa + Y * ca;
-      return [rx, -(ry * se + Z * ce), ry * ce - Z * se];
-    };
-    // Fit the block (including caprock and base bands) to the canvas.
-    const corners = [];
-    for (const x of [0, Lx]) for (const y of [0, Ly]) for (const d of [min - SIM_CAPROCK_DRAWN, max + H + 60]) corners.push(project(x, y, d));
-    const xs = corners.map(p => p[0]);
-    const ys = corners.map(p => p[1]);
-    const scale = camera.zoom * 0.9 * Math.min((size.width - 40) / (Math.max(...xs) - Math.min(...xs)), (size.height - 120) / (Math.max(...ys) - Math.min(...ys)));
-    const cx = size.width / 2 - scale * (Math.max(...xs) + Math.min(...xs)) / 2;
-    const cy = size.height / 2 + 20 - scale * (Math.max(...ys) + Math.min(...ys)) / 2;
-    const screen = (x, y, depth) => {
-      const p = project(x, y, depth);
-      return [cx + p[0] * scale, cy + p[1] * scale, p[2]];
-    };
-
-    ctx.clearRect(0, 0, size.width, size.height);
-    ctx.fillStyle = palette.stage;
-    ctx.fillRect(0, 0, size.width, size.height);
-
-    const stops = palette.depth.map(simParseColor);
-    const free = simParseColor(palette.glowFree);
-    const structural = simParseColor(palette.glowStructural);
-    const residual = simParseColor(palette.glowResidual);
-    const dissolved = simParseColor(palette.glowDissolved);
-    const xOf = i => Math.min(model.nx - 1, i * mesh.stride + 0.5) * model.dx;
-    const yOf = j => Math.min(model.ny - 1, j * mesh.stride + 0.5) * model.dy;
-    const vertex = new Array(cols * rows);
-    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) vertex[j * cols + i] = screen(xOf(i), yOf(j), model.zt[cell(i, j)]);
-
-    // Top of the aquifer (caprock removed), painter's order far to near.
-    const quads = [];
-    for (let j = 0; j < rows - 1; j++) for (let i = 0; i < cols - 1; i++) {
-      const v = [vertex[j * cols + i], vertex[j * cols + i + 1], vertex[(j + 1) * cols + i + 1], vertex[(j + 1) * cols + i]];
-      quads.push({ i, j, v, depth: (v[0][2] + v[1][2] + v[2][2] + v[3][2]) / 4 });
-    }
-    quads.sort((a, b) => b.depth - a.depth);
-    const reference = Math.max(4, 0.5 * H);
-    for (const quad of quads) {
-      const c = cell(quad.i, quad.j);
-      const zA = model.zt[cell(quad.i + 1, quad.j)] - model.zt[c];
-      const zB = model.zt[cell(quad.i, quad.j + 1)] - model.zt[c];
-      const n = [zA * ex / (model.dx * mesh.stride), zB * ex / (model.dy * mesh.stride), 1];
-      const shade = Math.max(0, (-0.5 * n[0] + 0.5 * n[1] + 0.707 * n[2]) / Math.hypot(n[0], n[1], n[2]));
-      let rgb = simDepthColor(stops, (model.zt[c] - min) / (max - min || 1)).map(v => v * (0.6 + 0.5 * shade));
-      if (layers.dissolved && frame.md[c] > 0) rgb = simMixRgb(rgb, dissolved, Math.min(0.6, frame.md[c] / model.disCapacity));
-      const zone = frame.hMax[c] - frame.h[c];
-      if (layers.residual && zone > 0.05) rgb = simMixRgb(rgb, residual, Math.min(0.55, 0.25 + zone / reference));
-      const h = frame.h[c];
-      if (h > 0.05) {
-        const closure = Math.max(0, model.zSpill[c] - model.zt[c]);
-        rgb = simMixRgb(rgb, simMixRgb(free, structural, Math.min(h, closure) / h), 0.35 + 0.6 * Math.min(1, Math.sqrt(h / reference)));
-      }
-      ctx.fillStyle = simRgba(rgb);
-      ctx.strokeStyle = simRgba(rgb);
-      ctx.lineWidth = 0.6;
-      ctx.beginPath();
-      ctx.moveTo(quad.v[0][0], quad.v[0][1]);
-      for (let k = 1; k < 4; k++) ctx.lineTo(quad.v[k][0], quad.v[k][1]);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    }
-
-    // Side walls facing the viewer: caprock, aquifer with the plume in section, base.
-    const walls = [
-      { normal: [0, -1], points: Array.from({ length: cols }, (_, i) => [i, 0]) },
-      { normal: [0, 1], points: Array.from({ length: cols }, (_, i) => [i, rows - 1]) },
-      { normal: [-1, 0], points: Array.from({ length: rows }, (_, j) => [0, j]) },
-      { normal: [1, 0], points: Array.from({ length: rows }, (_, j) => [cols - 1, j]) }
-    ];
-    const cap = simParseColor(palette.rockCap);
-    const aquifer = simParseColor(palette.rockAquifer);
-    const base = simParseColor(palette.rockBase);
-    for (const wall of walls) {
-      const facing = wall.normal[0] * sa + wall.normal[1] * ca;
-      if (facing >= -0.02) continue;
-      const light = 0.82 + 0.3 * Math.abs(wall.normal[0]);
-      for (let k = 0; k < wall.points.length - 1; k++) {
-        const [i0, j0] = wall.points[k];
-        const [i1, j1] = wall.points[k + 1];
-        const c0 = cell(i0, j0);
-        const c1 = cell(i1, j1);
-        const x0 = xOf(i0); const y0 = yOf(j0); const x1 = xOf(i1); const y1 = yOf(j1);
-        const z0 = model.zt[c0];
-        const z1 = model.zt[c1];
-        const band = (top0, top1, bottom0, bottom1, rgb, alpha = 1) => {
-          const a = screen(x0, y0, top0); const b = screen(x1, y1, top1); const c = screen(x1, y1, bottom1); const d = screen(x0, y0, bottom0);
-          ctx.fillStyle = simRgba(rgb.map(v => v * light), alpha);
-          ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.lineTo(d[0], d[1]); ctx.closePath(); ctx.fill();
-        };
-        band(z0 - SIM_CAPROCK_DRAWN, z1 - SIM_CAPROCK_DRAWN, z0, z1, cap);
-        band(z0, z1, z0 + H, z1 + H, aquifer);
-        const md0 = frame.md[c0] / model.disCapacity;
-        const md1 = frame.md[c1] / model.disCapacity;
-        if (md0 > 0 || md1 > 0) band(z0 + H * (1 - Math.min(1, md0)), z1 + H * (1 - Math.min(1, md1)), z0 + H, z1 + H, dissolved, 0.55);
-        if (frame.hMax[c0] > 0.05 || frame.hMax[c1] > 0.05) band(z0 + frame.h[c0], z1 + frame.h[c1], z0 + frame.hMax[c0], z1 + frame.hMax[c1], residual, 0.6);
-        if (frame.h[c0] > 0.05 || frame.h[c1] > 0.05) band(z0, z1, z0 + frame.h[c0], z1 + frame.h[c1], free, 0.95);
-        band(z0 + H, z1 + H, z0 + H + 60, z1 + H + 60, base);
-      }
-    }
-
-    // Fault traces and the injector.
-    model.faults.forEach((fault, index) => {
-      const [x0, y0, x1, y1] = model.faultLines[index];
-      const [fnx, fny] = simFaultNormal(fault);
-      const shift = -0.6 * model.dx * mesh.stride;
-      ctx.strokeStyle = frame.leaking?.[index] ? palette.glowLeaked : palette.ink;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let s = 0; s <= 40; s++) {
-        const x = Math.max(0, Math.min(Lx - 1, x0 + (x1 - x0) * s / 40 + fnx * shift));
-        const y = Math.max(0, Math.min(Ly - 1, y0 + (y1 - y0) * s / 40 + fny * shift));
-        const p = screen(x, y, simSampleField(model, model.zt, x, y) - 2);
-        if (s === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
-      }
-      ctx.stroke();
-    });
-    const wellTop = screen(model.wellX, model.wellY, min - 3 * SIM_CAPROCK_DRAWN);
-    const wellBottom = screen(model.wellX, model.wellY, model.zt[model.well] + H * 0.6);
-    ctx.strokeStyle = palette.ink;
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(wellTop[0], wellTop[1]); ctx.lineTo(wellBottom[0], wellBottom[1]); ctx.stroke();
-    ctx.fillStyle = palette.ink;
-    ctx.font = `700 12px ${palette.font}`;
-    ctx.textAlign = 'center';
-    ctx.fillText('INJ-1', wellTop[0], wellTop[1] - 8);
-  }, [size, frame, mesh, camera, exaggeration, palette, layers]);
+  // Slide the target so the ground follows the pointer.
+  const panBy = (c, dx, dy) => {
+    const cam = SimBlock3D.cameraFor(c, box, viewport);
+    const across = cam.distance / cam.focal;
+    const along = across / Math.max(0.35, Math.sin(c.elevation));
+    const sa = Math.sin(c.azimuth);
+    const ca = Math.cos(c.azimuth);
+    return clampCamera({ ...c, panX: c.panX - dx * across * ca + dy * along * sa, panY: c.panY + dx * across * sa + dy * along * ca });
+  };
 
   // Inertial orbit after a drag (skipped for reduced motion).
   const startInertia = () => {
@@ -882,62 +974,98 @@ const SimBlockView = ({ model, frame, palette, layers, reducedMotion, year }) =>
   };
   const resetView = () => {
     cancelAnimationFrame(animation.current);
+    velocity.current = { azimuth: 0, elevation: 0 };
     if (reducedMotion) { setCamera(SIM_CAMERA); return; }
     const from = camera;
+    const turn = ((SIM_CAMERA.azimuth - from.azimuth + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
     const start = performance.now();
     const ease = t => 1 - (1 - t) ** 3;
     const step = now => {
       const t = Math.min(1, (now - start) / 420);
       const k = ease(t);
-      setCamera({ azimuth: from.azimuth + (SIM_CAMERA.azimuth - from.azimuth) * k, elevation: from.elevation + (SIM_CAMERA.elevation - from.elevation) * k, zoom: from.zoom + (SIM_CAMERA.zoom - from.zoom) * k });
+      setCamera(clampCamera(Object.fromEntries(Object.keys(SIM_CAMERA).map(key =>
+        [key, key === 'azimuth' ? from.azimuth + turn * k : from[key] + (SIM_CAMERA[key] - from[key]) * k]))));
       if (t < 1) animation.current = requestAnimationFrame(step);
     };
     animation.current = requestAnimationFrame(step);
   };
   useEffect(() => () => cancelAnimationFrame(animation.current), []);
 
+  const pointAt = event => {
+    const rect = glRef.current.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  };
+  const hover = event => {
+    if (!frame) return;
+    const p = pointAt(event);
+    const hit = SimBlock3D.pick(SimBlock3D.cameraFor(camera, box, viewport), box, depthAt, p.x, p.y);
+    setReadout(hit ? { px: p.x, py: p.y, ...simReadoutAt(model, frame, hit.x, hit.y) } : null);
+  };
   const onPointerDown = event => {
     cancelAnimationFrame(animation.current);
     event.currentTarget.setPointerCapture(event.pointerId);
-    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY, pan: event.button === 2 || event.shiftKey });
+    setReadout(null);
   };
   const onPointerMove = event => {
     const previous = pointers.current.get(event.pointerId);
-    if (!previous) return;
+    if (!previous) { if (event.pointerType === 'mouse') hover(event); return; }
+    const dx = event.clientX - previous.x;
+    const dy = event.clientY - previous.y;
     if (pointers.current.size === 2) {
+      // Pinch to zoom, move both fingers to pan.
       const other = [...pointers.current.entries()].find(([id]) => id !== event.pointerId)[1];
       const before = Math.hypot(previous.x - other.x, previous.y - other.y);
       const after = Math.hypot(event.clientX - other.x, event.clientY - other.y);
-      if (before > 0) setCamera(c => clampCamera({ ...c, zoom: c.zoom * after / before }));
+      setCamera(c => panBy(clampCamera({ ...c, zoom: before > 0 ? c.zoom * after / before : c.zoom }), dx / 2, dy / 2));
+    } else if (previous.pan) {
+      setCamera(c => panBy(c, dx, dy));
     } else {
-      const dAz = (event.clientX - previous.x) * 0.008;
-      const dEl = (event.clientY - previous.y) * 0.006;
-      velocity.current = { azimuth: dAz, elevation: dEl };
-      setCamera(c => clampCamera({ ...c, azimuth: c.azimuth + dAz, elevation: c.elevation + dEl }));
+      velocity.current = { azimuth: dx * 0.008, elevation: dy * 0.006 };
+      setCamera(c => clampCamera({ ...c, azimuth: c.azimuth + dx * 0.008, elevation: c.elevation + dy * 0.006 }));
     }
-    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    pointers.current.set(event.pointerId, { ...previous, x: event.clientX, y: event.clientY });
   };
   const onPointerUp = event => {
+    const previous = pointers.current.get(event.pointerId);
     pointers.current.delete(event.pointerId);
-    if (!pointers.current.size) startInertia();
+    if (!pointers.current.size && previous && !previous.pan) startInertia();
   };
   const onWheel = event => setCamera(c => clampCamera({ ...c, zoom: c.zoom * (event.deltaY > 0 ? 0.92 : 1.08) }));
   const onKeyDown = event => {
-    const moves = { ArrowLeft: [-0.12, 0], ArrowRight: [0.12, 0], ArrowUp: [0, -0.08], ArrowDown: [0, 0.08] };
-    if (moves[event.key]) { event.preventDefault(); setCamera(c => clampCamera({ ...c, azimuth: c.azimuth + moves[event.key][0], elevation: c.elevation + moves[event.key][1] })); }
+    const moves = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const move = moves[event.key];
+    if (move) {
+      event.preventDefault();
+      setCamera(c => event.shiftKey ? panBy(c, -move[0] * 40, -move[1] * 40) : clampCamera({ ...c, azimuth: c.azimuth + move[0] * 0.12, elevation: c.elevation + move[1] * 0.08 }));
+    }
     if (event.key === '+' || event.key === '=') setCamera(c => clampCamera({ ...c, zoom: c.zoom * 1.1 }));
     if (event.key === '-') setCamera(c => clampCamera({ ...c, zoom: c.zoom / 1.1 }));
     if (event.key === '0') resetView();
   };
+  // Export the picture with its labels.
+  const composite = () => {
+    const out = document.createElement('canvas');
+    out.width = glRef.current.width;
+    out.height = glRef.current.height;
+    const ctx = out.getContext('2d');
+    ctx.drawImage(glRef.current, 0, 0);
+    ctx.drawImage(overlayRef.current, 0, 0, out.width, out.height);
+    return out;
+  };
+
   return (
     <>
-      <canvas ref={el => { canvasRef.current = el; sizeRef.current = el; }} data-export="3d" className="sim-view__fade" tabIndex={0} role="img"
-        aria-label={`3D block diagram at year ${Math.round(year)} with the caprock removed and ${exaggeration}× vertical exaggeration; the side walls cut through caprock, aquifer and base. Drag or use the arrow keys to orbit, scroll or press plus and minus to zoom, press 0 to reset.`}
+      <canvas ref={el => { glRef.current = el; sizeRef.current = el; if (el) el.simComposite = composite; }} data-export="3d" className="sim-view__fade" tabIndex={0} role="img"
+        aria-label={`3D block diagram at year ${Math.round(year)}: top of the aquifer with the caprock removed, ${exaggeration}× vertical exaggeration; the side walls and fault scarps show the CO₂ column in section. Drag or use the arrow keys to orbit, Shift-drag, right-drag or Shift-arrow keys to pan, scroll or press plus and minus to zoom, press 0 to reset.`}
         style={{ cursor: 'grab' }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-        onWheel={onWheel} onDoubleClick={resetView} onKeyDown={onKeyDown} />
+        onPointerLeave={() => setReadout(null)} onContextMenu={event => event.preventDefault()} onWheel={onWheel} onDoubleClick={resetView} onKeyDown={onKeyDown} />
+      <canvas ref={overlayRef} aria-hidden="true" style={{ pointerEvents: 'none' }} />
+      {!supported && <div className="sim-view-note" style={{ top: '45%', bottom: 'auto', left: 0, right: 0, textAlign: 'center' }}>This browser does not provide WebGL 2, which the 3D view needs. The map and the section show the same run.</div>}
+      {readout && <SimReadout readout={readout} size={size} />}
       <div className="sim-view-controls">
-        <label htmlFor="sim-exaggeration">Vertical exaggeration {exaggeration}×</label>
-        <input id="sim-exaggeration" className="sim-range" type="range" min={5} max={80} step={1} value={exaggeration} onChange={event => setExaggeration(Number(event.target.value))} />
+        <label htmlFor="sim-exaggeration" title="Vertical exaggeration"><span className="sim-view-controls__long">Vertical exaggeration </span>{exaggeration}×</label>
+        <input id="sim-exaggeration" className="sim-range" type="range" min={5} max={80} step={1} value={exaggeration} aria-label="Vertical exaggeration" aria-valuetext={`${exaggeration} times`} onChange={event => setExaggeration(Number(event.target.value))} />
         <button type="button" className="sim-button" onClick={resetView}>Reset view</button>
       </div>
     </>

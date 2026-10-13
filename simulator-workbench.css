@@ -1152,6 +1152,7 @@
 
   .sim-stage { grid-template-rows: auto auto; }
   .sim-view { height: calc(60vw + 170px); }
+  .sim-view-controls__long { display: none; }
 
   .sim-legend { gap: 2px 10px; font-size: 11px; }
   .sim-overlay { top: 8px; left: 8px; right: 8px; }

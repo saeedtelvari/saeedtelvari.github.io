@@ -43,6 +43,7 @@ Built with React 18, SVG mathematical visualizations, and a custom liquid glassm
 - `HomeSections.jsx` — Homepage content sections: About, Research Interests, Peer-Reviewed Publications, and Contact.
 - `SimulatorPage.jsx` — Simulator page: scenario inputs, streamed results, playback, outcomes, uncertainty study, share links and exports.
 - `SimViews.jsx`, `SimCharts.jsx` — Map, 3D and section views with their motion layer; inventory, histogram, tornado and scatter charts.
+- `sim-block3d.js` — WebGL 2 block diagram: the aquifer top built at cell corners from the engine's depth function and cut along fault traces (throw shows as a vertical scarp), side walls with the CO₂ column in section, camera and picking. Its geometry, camera and picking are tested in Node.
 - `ve2d-model.js` — Dependency-free SI vertical-equilibrium engine (geometry, traps, pressure, transport, leakage, dissolution, inventory, uncertainty sampling) shared by the page, the worker and Node tests.
 - `simulation-worker.js` — Runs simulator scenarios (streamed snapshots) and uncertainty batches off the main thread.
 - `hero-simulation-worker.js` — Precomputes the home-page hero animation.
