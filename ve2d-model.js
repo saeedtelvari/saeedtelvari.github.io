@@ -1071,7 +1071,7 @@
       if (year % snapshotYears === 0) {
         const snap = snapshotOf(model, state, year);
         if (keepSnapshots) snapshots.push(snap);
-        options.onSnapshot?.(snap);
+        options.onSnapshot?.(snap, history);
       }
     };
     record(0);
@@ -1083,10 +1083,126 @@
     return { modelView, snapshots, history, truncated, steps: state.steps, scenario: model.scenario };
   };
 
+  // ------------------------------------------------------------------ uncertainty
+
+  // Inputs the uncertainty study may vary. `fault0.*` addresses the first fault.
+  const UQ_PARAMS = Object.freeze([
+    { key: 'permMd', label: 'Permeability', unit: 'mD', log: true },
+    { key: 'porosity', label: 'Porosity', unit: '–' },
+    { key: 'thickness', label: 'Aquifer thickness', unit: 'm' },
+    { key: 'rateMt', label: 'Injection rate', unit: 'Mt/yr' },
+    { key: 'sgr', label: 'Residual gas saturation', unit: '–' },
+    { key: 'krg', label: 'CO₂ relative permeability', unit: '–' },
+    { key: 'disRate', label: 'Dissolution rate', unit: 'kg/m²/yr' },
+    { key: 'dipDeg', label: 'Regional dip', unit: '°' },
+    { key: 'domeRelief', label: 'Dome relief', unit: 'm' },
+    { key: 'roughness', label: 'Top-surface roughness', unit: 'm' },
+    { key: 'fault0.sealCap', label: 'Fault seal capacity', unit: 'm' },
+    { key: 'fault0.kf', label: 'Fault-zone permeability', unit: 'mD', log: true },
+    { key: 'fault0.trans', label: 'Cross-fault transmissibility', unit: '–' }
+  ]);
+
+  const mulberry32 = seed => {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+
+  const latinHypercube = (n, dimensions, rng) => {
+    const rows = Array.from({ length: n }, () => new Array(dimensions));
+    for (let d = 0; d < dimensions; d++) {
+      const strata = Array.from({ length: n }, (_, i) => i);
+      for (let i = n - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [strata[i], strata[j]] = [strata[j], strata[i]];
+      }
+      for (let i = 0; i < n; i++) rows[i][d] = (strata[i] + rng()) / n;
+    }
+    return rows;
+  };
+
+  const ranks = values => {
+    const order = values.map((value, index) => [value, index]).sort((a, b) => a[0] - b[0]);
+    const result = new Array(values.length);
+    for (let i = 0; i < order.length;) {
+      let j = i;
+      while (j + 1 < order.length && order[j + 1][0] === order[i][0]) j++;
+      for (let k = i; k <= j; k++) result[order[k][1]] = (i + j) / 2;
+      i = j + 1;
+    }
+    return result;
+  };
+
+  const spearman = (x, y) => {
+    const rx = ranks(x);
+    const ry = ranks(y);
+    const mean = values => values.reduce((sum, value) => sum + value, 0) / values.length;
+    const mx = mean(rx);
+    const my = mean(ry);
+    let num = 0;
+    let dx = 0;
+    let dy = 0;
+    for (let i = 0; i < rx.length; i++) {
+      num += (rx[i] - mx) * (ry[i] - my);
+      dx += (rx[i] - mx) ** 2;
+      dy += (ry[i] - my) ** 2;
+    }
+    return dx > 0 && dy > 0 ? num / Math.sqrt(dx * dy) : 0;
+  };
+
+  const setScenarioValue = (scenario, key, value) => {
+    if (key.startsWith('fault0.')) {
+      if (scenario.faults.length) scenario.faults[0] = { ...scenario.faults[0], [key.slice(7)]: value };
+    } else {
+      scenario[key] = value;
+    }
+  };
+
+  const sampleBatch = (base, specs, n, seed) => {
+    const unit = latinHypercube(n, specs.length, mulberry32(seed));
+    return unit.map(row => {
+      const scenario = normalizeScenario(base);
+      specs.forEach((spec, d) => {
+        const value = spec.log
+          ? Math.exp(Math.log(spec.min) + row[d] * (Math.log(spec.max) - Math.log(spec.min)))
+          : spec.min + row[d] * (spec.max - spec.min);
+        setScenarioValue(scenario, spec.key, value);
+      });
+      return normalizeScenario(scenario);
+    });
+  };
+
+  const summarize = row => {
+    const pct = value => row.injected > 0 ? 100 * value / row.injected : 0;
+    return {
+      freePct: pct(row.free),
+      structuralPct: pct(row.structural),
+      residualPct: pct(row.residual),
+      dissolvedPct: pct(row.dissolved),
+      exitedPct: pct(row.exited),
+      leakedPct: pct(row.leaked),
+      footprintKm2: row.footprint / 1e6,
+      migrationKm: row.migration / KM,
+      bhpBar: row.bhpPeak / BAR
+    };
+  };
+
+  const runBatch = (scenarios, onProgress) => scenarios.map((scenario, index) => {
+    const result = run(scenario, { keepSnapshots: false });
+    onProgress?.(index + 1, scenarios.length);
+    return { index, scenario: result.scenario, summary: summarize(result.history.at(-1)), truncated: result.truncated };
+  });
+
   return {
     YEAR, MT, MD, BAR, KM, GRAVITY, LX, LY, GRIDS,
     LIMITS, FAULT_LIMITS, DEFAULTS, PRESETS, MAX_FAULTS,
     normalizeScenario, topDepth, buildModel, roughnessField, trapAnalysis, contourSegments,
-    createState, advance, kpis, inventory, run
+    createState, advance, kpis, inventory, run,
+    UQ_PARAMS, mulberry32, latinHypercube, spearman, sampleBatch, summarize, runBatch
   };
 });

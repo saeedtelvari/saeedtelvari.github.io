@@ -435,3 +435,51 @@ test('the default scenario runs within the interactive budget', () => {
   const elapsed = Date.now() - started;
   assert.ok(elapsed < 3000, `default 1000-year run took ${elapsed} ms`);
 });
+
+// ---------------------------------------------------------------- Task 6
+
+test('Latin hypercube samples hit every stratum exactly once per dimension', () => {
+  const rng = VE2D.mulberry32(7);
+  const samples = VE2D.latinHypercube(10, 3, rng);
+  assert.equal(samples.length, 10);
+  for (let d = 0; d < 3; d++) {
+    const strata = samples.map(row => Math.floor(row[d] * 10)).sort((a, b) => a - b);
+    assert.deepEqual(strata, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  }
+  assert.deepEqual(VE2D.latinHypercube(4, 2, VE2D.mulberry32(3)), VE2D.latinHypercube(4, 2, VE2D.mulberry32(3)), 'seeded and reproducible');
+});
+
+test('Spearman rank correlation is +1 for monotone data and -1 when reversed', () => {
+  const x = [1, 2, 3, 4, 5, 6];
+  near(VE2D.spearman(x, x.map(v => v ** 3)), 1, 1e-12, 'monotone increasing');
+  near(VE2D.spearman(x, x.map(v => -Math.exp(v))), -1, 1e-12, 'monotone decreasing');
+  near(VE2D.spearman([1, 1, 2], [3, 3, 4]), 1, 1e-12, 'ties use average ranks');
+});
+
+test('sampled scenarios stay inside the requested ranges, log-uniform where asked', () => {
+  const specs = [
+    { key: 'permMd', min: 100, max: 2000, log: true },
+    { key: 'porosity', min: 0.1, max: 0.3 },
+    { key: 'fault0.sealCap', min: 2, max: 30 }
+  ];
+  const scenarios = VE2D.sampleBatch(VE2D.DEFAULTS, specs, 40, 11);
+  assert.equal(scenarios.length, 40);
+  for (const scenario of scenarios) {
+    assert.ok(scenario.permMd >= 100 && scenario.permMd <= 2000);
+    assert.ok(scenario.porosity >= 0.1 && scenario.porosity <= 0.3);
+    assert.ok(scenario.faults[0].sealCap >= 2 && scenario.faults[0].sealCap <= 30);
+    assert.equal(scenario.injYears, VE2D.DEFAULTS.injYears, 'unsampled inputs keep the base value');
+  }
+  const below = scenarios.filter(s => s.permMd < Math.sqrt(100 * 2000)).length;
+  assert.equal(below, 20, 'log-uniform: half the samples below the geometric mean');
+});
+
+test('a batch realization reproduces the workbench run exactly', () => {
+  const scenario = { ...VE2D.DEFAULTS, grid: 'coarse', years: 300, permMd: 800 };
+  const workbench = VE2D.summarize(VE2D.run(scenario, { keepSnapshots: false }).history.at(-1));
+  const [row] = VE2D.runBatch([scenario]);
+  assert.deepEqual(row.summary, workbench);
+  for (const key of ['leakedPct', 'exitedPct', 'residualPct', 'dissolvedPct', 'structuralPct', 'freePct', 'footprintKm2', 'bhpBar', 'migrationKm']) {
+    assert.ok(Number.isFinite(row.summary[key]), key);
+  }
+});
