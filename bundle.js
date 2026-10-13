@@ -490,7 +490,10 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 // File: Header.jsx
-// Header.jsx — fixed top navbar, transparent over hero, shrinks on scroll, with mobile drawer.
+function _extends() { _extends = Object.assign ? Object.assign.bind() : function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; }; return _extends.apply(this, arguments); }
+// Header.jsx — fixed navigation shared by the homepage, the CV and the simulator.
+// The site variant is transparent over the hero sky and turns into an Earth surface once
+// the page scrolls; the workbench variant is the simulator's solid 56 px bar.
 
 // [destructured React]
 
@@ -506,6 +509,27 @@ const getHeaderFocusWrapTarget = (focusables, activeElement, backwards) => {
 const setHeaderBackgroundInert = (element, inert) => {
   if (element) element.inert = inert;
 };
+const HEADER_PROFILES = [{
+  icon: 'mail',
+  label: 'Email',
+  href: `mailto:${SITE_LINKS.email}`
+}, {
+  icon: 'scholar',
+  label: 'Google Scholar',
+  href: SITE_LINKS.scholar
+}, {
+  icon: 'orcid',
+  label: 'ORCID',
+  href: SITE_LINKS.orcid
+}, {
+  icon: 'github',
+  label: 'GitHub',
+  href: SITE_LINKS.github
+}, {
+  icon: 'linkedin',
+  label: 'LinkedIn',
+  href: SITE_LINKS.linkedin
+}];
 const Header = ({
   active,
   onNavigate,
@@ -513,72 +537,24 @@ const Header = ({
 }) => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [currentSection, setCurrentSection] = useState(active);
   const menuButtonRef = useRef(null);
   const closeButtonRef = useRef(null);
   const mobileDrawerRef = useRef(null);
 
-  // Shrink-on-scroll
+  // Over the hero the site header is transparent; it gains a surface once the page moves.
   useEffect(() => {
-    const onScroll = () => {
-      setScrolled(window.scrollY > 80);
-
-      // Auto section spy when on home page
-      if (active === 'home' || active === 'about' || active === 'publications' || active === 'contact') {
-        const sections = [{
-          id: 'contact',
-          el: document.getElementById('contact')
-        }, {
-          id: 'publications',
-          el: document.getElementById('publications')
-        }, {
-          id: 'about',
-          el: document.getElementById('about')
-        }, {
-          id: 'home',
-          el: document.getElementById('home')
-        }];
-        for (const s of sections) {
-          if (s.el) {
-            const rect = s.el.getBoundingClientRect();
-            if (rect.top <= 200) {
-              setCurrentSection(s.id);
-              break;
-            }
-          }
-        }
-      } else {
-        setCurrentSection(active);
-      }
-    };
+    if (variant !== 'site') return undefined;
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
     window.addEventListener('scroll', onScroll, {
       passive: true
     });
     return () => window.removeEventListener('scroll', onScroll);
-  }, [active]);
+  }, [variant]);
 
-  // Sync current section if active prop changes
+  // The open drawer is modal: the page behind is inert, Tab cycles inside, Escape closes.
   useEffect(() => {
-    setCurrentSection(active);
-  }, [active]);
-
-  // Close drawer on escape key
-  useEffect(() => {
-    if (variant === 'workbench') return undefined;
-    const onKeyDown = e => {
-      if (e.key === 'Escape' && mobileOpen) {
-        setMobileOpen(false);
-        menuButtonRef.current && menuButtonRef.current.focus();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [mobileOpen, variant]);
-  useEffect(() => {
-    if (variant !== 'workbench' && mobileOpen && closeButtonRef.current) closeButtonRef.current.focus();
-  }, [mobileOpen, variant]);
-  useEffect(() => {
-    if (variant !== 'workbench' || !mobileOpen) return undefined;
+    if (!mobileOpen) return undefined;
     const mainContent = document.getElementById('main-content');
     const drawer = mobileDrawerRef.current;
     setHeaderBackgroundInert(mainContent, true);
@@ -603,588 +579,149 @@ const Header = ({
       setHeaderBackgroundInert(mainContent, false);
       if (menuButtonRef.current) menuButtonRef.current.focus();
     };
-  }, [mobileOpen, variant]);
-  const items = [{
-    id: 'home',
-    label: 'Home',
-    href: './index.html'
-  }, {
-    id: 'about',
-    label: 'About',
-    href: './index.html#about'
-  }, {
-    id: 'publications',
-    label: 'Research',
-    href: './index.html#publications'
-  }, {
-    id: 'simulator',
-    label: 'CO₂ Simulator',
-    href: './simulator.html'
-  }, {
-    id: 'contact',
-    label: 'Contact',
-    href: './index.html#contact'
-  }, {
-    id: 'cv',
-    label: 'CV',
-    href: './index.html#cv'
-  }];
-  const handleItemClick = id => {
+  }, [mobileOpen]);
+  const handleItemClick = (id, event) => {
     setMobileOpen(false);
-    if (onNavigate) onNavigate(id);else if (window.__onNavigate) window.__onNavigate(id);
+    if (onNavigate) onNavigate(id, event);
   };
-  const isWorkbench = variant === 'workbench';
-  const drawerPalette = isWorkbench ? {
-    divider: 'var(--ve-border)',
-    ink: 'var(--ve-ink)',
-    link: 'var(--ve-ink)',
-    muted: 'var(--ve-muted)',
-    subtle: 'var(--ve-muted)',
-    accent: 'var(--ve-accent)',
-    activeBackground: 'var(--ve-accent-soft)',
-    activeBorder: 'var(--ve-accent)'
-  } : {
-    divider: 'rgba(255,255,255,0.08)',
-    ink: '#fff',
-    link: 'rgba(255,255,255,0.85)',
-    muted: 'rgba(255,255,255,0.6)',
-    subtle: 'rgba(255,255,255,0.5)',
-    accent: '#64ffda',
-    activeBackground: 'rgba(100,255,218,0.15)',
-    activeBorder: 'rgba(100,255,218,0.35)'
-  };
-  const siteScrolledBackground = 'linear-gradient(180deg, rgba(19, 13, 28, 0.92) 0%, rgba(19, 13, 28, 0.75) 100%)';
-  const siteTopBackground = 'linear-gradient(180deg, rgba(19, 13, 28, 0.60) 0%, rgba(19, 13, 28, 0.20) 60%, transparent 100%)';
-  const siteBorderBottom = scrolled ? '1px solid rgba(255,255,255,0.12)' : '1px solid transparent';
-  const siteBoxShadow = scrolled ? '0 4px 30px rgba(0,0,0,0.30), inset 0 -1px 0 rgba(255,255,255,0.08)' : 'none';
+  const classes = ['app-header', `app-header--${variant}`, scrolled ? 'is-scrolled' : ''].filter(Boolean).join(' ');
+  const navLink = it => /*#__PURE__*/React.createElement("a", {
+    className: "app-nav__link",
+    href: it.href,
+    "aria-current": active === it.id ? 'page' : undefined,
+    onClick: event => handleItemClick(it.id, event)
+  }, it.label);
   return /*#__PURE__*/React.createElement("header", {
-    className: isWorkbench ? 'app-header app-header--workbench' : 'app-header',
-    role: "banner",
-    style: {
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      width: '100%',
-      zIndex: 1000,
-      pointerEvents: 'none'
-    }
-  }, /*#__PURE__*/React.createElement("style", null, `
-        .desktop-nav-list {
-          display: flex;
-          gap: 6px;
-          list-style: none;
-          margin: 0;
-          padding: 0;
-          align-items: center;
-        }
-        .hamburger-btn {
-          display: none;
-          background: rgba(255,255,255,0.08);
-          border: 1px solid rgba(255,255,255,0.15);
-          color: #64ffda;
-          width: 40px;
-          height: 40px;
-          border-radius: 10px;
-          cursor: pointer;
-          align-items: center;
-          justify-content: center;
-          font-size: 16px;
-          transition: all 0.3s ease;
-          backdrop-filter: blur(8px);
-        }
-        .hamburger-btn:hover {
-          background: rgba(100,255,218,0.18);
-          border-color: #64ffda;
-        }
-        .hamburger-btn.workbench {
-          background: var(--ve-surface);
-          border-color: var(--ve-border);
-          color: var(--ve-ink);
-          backdrop-filter: none;
-          transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
-        }
-        .hamburger-btn.workbench:hover {
-          background: var(--ve-accent-soft);
-          border-color: var(--ve-border);
-        }
-        .mobile-drawer-backdrop {
-          position: fixed;
-          inset: 0;
-          background: rgba(10, 8, 18, 0.7);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          z-index: 1001;
-          opacity: 0;
-          pointer-events: none;
-          transition: opacity 0.35s ease;
-        }
-        .mobile-drawer-backdrop.open {
-          opacity: 1;
-          pointer-events: auto;
-        }
-        .mobile-drawer-panel {
-          position: fixed;
-          top: 0;
-          right: 0;
-          bottom: 0;
-          width: min(320px, 80vw);
-          background: linear-gradient(165deg, rgba(33, 29, 52, 0.98) 0%, rgba(20, 28, 52, 0.98) 100%);
-          border-left: 1px solid rgba(100, 255, 218, 0.25);
-          box-shadow: -10px 0 35px rgba(0, 0, 0, 0.5);
-          z-index: 1002;
-          transform: translateX(100%);
-          transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-          padding: 28px 24px;
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-          pointer-events: auto;
-        }
-        .mobile-drawer-panel.open {
-          transform: translateX(0);
-        }
-        .mobile-drawer-backdrop.workbench {
-          background: rgba(15, 30, 42, 0.38);
-          backdrop-filter: none;
-          -webkit-backdrop-filter: none;
-          transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1);
-        }
-        .mobile-drawer-panel.workbench {
-          background: var(--ve-surface);
-          border-left: 1px solid var(--ve-border);
-          box-shadow: none;
-          transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
-        }
-        @media (max-width: 768px) {
-          .desktop-nav-list {
-            display: none !important;
-          }
-          .hamburger-btn {
-            display: flex !important;
-          }
-          .header-container {
-            padding: 0 20px !important;
-          }
-        }
-      `), /*#__PURE__*/React.createElement("div", {
-    className: "header-container",
-    style: {
-      height: isWorkbench ? 56 : scrolled ? 64 : 88,
-      padding: '0 36px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      transition: isWorkbench ? 'none' : 'all 0.4s ease',
-      background: isWorkbench ? 'var(--ve-surface)' : scrolled ? siteScrolledBackground : siteTopBackground,
-      backdropFilter: isWorkbench ? 'none' : scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)',
-      WebkitBackdropFilter: isWorkbench ? 'none' : scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)',
-      borderBottom: isWorkbench ? '1px solid var(--ve-border)' : siteBorderBottom,
-      boxShadow: isWorkbench ? 'none' : siteBoxShadow,
-      pointerEvents: 'auto'
-    }
+    className: classes
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "app-header__bar"
   }, /*#__PURE__*/React.createElement("a", {
+    className: "app-header__logo",
     href: "./index.html",
-    onClick: e => {
-      e.preventDefault();
-      handleItemClick('home');
-    },
-    "aria-label": "Sa'eed Telvari Homepage",
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      width: scrolled ? 44 : 58,
-      height: scrolled ? 44 : 58,
-      transition: isWorkbench ? 'none' : 'all 0.4s ease'
-    }
+    onClick: event => handleItemClick('home', event),
+    "aria-label": "Sa\u2019eed Telvari, home"
   }, /*#__PURE__*/React.createElement("img", {
     src: "./assets/logo-minimalist.webp",
-    alt: "Sa'eed Telvari",
-    style: {
-      width: '100%',
-      height: '100%',
-      objectFit: 'contain'
-    }
+    alt: "",
+    width: "40",
+    height: "40"
   })), /*#__PURE__*/React.createElement("nav", {
-    role: "navigation",
-    "aria-label": "Main menu"
+    className: "app-header__nav",
+    "aria-label": "Main"
   }, /*#__PURE__*/React.createElement("ul", {
-    className: "desktop-nav-list"
-  }, items.map(it => /*#__PURE__*/React.createElement(NavItem, {
-    key: it.id,
-    label: it.label,
-    href: it.href,
-    active: currentSection === it.id,
-    onClick: () => handleItemClick(it.id),
-    variant: variant
-  })))), /*#__PURE__*/React.createElement("button", {
+    className: "app-nav"
+  }, SITE_NAV_ITEMS.map(it => /*#__PURE__*/React.createElement("li", {
+    key: it.id
+  }, navLink(it))))), /*#__PURE__*/React.createElement("button", {
     type: "button",
     ref: menuButtonRef,
-    className: `hamburger-btn${isWorkbench ? ' workbench' : ''}`,
-    onClick: () => setMobileOpen(!mobileOpen),
+    className: "app-header__menu",
+    onClick: () => setMobileOpen(true),
     "aria-expanded": mobileOpen,
-    "aria-label": mobileOpen ? "Close navigation menu" : "Open navigation menu"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: `fas ${mobileOpen ? 'fa-times' : 'fa-bars'}`
+    "aria-controls": "site-drawer",
+    "aria-label": "Open navigation menu"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "menu",
+    size: 20
   }))), mobileOpen && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    className: `mobile-drawer-backdrop open${isWorkbench ? ' workbench' : ''}`,
+    className: "app-drawer__backdrop",
     onClick: () => setMobileOpen(false),
     "aria-hidden": "true"
   }), /*#__PURE__*/React.createElement("div", {
     ref: mobileDrawerRef,
-    className: `mobile-drawer-panel open${isWorkbench ? ' workbench' : ''}`,
+    id: "site-drawer",
+    className: "app-drawer",
     role: "dialog",
     "aria-modal": "true",
-    "aria-label": "Mobile Navigation"
+    "aria-label": "Navigation"
   }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      borderBottom: `1px solid ${drawerPalette.divider}`,
-      paddingBottom: 16
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10
-    }
-  }, /*#__PURE__*/React.createElement("img", {
-    src: "./assets/logo-minimalist.webp",
-    alt: "",
-    style: {
-      width: 32,
-      height: 32,
-      objectFit: 'contain'
-    }
-  }), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 15,
-      fontWeight: 700,
-      color: drawerPalette.ink,
-      letterSpacing: '-0.01em'
-    }
-  }, "Sa\u2019eed Telvari")), /*#__PURE__*/React.createElement("button", {
+    className: "app-drawer__head"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "app-drawer__name"
+  }, "Sa\u2019eed Telvari"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     ref: closeButtonRef,
+    className: "app-drawer__close",
     onClick: () => setMobileOpen(false),
-    "aria-label": "Close menu",
-    style: {
-      background: 'none',
-      border: 'none',
-      color: drawerPalette.muted,
-      fontSize: 18,
-      cursor: 'pointer',
-      padding: 4
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-times"
+    "aria-label": "Close navigation menu"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "close",
+    size: 20
   }))), /*#__PURE__*/React.createElement("ul", {
-    style: {
-      listStyle: 'none',
-      margin: 0,
-      padding: 0,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 8
-    }
-  }, items.map(it => {
-    const isActive = currentSection === it.id;
-    return /*#__PURE__*/React.createElement("li", {
-      key: it.id
-    }, /*#__PURE__*/React.createElement("a", {
-      href: it.href,
-      onClick: e => {
-        e.preventDefault();
-        handleItemClick(it.id);
-      },
-      style: {
-        width: '100%',
-        textAlign: 'left',
-        padding: '12px 16px',
-        borderRadius: 12,
-        background: isActive ? drawerPalette.activeBackground : 'transparent',
-        border: isActive ? `1px solid ${drawerPalette.activeBorder}` : '1px solid transparent',
-        color: isActive ? drawerPalette.accent : drawerPalette.link,
-        fontSize: 15,
-        fontWeight: isActive ? 600 : 400,
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        transition: isWorkbench ? 'color 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1)' : 'all 0.2s ease'
-      }
-    }, /*#__PURE__*/React.createElement("span", null, it.label), isActive && /*#__PURE__*/React.createElement("i", {
-      className: "fas fa-chevron-right",
-      style: {
-        fontSize: 11,
-        color: drawerPalette.accent
-      }
-    })));
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 'auto',
-      borderTop: `1px solid ${drawerPalette.divider}`,
-      paddingTop: 16
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: drawerPalette.subtle,
-      textTransform: 'uppercase',
-      letterSpacing: '0.1em',
-      marginBottom: 12
-    }
-  }, "Connect"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 12
-    }
-  }, /*#__PURE__*/React.createElement("a", {
-    href: "https://www.linkedin.com/in/stelvari/",
-    target: "_blank",
-    rel: "noreferrer",
-    "aria-label": "LinkedIn",
-    style: {
-      color: drawerPalette.accent,
-      fontSize: 16
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fab fa-linkedin"
-  })), /*#__PURE__*/React.createElement("a", {
-    href: "https://github.com/saeedtelvari",
-    target: "_blank",
-    rel: "noreferrer",
-    "aria-label": "GitHub",
-    style: {
-      color: drawerPalette.accent,
-      fontSize: 16
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fab fa-github"
-  })), /*#__PURE__*/React.createElement("a", {
-    href: "mailto:st4014@hw.ac.uk",
-    "aria-label": "Email",
-    style: {
-      color: drawerPalette.accent,
-      fontSize: 16
-    }
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-envelope"
-  })))))));
-};
-const NavItem = ({
-  label,
-  href,
-  active,
-  onClick,
-  variant = 'site'
-}) => {
-  const [hover, setHover] = useState(false);
-  const showPill = hover || active;
-  const existingBackground = showPill ? 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.05) 100%)' : 'transparent';
-  const existingBorder = active ? '1px solid rgba(100,255,218,0.40)' : showPill ? '1px solid rgba(255,255,255,0.15)' : '1px solid transparent';
-  const existingTransform = hover ? 'translateY(-2px)' : 'translateY(0)';
-  return /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("a", {
-    href: href,
-    onMouseEnter: () => setHover(true),
-    onMouseLeave: () => setHover(false),
-    onClick: e => {
-      e.preventDefault();
-      onClick();
-    },
-    "aria-current": active ? 'page' : undefined,
-    style: {
-      position: 'relative',
-      padding: '8px 16px',
-      fontFamily: "'Montserrat', sans-serif",
-      fontSize: 14.5,
-      fontWeight: active ? 600 : 400,
-      color: variant === 'workbench' ? active ? 'var(--ve-accent)' : 'var(--ve-ink)' : active ? '#64ffda' : 'azure',
-      cursor: 'pointer',
-      borderRadius: 12,
-      transition: variant === 'workbench' ? 'color 140ms ease, background-color 140ms ease, border-color 140ms ease, transform 140ms cubic-bezier(0.23,1,0.32,1)' : 'all 0.35s cubic-bezier(0.175,0.885,0.32,1.275)',
-      transform: variant === 'workbench' && hover ? 'translateY(-1px)' : existingTransform,
-      background: variant === 'workbench' && showPill ? 'var(--ve-accent-soft)' : existingBackground,
-      backdropFilter: variant === 'workbench' ? 'none' : showPill ? 'blur(10px)' : 'none',
-      WebkitBackdropFilter: variant === 'workbench' ? 'none' : showPill ? 'blur(10px)' : 'none',
-      border: variant === 'workbench' && active ? '1px solid rgba(23,111,104,0.28)' : existingBorder,
-      boxShadow: variant === 'workbench' ? 'none' : active ? '0 4px 15px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.20), 0 0 10px rgba(100,255,218,0.15)' : showPill ? '0 4px 15px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.30)' : 'none',
-      textDecoration: 'none',
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 6
-    }
-  }, /*#__PURE__*/React.createElement("span", null, label), active && /*#__PURE__*/React.createElement("span", {
-    style: {
-      position: 'absolute',
-      bottom: 2,
-      left: '50%',
-      transform: 'translateX(-50%)',
-      width: 4,
-      height: 4,
-      borderRadius: '50%',
-      backgroundColor: variant === 'workbench' ? 'var(--ve-accent)' : '#64ffda',
-      boxShadow: variant === 'workbench' ? 'none' : '0 0 8px #64ffda'
-    }
-  })));
+    className: "app-drawer__list"
+  }, SITE_NAV_ITEMS.map(it => /*#__PURE__*/React.createElement("li", {
+    key: it.id
+  }, navLink(it)))), /*#__PURE__*/React.createElement("ul", {
+    className: "app-drawer__profiles",
+    "aria-label": "Elsewhere"
+  }, HEADER_PROFILES.map(profile => /*#__PURE__*/React.createElement("li", {
+    key: profile.label
+  }, /*#__PURE__*/React.createElement("a", _extends({
+    href: profile.href
+  }, profile.href.startsWith('http') ? {
+    target: '_blank',
+    rel: 'noreferrer'
+  } : {}), /*#__PURE__*/React.createElement(Icon, {
+    name: profile.icon,
+    size: 16
+  }), profile.label)))))));
 };
 Object.assign(window, {
   Header
 });
 
 // File: Footer.jsx
-// Footer.jsx
+// Footer.jsx — closing band: name, affiliation, the same links as the header, back to top.
 const Footer = ({
   onNavigate,
   geological = false
 }) => {
-  const links = [{
-    id: 'home',
-    label: 'Home',
-    href: './index.html'
-  }, {
-    id: 'about',
-    label: 'About',
-    href: './index.html#about'
-  }, {
-    id: 'publications',
-    label: 'Research',
-    href: './index.html#publications'
-  }, {
-    id: 'simulator',
-    label: 'CO₂ Simulator',
-    href: './simulator.html'
-  }, {
-    id: 'contact',
-    label: 'Contact',
-    href: './index.html#contact'
-  }, {
-    id: 'cv',
-    label: 'CV',
-    href: './index.html#cv'
-  }];
+  const toTop = event => {
+    event.preventDefault();
+    window.scrollTo({
+      top: 0,
+      behavior: siteReducedMotion() ? 'auto' : 'smooth'
+    });
+    const main = document.getElementById('main-content');
+    if (main) main.focus({
+      preventScroll: true
+    });
+  };
   return /*#__PURE__*/React.createElement("footer", {
-    role: "contentinfo",
-    style: {
-      position: 'relative',
-      zIndex: 10,
-      padding: '64px 36px 48px',
-      backgroundColor: geological ? 'transparent' : '#1c252d',
-      color: 'rgba(255,255,255,0.75)',
-      fontFamily: "'Montserrat', sans-serif",
-      overflow: 'hidden'
-    }
+    className: `site-footer${geological ? ' site-footer--geological' : ''}`
   }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: 'relative',
-      zIndex: 2,
-      maxWidth: 1200,
-      margin: '0 auto',
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      flexWrap: 'wrap',
-      gap: 24
-    }
+    className: "site-footer__inner"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
-    style: {
-      margin: 0,
-      fontSize: 13.5,
-      color: 'rgba(255,255,255,0.90)',
-      fontWeight: 500
-    }
-  }, "\xA9 2024\u20132026 Sa\u2019eed Telvari. All rights reserved."), /*#__PURE__*/React.createElement("p", {
-    style: {
-      margin: '4px 0 0',
-      fontSize: 12,
-      color: 'rgba(255,255,255,0.55)'
-    }
-  }, "Institute of GeoEnergy Engineering \xB7 Heriot-Watt University")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 24,
-      flexWrap: 'wrap'
-    }
-  }, /*#__PURE__*/React.createElement("nav", {
-    role: "navigation",
-    "aria-label": "Footer navigation"
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 20,
-      fontSize: 13,
-      flexWrap: 'wrap',
-      alignItems: 'center'
-    }
-  }, links.map(l => /*#__PURE__*/React.createElement(FooterLink, {
-    key: l.id,
-    label: l.label,
-    href: l.href,
-    onClick: () => {
-      if (onNavigate) onNavigate(l.id);else if (window.__onNavigate) window.__onNavigate(l.id);
-    }
-  })))), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      if (onNavigate) onNavigate('home');else if (window.__onNavigate) window.__onNavigate('home');else window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
-    },
-    className: "pressable",
-    style: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 8,
-      padding: '8px 16px',
-      borderRadius: 10,
-      background: 'rgba(201, 163, 141, 0.10)',
-      border: '1px solid rgba(201, 163, 141, 0.32)',
-      color: '#d6b5a0',
-      fontFamily: 'ui-monospace, monospace',
-      fontSize: 11.5,
-      fontWeight: 700,
-      letterSpacing: '0.06em',
-      cursor: 'pointer',
-      textTransform: 'uppercase',
-      transition: 'transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background 160ms ease, border-color 160ms ease'
-    },
-    title: "Back to top"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-arrow-up",
-    style: {
-      fontSize: 10
-    }
-  }), "Back to top"))));
+    className: "site-footer__name"
+  }, "\xA9 2024\u20132026 Sa\u2019eed Telvari"), /*#__PURE__*/React.createElement("p", {
+    className: "site-footer__affiliation"
+  }, "Institute of GeoEnergy Engineering, Heriot-Watt University, Edinburgh")), /*#__PURE__*/React.createElement("nav", {
+    "aria-label": "Footer"
+  }, /*#__PURE__*/React.createElement("ul", {
+    className: "site-footer__links"
+  }, SITE_NAV_ITEMS.map(it => /*#__PURE__*/React.createElement("li", {
+    key: it.id
+  }, /*#__PURE__*/React.createElement(FooterLink, {
+    label: it.label,
+    href: it.href,
+    onClick: event => onNavigate && onNavigate(it.id, event)
+  }))))), /*#__PURE__*/React.createElement("a", {
+    className: "btn btn--quiet btn--small",
+    href: "#main-content",
+    onClick: toTop
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "arrow-up",
+    size: 16
+  }), "Back to top")));
 };
 const FooterLink = ({
   label,
   href,
   onClick
-}) => {
-  const [hover, setHover] = useState(false);
-  return /*#__PURE__*/React.createElement("a", {
-    href: href,
-    onClick: e => {
-      e.preventDefault();
-      onClick();
-    },
-    onMouseEnter: () => setHover(true),
-    onMouseLeave: () => setHover(false),
-    className: "pressable",
-    style: {
-      color: hover ? '#64ffda' : 'rgba(255,255,255,0.70)',
-      textDecoration: 'none',
-      cursor: 'pointer',
-      transition: 'color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1)',
-      fontWeight: hover ? 500 : 400,
-      transform: hover ? 'translateY(-1px)' : 'none',
-      userSelect: 'none'
-    }
-  }, label);
-};
+}) => /*#__PURE__*/React.createElement("a", {
+  href: href,
+  onClick: onClick
+}, label);
 Object.assign(window, {
   Footer
 });
@@ -6273,192 +5810,222 @@ Object.assign(window, {
 });
 
 // File: App.jsx
-// App.jsx — top-level wiring
+// App.jsx — entries for the three pages (home, CV, simulator) and their navigation.
 
 // [destructured React]
 
-// Loader dismissal shared by the home entry (index.html) and the standalone
-// simulator entry (simulator.html).
+// ---- navigation helpers (pure; tests/site-nav.test.js evaluates this block)
+const SITE_NAV_ITEMS = [{
+  id: 'research',
+  label: 'Research',
+  href: './index.html#research'
+}, {
+  id: 'projects',
+  label: 'Projects',
+  href: './index.html#projects'
+}, {
+  id: 'publications',
+  label: 'Publications',
+  href: './index.html#publications'
+}, {
+  id: 'simulator',
+  label: 'Simulator',
+  href: './simulator.html'
+}, {
+  id: 'cv',
+  label: 'CV',
+  href: './cv.html'
+}, {
+  id: 'contact',
+  label: 'Contact',
+  href: './index.html#contact'
+}];
+const SITE_SECTION_IDS = ['research', 'projects', 'publications', 'contact'];
+
+// The section whose top has passed the reading line (viewport coordinates); the hero is 'home'.
+const siteActiveSection = (rects, line) => {
+  let active = 'home';
+  for (const rect of rects) if (rect.top <= line) active = rect.id;
+  return active;
+};
+
+// Old anchors from before the redesign keep working.
+const siteLegacyTarget = hash => ({
+  '#about': 'research',
+  '#research': 'research',
+  '#projects': 'projects',
+  '#publications': 'publications',
+  '#contact': 'contact',
+  '#cv': 'cv',
+  '#simulator': 'simulator'
+})[hash] || 'home';
+// ---- end navigation helpers
+
+const siteHref = id => (SITE_NAV_ITEMS.find(item => item.id === id) || {
+  href: './index.html'
+}).href;
+const siteReducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+const siteScrollTo = id => {
+  const behavior = siteReducedMotion() ? 'auto' : 'smooth';
+  if (id === 'home') {
+    window.scrollTo({
+      top: 0,
+      behavior
+    });
+    return;
+  }
+  const target = document.getElementById(id);
+  if (target) target.scrollIntoView({
+    behavior,
+    block: 'start'
+  });
+};
+
+// Links are real; only plain clicks on targets within the current page are handled here.
+const siteNavigate = (page, id, event) => {
+  if (event && (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
+  const samePage = id === page || page === 'home' && SITE_SECTION_IDS.includes(id);
+  if (!samePage) {
+    if (!event) window.location.href = siteHref(id);
+    return;
+  }
+  if (event) event.preventDefault();
+  if (page === 'home' && id !== 'home') {
+    siteScrollTo(id);
+    window.history.pushState({
+      id
+    }, '', `${window.location.pathname}#${id}`);
+  } else {
+    siteScrollTo('home');
+    if (window.location.hash) window.history.pushState({
+      id
+    }, '', window.location.pathname);
+  }
+};
+
+// The pre-React shell in each HTML page fades out once React has rendered.
 const dismissLoader = () => {
-  if (window.__appReady) window.__appReady(); // push loader progress bar to 100%
+  if (window.__appReady) window.__appReady();
   const loader = document.getElementById('app-loader');
   if (!loader) return () => {};
-  const startTime = window.__pageLoadStart || Date.now();
-  const elapsed = Date.now() - startTime;
-  const minDuration = 150;
-  const remaining = Math.max(0, minDuration - elapsed);
-  const timer = setTimeout(() => {
-    loader.classList.add('loader-finished');
-    setTimeout(() => {
-      if (loader && loader.parentNode) {
-        loader.parentNode.removeChild(loader);
-      }
-    }, 500);
-  }, remaining);
+  loader.classList.add('loader-finished');
+  const timer = setTimeout(() => loader.remove(), 500);
   return () => clearTimeout(timer);
 };
-const App = () => {
-  const [screen, setScreen] = useState('home');
-  const [activeSection, setActiveSection] = useState('home');
-  const applyLocation = () => {
-    const id = (window.location.hash || '#home').slice(1);
-    if (id === 'simulator') {
-      window.location.replace('./simulator.html');
-      return;
-    }
-    if (id === 'cv') {
-      setScreen('cv');
-      setActiveSection('cv');
-      window.scrollTo(0, 0);
-      return;
-    }
-    setScreen('home');
-    if (id === 'home') {
-      setActiveSection('home');
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
-      return;
-    }
-    setTimeout(() => {
-      const targetId = id === 'research' ? 'publications' : id;
-      const el = document.getElementById(targetId);
-      if (el) {
-        el.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start'
-        });
-        setActiveSection(targetId);
-      } else {
-        window.scrollTo(0, 0);
+const SkipLink = () => /*#__PURE__*/React.createElement("a", {
+  className: "skip-link",
+  href: "#main-content"
+}, "Skip to content");
+const SiteHome = () => {
+  const [active, setActive] = useState('home');
+  const navigate = (id, event) => siteNavigate('home', id, event);
+  useEffect(() => dismissLoader(), []);
+
+  // Old and new anchors: pages redirect, sections scroll into view after the first layout.
+  useEffect(() => {
+    const apply = () => {
+      const target = siteLegacyTarget(window.location.hash);
+      if (target === 'cv' || target === 'simulator') {
+        window.location.replace(siteHref(target));
+        return;
       }
-    }, 50);
-  };
-  const onNavigate = id => {
-    if (id === 'simulator') {
-      window.location.href = './simulator.html';
-      return;
-    }
-    const hash = id === 'home' ? '' : '#' + id;
-    window.history.pushState({
-      screen: id
-    }, '', './index.html' + hash);
-    applyLocation();
-  };
-
-  // Expose onNavigate globally for child buttons
-  useEffect(() => {
-    window.__onNavigate = onNavigate;
-  });
-
-  // Dismiss 0ms pre-React loading screen once components mount and initial simulation renders
-  useEffect(() => {
-    return dismissLoader();
-  }, []);
-  useEffect(() => {
-    applyLocation();
-    window.addEventListener('hashchange', applyLocation);
-    window.addEventListener('popstate', applyLocation);
+      if (target !== 'home') requestAnimationFrame(() => siteScrollTo(target));
+    };
+    apply();
+    window.addEventListener('hashchange', apply);
+    window.addEventListener('popstate', apply);
     return () => {
-      window.removeEventListener('hashchange', applyLocation);
-      window.removeEventListener('popstate', applyLocation);
+      window.removeEventListener('hashchange', apply);
+      window.removeEventListener('popstate', apply);
     };
   }, []);
 
-  // Track active section on home screen using scroll listener
+  // One scroll spy for the header: the section under a line 45 % down the viewport.
   useEffect(() => {
-    if (screen !== 'home') {
-      setActiveSection(screen);
-      return;
-    }
-    const handleScroll = () => {
-      const scrollPos = window.scrollY + 200;
-      const sections = ['contact', 'publications', 'about', 'home'];
-      for (const s of sections) {
-        const el = document.getElementById(s);
-        if (el && el.offsetTop <= scrollPos) {
-          setActiveSection(s);
-          return;
-        }
-      }
-      setActiveSection('home');
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const rects = SITE_SECTION_IDS.map(id => {
+        const element = document.getElementById(id);
+        if (!element) return null;
+        const box = element.getBoundingClientRect();
+        return {
+          id,
+          top: box.top,
+          bottom: box.bottom
+        };
+      }).filter(Boolean);
+      setActive(siteActiveSection(rects, window.innerHeight * 0.45));
     };
-    window.addEventListener('scroll', handleScroll, {
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener('scroll', schedule, {
       passive: true
     });
-    handleScroll();
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [screen]);
-  const currentNav = screen === 'home' ? activeSection : screen;
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      minHeight: '100vh',
-      background: 'var(--bg-gradient)',
-      color: '#fff',
-      fontFamily: "'Montserrat', sans-serif"
-    },
-    "data-screen-label": screen === 'cv' ? '02 CV' : '01 Home'
-  }, /*#__PURE__*/React.createElement(Header, {
-    active: currentNav,
-    onNavigate: onNavigate
-  }), screen === 'home' ? /*#__PURE__*/React.createElement("main", null, /*#__PURE__*/React.createElement(SubsurfaceHero, {
-    onNavigate: onNavigate
+    window.addEventListener('resize', schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+    };
+  }, []);
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SkipLink, null), /*#__PURE__*/React.createElement(Header, {
+    active: active,
+    onNavigate: navigate
+  }), /*#__PURE__*/React.createElement("main", {
+    id: "main-content",
+    tabIndex: -1
+  }, /*#__PURE__*/React.createElement(SubsurfaceHero, {
+    onNavigate: navigate
   }), /*#__PURE__*/React.createElement(GeologicalDescent, null, /*#__PURE__*/React.createElement("div", {
-    id: "about"
-  }), /*#__PURE__*/React.createElement(AboutSection, {
-    onNavigate: onNavigate
-  }), /*#__PURE__*/React.createElement("div", {
     id: "research"
+  }), /*#__PURE__*/React.createElement(AboutSection, {
+    onNavigate: navigate
   }), /*#__PURE__*/React.createElement("div", {
     id: "publications"
   }), /*#__PURE__*/React.createElement(PublicationsList, {
-    onNavigate: onNavigate
+    onNavigate: navigate
   }), /*#__PURE__*/React.createElement("div", {
     id: "contact"
   }), /*#__PURE__*/React.createElement(ContactSection, null), /*#__PURE__*/React.createElement(Footer, {
-    onNavigate: onNavigate,
+    onNavigate: navigate,
     geological: true
-  }))) : /*#__PURE__*/React.createElement("main", null, /*#__PURE__*/React.createElement(CVPage, {
-    onNavigate: onNavigate
-  }), /*#__PURE__*/React.createElement(Footer, {
-    onNavigate: onNavigate
-  })));
+  }))));
+};
+const CVStandalone = () => {
+  const navigate = (id, event) => siteNavigate('cv', id, event);
+  useEffect(() => dismissLoader(), []);
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SkipLink, null), /*#__PURE__*/React.createElement(Header, {
+    active: "cv",
+    onNavigate: navigate
+  }), /*#__PURE__*/React.createElement("main", {
+    id: "main-content",
+    tabIndex: -1
+  }, /*#__PURE__*/React.createElement(CVPage, {
+    onNavigate: navigate
+  })), /*#__PURE__*/React.createElement(Footer, {
+    onNavigate: navigate
+  }));
 };
 
 // Standalone simulator entry — rendered when the page is simulator.html.
-// Fully independent from the home page: no hero, no sections, own URL.
 const SimulatorStandalone = () => {
-  useEffect(() => {
-    return dismissLoader();
-  }, []);
-  const simNav = id => {
-    if (id === 'simulator') {
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
-      return;
-    }
-    window.location.href = './index.html' + (id === 'home' ? '' : '#' + id);
-  };
+  useEffect(() => dismissLoader(), []);
   return /*#__PURE__*/React.createElement("div", {
     className: "ve-standalone",
     "data-screen-label": "03 VE Simulator"
-  }, /*#__PURE__*/React.createElement(Header, {
+  }, /*#__PURE__*/React.createElement(SkipLink, null), /*#__PURE__*/React.createElement(Header, {
     active: "simulator",
-    onNavigate: simNav,
+    onNavigate: (id, event) => siteNavigate('simulator', id, event),
     variant: "workbench"
   }), /*#__PURE__*/React.createElement("main", {
     id: "main-content"
   }, /*#__PURE__*/React.createElement(SimulatorPage, null)));
 };
 const rootEl = document.getElementById('root');
-const isSimulatorEntry = rootEl && typeof rootEl.getAttribute === 'function' && rootEl.getAttribute('data-page') === 'simulator';
+const sitePage = rootEl && typeof rootEl.getAttribute === 'function' ? rootEl.getAttribute('data-page') : null;
 const root = ReactDOM.createRoot(rootEl);
-if (isSimulatorEntry) {
-  root.render( /*#__PURE__*/React.createElement(SimulatorStandalone, null));
-} else {
-  root.render( /*#__PURE__*/React.createElement(App, null));
-}
+root.render(sitePage === 'simulator' ? /*#__PURE__*/React.createElement(SimulatorStandalone, null) : sitePage === 'cv' ? /*#__PURE__*/React.createElement(CVStandalone, null) : /*#__PURE__*/React.createElement(SiteHome, null));
 
