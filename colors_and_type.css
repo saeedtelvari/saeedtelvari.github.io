@@ -1,282 +1,242 @@
 /* =====================================================
-   TELVARI PORTFOLIO — COLORS & TYPE TOKENS
-   Liquid glassmorphism over deep navy.
-   (Google Fonts are loaded via <link> in index.html)
+   SA'EED TELVARI — SITE STYLES
+   The homepage, CV and shared header use the CO₂ storage simulator's
+   Earth night tokens under the same names (--sim-*); simulator.html
+   redefines them per palette on .ve-standalone. tests/site-tokens.test.js
+   keeps the values below identical to simulator-workbench.css.
+   Chrome is neutral; colour is reserved for data and the one accent.
    ===================================================== */
 
 :root {
-  /* -----------------------------------------------------
-     CORE PALETTE — Warm deep ocean + mint accent
-     ----------------------------------------------------- */
-  /* The signature page gradient is built from these three.
-     Each navy has a touch of warm violet/burgundy undertone so the
-     overall mood reads "deep + atmospheric" rather than "cold tech". */
-  --navy-1: #211d34;   /* top of page gradient — warm aubergine-dark */
-  --navy-2: #1c2645;   /* mid — warm indigo */
-  --navy-3: #1d416e;   /* base — warmer royal blue */
-  --abyss:  #130d1c;   /* near-black, overlays + footer — slight violet */
+  /* Earth, night — copied from .ve-standalone in simulator-workbench.css */
+  --sim-bg: #120e0b;
+  --sim-surface: #1a1511;
+  --sim-surface-2: #221c17;
+  --sim-surface-3: #2c241d;
+  --sim-rule: #352b23;
+  --sim-rule-strong: #4a3c30;
+  --sim-ink: #f4ede3;
+  --sim-ink-muted: #bcae9c;
+  --sim-ink-faint: #8d7f6e;
+  --sim-accent: #e8a15a;
+  --sim-accent-ink: #1e1206;
+  --sim-accent-soft: rgba(232, 161, 90, 0.14);
+  --sim-focus: #e8a15a;
+  --sim-danger: #ff8b80;
+  --sim-warning: #f2c66d;
 
-  /* Mint/teal — the singular accent that everything keys off */
-  --mint:        #64ffda;   /* primary accent (icons, links, highlights) */
-  --mint-soft:   #4ecdc4;   /* secondary tone, CV "btn-download" */
-  --mint-bright: #7ee8e2;   /* hover state */
-  --mint-tint:   rgba(100, 255, 218, 0.20); /* fills on cards/tags */
+  --sim-c-dissolved: #32a0c5;
+  --sim-c-residual: #c1628a;
+  --sim-c-structural: #426bce;
+  --sim-c-free: #00a392;
+  --sim-c-exited: #8861a4;
+  --sim-c-leaked: #d64a33;
+  --sim-glow-free: #38e8d1;
+  --sim-glow-structural: #6a99ff;
+  --sim-glow-residual: #ff99c2;
+  --sim-glow-dissolved: #79e0ff;
+  --sim-glow-leaked: #ff6247;
 
-  /* Secondary highlight — warm gold, used sparingly for awards/badges */
-  --gold:        #ffc107;
+  --sim-depth-0: #c0a684;
+  --sim-depth-1: #a58b6d;
+  --sim-depth-2: #8b7157;
+  --sim-depth-3: #725742;
+  --sim-depth-4: #59402e;
+  --sim-depth-5: #41291c;
+  --sim-depth-6: #2a140a;
+  --sim-contour: rgba(244, 237, 227, 0.3);
+  --sim-stage: #0f0c09;
+  --sim-rock-cap: #5e5348;
+  --sim-rock-aquifer: #59402e;
+  --sim-rock-base: #2a140a;
+  --sim-rock-over: #17120e;
 
-  /* Status/badge supplements (used in publications + CV) */
-  --green:       #28a745;
-  --muted:       #adb5bd;
+  --sim-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --sim-font-ui: 'Open Sans', system-ui, sans-serif;
+  --sim-font-head: 'Montserrat', system-ui, sans-serif;
+  --sim-font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
 
-  /* Decorative gradient blobs that sit behind sections */
-  --blob-violet: rgba(120, 119, 198, 0.10);
-  --blob-pink:   rgba(255, 119, 198, 0.08);
+  /* Site layout */
+  --site-header-h: 64px;
+  --site-sheet: rgba(26, 21, 17, 0.94);
 
-  /* -----------------------------------------------------
-     SIGNATURE GRADIENTS
-     ----------------------------------------------------- */
-  --bg-gradient: linear-gradient(135deg, #211d34 0%, #1c2645 50%, #1d416e 100%);
-  --section-overlay: linear-gradient(135deg, rgba(33,29,52,0.85) 0%, rgba(28,38,69,0.80) 50%, rgba(29,65,110,0.85) 100%);
-  --mint-gradient: linear-gradient(135deg, rgba(78,205,196,0.8) 0%, rgba(78,205,196,0.5) 100%);
-  --mint-text-gradient: linear-gradient(135deg, #fff 0%, #a8edea 100%);
-
-  /* -----------------------------------------------------
-     FOREGROUND — Always on dark
-     ----------------------------------------------------- */
-  --fg-1: #ffffff;                       /* pure white — headings */
-  --fg-2: rgba(255,255,255,0.90);        /* body lead */
-  --fg-3: rgba(255,255,255,0.75);        /* body */
-  --fg-4: rgba(255,255,255,0.60);        /* meta, venue, dates */
-  --fg-5: rgba(255,255,255,0.40);        /* footnotes, dividers */
-
-  /* -----------------------------------------------------
-     GLASS SYSTEM — The defining mechanic of this brand.
-     Layered: bg fill + border + inset highlight + drop shadow.
-     ----------------------------------------------------- */
-  --glass-bg:        rgba(255,255,255,0.15);
-  --glass-bg-card:   linear-gradient(135deg, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.08) 100%);
-  --glass-bg-panel:  linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.08) 100%);
-  --glass-border:        rgba(255,255,255,0.25);
-  --glass-border-bright: rgba(255,255,255,0.40);
-  --glass-border-thin:   rgba(255,255,255,0.15);
-  --glass-shine: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.20) 50%, transparent 70%);
-
-  /* Backdrop blur — apply via blur(var()) saturate(180%) */
-  --blur-sm: 10px;
-  --blur-md: 20px;
-  --blur-lg: 25px;
-  --blur-xl: 40px;
-
-  /* Layered shadow recipes (compose multiple) */
-  --shadow-card:    0 8px 32px rgba(31,38,135,0.15), inset 0 2px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.05);
-  --shadow-card-h:  0 15px 40px rgba(0,0,0,0.20), inset 0 2px 0 rgba(255,255,255,0.30), 0 0 30px rgba(255,255,255,0.10);
-  --shadow-btn:     0 4px 15px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.30);
-  --shadow-btn-h:   0 8px 25px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.40), 0 0 20px rgba(255,255,255,0.10);
-  --shadow-page:    0 8px 32px rgba(0,0,0,0.30), inset 0 2px 4px rgba(255,255,255,0.10);
-
-  /* -----------------------------------------------------
-     RADII — Generous, organic, never sharp.
-     ----------------------------------------------------- */
-  --r-sm: 8px;     /* badges, small tags */
-  --r-md: 12px;    /* buttons, inputs */
-  --r-lg: 16px;    /* small cards */
-  --r-xl: 20px;    /* glass panels */
-  --r-2xl: 24px;   /* large cards */
-  --r-3xl: 30px;   /* hero sections */
-  --r-pill: 9999px;
-
-  /* -----------------------------------------------------
-     SPACING — multiples of 4
-     ----------------------------------------------------- */
-  --sp-1: 4px;
-  --sp-2: 8px;
-  --sp-3: 12px;
-  --sp-4: 16px;
-  --sp-5: 20px;
-  --sp-6: 24px;
-  --sp-8: 32px;
-  --sp-10: 40px;
-  --sp-12: 48px;
-  --sp-16: 64px;
-  --sp-20: 80px;
-  --sp-24: 96px;
-
-  /* -----------------------------------------------------
-     TYPOGRAPHY
-     Body: Montserrat. Long copy: Open Sans. Decorative: Arizonia.
-     ----------------------------------------------------- */
-  --font-sans:    'Montserrat', system-ui, -apple-system, sans-serif;
-  --font-prose:   'Open Sans', 'Montserrat', sans-serif;
-  --font-display: 'Arizonia', cursive;       /* rare, decorative only */
-  --font-mono:    'JetBrains Mono', ui-monospace, Menlo, monospace;
-
-  /* Modular scale (1.250) */
-  --fs-xs:   12px;
-  --fs-sm:   14px;
-  --fs-base: 16px;
-  --fs-md:   18px;
-  --fs-lg:   20px;
-  --fs-xl:   24px;
-  --fs-2xl:  30px;
-  --fs-3xl:  36px;
-  --fs-4xl:  48px;
-  --fs-5xl:  64px;
-
-  /* Weights — Montserrat shines at 400, 600, 700, 800 */
-  --fw-regular:  400;
-  --fw-medium:   500;
-  --fw-semibold: 600;
-  --fw-bold:     700;
-  --fw-black:    800;
-
-  /* Line heights */
-  --lh-tight: 1.20;
-  --lh-snug:  1.40;
-  --lh-base:  1.60;
-  --lh-loose: 1.80;
-
-  /* Letter spacing */
-  --ls-tight:  -0.01em;
-  --ls-normal:  0;
-  --ls-wide:    0.05em;
-  --ls-wider:   0.10em;   /* badges, eyebrows */
-
-  /* -----------------------------------------------------
-     MOTION — bouncy back-out is the signature.
-     ----------------------------------------------------- */
-  --ease-bounce: cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
-  --dur-fast: 0.30s;
-  --dur-base: 0.40s;
-  --dur-slow: 0.75s;
-
-  /* Emil Kowalski craft tokens — crisp, physical, non-sluggish */
-  --ease-emil-out: cubic-bezier(0.23, 1, 0.32, 1);
+  /* Type and motion aliases kept for existing blocks */
+  --font-sans: var(--sim-font-head);
+  --font-prose: var(--sim-font-ui);
+  --font-mono: var(--sim-font-mono);
+  --ease-emil-out: var(--sim-ease);
   --ease-emil-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
   --dur-press: 160ms;
   --dur-tactile: 200ms;
   --dur-reveal: 240ms;
+  --bg-gradient: var(--sim-bg);
+
+  color-scheme: dark;
 }
 
 /* =====================================================
-   SEMANTIC TYPE — apply to actual elements
+   BASE ELEMENTS
+   Sizes, weights and spacing are unchanged from the previous system because
+   simulator.html also loads this file; only colours moved to the tokens.
    ===================================================== */
 
 body {
-  font-family: var(--font-sans);
-  font-size: var(--fs-base);
-  line-height: var(--lh-base);
-  color: var(--fg-2);
-  background: var(--bg-gradient);
-  background-attachment: fixed;
+  font-family: var(--sim-font-ui);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--sim-ink);
+  background: var(--sim-bg);
 }
 
 h1, .h1 {
-  font-family: var(--font-sans);
-  font-weight: var(--fw-bold);
-  font-size: var(--fs-5xl);                  /* 64 — hero cv-name */
-  line-height: var(--lh-tight);
-  letter-spacing: var(--ls-tight);
-  color: var(--fg-1);
-  /* The signature mint-tinted name treatment */
-  background: var(--mint-text-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-family: var(--sim-font-head);
+  font-weight: 700;
+  font-size: 64px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--sim-ink);
 }
 
 h2, .h2 {
-  font-family: var(--font-sans);
-  font-weight: var(--fw-bold);
-  font-size: var(--fs-3xl);                  /* 36 — section-title */
-  line-height: var(--lh-tight);
-  color: var(--fg-1);
+  font-family: var(--sim-font-head);
+  font-weight: 700;
+  font-size: 36px;
+  line-height: 1.2;
+  color: var(--sim-ink);
   text-align: center;
   position: relative;
-  padding-bottom: var(--sp-4);
-}
-/* Mint underline that defines section titles */
-h2.section-title::after, .h2.section-title::after {
-  content: '';
-  position: absolute;
-  left: 50%; bottom: 0;
-  transform: translateX(-50%);
-  width: 100px; height: 4px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6) 50%, transparent);
+  padding-bottom: 16px;
 }
 
 h3, .h3 {
-  font-family: var(--font-sans);
-  font-weight: var(--fw-semibold);
-  font-size: var(--fs-xl);                   /* 24 */
-  line-height: var(--lh-snug);
-  color: var(--fg-1);
+  font-family: var(--sim-font-head);
+  font-weight: 600;
+  font-size: 24px;
+  line-height: 1.4;
+  color: var(--sim-ink);
 }
 
 h4, .h4 {
-  font-family: var(--font-sans);
-  font-weight: var(--fw-semibold);
-  font-size: var(--fs-md);                   /* 18 */
-  line-height: var(--lh-snug);
-  color: var(--fg-1);
+  font-family: var(--sim-font-head);
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 1.4;
+  color: var(--sim-ink);
 }
 
 p {
-  font-family: var(--font-prose);
-  font-size: var(--fs-base);
-  line-height: var(--lh-loose);
-  color: var(--fg-3);
-}
-
-p.lead {
-  font-size: var(--fs-lg);
-  font-weight: var(--fw-medium);
-  color: var(--fg-1);
+  font-family: var(--sim-font-ui);
+  font-size: 16px;
+  line-height: 1.8;
+  color: inherit;
 }
 
 strong, b {
-  color: var(--mint);
-  font-weight: var(--fw-semibold);
+  color: inherit;
+  font-weight: 600;
 }
 
 a {
-  color: var(--mint-soft);
-  font-weight: var(--fw-semibold);
+  color: var(--sim-accent);
+  font-weight: 600;
   text-decoration: none;
-  transition: color var(--dur-fast) var(--ease-smooth);
+  transition: color 160ms var(--sim-ease);
 }
-a:hover { color: var(--mint-bright); }
-
-small, .meta {
-  font-size: var(--fs-sm);
-  color: var(--fg-4);
-}
-
-.eyebrow {
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-wider);
-  text-transform: uppercase;
-  color: var(--mint);
-}
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 code, kbd, .mono {
-  font-family: var(--font-mono);
+  font-family: var(--sim-font-mono);
   font-size: 0.92em;
-  background: rgba(255,255,255,0.08);
+  background: rgba(244, 237, 227, 0.06);
   padding: 0.1em 0.4em;
-  border-radius: var(--r-sm);
-  color: var(--mint);
-  border: 1px solid var(--glass-border-thin);
+  border-radius: 6px;
+  color: inherit;
+  border: 1px solid var(--sim-rule);
 }
 
-.script {
-  font-family: var(--font-display);          /* Arizonia — sparingly */
-  font-size: var(--fs-3xl);
-  color: var(--mint-bright);
+::selection { background: rgba(232, 161, 90, 0.32); color: var(--sim-ink); }
+
+/* =====================================================
+   SITE PRIMITIVES
+   ===================================================== */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
+
+.skip-link {
+  position: fixed;
+  left: 16px;
+  top: -64px;
+  z-index: 2000;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--sim-accent);
+  color: var(--sim-accent-ink);
+  font: 600 14px/1.2 var(--sim-font-ui);
+  transition: top 160ms var(--sim-ease);
+}
+.skip-link:focus { top: 12px; text-decoration: none; }
+
+.icon { display: inline-block; flex: none; vertical-align: middle; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font: 600 14px/1.2 var(--sim-font-ui);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 160ms var(--sim-ease), border-color 160ms var(--sim-ease), color 160ms var(--sim-ease), transform 160ms var(--sim-ease);
+}
+.btn:hover { text-decoration: none; }
+.btn:active { transform: scale(0.97); }
+.btn--primary { background: var(--sim-accent); color: var(--sim-accent-ink); }
+.btn--quiet { background: transparent; color: var(--sim-ink); border-color: rgba(244, 237, 227, 0.32); }
+.btn--small { min-height: 36px; padding: 0 12px; font-size: 13px; }
+@media (hover: hover) and (pointer: fine) {
+  .btn--primary:hover { background: color-mix(in srgb, var(--sim-accent) 86%, #fff); }
+  .btn--quiet:hover { border-color: var(--sim-ink); background: rgba(244, 237, 227, 0.06); }
+}
+
+.text-link {
+  color: var(--sim-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.text-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.sheet {
+  position: relative;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 44px 48px;
+  background: var(--site-sheet);
+  border: 1px solid var(--sim-rule);
+  border-radius: 14px;
+}
+@media (max-width: 600px) {
+  .sheet { padding: 24px 20px; border-radius: 12px; }
+}
+
+/* =====================================================
+   LEGACY BLOCKS — removed as their components are rebuilt
+   ===================================================== */
 
 /* =====================================================
    MODERN VISUAL EFFECTS & ANIMATIONS
@@ -1525,7 +1485,7 @@ body:has(#app-loader) .hero-name-contour {
    ACCESSIBILITY & FOCUS RINGS
    ===================================================== */
 :focus-visible {
-  outline: 2px solid var(--mint) !important;
+  outline: 2px solid var(--sim-focus) !important;
   outline-offset: 3px !important;
 }
 

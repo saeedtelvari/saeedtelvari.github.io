@@ -6,7 +6,93 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
 // [destructured React]
 
 /* =====================================================
-   Reveal — Scroll-reveal animation wrapper
+   Icon — inline SVG set (replaces Font Awesome on the site pages).
+   UI glyphs are 24-unit stroke paths; brand marks are the CC0 paths
+   from Simple Icons (GitHub, LinkedIn, ORCID, Google Scholar).
+   ===================================================== */
+const SITE_ICONS = {
+  menu: {
+    d: 'M4 7h16M4 12h16M4 17h16'
+  },
+  close: {
+    d: 'M6 6l12 12M18 6 6 18'
+  },
+  external: {
+    d: 'M14 4h6v6M10 14 20 4M19 13.5V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5.5'
+  },
+  copy: {
+    d: 'M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1zM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1'
+  },
+  check: {
+    d: 'M5 12.5l4.5 4.5L19 7.5'
+  },
+  play: {
+    d: 'M8 5.5v13l11-6.5z',
+    fill: true
+  },
+  pause: {
+    d: 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z',
+    fill: true
+  },
+  restart: {
+    d: 'M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4.2h4.2'
+  },
+  'arrow-up': {
+    d: 'M12 19V5M5.5 11.5 12 5l6.5 6.5'
+  },
+  mail: {
+    d: 'M4 5.5h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1zM3.5 7l8.5 6.5L20.5 7'
+  },
+  print: {
+    d: 'M7 9V3.5h10V9M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v6.5H7z'
+  },
+  pin: {
+    d: 'M12 21s-6.5-5.7-6.5-11a6.5 6.5 0 1 1 13 0c0 5.3-6.5 11-6.5 11zM12 12.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6z'
+  },
+  scholar: {
+    fill: true,
+    d: 'M5.242 13.769L0 9.5 12 0l12 9.5-5.242 4.269C17.548 11.249 14.978 9.5 12 9.5c-2.977 0-5.548 1.748-6.758 4.269zM12 10a7 7 0 1 0 0 14 7 7 0 0 0 0-14z'
+  },
+  orcid: {
+    fill: true,
+    d: 'M12 0C5.372 0 0 5.372 0 12s5.372 12 12 12 12-5.372 12-12S18.628 0 12 0zM7.369 4.378c.525 0 .947.431.947.947s-.422.947-.947.947a.95.95 0 0 1-.947-.947c0-.525.422-.947.947-.947zm-.722 3.038h1.444v10.041H6.647V7.416zm3.562 0h3.9c3.712 0 5.344 2.653 5.344 5.025 0 2.578-2.016 5.025-5.325 5.025h-3.919V7.416zm1.444 1.303v7.444h2.297c3.272 0 4.022-2.484 4.022-3.722 0-2.016-1.284-3.722-4.097-3.722h-2.222z'
+  },
+  github: {
+    fill: true,
+    d: 'M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12'
+  },
+  linkedin: {
+    fill: true,
+    d: 'M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z'
+  }
+};
+const Icon = ({
+  name,
+  size = 18,
+  className = ''
+}) => {
+  const icon = SITE_ICONS[name];
+  if (!icon) return null;
+  return /*#__PURE__*/React.createElement("svg", {
+    className: `icon ${className}`.trim(),
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    "aria-hidden": "true",
+    focusable: "false",
+    fill: icon.fill ? 'currentColor' : 'none',
+    stroke: icon.fill ? 'none' : 'currentColor',
+    strokeWidth: icon.fill ? undefined : 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: icon.d
+  }));
+};
+
+/* =====================================================
+   Legacy primitives — still used by the old sections and CV until they are
+   rebuilt; delete with them.
    ===================================================== */
 const Reveal = ({
   children,
@@ -17,22 +103,22 @@ const Reveal = ({
   const [revealed, setRevealed] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
-    if (!ref.current) return;
-    if ('IntersectionObserver' in window) {
-      const observer = new IntersectionObserver(([entry]) => {
-        if (entry.isIntersecting) {
-          setRevealed(true);
-          observer.unobserve(entry.target);
-        }
-      }, {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
-      });
-      observer.observe(ref.current);
-      return () => observer.disconnect();
-    } else {
+    if (!ref.current) return undefined;
+    if (!('IntersectionObserver' in window)) {
       setRevealed(true);
+      return undefined;
     }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setRevealed(true);
+        observer.unobserve(entry.target);
+      }
+    }, {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    });
+    observer.observe(ref.current);
+    return () => observer.disconnect();
   }, []);
   return /*#__PURE__*/React.createElement("div", {
     ref: ref,
@@ -40,329 +126,68 @@ const Reveal = ({
     style: style
   }, children);
 };
-
-/* =====================================================
-   GlassCard — the workhorse container
-   ===================================================== */
-const GlassCard = ({
-  children,
-  hover = true,
-  padding = 24,
-  radius = 24,
-  style = {},
-  className = '',
-  onClick
-}) => {
-  const [hovered, setHovered] = useState(false);
-  const [pressed, setPressed] = useState(false);
-  const base = {
-    background: 'linear-gradient(145deg, rgba(18, 22, 38, 0.78) 0%, rgba(14, 18, 33, 0.72) 100%)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    borderTop: '1px solid rgba(255,255,255,0.15)',
-    borderLeft: '1px solid rgba(255,255,255,0.12)',
-    borderRadius: radius,
-    padding,
-    boxShadow: '0 8px 26px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.08)',
-    transition: 'transform 200ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 200ms ease, border-color 200ms ease',
-    color: 'rgba(255,255,255,0.92)',
-    cursor: onClick ? 'pointer' : 'default',
-    ...style
-  };
-  if (hover && hovered) {
-    base.transform = 'translateY(-3px)';
-    base.borderColor = 'rgba(100, 255, 218, 0.35)';
-    base.boxShadow = '0 12px 32px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.15), 0 0 20px rgba(100,255,218,0.12)';
-  }
-  if (onClick && pressed) {
-    base.transform = 'scale(0.98)';
-  }
-  return /*#__PURE__*/React.createElement("div", {
-    className: `glass-card ${className}`.trim(),
-    style: base,
-    onMouseEnter: () => setHovered(true),
-    onMouseLeave: () => {
-      setHovered(false);
-      setPressed(false);
-    },
-    onMouseDown: () => {
-      if (onClick) setPressed(true);
-    },
-    onMouseUp: () => setPressed(false),
-    onClick: onClick
-  }, children);
-};
-
-/* =====================================================
-   GlassButton — primary + mint variants
-   ===================================================== */
 const GlassButton = ({
   children,
-  variant = 'glass',
   onClick,
-  icon,
-  style = {}
-}) => {
-  const [state, setState] = useState('rest'); // rest | hover | press
-
-  const mintBg = {
-    background: 'linear-gradient(135deg, rgba(78,205,196,0.80) 0%, rgba(78,205,196,0.50) 100%)',
-    border: '1px solid rgba(255,255,255,0.20)'
-  };
-  const glassBg = {
-    background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.10) 100%)',
-    border: '1px solid rgba(255,255,255,0.30)'
-  };
-  const base = {
-    ...(variant === 'mint' ? mintBg : glassBg),
-    color: '#fff',
-    fontFamily: "'Montserrat', system-ui, sans-serif",
-    fontWeight: variant === 'mint' ? 600 : 500,
-    fontSize: 14,
-    padding: '12px 22px',
-    borderRadius: variant === 'mint' ? 14 : 12,
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
-    boxShadow: '0 4px 15px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.30)',
-    cursor: 'pointer',
-    transition: 'transform 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms ease, border-color 160ms ease, background 160ms ease',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    textDecoration: 'none',
-    userSelect: 'none',
-    ...style
-  };
-  if (state === 'hover') {
-    base.transform = 'translateY(-2px) scale(1.02)';
-    base.boxShadow = '0 8px 25px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.40), 0 0 20px rgba(255,255,255,0.10)';
-    base.borderColor = 'rgba(255,255,255,0.55)';
-  } else if (state === 'press') {
-    base.transform = 'scale(0.97)';
-  }
-  return /*#__PURE__*/React.createElement("button", {
-    style: base,
-    onClick: onClick,
-    onMouseEnter: () => setState('hover'),
-    onMouseLeave: () => setState('rest'),
-    onMouseDown: () => setState('press'),
-    onMouseUp: () => setState('hover')
-  }, icon && /*#__PURE__*/React.createElement("i", {
-    className: icon
-  }), children);
-};
-
-/* =====================================================
-   Badge — pub badges (Conference / Published / Submitted / Journal)
-   ===================================================== */
-const BADGE_TINTS = {
-  conference: {
-    bg: 'rgba(255,193,7,0.20)',
-    color: '#ffc107'
-  },
-  published: {
-    bg: 'rgba(100,255,218,0.20)',
-    color: '#64ffda'
-  },
-  journal: {
-    bg: 'rgba(40,167,69,0.20)',
-    color: '#28a745'
-  },
-  submitted: {
-    bg: 'rgba(108,117,125,0.20)',
-    color: '#adb5bd'
-  },
-  accepted: {
-    bg: 'rgba(255,193,7,0.20)',
-    color: '#ffc107'
-  },
-  preprint: {
-    bg: 'rgba(167,139,250,0.22)',
-    color: '#c4b5fd'
-  }
-};
-const Badge = ({
-  kind = 'conference',
-  children
-}) => {
-  const t = BADGE_TINTS[kind] || BADGE_TINTS.conference;
-  return /*#__PURE__*/React.createElement("span", {
-    style: {
-      display: 'inline-block',
-      padding: '4px 12px',
-      borderRadius: 12,
-      background: t.bg,
-      color: t.color,
-      fontSize: 11,
-      fontWeight: 600,
-      letterSpacing: '0.05em',
-      textTransform: 'uppercase',
-      marginBottom: 12
-    }
-  }, children);
-};
-
-/* =====================================================
-   Tag — research (mint pill) + project (neutral chip)
-   ===================================================== */
+  icon
+}) => /*#__PURE__*/React.createElement("button", {
+  type: "button",
+  className: "btn btn--primary",
+  onClick: onClick
+}, icon && /*#__PURE__*/React.createElement("i", {
+  className: icon
+}), children);
 const Tag = ({
-  children,
-  variant = 'research'
-}) => {
-  const [hovered, setHovered] = useState(false);
-  const research = {
-    background: hovered ? 'linear-gradient(135deg, rgba(78,205,196,0.45) 0%, rgba(78,205,196,0.20) 100%)' : 'linear-gradient(135deg, rgba(78,205,196,0.30) 0%, rgba(78,205,196,0.10) 100%)',
-    color: '#fff',
-    border: hovered ? '1px solid rgba(78,205,196,0.50)' : '1px solid rgba(78,205,196,0.30)',
-    padding: '6px 14px',
-    borderRadius: 20,
-    fontSize: 13
-  };
-  const project = {
-    background: hovered ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.10)',
-    color: 'rgba(255,255,255,0.90)',
-    border: hovered ? '1px solid rgba(255,255,255,0.25)' : '1px solid rgba(255,255,255,0.15)',
+  children
+}) => /*#__PURE__*/React.createElement("span", {
+  style: {
+    display: 'inline-block',
     padding: '5px 12px',
-    borderRadius: 15,
-    fontSize: 12
-  };
-  const skill = {
-    background: hovered ? 'linear-gradient(135deg, rgba(78,205,196,0.40) 0%, rgba(78,205,196,0.20) 100%)' : 'linear-gradient(135deg, rgba(78,205,196,0.25) 0%, rgba(78,205,196,0.10) 100%)',
-    color: '#fff',
-    border: hovered ? '1px solid rgba(78,205,196,0.35)' : '1px solid rgba(78,205,196,0.20)',
-    padding: '5px 12px',
-    borderRadius: 10,
-    fontSize: 12
-  };
-  const styleMap = {
-    research,
-    project,
-    skill
-  };
-  return /*#__PURE__*/React.createElement("span", {
-    onMouseEnter: () => setHovered(true),
-    onMouseLeave: () => setHovered(false),
-    style: {
-      ...styleMap[variant],
-      display: 'inline-block',
-      transition: 'all 0.3s ease',
-      transform: hovered ? 'translateY(-2px)' : 'none',
-      boxShadow: hovered ? '0 4px 12px rgba(100, 255, 218, 0.15)' : 'none'
-    }
-  }, children);
-};
-
-/* =====================================================
-   ResearchIcon — 80px mint circle with icon
-   ===================================================== */
-const ResearchIcon = ({
-  icon,
-  size = 80
-}) => /*#__PURE__*/React.createElement("div", {
-  style: {
-    width: size,
-    height: size,
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'linear-gradient(135deg, rgba(100,255,218,0.20) 0%, rgba(100,255,218,0.05) 100%)',
-    border: '1px solid rgba(100,255,218,0.30)',
-    margin: '0 auto 20px'
+    borderRadius: 999,
+    fontSize: 12.5,
+    border: '1px solid var(--sim-rule-strong)',
+    color: 'var(--sim-ink)'
   }
-}, /*#__PURE__*/React.createElement("i", {
-  className: icon,
-  style: {
-    fontSize: size * 0.28,
-    color: '#64ffda'
-  }
-}));
-
-/* =====================================================
-   Section title with mint underline
-   ===================================================== */
-const SectionTitle = ({
-  children,
-  style
-}) => /*#__PURE__*/React.createElement("h2", {
-  style: {
-    fontFamily: "'Montserrat', sans-serif",
-    fontWeight: 700,
-    fontSize: 40,
-    lineHeight: 1.2,
-    color: '#fff',
-    textAlign: 'center',
-    margin: '0 0 48px',
-    position: 'relative',
-    paddingBottom: 16,
-    ...style
-  }
-}, children, /*#__PURE__*/React.createElement("span", {
-  style: {
-    position: 'absolute',
-    bottom: 0,
-    left: '50%',
-    transform: 'translateX(-50%)',
-    width: 100,
-    height: 4,
-    borderRadius: 2,
-    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6) 50%, transparent)'
-  }
-}));
-
-/* =====================================================
-   Divider — mint gradient hairline
-   ===================================================== */
+}, children);
 const Divider = () => /*#__PURE__*/React.createElement("hr", {
   style: {
-    height: 2,
+    height: 1,
     margin: '32px 0',
     border: 'none',
-    borderRadius: 2,
-    background: 'linear-gradient(90deg, transparent, rgba(78,205,196,0.30) 20%, rgba(78,205,196,0.50) 50%, rgba(78,205,196,0.30) 80%, transparent)'
+    background: 'var(--sim-rule)'
   }
 });
-
-/* =====================================================
-   Section panel — large rounded glass with geological stratigraphy
-   ===================================================== */
 const SectionPanel = ({
   children,
   style = {}
-}) => {
-  return /*#__PURE__*/React.createElement("section", {
-    className: "section-panel",
-    style: {
-      position: 'relative',
-      minHeight: '60vh',
-      padding: '115px 24px',
-      zIndex: 1,
-      ...style
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "section-panel-content",
-    style: {
-      position: 'relative',
-      maxWidth: 1000,
-      margin: '0 auto',
-      background: 'rgba(14,20,25,0.9)',
-      backdropFilter: 'blur(3px)',
-      WebkitBackdropFilter: 'blur(3px)',
-      border: '1px solid rgba(198,210,211,0.15)',
-      borderRadius: 18,
-      boxShadow: '0 24px 60px rgba(5,10,17,0.22)'
-    }
-  }, children));
-};
+}) => /*#__PURE__*/React.createElement("section", {
+  className: "section-panel",
+  style: {
+    position: 'relative',
+    minHeight: '60vh',
+    padding: '115px 24px',
+    zIndex: 1,
+    ...style
+  }
+}, /*#__PURE__*/React.createElement("div", {
+  className: "section-panel-content",
+  style: {
+    position: 'relative',
+    maxWidth: 1000,
+    margin: '0 auto',
+    background: 'var(--site-sheet)',
+    border: '1px solid var(--sim-rule)',
+    borderRadius: 14
+  }
+}, children));
 Object.assign(window, {
-  GlassCard,
+  Icon,
+  SITE_ICONS,
+  Reveal,
   GlassButton,
-  Badge,
   Tag,
-  ResearchIcon,
-  SectionTitle,
   Divider,
-  SectionPanel,
-  Reveal
+  SectionPanel
 });
 
 // File: site-content.js
