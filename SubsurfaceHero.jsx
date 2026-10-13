@@ -212,6 +212,14 @@ const SubsurfaceHero = ({ onNavigate }) => {
    ===================================================== */
 const HeroSection = React.memo(({ sectionRef }) => {
   const AQUIFER_PATH = HERO_PATHS.underburden;
+  // Fine bedding is decoration: draw it once the hero has painted.
+  const [detail, setDetail] = useState(false);
+  useEffect(() => {
+    const show = () => setDetail(true);
+    const idle = window.requestIdleCallback;
+    const id = idle ? idle(show, { timeout: 1200 }) : window.setTimeout(show, 200);
+    return () => (idle ? window.cancelIdleCallback(id) : window.clearTimeout(id));
+  }, []);
   return (
     <svg ref={sectionRef} className="hero-svg hero-svg--rock" viewBox="0 0 1000 580" preserveAspectRatio="none" aria-hidden="true">
       <defs>
@@ -244,7 +252,7 @@ const HeroSection = React.memo(({ sectionRef }) => {
         <rect width="1000" height="580" fill="url(#descent-rock-shale)" mask="url(#hero-lower-texture-mask)"/>
         <rect width="1000" height="580" fill="url(#hero-descent-bridge)"/>
       </g>
-      <GeologyTexture faults={heroGeology.faults} geology={heroGeology} />
+      {detail && <GeologyTexture faults={heroGeology.faults} geology={heroGeology} />}
     </svg>
   );
 });

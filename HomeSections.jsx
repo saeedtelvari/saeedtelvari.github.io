@@ -97,7 +97,7 @@ const ResearchSection = () => (
           simulation and machine learning for upscaling and digital rock.
         </p>
       </div>
-      <aside className="research__aside" aria-label="Recent activity"><ActivityList /></aside>
+      <div className="research__aside"><ActivityList /></div>
     </div>
   </SiteSection>
 );

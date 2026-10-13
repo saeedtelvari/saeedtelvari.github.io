@@ -38,6 +38,7 @@ test('pinch-outs and local fault offsets share contacts and resize without cross
         } }),
         useState: () => [heights, fn => { updated = fn(heights); }],
         useEffect: fn => { effect = fn; },
+        useMemo: fn => fn(),
         createElement: (type, props, ...children) => {
           const node = { type, props: props || {}, children };
           nodes.push(node);
