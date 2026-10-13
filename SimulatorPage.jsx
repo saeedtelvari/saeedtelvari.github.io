@@ -93,11 +93,24 @@ const simGridCsv = (model, frame) => {
 
 const simInitialRun = () => ({ id: 0, status: 'idle', scenario: null, model: null, frames: [], history: [], truncated: false, error: null });
 
+// Starting a run keeps the previous scenario paired with the previous fields until the
+// worker reports the new model, so no view mixes old results with new geometry.
+const simStartRun = (run, id, scenario) => ({ ...run, id, status: 'computing', pendingScenario: scenario, error: null });
+
+// Advance playback; stop at the end of the run, or at the last computed frame once the
+// run is finished (a truncated run ends early).
+const simNextYear = (current, dt, yearsPerSecond, { years, computedYears, ready }) => {
+  const next = current + dt * yearsPerSecond;
+  if (next >= years) return { year: years <= computedYears ? years : computedYears, stop: true };
+  if (next >= computedYears) return { year: computedYears, stop: ready };
+  return { year: next, stop: false };
+};
+
 // Reducer for worker messages; anything from an older run id is ignored.
 const simApplyWorkerMessage = (run, message) => {
   if (!message || message.id !== run.id) return run;
   switch (message.type) {
-    case 'model': return { ...run, status: 'computing', model: message.model, frames: [], history: [], truncated: false, error: null };
+    case 'model': return { ...run, status: 'computing', scenario: run.pendingScenario ?? run.scenario, model: message.model, frames: [], history: [], truncated: false, error: null };
     case 'frame': return { ...run, frames: run.frames.concat([message.snap]), history: run.history.concat(message.rows) };
     case 'done': return { ...run, status: 'ready', history: run.history.concat(message.rows), truncated: !!message.truncated };
     case 'error': return { ...run, status: 'error', error: message.message };
@@ -316,7 +329,7 @@ const useSimSimulation = scenario => {
         }
       }
       busyRef.current = true;
-      setRun(current => ({ ...current, id, status: 'computing', scenario, error: null }));
+      setRun(current => simStartRun(current, id, scenario));
       workerRef.current.postMessage({ type: 'run', id, scenario });
     }, idRef.current === 0 ? 0 : 250);
     return () => clearTimeout(timer);
@@ -327,7 +340,7 @@ const useSimSimulation = scenario => {
 };
 
 const useSimReducedMotion = () => {
-  const [reduced, setReduced] = useState(false);
+  const [reduced, setReduced] = useState(() => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   useEffect(() => {
     const query = window.matchMedia?.('(prefers-reduced-motion: reduce)');
     if (!query) return undefined;
@@ -467,7 +480,7 @@ const SimInputs = ({ scenario, onChange, onPreset, onRandom, onClose }) => {
           <div className="sim-fault" key={index}>
             <div className="sim-fault__head">
               <span><span className="sim-fault__swatch" data-leaky={fault.kf > 0} aria-hidden="true" />Fault F{index + 1}</span>
-              <button type="button" className="sim-button sim-button--quiet" onClick={() => onChange({ faults: scenario.faults.filter((_, i) => i !== index) })}>Remove</button>
+              <button type="button" className="sim-button sim-button--quiet" aria-label={`Remove fault F${index + 1}`} onClick={() => onChange({ faults: scenario.faults.filter((_, i) => i !== index) })}>Remove</button>
             </div>
             {Object.keys(SIM_FAULT_FIELDS).map(key => (
               <SimField key={key} name={`f${index}-${key}`} meta={SIM_FAULT_FIELDS[key]} value={fault[key]} limits={VE2D.FAULT_LIMITS[key]} onChange={value => setFault(index, { [key]: value })} />
@@ -620,7 +633,7 @@ const simPercentile = (sorted, p) => {
   return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
 };
 
-const SimUncertainty = ({ scenario, onLoad, theme }) => {
+const SimUncertainty = ({ scenario, onLoad, theme, hidden }) => {
   const [specs, setSpecs] = useState(() => simDefaultUqSpecs(scenario));
   const [runs, setRuns] = useState(50);
   const [grid, setGrid] = useState('coarse');
@@ -673,7 +686,7 @@ const SimUncertainty = ({ scenario, onLoad, theme }) => {
   }, [state.rows, metric]);
 
   return (
-    <div className="sim-uq" id="sim-panel-uncertainty" role="tabpanel" aria-labelledby="sim-tab-uncertainty">
+    <div className="sim-uq" id="sim-panel-uncertainty" role="tabpanel" aria-labelledby="sim-tab-uncertainty" hidden={hidden}>
       <aside className="sim-rail sim-uq__setup" aria-label="Uncertainty set-up">
         <div className="sim-rail__head"><h2>Inputs to vary</h2></div>
         <p className="sim-field__hint" style={{ padding: '0 16px 8px' }}>Each run draws its inputs by Latin hypercube sampling from these ranges; everything else is the current scenario.</p>
@@ -816,15 +829,16 @@ const SimulatorPage = () => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       setYear(current => {
-        const next = current + dt * SIM_SPEEDS[speed];
-        if (run.model && next >= run.model.years) { setPlaying(false); return run.model.years; }
-        return Math.min(next, computedYears);
+        if (!run.model) return current;
+        const step = simNextYear(current, dt, SIM_SPEEDS[speed], { years: run.model.years, computedYears, ready: run.status !== 'computing' });
+        if (step.stop) setPlaying(false);
+        return step.year;
       });
       frameId = requestAnimationFrame(tick);
     };
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [playing, speed, computedYears, run.model]);
+  }, [playing, speed, computedYears, run.model, run.status]);
 
   useEffect(() => {
     const onKey = event => {
@@ -869,7 +883,8 @@ const SimulatorPage = () => {
 
   const play = () => {
     if (!run.model) return;
-    if (!playing && year >= run.model.years - 1e-6) setYear(0);
+    const finished = year >= run.model.years - 1e-6 || (run.status !== 'computing' && year >= computedYears);
+    if (!playing && finished) setYear(0);
     setPlaying(p => !p);
   };
   const seek = value => { setPlaying(false); setYear(Math.max(0, value)); };
@@ -973,7 +988,7 @@ const SimulatorPage = () => {
           </aside>
         </div>
       )}
-      {section === 'uncertainty' && <SimUncertainty scenario={scenario} onLoad={loadRealization} theme={theme} />}
+      <SimUncertainty scenario={scenario} onLoad={loadRealization} theme={theme} hidden={section !== 'uncertainty'} />
       {section === 'method' && (
         <div className="sim-method" id="sim-panel-method" role="tabpanel" aria-labelledby="sim-tab-method">
           <GuidePage />

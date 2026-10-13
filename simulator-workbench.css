@@ -144,6 +144,8 @@
 :where(.sim) b { color: inherit; }
 :where(.sim) a { color: var(--sim-accent); }
 
+.sim [hidden] { display: none !important; }
+
 .sim-sr-only {
   position: absolute;
   width: 1px;

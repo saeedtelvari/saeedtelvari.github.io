@@ -483,3 +483,8 @@ test('a batch realization reproduces the workbench run exactly', () => {
     assert.ok(Number.isFinite(row.summary[key]), key);
   }
 });
+
+test('simulated period snaps to its 50-year step so the run ends on a snapshot', () => {
+  assert.equal(VE2D.normalizeScenario({ years: 1033 }).years, 1050);
+  assert.equal(VE2D.normalizeScenario({ years: 1010 }).years, 1000);
+});

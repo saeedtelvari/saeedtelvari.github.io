@@ -144,7 +144,8 @@
     for (const [key, [min, max]] of Object.entries(LIMITS)) {
       const value = Number(raw[key]);
       const bounded = Number.isFinite(value) && raw[key] !== '' && raw[key] !== null ? clamp(value, min, max) : DEFAULTS[key];
-      scenario[key] = INTEGER_KEYS.has(key) ? Math.round(bounded) : bounded;
+      // The simulated period snaps to its step so every run ends on a snapshot year.
+      scenario[key] = key === 'years' ? Math.round(bounded / 50) * 50 : INTEGER_KEYS.has(key) ? Math.round(bounded) : bounded;
     }
     const faults = Array.isArray(raw.faults) ? raw.faults : DEFAULTS.faults;
     scenario.faults = faults.slice(0, MAX_FAULTS).map(normalizeFault);

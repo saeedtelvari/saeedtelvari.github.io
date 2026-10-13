@@ -15,7 +15,8 @@ const loadHelpers = () => {
   const context = { React: {}, VE2D, URLSearchParams };
   vm.runInNewContext(`${prelude}
 this.helpers = { simEncodeScenario, simDecodeScenario, simInventoryCsv, simGridCsv, simApplyWorkerMessage, simInitialRun,
-  simFrameAt, simRowAt, simFormatMass, simFormatPercent, simStoredTheme, simDefaultSectionLine, simMessages, SIM_INVENTORY };`, context);
+  simFrameAt, simRowAt, simFormatMass, simFormatPercent, simStoredTheme, simDefaultSectionLine, simMessages, SIM_INVENTORY,
+  simStartRun, simNextYear };`, context);
   return context.helpers;
 };
 const h = loadHelpers();
@@ -156,4 +157,35 @@ test('the page uses plain names and one shared engine', () => {
   assert.doesNotMatch(page, /VE Simulator|kt\/yr|model units/);
   assert.doesNotMatch(read('GuidePage.jsx'), /Navier/);
   assert.ok(!fs.existsSync(path.join(root, 'uq-worker.js')), 'the separate solver copy is gone');
+});
+
+// ---------------------------------------------------------------- final review fixes
+
+test('a new run keeps showing its old scenario until the new model arrives', () => {
+  const helpers = loadHelpers();
+  const old = { ...helpers.simInitialRun(), id: 1, status: 'ready', scenario: { tag: 'old' } };
+  const started = helpers.simStartRun(old, 2, { tag: 'new' });
+  assert.equal(started.scenario.tag, 'old', 'old fields and old scenario stay paired');
+  assert.equal(started.status, 'computing');
+  const modelled = helpers.simApplyWorkerMessage(started, { type: 'model', id: 2, model: { nx: 1 } });
+  assert.equal(modelled.scenario.tag, 'new');
+});
+
+test('playback stops at the end of what was computed once the run is finished', () => {
+  const { simNextYear } = loadHelpers();
+  assert.deepEqual(plain(simNextYear(1029, 0.1, 25, { years: 1033, computedYears: 1030, ready: true })), { year: 1030, stop: true });
+  assert.deepEqual(plain(simNextYear(400, 0.1, 25, { years: 1000, computedYears: 405, ready: false })), { year: 402.5, stop: false });
+  assert.deepEqual(plain(simNextYear(404, 0.1, 25, { years: 1000, computedYears: 405, ready: false })), { year: 405, stop: false }, 'waits for frames while computing');
+  assert.deepEqual(plain(simNextYear(999, 0.1, 25, { years: 1000, computedYears: 1000, ready: true })), { year: 1000, stop: true });
+});
+
+test('uncertainty results survive switching to the simulator and back', () => {
+  const page = read('SimulatorPage.jsx');
+  assert.match(page, /<SimUncertainty[^>]*hidden=\{section !== 'uncertainty'\}/);
+  assert.doesNotMatch(page, /section === 'uncertainty' && <SimUncertainty/);
+  assert.match(read('simulator-workbench.css'), /\.sim \[hidden\] \{ display: none !important; \}/);
+});
+
+test('the stylesheet is cache-busted with the bundles', () => {
+  assert.match(read('simulator.html'), /simulator-workbench\.css\?v=\d+/);
 });

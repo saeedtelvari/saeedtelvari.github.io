@@ -192,7 +192,8 @@ var { useState, useEffect, useMemo, useRef, useCallback } = React;
     for (const [key, [min, max]] of Object.entries(LIMITS)) {
       const value = Number(raw[key]);
       const bounded = Number.isFinite(value) && raw[key] !== '' && raw[key] !== null ? clamp(value, min, max) : DEFAULTS[key];
-      scenario[key] = INTEGER_KEYS.has(key) ? Math.round(bounded) : bounded;
+      // The simulated period snaps to its step so every run ends on a snapshot year.
+      scenario[key] = key === 'years' ? Math.round(bounded / 50) * 50 : INTEGER_KEYS.has(key) ? Math.round(bounded) : bounded;
     }
     const faults = Array.isArray(raw.faults) ? raw.faults : DEFAULTS.faults;
     scenario.faults = faults.slice(0, MAX_FAULTS).map(normalizeFault);
@@ -3981,6 +3982,38 @@ const simInitialRun = () => ({
   error: null
 });
 
+// Starting a run keeps the previous scenario paired with the previous fields until the
+// worker reports the new model, so no view mixes old results with new geometry.
+const simStartRun = (run, id, scenario) => ({
+  ...run,
+  id,
+  status: 'computing',
+  pendingScenario: scenario,
+  error: null
+});
+
+// Advance playback; stop at the end of the run, or at the last computed frame once the
+// run is finished (a truncated run ends early).
+const simNextYear = (current, dt, yearsPerSecond, {
+  years,
+  computedYears,
+  ready
+}) => {
+  const next = current + dt * yearsPerSecond;
+  if (next >= years) return {
+    year: years <= computedYears ? years : computedYears,
+    stop: true
+  };
+  if (next >= computedYears) return {
+    year: computedYears,
+    stop: ready
+  };
+  return {
+    year: next,
+    stop: false
+  };
+};
+
 // Reducer for worker messages; anything from an older run id is ignored.
 const simApplyWorkerMessage = (run, message) => {
   if (!message || message.id !== run.id) return run;
@@ -3989,6 +4022,7 @@ const simApplyWorkerMessage = (run, message) => {
       return {
         ...run,
         status: 'computing',
+        scenario: run.pendingScenario ?? run.scenario,
         model: message.model,
         frames: [],
         history: [],
@@ -4422,13 +4456,7 @@ const useSimSimulation = scenario => {
         }
       }
       busyRef.current = true;
-      setRun(current => ({
-        ...current,
-        id,
-        status: 'computing',
-        scenario,
-        error: null
-      }));
+      setRun(current => simStartRun(current, id, scenario));
       workerRef.current.postMessage({
         type: 'run',
         id,
@@ -4441,7 +4469,7 @@ const useSimSimulation = scenario => {
   return run;
 };
 const useSimReducedMotion = () => {
-  const [reduced, setReduced] = useState(false);
+  const [reduced, setReduced] = useState(() => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   useEffect(() => {
     const query = window.matchMedia?.('(prefers-reduced-motion: reduce)');
     if (!query) return undefined;
@@ -4649,6 +4677,7 @@ const SimInputs = ({
   }), "Fault F", index + 1), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "sim-button sim-button--quiet",
+    "aria-label": `Remove fault F${index + 1}`,
     onClick: () => onChange({
       faults: scenario.faults.filter((_, i) => i !== index)
     })
@@ -4958,7 +4987,8 @@ const simPercentile = (sorted, p) => {
 const SimUncertainty = ({
   scenario,
   onLoad,
-  theme
+  theme,
+  hidden
 }) => {
   const [specs, setSpecs] = useState(() => simDefaultUqSpecs(scenario));
   const [runs, setRuns] = useState(50);
@@ -5080,7 +5110,8 @@ const SimUncertainty = ({
     className: "sim-uq",
     id: "sim-panel-uncertainty",
     role: "tabpanel",
-    "aria-labelledby": "sim-tab-uncertainty"
+    "aria-labelledby": "sim-tab-uncertainty",
+    hidden: hidden
   }, /*#__PURE__*/React.createElement("aside", {
     className: "sim-rail sim-uq__setup",
     "aria-label": "Uncertainty set-up"
@@ -5333,18 +5364,20 @@ const SimulatorPage = () => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       setYear(current => {
-        const next = current + dt * SIM_SPEEDS[speed];
-        if (run.model && next >= run.model.years) {
-          setPlaying(false);
-          return run.model.years;
-        }
-        return Math.min(next, computedYears);
+        if (!run.model) return current;
+        const step = simNextYear(current, dt, SIM_SPEEDS[speed], {
+          years: run.model.years,
+          computedYears,
+          ready: run.status !== 'computing'
+        });
+        if (step.stop) setPlaying(false);
+        return step.year;
       });
       frameId = requestAnimationFrame(tick);
     };
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [playing, speed, computedYears, run.model]);
+  }, [playing, speed, computedYears, run.model, run.status]);
   useEffect(() => {
     const onKey = event => {
       if (section !== 'simulator' || event.target.closest?.('input, select, textarea, button, summary')) return;
@@ -5407,7 +5440,8 @@ const SimulatorPage = () => {
   };
   const play = () => {
     if (!run.model) return;
-    if (!playing && year >= run.model.years - 1e-6) setYear(0);
+    const finished = year >= run.model.years - 1e-6 || run.status !== 'computing' && year >= computedYears;
+    if (!playing && finished) setYear(0);
     setPlaying(p => !p);
   };
   const seek = value => {
@@ -5635,10 +5669,11 @@ const SimulatorPage = () => {
     history: shown.history,
     year: shownYear,
     onSeek: seek
-  }))), section === 'uncertainty' && /*#__PURE__*/React.createElement(SimUncertainty, {
+  }))), /*#__PURE__*/React.createElement(SimUncertainty, {
     scenario: scenario,
     onLoad: loadRealization,
-    theme: theme
+    theme: theme,
+    hidden: section !== 'uncertainty'
   }), section === 'method' && /*#__PURE__*/React.createElement("div", {
     className: "sim-method",
     id: "sim-panel-method",
