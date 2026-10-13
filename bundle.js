@@ -3145,7 +3145,7 @@ const GeologicalDescent = ({
     height: "840",
     patternUnits: "userSpaceOnUse"
   }, /*#__PURE__*/React.createElement("image", {
-    href: texturesOn ? `./assets/geology-${material}.webp?v=2` : undefined,
+    href: texturesOn ? `./assets/geology-${material}.webp?v=3` : undefined,
     width: "840",
     height: "840",
     preserveAspectRatio: "none"

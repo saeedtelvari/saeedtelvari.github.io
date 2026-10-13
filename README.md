@@ -1,75 +1,56 @@
-# Sa'eed Telvari — Personal Portfolio & CO₂ Storage Simulator
+# Sa'eed Telvari — personal site and CO₂ storage simulator
 
-An interactive portfolio website and a browser-based CO₂ storage simulator built on the vertical-equilibrium (VE) approximation, for Sa'eed Telvari (Ph.D. Candidate in Petroleum Engineering at Heriot-Watt University).
+The homepage, CV and browser-based CO₂ storage simulator of Sa'eed Telvari, PhD candidate in Petroleum Engineering at Heriot-Watt University.
 
-Built with React 18, SVG mathematical visualizations, and a custom liquid glassmorphism design system.
-
----
-
-## 🌟 Key Features
-
-1. **Interactive Subsurface Hero (`SubsurfaceHero.jsx`)**:
-   - Educational height-based VE animation for $\mathrm{CO}_2$ plume migration and capillary trapping across faulted sandstone formations; precomputation runs in a Web Worker.
-   - Conforming SVG geological cross-section with real-time dynamic fault step interpolation, buoyancy streamlines, active wellbore casing, and glassmorphic simulation playback controls.
-
-2. **CO₂ Storage Simulator (`simulator.html`, `SimulatorPage.jsx`, `SimViews.jsx`, `SimCharts.jsx`)**:
-   - One SI vertical-equilibrium model (`ve2d-model.js`) drives three synchronised views: a structure map, a 3D block diagram and a geological section through the same run.
-   - Physics: sharp-interface VE with hysteretic residual trapping, a compressible pressure solve during injection (Peaceman bottom-hole build-up), open (hydrostatic) or closed model edges, faults with throw, cross-fault transmissibility and threshold-gated leakage, convective dissolution and co2lab-style spill-point trap analysis.
-   - A six-class inventory (free, structural, residual, dissolved, left the model, leaked) with its mass-balance error, the inventory through time, plume and pressure figures and plain-language notes.
-   - Uncertainty study: Latin hypercube sampling of the same engine in a Web Worker, P10/P50/P90, histograms, Spearman tornado and a run scatter that opens any run in the simulator.
-   - Share links, inventory and grid CSV exports, view images, night and day themes, keyboard playback and data-driven motion that respects `prefers-reduced-motion`.
-
-3. **Method (`GuidePage.jsx`)**:
-   - The equations, numerics, verification results and limitations of the implemented model, typeset with KaTeX.
-
-4. **Academic CV View (`CVPage.jsx`)**:
-   - Academic milestones, education, peer-reviewed publications, honors, and technical skill matrices with clean `@media print` export.
-
-5. **Responsive & Accessible Design (`Header.jsx`, `colors_and_type.css`)**:
-   - Mobile slide-out glass drawer navigation with scroll-spy section tracking.
-   - Fully accessible with `:focus-visible` outlines, ARIA attributes, and `@media (prefers-reduced-motion: reduce)` support.
+React 18 (UMD) components, precompiled with Babel into two bundles. The homepage, CV and simulator share one design system: the simulator's Earth night tokens (`--sim-*`). Chrome stays neutral; colour is reserved for data (CO₂ trapping classes, rock) and one amber accent.
 
 ---
 
-## 📁 Repository Structure
+## Pages
 
-- `index.html` — Home page entry point with CDN imports (React 18, ReactDOM, FontAwesome 6).
-- `simulator.html` — Standalone CO₂ Storage Simulator page (own URL; loads independently of the home page).
-- `colors_and_type.css` — Design system design tokens, glassmorphism filters, accessible focus rings, and typography.
-- `Primitives.jsx` — Reusable glass UI primitives (`GlassCard`, `GlassButton`, `Badge`, `Tag`, `Reveal`, `SectionPanel`).
-- `Header.jsx` — Fixed glassmorphic navigation header with shrink-on-scroll, scroll-spy, and mobile hamburger drawer.
-- `Footer.jsx` — Translucent footer with copyright and interactive navigation links.
-- `SubsurfaceHero.jsx` — Landing hero with real-time VE fluid solver and animated faulted geological cross-section.
-- `HomeSections.jsx` — Homepage content sections: About, Research Interests, Peer-Reviewed Publications, and Contact.
-- `SimulatorPage.jsx` — Simulator page: scenario inputs, streamed results, playback, outcomes, uncertainty study, share links and exports.
-- `SimViews.jsx`, `SimCharts.jsx` — Map, 3D and section views with their motion layer; inventory, histogram, tornado and scatter charts.
-- `sim-block3d.js` — WebGL 2 block diagram: the aquifer top built at cell corners from the engine's depth function and cut along fault traces (throw shows as a vertical scarp), side walls with the CO₂ column in section, camera and picking. Its geometry, camera and picking are tested in Node.
-- `ve2d-model.js` — Dependency-free SI vertical-equilibrium engine (geometry, traps, pressure, transport, leakage, dissolution, inventory, uncertainty sampling) shared by the page, the worker and Node tests.
-- `simulation-worker.js` — Runs simulator scenarios (streamed snapshots) and uncertainty batches off the main thread.
-- `hero-simulation-worker.js` — Precomputes the home-page hero animation.
-- `bundle.js`, `simulator-bundle.js` — Generated home/common and simulator-specific bundles; do not edit directly.
-- `GuidePage.jsx` — Method page for the simulator.
-- `CVPage.jsx` — Interactive and printable Curriculum Vitae.
-- `App.jsx` — Top-level router managing multi-view state and smooth scroll anchors.
-- `assets/` — Optimized image assets, badges, and background textures.
+1. **Homepage (`index.html`)**
+   - **Hero (`SubsurfaceHero.jsx`).** A moonlit Highland field site above a live vertical-equilibrium (VE) section of CO₂ injected into a faulted saline aquifer.
+   - **Hero model (`hero-geology.js`).** Shared by the page, `hero-simulation-worker.js` and the tests. It is a conservative sharp-interface VE model:
+     - residual-trapping hysteresis;
+     - fault contacts that balance the gas-water level;
+     - fault leakage into an overlying aquifer once the mobile column passes the fault rock's entry height;
+     - a 30-year injection followed by migration to year 2000.
+   - **Hero display.** The player shows the CO₂ inventory (mobile, residual, leaked). The depth axis is linear below an explicit break. Playback pauses off-screen and does not autoplay under reduced motion.
+   - **Sections (`HomeSections.jsx`).** Research with recent activity, projects, publications (DOIs and BibTeX) and contact. They sit on a geological descent (`GeologicalDescent.jsx`) that continues the hero's rock down to the basement.
+2. **CV (`cv.html`, `CVPage.jsx`).** One document that prints cleanly to PDF. Every fact comes from `site-content.js`, which the homepage shares.
+3. **CO₂ storage simulator (`simulator.html`, `SimulatorPage.jsx`, `SimViews.jsx`, `SimCharts.jsx`, `GuidePage.jsx`)**
+   - **Model.** One SI vertical-equilibrium model (`ve2d-model.js`) drives a structure map, a WebGL block diagram (`sim-block3d.js`) and a geological section.
+   - **Physics.** Hysteretic residual trapping, a compressible pressure solve during injection, faults with throw and threshold-gated leakage, convective dissolution and spill-point trap analysis.
+   - **Inventory.** Six classes, with the mass-balance error shown.
+   - **Uncertainty.** Latin hypercube sampling in a worker, with P10/P50/P90 and a tornado.
+   - **Sharing and display.** Share links, CSV exports, night and day themes, and five palettes.
+   - **Method guide.** `simulator.html#method` opens the Method guide directly.
 
----
+## Repository structure
 
-## 🚀 Running Locally
+| Path | Role |
+| --- | --- |
+| `index.html`, `cv.html`, `simulator.html` | Page entries. `App.jsx` picks the component from `data-page` on `#root`. |
+| `colors_and_type.css` | Site tokens (the simulator's Earth night `--sim-*` values, kept identical by `tests/site-tokens.test.js`), base elements, header, hero, sections, CV, footer and print. |
+| `simulator-workbench.css` | The simulator's layout and its five palettes × night/day. |
+| `site-content.js` | Links, publications (verified DOIs, BibTeX), activity, projects and CV data. |
+| `Primitives.jsx` | Inline SVG icon set (`Icon`). |
+| `Header.jsx`, `Footer.jsx` | Shared navigation. The site variant is transparent over the hero; the workbench variant is the simulator's bar. |
+| `hero-geology.js`, `hero-simulation-worker.js`, `SubsurfaceHero.jsx` | The hero's geometry, model and rendering. |
+| `GeologicalDescent.jsx` | The rock behind the homepage sections. |
+| `bundle.js`, `simulator-bundle.js` | Generated by `node build.js`. Do not edit. |
+| `assets/` | Logo, favicons, social cards, the simulator screenshot and six geology textures (see `docs/geology-textures.md`). |
+| `docs/superpowers/` | Specs, plans and audits for the redesigns. |
 
-Simply serve the repository folder using any local HTTP server:
+## Running locally
+
+Serve the folder with any static server, for example:
 
 ```bash
-# Python 3
 python -m http.server 8000
-
-# or Node.js / npx
-npx serve .
 ```
 
-Navigate to `http://localhost:8000` in any modern web browser.
-
-Rebuild generated bundles and run the repository smoke check after source changes:
+After changing a source file, rebuild the bundles and run the checks:
 
 ```bash
 node build.js
@@ -77,4 +58,4 @@ node --test tests/*.test.js
 node tests/site-smoke.js
 ```
 
-To enable the direct CV download, add the final PDF at `assets/Saeed-Telvari-CV.pdf`. Until then, the CV page offers the browser's Print / Save as PDF flow.
+Assets are cache-busted with `?v=N`. When `bundle.js` or `colors_and_type.css` change, bump the version on all three pages together; `tests/site-smoke.js` checks that they match.
