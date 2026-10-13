@@ -40,13 +40,16 @@ lacks('GuidePage.jsx', /schemes running inside the simulator/, 'guide must not c
 lacks('GuidePage.jsx', /\*\*Brooks-Corey/, 'raw Markdown markers must not be visible');
 
 has('SimulatorPage.jsx', /role="tab"/, 'simulator tabs need tab semantics');
-has('SimulatorPage.jsx', /tabIndex=\{activeSubTab ===/, 'simulator tabs need roving keyboard focus');
-has('SimulatorPage.jsx', /Copy scenario link/, 'simulator state needs a share action');
-has('SimulatorPage.jsx', /Mass balance CSV/, 'simulator results need CSV export');
-has('SimulatorPage.jsx', /Reservoir SVG/, 'simulator visualization needs image export');
-has('SimulatorPage.jsx', /new Worker\(['"]\.\/uq-worker\.js/, 'UQ batches must run off the main thread');
+has('SimulatorPage.jsx', /tabIndex=\{section ===/, 'simulator tabs need roving keyboard focus');
+has('SimulatorPage.jsx', /Copy a link to this scenario/, 'simulator state needs a share action');
+has('SimulatorPage.jsx', /Inventory through time/, 'simulator results need CSV export');
+has('SimulatorPage.jsx', /Current view/, 'simulator visualization needs image export');
+has('SimulatorPage.jsx', /new Worker\(['"]\.\/simulation-worker\.js/, 'simulation runs and uncertainty batches must run off the main thread');
 has('SimulatorPage.jsx', /<details/, 'mobile controls need progressive disclosure');
-assert.ok(fs.existsSync(path.join(root, 'uq-worker.js')), 'UQ worker must exist');
+assert.ok(fs.existsSync(path.join(root, 'simulation-worker.js')), 'simulation worker must exist');
+assert.ok(!fs.existsSync(path.join(root, 'uq-worker.js')), 'the old copy of the solver must stay deleted');
+has('simulator.html', /KaTeX\/0\.16\.9\/katex\.min\.js/, 'method equations need the pinned KaTeX build');
+has('simulator.html', /<title>CO₂ Storage Simulator \| Sa'eed Telvari<\/title>/, 'simulator needs its plain page name');
 has('simulator.html', /simulator-workbench\.css/, 'simulator needs its dedicated workbench stylesheet');
 assert.ok(fs.existsSync(path.join(root, 'simulator-workbench.css')), 'workbench stylesheet must exist');
 
@@ -54,7 +57,7 @@ has('build.js', /simulator-bundle\.js/, 'the heavy simulator must have a page-sp
 const simulatorBundleVersions = [...read('simulator.html').matchAll(/simulator-bundle\.js\?v=([^"']+)/g)].map(match => match[1]);
 assert.ok(simulatorBundleVersions.length >= 2, 'simulator bundle must be preloaded and executed');
 assert.equal(new Set(simulatorBundleVersions).size, 1, 'simulator preload and script URLs must use the same cache version');
-assert.equal(simulatorBundleVersions[0], '18', 'simulator page must load the current bundle version');
+assert.equal(simulatorBundleVersions[0], '23', 'simulator page must load the current bundle version');
 lacks('index.html', /simulator-bundle\.js/, 'home page must not download the simulator bundle');
 
 console.log('site smoke contracts passed');

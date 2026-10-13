@@ -1,6 +1,6 @@
-# Sa'eed Telvari — Personal Portfolio & VE Simulator Platform
+# Sa'eed Telvari — Personal Portfolio & CO₂ Storage Simulator
 
-An interactive portfolio website and educational Vertical Equilibrium (VE) reservoir simulator for Sa'eed Telvari (Ph.D. Candidate in Petroleum Engineering at Heriot-Watt University).
+An interactive portfolio website and a browser-based CO₂ storage simulator built on the vertical-equilibrium (VE) approximation, for Sa'eed Telvari (Ph.D. Candidate in Petroleum Engineering at Heriot-Watt University).
 
 Built with React 18, SVG mathematical visualizations, and a custom liquid glassmorphism design system.
 
@@ -12,14 +12,15 @@ Built with React 18, SVG mathematical visualizations, and a custom liquid glassm
    - Educational height-based VE animation for $\mathrm{CO}_2$ plume migration and capillary trapping across faulted sandstone formations; precomputation runs in a Web Worker.
    - Conforming SVG geological cross-section with real-time dynamic fault step interpolation, buoyancy streamlines, active wellbore casing, and glassmorphic simulation playback controls.
 
-2. **Interactive VE Cross-section, x–y Map & UQ Dashboard (`SimulatorPage.jsx`)**:
-   - Interactive parameter controls: permeability, porosity, residual trapping coefficients, injection rate, dip angle, and fault transmissibility multipliers.
-   - True x–y finite-volume plume-height model with heatmap contours, well placement, cross-fault flow, residual trapping, PNG export, and grid CSV export.
-   - Web Worker Monte Carlo uncertainty engine with percentile outcomes, distributions, and correlation-based sensitivity summaries.
-   - Live $\mathrm{CO}_2$ Mass Balance accounting with real-time structural vs residual capillary trapping efficiency tracking.
+2. **CO₂ Storage Simulator (`simulator.html`, `SimulatorPage.jsx`, `SimViews.jsx`, `SimCharts.jsx`)**:
+   - One SI vertical-equilibrium model (`ve2d-model.js`) drives three synchronised views: a structure map, a 3D block diagram and a geological section through the same run.
+   - Physics: sharp-interface VE with hysteretic residual trapping, a compressible pressure solve during injection (Peaceman bottom-hole build-up), open (hydrostatic) or closed model edges, faults with throw, cross-fault transmissibility and threshold-gated leakage, convective dissolution and co2lab-style spill-point trap analysis.
+   - A six-class inventory (free, structural, residual, dissolved, left the model, leaked) with its mass-balance error, the inventory through time, plume and pressure figures and plain-language notes.
+   - Uncertainty study: Latin hypercube sampling of the same engine in a Web Worker, P10/P50/P90, histograms, Spearman tornado and a run scatter that opens any run in the simulator.
+   - Share links, inventory and grid CSV exports, view images, night and day themes, keyboard playback and data-driven motion that respects `prefers-reduced-motion`.
 
-3. **Mathematical & Physical Guide (`GuidePage.jsx`)**:
-   - Reference theory is clearly separated from the simplified equations actually evaluated by the browser model.
+3. **Method (`GuidePage.jsx`)**:
+   - The equations, numerics, verification results and limitations of the implemented model, typeset with KaTeX.
 
 4. **Academic CV View (`CVPage.jsx`)**:
    - Academic milestones, education, peer-reviewed publications, honors, and technical skill matrices with clean `@media print` export.
@@ -33,18 +34,21 @@ Built with React 18, SVG mathematical visualizations, and a custom liquid glassm
 ## 📁 Repository Structure
 
 - `index.html` — Home page entry point with CDN imports (React 18, ReactDOM, FontAwesome 6).
-- `simulator.html` — Standalone VE Simulator page (own URL; loads independently of the home page).
+- `simulator.html` — Standalone CO₂ Storage Simulator page (own URL; loads independently of the home page).
 - `colors_and_type.css` — Design system design tokens, glassmorphism filters, accessible focus rings, and typography.
 - `Primitives.jsx` — Reusable glass UI primitives (`GlassCard`, `GlassButton`, `Badge`, `Tag`, `Reveal`, `SectionPanel`).
 - `Header.jsx` — Fixed glassmorphic navigation header with shrink-on-scroll, scroll-spy, and mobile hamburger drawer.
 - `Footer.jsx` — Translucent footer with copyright and interactive navigation links.
 - `SubsurfaceHero.jsx` — Landing hero with real-time VE fluid solver and animated faulted geological cross-section.
 - `HomeSections.jsx` — Homepage content sections: About, Research Interests, Peer-Reviewed Publications, and Contact.
-- `SimulatorPage.jsx` — VE simulation sandbox, Monte Carlo UQ dashboard, share links, exports, and mass-balance analytics.
-- `ve2d-model.js` — Dependency-free x–y VE plume-height solver shared by the browser and Node tests.
-- `hero-simulation-worker.js`, `uq-worker.js` — Background numerical work that keeps interaction responsive.
+- `SimulatorPage.jsx` — Simulator page: scenario inputs, streamed results, playback, outcomes, uncertainty study, share links and exports.
+- `SimViews.jsx`, `SimCharts.jsx` — Map, 3D and section views with their motion layer; inventory, histogram, tornado and scatter charts.
+- `sim-block3d.js` — WebGL 2 block diagram: the aquifer top built at cell corners from the engine's depth function and cut along fault traces (throw shows as a vertical scarp), side walls with the CO₂ column in section, camera and picking. Its geometry, camera and picking are tested in Node.
+- `ve2d-model.js` — Dependency-free SI vertical-equilibrium engine (geometry, traps, pressure, transport, leakage, dissolution, inventory, uncertainty sampling) shared by the page, the worker and Node tests.
+- `simulation-worker.js` — Runs simulator scenarios (streamed snapshots) and uncertainty batches off the main thread.
+- `hero-simulation-worker.js` — Precomputes the home-page hero animation.
 - `bundle.js`, `simulator-bundle.js` — Generated home/common and simulator-specific bundles; do not edit directly.
-- `GuidePage.jsx` — Mathematical formulation and PDE methodology guide.
+- `GuidePage.jsx` — Method page for the simulator.
 - `CVPage.jsx` — Interactive and printable Curriculum Vitae.
 - `App.jsx` — Top-level router managing multi-view state and smooth scroll anchors.
 - `assets/` — Optimized image assets, badges, and background textures.
@@ -69,7 +73,7 @@ Rebuild generated bundles and run the repository smoke check after source change
 
 ```bash
 node build.js
-node --test tests/ve2d-model.test.js
+node --test tests/*.test.js
 node tests/site-smoke.js
 ```
 

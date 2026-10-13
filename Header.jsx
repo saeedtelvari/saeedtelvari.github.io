@@ -111,7 +111,7 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
     { id: 'home',         label: 'Home', href: './index.html' },
     { id: 'about',        label: 'About', href: './index.html#about' },
     { id: 'publications', label: 'Research', href: './index.html#publications' },
-    { id: 'simulator',    label: 'VE Simulator', href: './simulator.html' },
+    { id: 'simulator',    label: 'CO₂ Simulator', href: './simulator.html' },
     { id: 'contact',      label: 'Contact', href: './index.html#contact' },
     { id: 'cv',           label: 'CV', href: './index.html#cv' },
   ];
@@ -185,14 +185,14 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
           border-color: #64ffda;
         }
         .hamburger-btn.workbench {
-          background: #fff;
+          background: var(--ve-surface);
           border-color: var(--ve-border);
           color: var(--ve-ink);
           backdrop-filter: none;
           transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
         }
         .hamburger-btn.workbench:hover {
-          background: #f3f6f8;
+          background: var(--ve-accent-soft);
           border-color: var(--ve-border);
         }
         .mobile-drawer-backdrop {
@@ -238,7 +238,7 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
           transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1);
         }
         .mobile-drawer-panel.workbench {
-          background: #fff;
+          background: var(--ve-surface);
           border-left: 1px solid var(--ve-border);
           box-shadow: none;
           transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -263,7 +263,7 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
           padding: '0 36px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           transition: isWorkbench ? 'none' : 'all 0.4s ease',
-          background: isWorkbench ? '#ffffff' : (scrolled ? siteScrolledBackground : siteTopBackground),
+          background: isWorkbench ? 'var(--ve-surface)' : (scrolled ? siteScrolledBackground : siteTopBackground),
           backdropFilter: isWorkbench ? 'none' : (scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)'),
           WebkitBackdropFilter: isWorkbench ? 'none' : (scrolled ? 'blur(20px) saturate(180%)' : 'blur(6px)'),
           borderBottom: isWorkbench ? '1px solid var(--ve-border)' : siteBorderBottom,
