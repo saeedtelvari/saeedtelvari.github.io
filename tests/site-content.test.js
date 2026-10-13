@@ -19,7 +19,9 @@ test('publication facts are correct and shared by the homepage and CV', { todo: 
   assert.equal(spe.title, 'Accelerated Permeability Upscaling: A Convolutional Neural Network Approach');
   assert.match(pubs[0].status, /under review/i);
   assert.deepEqual(pubs.map(p => p.year), [...pubs.map(p => p.year)].sort((a, b) => b - a));
-  for (const file of ['HomeSections.jsx', 'CVPage.jsx']) assert.match(fs.readFileSync(path.join(root, file), 'utf8'), /SITE_PUBLICATIONS/);
+  for (const file of ['HomeSections.jsx', 'CVPage.jsx']) {
+    assert.ok(fs.readFileSync(path.join(root, file), 'utf8').includes('SITE_PUBLICATIONS'), `${file} reads SITE_PUBLICATIONS`);
+  }
 });
 
 test('wording rules the user set on 2026-10-13', () => {
