@@ -88,3 +88,16 @@ test('playback is slow during injection and fast during migration', () => {
   assert.equal(G.yearsPerSecond(100), 60);
   for (let y = 0; y < 60; y++) assert.ok(G.yearsPerSecond(y + 1) >= G.yearsPerSecond(y));
 });
+
+test('hero playback starts still under reduced motion and never ticks unseen', () => {
+  const src = fs.readFileSync(require.resolve('../SubsurfaceHero.jsx'), 'utf8');
+  const h = new Function(src.slice(src.indexOf('// ---- hero playback helpers'), src.indexOf('// ---- end hero playback helpers')) +
+    '\nreturn { heroInitialPlayback, heroShouldTick, heroPhase };')();
+  assert.deepEqual(h.heroInitialPlayback(true), { year: 400, playing: false });
+  assert.deepEqual(h.heroInitialPlayback(false), { year: 0, playing: true });
+  for (const playing of [true, false]) for (const visible of [true, false]) for (const hidden of [true, false]) {
+    assert.equal(h.heroShouldTick({ playing, visible, hidden }), playing && visible && !hidden);
+  }
+  assert.equal(h.heroPhase(12, 30), 'injecting');
+  assert.equal(h.heroPhase(30, 30), 'migrating');
+});
