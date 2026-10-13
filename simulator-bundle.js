@@ -5149,7 +5149,12 @@ const simEncodeScenario = scenario => {
 const simDecodeScenario = search => {
   const params = new URLSearchParams(search);
   if (!params.has('preset') && !params.has('rateMt') && !params.has('faults')) return null;
-  const raw = {};
+  // A preset name is the starting point; anything else in the link overrides it.
+  const preset = VE2D.PRESETS[params.get('preset')];
+  const raw = preset ? {
+    ...VE2D.DEFAULTS,
+    ...preset.patch
+  } : {};
   for (const [key, value] of params) if (key !== 'faults') raw[key] = value;
   if (params.has('faults')) {
     const text = params.get('faults');

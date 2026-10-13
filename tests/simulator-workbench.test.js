@@ -30,6 +30,14 @@ test('share links round-trip every preset exactly', () => {
   }
 });
 
+test('a link that names only a preset opens that preset', () => {
+  for (const [id, preset] of Object.entries(VE2D.PRESETS)) {
+    const expected = VE2D.normalizeScenario({ ...VE2D.DEFAULTS, ...preset.patch, preset: id });
+    assert.deepEqual(plain(h.simDecodeScenario(`?preset=${id}`)), plain(expected), id);
+  }
+  assert.equal(h.simDecodeScenario('?preset=sealed-block&rateMt=2').rateMt, 2, 'explicit values still win');
+});
+
 test('hand-edited share links decode to a valid scenario', () => {
   const scenario = h.simDecodeScenario('?rateMt=NaN&faults=9&porosity=7&evil=1&grid=huge');
   assert.equal(scenario.rateMt, VE2D.DEFAULTS.rateMt);
