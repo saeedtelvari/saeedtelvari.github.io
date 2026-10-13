@@ -144,7 +144,7 @@ const GeologicalDescent = ({ children }) => {
           {[...new Set(materials)].map(material => (
             <React.Fragment key={material}>
               <pattern id={`descent-raw-${material}`} width="840" height="840" patternUnits="userSpaceOnUse">
-                <image href={texturesOn ? `./assets/geology-${material}.webp?v=2` : undefined} width="840" height="840" preserveAspectRatio="none" />
+                <image href={texturesOn ? `./assets/geology-${material}.webp?v=3` : undefined} width="840" height="840" preserveAspectRatio="none" />
               </pattern>
               <pattern id={`descent-raw-${material}-x`} href={`#descent-raw-${material}`} patternTransform="translate(420 0)" />
               <pattern id={`descent-raw-${material}-y`} href={`#descent-raw-${material}`} patternTransform="translate(0 420)" />

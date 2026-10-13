@@ -1,6 +1,6 @@
 # Geological material textures
 
-Generated with the built-in imagegen tool on 2026-09-30. The originals remain in Codex's generated-images folder; the website uses compressed 1024 px WebP copies in `assets/`.
+Generated with the built-in imagegen tool on 2026-09-30. The originals remain in Codex's generated-images folder. Since 2026-10-14 the website uses 640 px WebP copies in `assets/` (about 70–100 KB each). They are graded toward the site's Earth palette (55 % of the original chroma, slightly warmer and darker) and load only once the rock scrolls into view; flat Earth colours stand in until then.
 
 Each material uses the following common prompt, with its subject description inserted after “Generate one square texture of”.
 
