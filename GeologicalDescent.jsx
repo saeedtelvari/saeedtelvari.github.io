@@ -5,6 +5,24 @@ const GeologicalDescent = ({ children }) => {
   const [heights, setHeights] = React.useState([1100, 900, 1500, 850, 240]);
   // Photographic textures load once the rock scrolls into view; flat colours stand in until then.
   const [texturesOn, setTexturesOn] = React.useState(false);
+  // The rock lies below the fold: build it after the hero has painted.
+  const [artReady, setArtReady] = React.useState(false);
+  const liveRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const ready = () => setArtReady(() => true);
+    const idle = window.requestIdleCallback;
+    const id = idle ? idle(ready, { timeout: 1500 }) : window.setTimeout(ready, 250);
+    return () => (idle ? window.cancelIdleCallback(id) : window.clearTimeout(id));
+  }, []);
+
+  // Once drawn: size the textures and pause the flow streaks while they are off-screen.
+  React.useEffect(() => {
+    const live = liveRef.current;
+    if (!artReady || !live || !live.measure) return;
+    live.measure();
+    live.root.querySelectorAll('.descent-motion').forEach(element => live.visibility.observe(element));
+  }, [artReady]);
 
   React.useEffect(() => {
     // Captured once: a resize callback can still arrive after React has detached the ref.
@@ -29,15 +47,18 @@ const GeologicalDescent = ({ children }) => {
       entries.forEach(entry => { entry.target.dataset.visible = String(entry.isIntersecting); });
     });
     root.querySelectorAll('.descent-motion').forEach(element => visibility.observe(element));
+    liveRef.current = { root, measure, visibility };
     const textures = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) return;
       setTexturesOn(() => true);
       textures.disconnect();
     }, { rootMargin: '0px 0px -5% 0px' });
-    textures.observe(root.querySelector('.geological-descent-art') || root);
+    textures.observe(root.querySelector('.section-panel') || root);
     return () => { sizes.disconnect(); visibility.disconnect(); textures.disconnect(); };
   }, []);
 
+  const art = React.useMemo(() => {
+  if (!artReady) return null;
   const footer = heights[heights.length - 1];
   const lastSection = heights[heights.length - 2];
   const total = heights.reduce((sum, height) => sum + height, 0);
@@ -131,7 +152,6 @@ const GeologicalDescent = ({ children }) => {
   }));
 
   return (
-    <div ref={rootRef} className="geological-descent">
       <svg className="geological-descent-art" viewBox={`0 0 1440 ${total}`} preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <linearGradient id="descent-wrap-x">
@@ -246,6 +266,12 @@ const GeologicalDescent = ({ children }) => {
         <rect width="1440" height={total} fill="url(#descent-reading-veil)" />
         <rect width="1440" height="240" fill="url(#descent-bridge)" />
       </svg>
+  );
+  }, [artReady, heights, texturesOn]);
+
+  return (
+    <div ref={rootRef} className="geological-descent">
+      {art}
       {children}
     </div>
   );

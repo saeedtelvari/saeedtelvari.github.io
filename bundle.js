@@ -1329,6 +1329,16 @@ const HeroSection = React.memo(({
   sectionRef
 }) => {
   const AQUIFER_PATH = HERO_PATHS.underburden;
+  // Fine bedding is decoration: draw it once the hero has painted.
+  const [detail, setDetail] = useState(false);
+  useEffect(() => {
+    const show = () => setDetail(true);
+    const idle = window.requestIdleCallback;
+    const id = idle ? idle(show, {
+      timeout: 1200
+    }) : window.setTimeout(show, 200);
+    return () => idle ? window.cancelIdleCallback(id) : window.clearTimeout(id);
+  }, []);
   return /*#__PURE__*/React.createElement("svg", {
     ref: sectionRef,
     className: "hero-svg hero-svg--rock",
@@ -1439,7 +1449,7 @@ const HeroSection = React.memo(({
     width: "1000",
     height: "580",
     fill: "url(#hero-descent-bridge)"
-  })), /*#__PURE__*/React.createElement(GeologyTexture, {
+  })), detail && /*#__PURE__*/React.createElement(GeologyTexture, {
     faults: heroGeology.faults,
     geology: heroGeology
   }));
@@ -2927,6 +2937,25 @@ const GeologicalDescent = ({
   const [heights, setHeights] = React.useState([1100, 900, 1500, 850, 240]);
   // Photographic textures load once the rock scrolls into view; flat colours stand in until then.
   const [texturesOn, setTexturesOn] = React.useState(false);
+  // The rock lies below the fold: build it after the hero has painted.
+  const [artReady, setArtReady] = React.useState(false);
+  const liveRef = React.useRef(null);
+  React.useEffect(() => {
+    const ready = () => setArtReady(() => true);
+    const idle = window.requestIdleCallback;
+    const id = idle ? idle(ready, {
+      timeout: 1500
+    }) : window.setTimeout(ready, 250);
+    return () => idle ? window.cancelIdleCallback(id) : window.clearTimeout(id);
+  }, []);
+
+  // Once drawn: size the textures and pause the flow streaks while they are off-screen.
+  React.useEffect(() => {
+    const live = liveRef.current;
+    if (!artReady || !live || !live.measure) return;
+    live.measure();
+    live.root.querySelectorAll('.descent-motion').forEach(element => live.visibility.observe(element));
+  }, [artReady]);
   React.useEffect(() => {
     // Captured once: a resize callback can still arrive after React has detached the ref.
     const root = rootRef.current;
@@ -2952,6 +2981,11 @@ const GeologicalDescent = ({
       });
     });
     root.querySelectorAll('.descent-motion').forEach(element => visibility.observe(element));
+    liveRef.current = {
+      root,
+      measure,
+      visibility
+    };
     const textures = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) return;
       setTexturesOn(() => true);
@@ -2959,436 +2993,440 @@ const GeologicalDescent = ({
     }, {
       rootMargin: '0px 0px -5% 0px'
     });
-    textures.observe(root.querySelector('.geological-descent-art') || root);
+    textures.observe(root.querySelector('.section-panel') || root);
     return () => {
       sizes.disconnect();
       visibility.disconnect();
       textures.disconnect();
     };
   }, []);
-  const footer = heights[heights.length - 1];
-  const lastSection = heights[heights.length - 2];
-  const total = heights.reduce((sum, height) => sum + height, 0);
-  const materials = ['shale', 'sandstone', 'sandstone', 'siltstone', 'limestone', 'shale', 'sandstone', 'dolomite', 'shale', 'siltstone', 'sandstone', 'limestone', 'limestone', 'shale', 'sandstone', 'siltstone', 'shale', 'dolomite', 'sandstone', 'siltstone', 'shale', 'limestone', 'sandstone', 'dolomite', 'shale', 'sandstone', 'siltstone', 'dolomite', 'shale', 'limestone', 'shale', 'sandstone', 'sandstone', 'siltstone', 'limestone', 'shale', 'dolomite', 'sandstone', 'shale', 'sandstone', 'basement'];
-  // Earth-graded flat colours: the whole bed before its texture loads, and a light tint after.
-  const colors = {
-    shale: '#2e2925',
-    sandstone: '#7a6347',
-    siltstone: '#5f5044',
-    limestone: '#7a7468',
-    dolomite: '#857a64',
-    basement: '#6e625a'
-  };
-  const random = seed => {
-    const n = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
-    return n - Math.floor(n);
-  };
-  const weights = materials.slice(0, -1).map((_, i) => .45 + random(i + 8) * 1.4);
-  const basementLevel = total - footer - lastSection * .58;
-  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
-  const levels = [0];
-  weights.forEach(weight => levels.push(levels[levels.length - 1] + weight / weightTotal * basementLevel));
-  levels.push(total);
-  const smooth = value => {
-    const t = Math.max(0, Math.min(1, value));
-    return t * t * t * (10 + t * (6 * t - 15));
-  };
-  // Three sandstone deposits taper out; the remaining succession stays continuous.
-  const pinch = (bed, x) => bed === 6 ? smooth((x - 180) / 640) : bed === 18 ? smooth((1120 - x) / 700) : bed === 37 ? smooth((x - 120) / 400) * smooth((1360 - x) / 400) : 1;
-  const columnProfiles = new Map();
-  const baseBoundary = (i, x) => {
-    if (i === 0) return 0;
-    if (i === levels.length - 1) return total;
-    if (columnProfiles.has(x)) return columnProfiles.get(x)[i];
-    const thicknesses = weights.map((weight, n) => weight * pinch(n, x) * (1 + .24 * Math.sin(x / 440 + n * .72) + .1 * Math.cos(x / 280 - n * .46)));
-    const thicknessTotal = thicknesses.reduce((sum, weight) => sum + weight, 0);
-    const erosion = 32 * Math.sin(x / 310 + .8) + 12 * Math.sin(x / 110);
-    const fold = 36 * Math.sin(x / 510 + .45) + 12 * Math.cos(x / 230);
-    let cumulative = 0;
-    const column = [0, ...thicknesses.map((weight, n) => {
-      cumulative += weight;
-      const fraction = cumulative / thicknessTotal;
-      return fraction * (basementLevel + erosion) + Math.sin(Math.PI * fraction) * fold;
-    }), total];
-    columnProfiles.set(x, column);
-    return column[i];
-  };
-  // Two small faults offset a few beds and die out before the adjacent succession.
-  const structuralFaults = [{
-    top: 10,
-    bottom: 14,
-    x: 260,
-    slope: .62,
-    throw: 12
-  }, {
-    top: 24,
-    bottom: 29,
-    x: 1160,
-    slope: -.55,
-    throw: -10
-  }].map(fault => {
-    const y = baseBoundary(fault.top, fault.x);
-    return {
-      ...fault,
-      y,
-      length: baseBoundary(fault.bottom, fault.x) - y
+  const art = React.useMemo(() => {
+    if (!artReady) return null;
+    const footer = heights[heights.length - 1];
+    const lastSection = heights[heights.length - 2];
+    const total = heights.reduce((sum, height) => sum + height, 0);
+    const materials = ['shale', 'sandstone', 'sandstone', 'siltstone', 'limestone', 'shale', 'sandstone', 'dolomite', 'shale', 'siltstone', 'sandstone', 'limestone', 'limestone', 'shale', 'sandstone', 'siltstone', 'shale', 'dolomite', 'sandstone', 'siltstone', 'shale', 'limestone', 'sandstone', 'dolomite', 'shale', 'sandstone', 'siltstone', 'dolomite', 'shale', 'limestone', 'shale', 'sandstone', 'sandstone', 'siltstone', 'limestone', 'shale', 'dolomite', 'sandstone', 'shale', 'sandstone', 'basement'];
+    // Earth-graded flat colours: the whole bed before its texture loads, and a light tint after.
+    const colors = {
+      shale: '#2e2925',
+      sandstone: '#7a6347',
+      siltstone: '#5f5044',
+      limestone: '#7a7468',
+      dolomite: '#857a64',
+      basement: '#6e625a'
     };
-  });
-  const faultX = (fault, y) => fault.x + (y - fault.y - fault.length / 2) * fault.slope;
-  const boundaryY = (i, x) => {
-    const y = baseBoundary(i, x);
-    return y + structuralFaults.reduce((offset, fault) => {
-      const t = (y - fault.y) / fault.length;
-      return offset + (t > 0 && t < 1 && x > faultX(fault, y) ? fault.throw * Math.sin(Math.PI * t) : 0);
-    }, 0);
-  };
-  // Both adjoining beds use the same contact, including exact fault steps.
-  const profiles = levels.map((_, i) => {
-    const points = Array.from({
-      length: 121
-    }, (_, n) => [n * 12, boundaryY(i, n * 12)]);
-    structuralFaults.forEach(fault => {
-      let left = 0,
-        right = 1440;
-      for (let n = 0; n < 24; n++) {
-        const x = (left + right) / 2;
-        if (x < faultX(fault, baseBoundary(i, x))) left = x;else right = x;
-      }
-      const x = (left + right) / 2,
-        y = baseBoundary(i, x);
-      if (y > fault.y && y < fault.y + fault.length) points.push([x, boundaryY(i, x - .001)], [x, boundaryY(i, x + .001)]);
+    const random = seed => {
+      const n = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+      return n - Math.floor(n);
+    };
+    const weights = materials.slice(0, -1).map((_, i) => .45 + random(i + 8) * 1.4);
+    const basementLevel = total - footer - lastSection * .58;
+    const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+    const levels = [0];
+    weights.forEach(weight => levels.push(levels[levels.length - 1] + weight / weightTotal * basementLevel));
+    levels.push(total);
+    const smooth = value => {
+      const t = Math.max(0, Math.min(1, value));
+      return t * t * t * (10 + t * (6 * t - 15));
+    };
+    // Three sandstone deposits taper out; the remaining succession stays continuous.
+    const pinch = (bed, x) => bed === 6 ? smooth((x - 180) / 640) : bed === 18 ? smooth((1120 - x) / 700) : bed === 37 ? smooth((x - 120) / 400) * smooth((1360 - x) / 400) : 1;
+    const columnProfiles = new Map();
+    const baseBoundary = (i, x) => {
+      if (i === 0) return 0;
+      if (i === levels.length - 1) return total;
+      if (columnProfiles.has(x)) return columnProfiles.get(x)[i];
+      const thicknesses = weights.map((weight, n) => weight * pinch(n, x) * (1 + .24 * Math.sin(x / 440 + n * .72) + .1 * Math.cos(x / 280 - n * .46)));
+      const thicknessTotal = thicknesses.reduce((sum, weight) => sum + weight, 0);
+      const erosion = 32 * Math.sin(x / 310 + .8) + 12 * Math.sin(x / 110);
+      const fold = 36 * Math.sin(x / 510 + .45) + 12 * Math.cos(x / 230);
+      let cumulative = 0;
+      const column = [0, ...thicknesses.map((weight, n) => {
+        cumulative += weight;
+        const fraction = cumulative / thicknessTotal;
+        return fraction * (basementLevel + erosion) + Math.sin(Math.PI * fraction) * fold;
+      }), total];
+      columnProfiles.set(x, column);
+      return column[i];
+    };
+    // Two small faults offset a few beds and die out before the adjacent succession.
+    const structuralFaults = [{
+      top: 10,
+      bottom: 14,
+      x: 260,
+      slope: .62,
+      throw: 12
+    }, {
+      top: 24,
+      bottom: 29,
+      x: 1160,
+      slope: -.55,
+      throw: -10
+    }].map(fault => {
+      const y = baseBoundary(fault.top, fault.x);
+      return {
+        ...fault,
+        y,
+        length: baseBoundary(fault.bottom, fault.x) - y
+      };
     });
-    return points.sort((a, b) => a[0] - b[0]);
-  });
-  const trace = points => 'M' + points.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L');
-  const beds = profiles.slice(0, -1).map((points, i) => trace(points) + 'L' + [...profiles[i + 1]].reverse().map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L') + 'Z');
-  const middle = (i, x) => (boundaryY(i, x) + boundaryY(i + 1, x)) / 2;
-  const bedAt = (material, y) => materials.reduce((best, rock, i) => rock === material && Math.abs(levels[i] - y) < Math.abs(levels[best] - y) ? i : best, materials.indexOf(material));
-  const sandstoneBed = bedAt('sandstone', heights[0] * .22);
-  const lowerSandstone = bedAt('sandstone', heights[0] + heights[1] * .68);
-  // Brittle carbonate intervals and granite host the fault/joint clusters.
-  const fracturedBeds = [4, 12, 27, materials.length - 1];
-  const fractureCounts = {
-    shale: 0,
-    siltstone: 1,
-    sandstone: 2,
-    limestone: 5,
-    dolomite: 7,
-    basement: 180
-  };
-  const faults = fracturedBeds.flatMap(bed => Array.from({
-    length: materials[bed] === 'basement' ? 24 : 4
-  }, (_, n) => {
-    const seed = bed * 31 + n * 7;
-    const x = 65 + random(seed) * 1310;
-    const top = boundaryY(bed, x),
-      height = boundaryY(bed + 1, x) - top;
-    const length = Math.min(210, height * .7) * (.65 + random(seed + 1) * .35);
-    return {
-      bed,
-      x,
-      y: top + height * .08 + random(seed + 2) * Math.max(0, height * .84 - length),
-      length,
-      slope: n % 3 ? .64 : -.56,
-      throw: n % 2 ? -7 : 7
+    const faultX = (fault, y) => fault.x + (y - fault.y - fault.length / 2) * fault.slope;
+    const boundaryY = (i, x) => {
+      const y = baseBoundary(i, x);
+      return y + structuralFaults.reduce((offset, fault) => {
+        const t = (y - fault.y) / fault.length;
+        return offset + (t > 0 && t < 1 && x > faultX(fault, y) ? fault.throw * Math.sin(Math.PI * t) : 0);
+      }, 0);
     };
-  }));
+    // Both adjoining beds use the same contact, including exact fault steps.
+    const profiles = levels.map((_, i) => {
+      const points = Array.from({
+        length: 121
+      }, (_, n) => [n * 12, boundaryY(i, n * 12)]);
+      structuralFaults.forEach(fault => {
+        let left = 0,
+          right = 1440;
+        for (let n = 0; n < 24; n++) {
+          const x = (left + right) / 2;
+          if (x < faultX(fault, baseBoundary(i, x))) left = x;else right = x;
+        }
+        const x = (left + right) / 2,
+          y = baseBoundary(i, x);
+        if (y > fault.y && y < fault.y + fault.length) points.push([x, boundaryY(i, x - .001)], [x, boundaryY(i, x + .001)]);
+      });
+      return points.sort((a, b) => a[0] - b[0]);
+    });
+    const trace = points => 'M' + points.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L');
+    const beds = profiles.slice(0, -1).map((points, i) => trace(points) + 'L' + [...profiles[i + 1]].reverse().map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L') + 'Z');
+    const middle = (i, x) => (boundaryY(i, x) + boundaryY(i + 1, x)) / 2;
+    const bedAt = (material, y) => materials.reduce((best, rock, i) => rock === material && Math.abs(levels[i] - y) < Math.abs(levels[best] - y) ? i : best, materials.indexOf(material));
+    const sandstoneBed = bedAt('sandstone', heights[0] * .22);
+    const lowerSandstone = bedAt('sandstone', heights[0] + heights[1] * .68);
+    // Brittle carbonate intervals and granite host the fault/joint clusters.
+    const fracturedBeds = [4, 12, 27, materials.length - 1];
+    const fractureCounts = {
+      shale: 0,
+      siltstone: 1,
+      sandstone: 2,
+      limestone: 5,
+      dolomite: 7,
+      basement: 180
+    };
+    const faults = fracturedBeds.flatMap(bed => Array.from({
+      length: materials[bed] === 'basement' ? 24 : 4
+    }, (_, n) => {
+      const seed = bed * 31 + n * 7;
+      const x = 65 + random(seed) * 1310;
+      const top = boundaryY(bed, x),
+        height = boundaryY(bed + 1, x) - top;
+      const length = Math.min(210, height * .7) * (.65 + random(seed + 1) * .35);
+      return {
+        bed,
+        x,
+        y: top + height * .08 + random(seed + 2) * Math.max(0, height * .84 - length),
+        length,
+        slope: n % 3 ? .64 : -.56,
+        throw: n % 2 ? -7 : 7
+      };
+    }));
+    return /*#__PURE__*/React.createElement("svg", {
+      className: "geological-descent-art",
+      viewBox: `0 0 1440 ${total}`,
+      preserveAspectRatio: "none",
+      "aria-hidden": "true"
+    }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+      id: "descent-wrap-x"
+    }, [0, .15, .5, .85, 1].map((offset, i) => /*#__PURE__*/React.createElement("stop", {
+      key: i,
+      offset: offset,
+      stopColor: "#fff",
+      stopOpacity: [0, .2, 1, .2, 0][i]
+    }))), /*#__PURE__*/React.createElement("linearGradient", {
+      id: "descent-wrap-y",
+      x1: "0",
+      y1: "0",
+      x2: "0",
+      y2: "1",
+      href: "#descent-wrap-x"
+    }), /*#__PURE__*/React.createElement("mask", {
+      id: "descent-wrap-mask-x",
+      x: "0",
+      y: "0",
+      width: "840",
+      height: "840",
+      maskUnits: "userSpaceOnUse"
+    }, /*#__PURE__*/React.createElement("rect", {
+      width: "840",
+      height: "840",
+      fill: "url(#descent-wrap-x)"
+    })), /*#__PURE__*/React.createElement("mask", {
+      id: "descent-wrap-mask-y",
+      x: "0",
+      y: "0",
+      width: "840",
+      height: "840",
+      maskUnits: "userSpaceOnUse"
+    }, /*#__PURE__*/React.createElement("rect", {
+      width: "840",
+      height: "840",
+      fill: "url(#descent-wrap-y)"
+    })), [...new Set(materials)].map(material => /*#__PURE__*/React.createElement(React.Fragment, {
+      key: material
+    }, /*#__PURE__*/React.createElement("pattern", {
+      id: `descent-raw-${material}`,
+      width: "840",
+      height: "840",
+      patternUnits: "userSpaceOnUse"
+    }, /*#__PURE__*/React.createElement("image", {
+      href: texturesOn ? `./assets/geology-${material}.webp?v=3` : undefined,
+      width: "840",
+      height: "840",
+      preserveAspectRatio: "none"
+    })), /*#__PURE__*/React.createElement("pattern", {
+      id: `descent-raw-${material}-x`,
+      href: `#descent-raw-${material}`,
+      patternTransform: "translate(420 0)"
+    }), /*#__PURE__*/React.createElement("pattern", {
+      id: `descent-raw-${material}-y`,
+      href: `#descent-raw-${material}`,
+      patternTransform: "translate(0 420)"
+    }), /*#__PURE__*/React.createElement("pattern", {
+      id: `descent-raw-${material}-xy`,
+      href: `#descent-raw-${material}`,
+      patternTransform: "translate(420 420)"
+    }), /*#__PURE__*/React.createElement("pattern", {
+      className: "descent-material",
+      id: `descent-rock-${material}`,
+      width: "840",
+      height: "840",
+      patternUnits: "userSpaceOnUse"
+    }, /*#__PURE__*/React.createElement("g", {
+      className: "descent-tile"
+    }, /*#__PURE__*/React.createElement("rect", {
+      width: "840",
+      height: "840",
+      fill: `url(#descent-raw-${material}-xy)`
+    }), /*#__PURE__*/React.createElement("rect", {
+      width: "840",
+      height: "840",
+      fill: `url(#descent-raw-${material}-y)`,
+      mask: "url(#descent-wrap-mask-x)"
+    }), /*#__PURE__*/React.createElement("g", {
+      mask: "url(#descent-wrap-mask-y)"
+    }, /*#__PURE__*/React.createElement("rect", {
+      width: "840",
+      height: "840",
+      fill: `url(#descent-raw-${material}-x)`
+    }), /*#__PURE__*/React.createElement("rect", {
+      width: "840",
+      height: "840",
+      fill: `url(#descent-raw-${material})`,
+      mask: "url(#descent-wrap-mask-x)"
+    })))))), beds.map((bed, i) => /*#__PURE__*/React.createElement("clipPath", {
+      key: i,
+      id: `descent-bed-${i}`
+    }, /*#__PURE__*/React.createElement("path", {
+      d: bed
+    }))), /*#__PURE__*/React.createElement("filter", {
+      id: "descent-mineral-grain"
+    }, /*#__PURE__*/React.createElement("feTurbulence", {
+      type: "fractalNoise",
+      baseFrequency: ".55",
+      numOctaves: "3",
+      seed: "19",
+      stitchTiles: "stitch"
+    }), /*#__PURE__*/React.createElement("feColorMatrix", {
+      type: "saturate",
+      values: "0"
+    })), /*#__PURE__*/React.createElement("pattern", {
+      id: "descent-grain",
+      width: "160",
+      height: "160",
+      patternUnits: "userSpaceOnUse"
+    }, /*#__PURE__*/React.createElement("rect", {
+      width: "160",
+      height: "160",
+      filter: "url(#descent-mineral-grain)"
+    })), /*#__PURE__*/React.createElement("linearGradient", {
+      id: "descent-bridge",
+      x1: "0",
+      y1: "0",
+      x2: "0",
+      y2: "1"
+    }, /*#__PURE__*/React.createElement("stop", {
+      stopColor: "#1d150f"
+    }), /*#__PURE__*/React.createElement("stop", {
+      offset: "1",
+      stopColor: "#1d150f",
+      stopOpacity: "0"
+    })), /*#__PURE__*/React.createElement("linearGradient", {
+      id: "descent-reading-veil"
+    }, /*#__PURE__*/React.createElement("stop", {
+      stopColor: "#120e0b",
+      stopOpacity: ".45"
+    }), /*#__PURE__*/React.createElement("stop", {
+      offset: ".2",
+      stopColor: "#120e0b",
+      stopOpacity: ".6"
+    }), /*#__PURE__*/React.createElement("stop", {
+      offset: ".8",
+      stopColor: "#120e0b",
+      stopOpacity: ".6"
+    }), /*#__PURE__*/React.createElement("stop", {
+      offset: "1",
+      stopColor: "#120e0b",
+      stopOpacity: ".45"
+    }))), /*#__PURE__*/React.createElement("rect", {
+      width: "1440",
+      height: total,
+      fill: "#120e0b"
+    }), materials.map((material, i) => /*#__PURE__*/React.createElement("g", {
+      key: i
+    }, /*#__PURE__*/React.createElement("path", {
+      "data-bed": i,
+      "data-pinch-out": [6, 18, 37].includes(i) ? true : undefined,
+      d: beds[i],
+      fill: colors[material]
+    }), /*#__PURE__*/React.createElement("path", {
+      className: "descent-rock",
+      "data-material": material,
+      d: beds[i],
+      fill: `url(#descent-rock-${material})`
+    }), /*#__PURE__*/React.createElement("path", {
+      d: beds[i],
+      fill: colors[material],
+      opacity: .08 + random(i + 210) * .08
+    }), /*#__PURE__*/React.createElement("path", {
+      d: beds[i],
+      fill: "url(#descent-grain)",
+      opacity: material === 'sandstone' || material === 'siltstone' ? '.09' : '.04'
+    }), /*#__PURE__*/React.createElement("g", {
+      clipPath: `url(#descent-bed-${i})`,
+      fill: "none"
+    }, material !== 'basement' && (material === 'shale' ? [.12, .28, .43, .61, .76, .9] : [.24, .52, .78]).map(fraction => /*#__PURE__*/React.createElement("path", {
+      key: fraction,
+      d: trace(profiles[i].map(([x]) => {
+        const y = boundaryY(i, x) * (1 - fraction) + boundaryY(i + 1, x) * fraction;
+        const offset = faults.reduce((sum, fault) => {
+          const t = (y - fault.y) / fault.length;
+          return sum + (fault.bed === i && t > 0 && t < 1 && x > faultX(fault, y) ? fault.throw * Math.sin(Math.PI * t) : 0);
+        }, 0);
+        return [x, y + offset];
+      })),
+      stroke: material === 'shale' ? '#a4aea8' : '#494b40',
+      strokeOpacity: ".16",
+      strokeWidth: ".55"
+    })), /*#__PURE__*/React.createElement("path", {
+      "data-fractures": i,
+      "data-material": material,
+      "data-fracture-count": fracturedBeds.includes(i) && material !== 'basement' ? 18 : fractureCounts[material],
+      stroke: material === 'basement' ? '#382e2a' : '#3f4239',
+      strokeOpacity: ".42",
+      strokeWidth: ".7",
+      d: Array.from({
+        length: fracturedBeds.includes(i) && material !== 'basement' ? 18 : fractureCounts[material]
+      }, (_, n) => {
+        const seed = i * 97 + n * 5;
+        const x = 12 + (n * 91 + random(seed) * 65) % 1416;
+        const top = boundaryY(i, x),
+          bottom = boundaryY(i + 1, x);
+        const y = top + (random(seed + 1) * .84 + .06) * (bottom - top);
+        const length = 14 + random(seed + 2) * (material === 'basement' ? 62 : 32);
+        const lean = (n % 3 ? .64 : -.56) * length;
+        return `M${x} ${y}l${lean * .45} ${length * .48} ${lean * .55 + 2} ${length * .52}` + (n % 3 === 0 ? `m${-lean * .55 - 3} ${-length * .52}l${-lean * .35} ${length * .3}` : '');
+      }).join('')
+    }), (material === 'basement' || fracturedBeds.includes(i)) && /*#__PURE__*/React.createElement("path", {
+      stroke: "#ddd3b9",
+      strokeOpacity: ".36",
+      strokeWidth: "1",
+      d: Array.from({
+        length: material === 'basement' ? 12 : 3
+      }, (_, n) => {
+        const x = 35 + random(i * 37 + n * 11) * 1370;
+        const y = boundaryY(i, x) + (boundaryY(i + 1, x) - boundaryY(i, x)) * random(n * 17 + i);
+        return `M${x} ${y}l17 19 -7 11 23 24m-16 -35l-19 7`;
+      }).join('')
+    })))), profiles.slice(1, -1).map((points, i) => /*#__PURE__*/React.createElement("path", {
+      key: i,
+      "data-contact": i + 1,
+      d: trace(points),
+      fill: "none",
+      stroke: "#a9a595",
+      strokeOpacity: i === materials.length - 2 ? '.3' : '.1',
+      strokeWidth: i === materials.length - 2 ? 1 : .6
+    })), faults.map((fault, i) => {
+      const line = trace(Array.from({
+        length: 13
+      }, (_, n) => {
+        const y = fault.y + fault.length * n / 12;
+        return [faultX(fault, y) + Math.sin(n * 1.8 + i) * Math.min(1.2, fault.length * .015), y];
+      }));
+      return /*#__PURE__*/React.createElement("g", {
+        key: i,
+        className: "descent-fault",
+        clipPath: `url(#descent-bed-${fault.bed})`
+      }, /*#__PURE__*/React.createElement("path", {
+        "data-fault": i,
+        "data-fault-material": materials[fault.bed],
+        d: line,
+        fill: "none",
+        stroke: "#42372e",
+        strokeOpacity: ".48",
+        strokeWidth: "1"
+      }), /*#__PURE__*/React.createElement("path", {
+        d: line,
+        transform: "translate(1.5 0)",
+        fill: "none",
+        stroke: "#b0a58e",
+        strokeOpacity: ".23",
+        strokeWidth: ".6"
+      }));
+    }), structuralFaults.map((fault, i) => /*#__PURE__*/React.createElement("path", {
+      key: i,
+      "data-structural-fault": i,
+      d: `M${faultX(fault, fault.y)} ${fault.y}l${fault.slope * fault.length} ${fault.length}`,
+      fill: "none",
+      stroke: "#b3aaa0",
+      strokeOpacity: ".28",
+      strokeWidth: ".8"
+    })), [sandstoneBed, lowerSandstone].map((bed, n) => /*#__PURE__*/React.createElement("g", {
+      key: bed,
+      className: "descent-motion",
+      "data-visible": "false",
+      clipPath: `url(#descent-bed-${bed})`
+    }, [38, 1240].map(x => /*#__PURE__*/React.createElement(React.Fragment, {
+      key: x
+    }, /*#__PURE__*/React.createElement("path", {
+      d: `M${x} ${middle(bed, x)}l108 -4`,
+      fill: "none",
+      stroke: "#d8cfc4",
+      strokeOpacity: ".12",
+      strokeWidth: "1"
+    }), [0, 1, 2].map(i => /*#__PURE__*/React.createElement("ellipse", {
+      key: i,
+      className: "descent-flow",
+      cx: x,
+      cy: middle(bed, x),
+      rx: "3",
+      ry: "1.1",
+      fill: "#e2d9cd",
+      style: {
+        animationDelay: `${-i * 1.1 - n * 9}s`
+      }
+    })))))), /*#__PURE__*/React.createElement("rect", {
+      width: "1440",
+      height: total,
+      fill: "url(#descent-reading-veil)"
+    }), /*#__PURE__*/React.createElement("rect", {
+      width: "1440",
+      height: "240",
+      fill: "url(#descent-bridge)"
+    }));
+  }, [artReady, heights, texturesOn]);
   return /*#__PURE__*/React.createElement("div", {
     ref: rootRef,
     className: "geological-descent"
-  }, /*#__PURE__*/React.createElement("svg", {
-    className: "geological-descent-art",
-    viewBox: `0 0 1440 ${total}`,
-    preserveAspectRatio: "none",
-    "aria-hidden": "true"
-  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
-    id: "descent-wrap-x"
-  }, [0, .15, .5, .85, 1].map((offset, i) => /*#__PURE__*/React.createElement("stop", {
-    key: i,
-    offset: offset,
-    stopColor: "#fff",
-    stopOpacity: [0, .2, 1, .2, 0][i]
-  }))), /*#__PURE__*/React.createElement("linearGradient", {
-    id: "descent-wrap-y",
-    x1: "0",
-    y1: "0",
-    x2: "0",
-    y2: "1",
-    href: "#descent-wrap-x"
-  }), /*#__PURE__*/React.createElement("mask", {
-    id: "descent-wrap-mask-x",
-    x: "0",
-    y: "0",
-    width: "840",
-    height: "840",
-    maskUnits: "userSpaceOnUse"
-  }, /*#__PURE__*/React.createElement("rect", {
-    width: "840",
-    height: "840",
-    fill: "url(#descent-wrap-x)"
-  })), /*#__PURE__*/React.createElement("mask", {
-    id: "descent-wrap-mask-y",
-    x: "0",
-    y: "0",
-    width: "840",
-    height: "840",
-    maskUnits: "userSpaceOnUse"
-  }, /*#__PURE__*/React.createElement("rect", {
-    width: "840",
-    height: "840",
-    fill: "url(#descent-wrap-y)"
-  })), [...new Set(materials)].map(material => /*#__PURE__*/React.createElement(React.Fragment, {
-    key: material
-  }, /*#__PURE__*/React.createElement("pattern", {
-    id: `descent-raw-${material}`,
-    width: "840",
-    height: "840",
-    patternUnits: "userSpaceOnUse"
-  }, /*#__PURE__*/React.createElement("image", {
-    href: texturesOn ? `./assets/geology-${material}.webp?v=3` : undefined,
-    width: "840",
-    height: "840",
-    preserveAspectRatio: "none"
-  })), /*#__PURE__*/React.createElement("pattern", {
-    id: `descent-raw-${material}-x`,
-    href: `#descent-raw-${material}`,
-    patternTransform: "translate(420 0)"
-  }), /*#__PURE__*/React.createElement("pattern", {
-    id: `descent-raw-${material}-y`,
-    href: `#descent-raw-${material}`,
-    patternTransform: "translate(0 420)"
-  }), /*#__PURE__*/React.createElement("pattern", {
-    id: `descent-raw-${material}-xy`,
-    href: `#descent-raw-${material}`,
-    patternTransform: "translate(420 420)"
-  }), /*#__PURE__*/React.createElement("pattern", {
-    className: "descent-material",
-    id: `descent-rock-${material}`,
-    width: "840",
-    height: "840",
-    patternUnits: "userSpaceOnUse"
-  }, /*#__PURE__*/React.createElement("g", {
-    className: "descent-tile"
-  }, /*#__PURE__*/React.createElement("rect", {
-    width: "840",
-    height: "840",
-    fill: `url(#descent-raw-${material}-xy)`
-  }), /*#__PURE__*/React.createElement("rect", {
-    width: "840",
-    height: "840",
-    fill: `url(#descent-raw-${material}-y)`,
-    mask: "url(#descent-wrap-mask-x)"
-  }), /*#__PURE__*/React.createElement("g", {
-    mask: "url(#descent-wrap-mask-y)"
-  }, /*#__PURE__*/React.createElement("rect", {
-    width: "840",
-    height: "840",
-    fill: `url(#descent-raw-${material}-x)`
-  }), /*#__PURE__*/React.createElement("rect", {
-    width: "840",
-    height: "840",
-    fill: `url(#descent-raw-${material})`,
-    mask: "url(#descent-wrap-mask-x)"
-  })))))), beds.map((bed, i) => /*#__PURE__*/React.createElement("clipPath", {
-    key: i,
-    id: `descent-bed-${i}`
-  }, /*#__PURE__*/React.createElement("path", {
-    d: bed
-  }))), /*#__PURE__*/React.createElement("filter", {
-    id: "descent-mineral-grain"
-  }, /*#__PURE__*/React.createElement("feTurbulence", {
-    type: "fractalNoise",
-    baseFrequency: ".55",
-    numOctaves: "3",
-    seed: "19",
-    stitchTiles: "stitch"
-  }), /*#__PURE__*/React.createElement("feColorMatrix", {
-    type: "saturate",
-    values: "0"
-  })), /*#__PURE__*/React.createElement("pattern", {
-    id: "descent-grain",
-    width: "160",
-    height: "160",
-    patternUnits: "userSpaceOnUse"
-  }, /*#__PURE__*/React.createElement("rect", {
-    width: "160",
-    height: "160",
-    filter: "url(#descent-mineral-grain)"
-  })), /*#__PURE__*/React.createElement("linearGradient", {
-    id: "descent-bridge",
-    x1: "0",
-    y1: "0",
-    x2: "0",
-    y2: "1"
-  }, /*#__PURE__*/React.createElement("stop", {
-    stopColor: "#1d150f"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "1",
-    stopColor: "#1d150f",
-    stopOpacity: "0"
-  })), /*#__PURE__*/React.createElement("linearGradient", {
-    id: "descent-reading-veil"
-  }, /*#__PURE__*/React.createElement("stop", {
-    stopColor: "#120e0b",
-    stopOpacity: ".45"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: ".2",
-    stopColor: "#120e0b",
-    stopOpacity: ".6"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: ".8",
-    stopColor: "#120e0b",
-    stopOpacity: ".6"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "1",
-    stopColor: "#120e0b",
-    stopOpacity: ".45"
-  }))), /*#__PURE__*/React.createElement("rect", {
-    width: "1440",
-    height: total,
-    fill: "#120e0b"
-  }), materials.map((material, i) => /*#__PURE__*/React.createElement("g", {
-    key: i
-  }, /*#__PURE__*/React.createElement("path", {
-    "data-bed": i,
-    "data-pinch-out": [6, 18, 37].includes(i) ? true : undefined,
-    d: beds[i],
-    fill: colors[material]
-  }), /*#__PURE__*/React.createElement("path", {
-    className: "descent-rock",
-    "data-material": material,
-    d: beds[i],
-    fill: `url(#descent-rock-${material})`
-  }), /*#__PURE__*/React.createElement("path", {
-    d: beds[i],
-    fill: colors[material],
-    opacity: .08 + random(i + 210) * .08
-  }), /*#__PURE__*/React.createElement("path", {
-    d: beds[i],
-    fill: "url(#descent-grain)",
-    opacity: material === 'sandstone' || material === 'siltstone' ? '.09' : '.04'
-  }), /*#__PURE__*/React.createElement("g", {
-    clipPath: `url(#descent-bed-${i})`,
-    fill: "none"
-  }, material !== 'basement' && (material === 'shale' ? [.12, .28, .43, .61, .76, .9] : [.24, .52, .78]).map(fraction => /*#__PURE__*/React.createElement("path", {
-    key: fraction,
-    d: trace(profiles[i].map(([x]) => {
-      const y = boundaryY(i, x) * (1 - fraction) + boundaryY(i + 1, x) * fraction;
-      const offset = faults.reduce((sum, fault) => {
-        const t = (y - fault.y) / fault.length;
-        return sum + (fault.bed === i && t > 0 && t < 1 && x > faultX(fault, y) ? fault.throw * Math.sin(Math.PI * t) : 0);
-      }, 0);
-      return [x, y + offset];
-    })),
-    stroke: material === 'shale' ? '#a4aea8' : '#494b40',
-    strokeOpacity: ".16",
-    strokeWidth: ".55"
-  })), /*#__PURE__*/React.createElement("path", {
-    "data-fractures": i,
-    "data-material": material,
-    "data-fracture-count": fracturedBeds.includes(i) && material !== 'basement' ? 18 : fractureCounts[material],
-    stroke: material === 'basement' ? '#382e2a' : '#3f4239',
-    strokeOpacity: ".42",
-    strokeWidth: ".7",
-    d: Array.from({
-      length: fracturedBeds.includes(i) && material !== 'basement' ? 18 : fractureCounts[material]
-    }, (_, n) => {
-      const seed = i * 97 + n * 5;
-      const x = 12 + (n * 91 + random(seed) * 65) % 1416;
-      const top = boundaryY(i, x),
-        bottom = boundaryY(i + 1, x);
-      const y = top + (random(seed + 1) * .84 + .06) * (bottom - top);
-      const length = 14 + random(seed + 2) * (material === 'basement' ? 62 : 32);
-      const lean = (n % 3 ? .64 : -.56) * length;
-      return `M${x} ${y}l${lean * .45} ${length * .48} ${lean * .55 + 2} ${length * .52}` + (n % 3 === 0 ? `m${-lean * .55 - 3} ${-length * .52}l${-lean * .35} ${length * .3}` : '');
-    }).join('')
-  }), (material === 'basement' || fracturedBeds.includes(i)) && /*#__PURE__*/React.createElement("path", {
-    stroke: "#ddd3b9",
-    strokeOpacity: ".36",
-    strokeWidth: "1",
-    d: Array.from({
-      length: material === 'basement' ? 12 : 3
-    }, (_, n) => {
-      const x = 35 + random(i * 37 + n * 11) * 1370;
-      const y = boundaryY(i, x) + (boundaryY(i + 1, x) - boundaryY(i, x)) * random(n * 17 + i);
-      return `M${x} ${y}l17 19 -7 11 23 24m-16 -35l-19 7`;
-    }).join('')
-  })))), profiles.slice(1, -1).map((points, i) => /*#__PURE__*/React.createElement("path", {
-    key: i,
-    "data-contact": i + 1,
-    d: trace(points),
-    fill: "none",
-    stroke: "#a9a595",
-    strokeOpacity: i === materials.length - 2 ? '.3' : '.1',
-    strokeWidth: i === materials.length - 2 ? 1 : .6
-  })), faults.map((fault, i) => {
-    const line = trace(Array.from({
-      length: 13
-    }, (_, n) => {
-      const y = fault.y + fault.length * n / 12;
-      return [faultX(fault, y) + Math.sin(n * 1.8 + i) * Math.min(1.2, fault.length * .015), y];
-    }));
-    return /*#__PURE__*/React.createElement("g", {
-      key: i,
-      className: "descent-fault",
-      clipPath: `url(#descent-bed-${fault.bed})`
-    }, /*#__PURE__*/React.createElement("path", {
-      "data-fault": i,
-      "data-fault-material": materials[fault.bed],
-      d: line,
-      fill: "none",
-      stroke: "#42372e",
-      strokeOpacity: ".48",
-      strokeWidth: "1"
-    }), /*#__PURE__*/React.createElement("path", {
-      d: line,
-      transform: "translate(1.5 0)",
-      fill: "none",
-      stroke: "#b0a58e",
-      strokeOpacity: ".23",
-      strokeWidth: ".6"
-    }));
-  }), structuralFaults.map((fault, i) => /*#__PURE__*/React.createElement("path", {
-    key: i,
-    "data-structural-fault": i,
-    d: `M${faultX(fault, fault.y)} ${fault.y}l${fault.slope * fault.length} ${fault.length}`,
-    fill: "none",
-    stroke: "#b3aaa0",
-    strokeOpacity: ".28",
-    strokeWidth: ".8"
-  })), [sandstoneBed, lowerSandstone].map((bed, n) => /*#__PURE__*/React.createElement("g", {
-    key: bed,
-    className: "descent-motion",
-    "data-visible": "false",
-    clipPath: `url(#descent-bed-${bed})`
-  }, [38, 1240].map(x => /*#__PURE__*/React.createElement(React.Fragment, {
-    key: x
-  }, /*#__PURE__*/React.createElement("path", {
-    d: `M${x} ${middle(bed, x)}l108 -4`,
-    fill: "none",
-    stroke: "#d8cfc4",
-    strokeOpacity: ".12",
-    strokeWidth: "1"
-  }), [0, 1, 2].map(i => /*#__PURE__*/React.createElement("ellipse", {
-    key: i,
-    className: "descent-flow",
-    cx: x,
-    cy: middle(bed, x),
-    rx: "3",
-    ry: "1.1",
-    fill: "#e2d9cd",
-    style: {
-      animationDelay: `${-i * 1.1 - n * 9}s`
-    }
-  })))))), /*#__PURE__*/React.createElement("rect", {
-    width: "1440",
-    height: total,
-    fill: "url(#descent-reading-veil)"
-  }), /*#__PURE__*/React.createElement("rect", {
-    width: "1440",
-    height: "240",
-    fill: "url(#descent-bridge)"
-  })), children);
+  }, art, children);
 };
 Object.assign(window, {
   GeologicalDescent
@@ -3484,9 +3522,8 @@ const ResearchSection = () => /*#__PURE__*/React.createElement(SiteSection, {
   key: term
 }, /*#__PURE__*/React.createElement("dt", null, term), /*#__PURE__*/React.createElement("dd", null, detail)))), /*#__PURE__*/React.createElement("h3", null, "Methods and tools"), /*#__PURE__*/React.createElement("p", {
   className: "methods"
-}, "VE modelling, multiphase and compositional simulation, permeability upscaling and scientific machine learning, in MATLAB and MRST, Python, and Julia with JutulDarcy."), /*#__PURE__*/React.createElement("h3", null, "Background"), /*#__PURE__*/React.createElement("p", null, "BSc and MSc in Petroleum Engineering from Amirkabir University of Technology, Tehran, focused on reservoir simulation and machine learning for upscaling and digital rock.")), /*#__PURE__*/React.createElement("aside", {
-  className: "research__aside",
-  "aria-label": "Recent activity"
+}, "VE modelling, multiphase and compositional simulation, permeability upscaling and scientific machine learning, in MATLAB and MRST, Python, and Julia with JutulDarcy."), /*#__PURE__*/React.createElement("h3", null, "Background"), /*#__PURE__*/React.createElement("p", null, "BSc and MSc in Petroleum Engineering from Amirkabir University of Technology, Tehran, focused on reservoir simulation and machine learning for upscaling and digital rock.")), /*#__PURE__*/React.createElement("div", {
+  className: "research__aside"
 }, /*#__PURE__*/React.createElement(ActivityList, null))));
 const ProjectsSection = () => {
   const [feature, ...others] = SITE_PROJECTS;

@@ -647,14 +647,8 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   animation: heroTextReveal 700ms var(--ease-emil-out) both;
 }
 
-/* Keep the entrance visible instead of spending it behind the loading screen. */
-body:has(#app-loader) .hero-reveal,
-body:has(#app-loader) .hero-name-ink,
-body:has(#app-loader) .hero-name-ink::before,
-body:has(#app-loader) .hero-name-word::before,
-body:has(#app-loader) .hero-name-contour {
-  animation-play-state: paused;
-}
+/* The pre-React shell is the same night sky, so the entrance starts at mount and plays
+   through the shell's 450 ms fade instead of waiting for it to be removed. */
 
 .hero-name {
   display: inline-block;
@@ -810,8 +804,10 @@ body:has(#app-loader) .hero-name-contour {
 
 .hero-summary.hero-reveal { animation-duration: 500ms; animation-delay: 620ms; }
 .hero-actions.hero-reveal { animation-duration: 500ms; animation-delay: 740ms; }
-.hero-identity[data-name-style="contour"] .hero-summary.hero-reveal { animation-delay: 1000ms; }
-.hero-identity[data-name-style="contour"] .hero-actions.hero-reveal { animation-delay: 1140ms; }
+/* The summary and actions follow the first word of the name, not the whole contour reveal,
+   so the page's message is readable early on slow connections. */
+.hero-identity[data-name-style="contour"] .hero-summary.hero-reveal { animation-delay: 400ms; }
+.hero-identity[data-name-style="contour"] .hero-actions.hero-reveal { animation-delay: 520ms; }
 .hero-actions:focus-within { animation: none; }
 
 @keyframes heroTextReveal {
@@ -1054,6 +1050,13 @@ body:has(#app-loader) .hero-name-contour {
   .hero-player__note { display: none; }
   .hero-player__title { margin: 0; }
   .hero-player__bar { margin: 6px 0 0; }
+}
+
+/* The smallest phones: keep the identity inside the sky (profiles stay in the menu and Contact). */
+@media (max-width: 400px) {
+  .hero-summary { font-size: 15px; }
+  .hero-profiles,
+  .hero-moon { display: none; }
 }
 
 /* Ambient motion pauses while the hero is off-screen or the tab is hidden. */

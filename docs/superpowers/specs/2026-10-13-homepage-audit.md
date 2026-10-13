@@ -125,3 +125,54 @@ Two drafts conflict with origin:
 
 - **SPE Aberdeen bursary:** the draft says "received a £1,000 … Bursary" where origin says "Runner-up … £1,000 awarded".
 - **Hackathon:** the draft says "as part of a team" where origin says "Team runner-up".
+
+## After the redesign (branch `redesign/homepage`, 2026-10-14)
+
+| Desktop 1440×900 | Phone 390×844 |
+| --- | --- |
+| ![Desktop hero after](2026-10-13-homepage-audit/after-home-desktop.webp) | ![Phone hero after](2026-10-13-homepage-audit/after-home-phone.webp) |
+
+Full pages: [desktop](2026-10-13-homepage-audit/after-home-desktop-full.webp), [phone](2026-10-13-homepage-audit/after-home-phone-full.webp). CV: [desktop](2026-10-13-homepage-audit/after-cv-desktop.webp), [phone](2026-10-13-homepage-audit/after-cv-phone.webp). Also [tablet 834×1112](2026-10-13-homepage-audit/after-home-tablet.webp), [laptop 1280×720](2026-10-13-homepage-audit/after-home-laptop.webp) and [320×640](2026-10-13-homepage-audit/after-home-320.webp).
+
+Measured with the same scripts as the audit. Weights come from a local server that gzips like GitHub Pages. The throttled profile is 1.6 Mbps, 150 ms RTT and 4× CPU on a 390×844 phone.
+
+| Measure | Before (live) | After |
+| --- | --- | --- |
+| Homepage transfer | 2.67 MB | 0.78 MB |
+| CV transfer | 6.84 MB | 0.27 MB |
+| Simulator transfer | 0.57 MB | 0.56 MB |
+| Hero script time while playing | 570 ms/s | 21–47 ms/s |
+| Hero script time scrolled away | 646 ms/s | 1–13 ms/s |
+| Hero JS heap | 61–66 MB | 7–17 MB |
+| Throttled phone: homepage LCP | 3.7 s (name inserted at 3.9 s) | 2.4–2.5 s (summary visible at 1.9 s) |
+| Throttled phone: CV LCP | 4.5 s, load event 37 s | 1.3 s |
+| axe-core violations (home desktop and phone, CV) | 3 (landmarks, heading order) | 0 |
+| Console errors (home, CV, simulator, `#method`, legacy `#cv`) | 1 (CV, phone) | 0 |
+| Horizontal overflow at 320, 390, 834, 1280 and 1440 px | none | none |
+| Tests | 83 | 98, plus the smoke contracts |
+
+### How each P0 finding was resolved
+
+1. **Wrong DOI.** The SPE paper now uses `10.2118/231836-PA` and its full title. Every BibTeX entry carries its DOI. `tests/site-content.test.js` pins this.
+2. **Hero CPU cost.**
+   - Geometry is precomputed once per page load.
+   - Static layers are memoised.
+   - A `requestAnimationFrame` clock replaces the 50 ms interval.
+   - Playback stops at year 2000 and pauses off-screen or while the tab is hidden.
+   - The ambient CSS animations pause with it.
+   - Frames are `Float32Array`s transferred from the worker.
+3. **CV page.** The CV has its own page, `cv.html`, with no photo background and no homepage mount. The descent captures its root element, so the unmount race is gone.
+4. **Hero physics.** One conservative model in `hero-geology.js`:
+   - Flux and drawing use the mobile thickness.
+   - Transfers are capacity-limited.
+   - Fault contacts are hysteresis-aware.
+   - Leakage runs 1:1 into the overlying aquifer.
+   - Injection lasts 30 years.
+   - Inventory balance is exact to 1e-9 across 100 random geologies (`tests/hero-model.test.js`).
+
+   The section around the model is corrected too:
+   - Layers are named Overburden, Overlying aquifer, Caprock, Storage aquifer and Underburden.
+   - The depth axis is linear below an explicit break.
+   - The player has an inventory legend and states the vertical exaggeration.
+5. **Navigation.** One scroll spy (`siteActiveSection`, tested) drives the header; the header no longer runs its own. The name, role and summary stack at every width.
+6. **Tablet collision.** At 834 px the name sits on its own line, below the role line.
