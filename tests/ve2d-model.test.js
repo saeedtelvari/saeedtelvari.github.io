@@ -344,3 +344,94 @@ test('with injection the plume stays inside the aquifer thickness', () => {
     }
   }
 });
+
+// ---------------------------------------------------------------- Task 5
+
+const uniformLayer = (model, state, height) => {
+  const drain = model.p.phi * (1 - model.p.swr);
+  state.h.fill(height);
+  state.hMax.fill(height);
+  state.s.fill(drain * height);
+};
+
+test('a leaky fault leaks only while the column exceeds its seal capacity', () => {
+  const fault = { x: 10.1, y: 6, strike: 0, length: 8, throw: 0, trans: 1, sealCap: 20, kf: 100 };
+  const run = height => {
+    const model = VE2D.buildModel(flat({ grid: 'coarse', boundary: 'closed', injYears: 1, disRate: 0, faults: [fault] }));
+    model.p.rate = 0;
+    const state = VE2D.createState(model);
+    uniformLayer(model, state, height);
+    const cells = model.leakCells.map(cell => cell.cell);
+    let minimum = Infinity;
+    for (let year = 1; year <= 40; year++) {
+      VE2D.advance(model, state, YEARS(year));
+      for (const c of cells) minimum = Math.min(minimum, state.h[c]);
+    }
+    return { leaked: state.leaked, minimum };
+  };
+  assert.equal(run(10).leaked, 0, 'a 10 m column below a 20 m seal capacity does not leak');
+  const leaking = run(30);
+  assert.ok(leaking.leaked > 0, 'a 30 m column leaks');
+  assert.ok(leaking.minimum >= 20 - 1e-9, `leakage never drains a fault column below the seal capacity (${leaking.minimum})`);
+});
+
+test('dissolution stops when the brine column is saturated', () => {
+  const model = VE2D.buildModel({ ...VE2D.DEFAULTS, grid: 'coarse', disRate: 2, disCap: 1, years: 200 });
+  const state = VE2D.createState(model);
+  VE2D.advance(model, state, YEARS(200));
+  const capacity = model.scenario.disCap * model.p.phi * model.H;
+  assert.ok(state.dissolved > 0, 'CO2 dissolves');
+  assert.ok(Math.max(...state.md) <= capacity + 1e-9, `dissolved mass per area ${Math.max(...state.md)} <= ${capacity}`);
+  const none = VE2D.buildModel({ ...VE2D.DEFAULTS, grid: 'coarse', disRate: 0, years: 200 });
+  const noneState = VE2D.createState(none);
+  VE2D.advance(none, noneState, YEARS(100));
+  assert.equal(noneState.dissolved, 0);
+});
+
+test('the inventory accounts for every kilogram at every recorded year', () => {
+  const result = VE2D.run({ ...VE2D.DEFAULTS, years: 400 });
+  assert.equal(result.history[0].year, 0);
+  assert.equal(result.history.at(-1).year, 400);
+  for (const row of result.history) {
+    if (row.injected === 0) continue;
+    const sum = row.free + row.structural + row.residual + row.dissolved + row.exited + row.leaked;
+    assert.ok(Math.abs(row.injected - sum) / row.injected < 1e-9, `year ${row.year}: ${row.injected} vs ${sum}`);
+    assert.ok(Math.abs(row.balance) / row.injected < 1e-9, `reported balance at year ${row.year}`);
+    for (const key of ['free', 'structural', 'residual', 'dissolved', 'exited', 'leaked']) assert.ok(row[key] >= 0, `${key} >= 0`);
+  }
+  const last = result.history.at(-1);
+  for (const key of ['structural', 'residual', 'dissolved', 'leaked']) assert.ok(last[key] > 0, `default scenario shows ${key} trapping`);
+  assert.equal(result.snapshots.length, 400 / 5 + 1);
+  assert.equal(result.snapshots[1].year, 5);
+  assert.equal(result.snapshots[1].h.length, result.modelView.nx * result.modelView.ny);
+});
+
+test('results converge with grid refinement', () => {
+  const summary = grid => {
+    const { history } = VE2D.run({ ...VE2D.DEFAULTS, grid }, { keepSnapshots: false });
+    const last = history.at(-1);
+    return { footprint: last.footprint, leaked: last.leaked / last.injected, residual: last.residual / last.injected };
+  };
+  const standard = summary('standard');
+  const fine = summary('fine');
+  for (const key of ['footprint', 'residual']) {
+    assert.ok(Math.abs(standard[key] - fine[key]) / fine[key] < 0.1, `${key}: ${standard[key]} vs ${fine[key]}`);
+  }
+  assert.ok(Math.abs(standard.leaked - fine.leaked) < 0.1 * Math.max(fine.leaked, 0.01), `leaked fraction: ${standard.leaked} vs ${fine.leaked}`);
+});
+
+test('extreme inputs finish and conserve', () => {
+  const started = Date.now();
+  const result = VE2D.run({ ...VE2D.DEFAULTS, rateMt: 5, thickness: 10, permMd: 10, boundary: 'closed', years: 200 }, { keepSnapshots: false });
+  const last = result.history.at(-1);
+  assert.ok(Date.now() - started < 20000, 'finishes in bounded time');
+  assert.ok(Math.abs(last.balance) / last.injected < 1e-9, 'conserves mass');
+  assert.ok(last.bhpPeak > 100e5, 'reports a large bottom-hole build-up');
+});
+
+test('the default scenario runs within the interactive budget', () => {
+  const started = Date.now();
+  VE2D.run(VE2D.DEFAULTS, { keepSnapshots: false });
+  const elapsed = Date.now() - started;
+  assert.ok(elapsed < 3000, `default 1000-year run took ${elapsed} ms`);
+});

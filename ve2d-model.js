@@ -59,7 +59,7 @@
   const INTEGER_KEYS = new Set(['years', 'seed', 'injYears', 'domes', 'dipAz']);
   const MAX_FAULTS = 3;
 
-  const DEFAULT_FAULT = Object.freeze({ x: 9.5, y: 6, strike: 12, length: 8, throw: 12, trans: 0.4, sealCap: 15, kf: 20 });
+  const DEFAULT_FAULT = Object.freeze({ x: 9.5, y: 6, strike: 12, length: 8, throw: 12, trans: 0.4, sealCap: 10, kf: 20 });
   const DEFAULTS = Object.freeze({
     preset: 'dome-fault',
     grid: 'standard',
@@ -601,6 +601,43 @@
     return viscous + gravity;
   };
 
+  const FAULT_ZONE_WIDTH = 5;
+  const CAPROCK_THICKNESS = 100;
+
+  // Operator-split sinks after each transport step: vertical leakage up leaky fault zones
+  // (only above the seal capacity, never draining a column below it) and convective
+  // dissolution into the brine column until it is saturated.
+  const applySinks = (model, state, dt) => {
+    const { p, area, H } = model;
+    const { h, s, md } = state;
+    const imbibe = p.phi * Math.max(1e-3, 1 - p.swr - p.sgr);
+    state.leaking.fill(0);
+    for (const { cell, length, fault } of model.leakCells) {
+      const { sealCap, kf } = model.scenario.faults[fault];
+      const excess = Math.min(h[cell], H) - sealCap;
+      if (!(excess > 0)) continue;
+      const rate = length * FAULT_ZONE_WIDTH * kf * MD * (p.krg / p.muG) * p.dRho * p.g * (excess / CAPROCK_THICKNESS + 1);
+      const volume = Math.min(rate * dt, excess * imbibe * area);
+      if (!(volume > 0)) continue;
+      s[cell] -= volume / area;
+      state.leaked += volume * p.rhoG;
+      state.leaking[fault] = 1;
+      invertColumn(p, state, cell);
+    }
+    if (p.disRate > 0 && p.disCap > 0) {
+      const capacity = p.disCap * p.phi * H;
+      for (let c = 0; c < model.n; c++) {
+        if (s[c] <= 0 || md[c] >= capacity) continue;
+        const mass = Math.min(p.disRate * dt, capacity - md[c], p.rhoG * s[c]);
+        if (!(mass > 0)) continue;
+        md[c] += mass;
+        s[c] = Math.max(0, s[c] - mass / p.rhoG);
+        state.dissolved += mass * area;
+        invertColumn(p, state, c);
+      }
+    }
+  };
+
   const stepTransport = (model, state, dtMax) => {
     const { nx, ny, n, p, tx, ty, mx, my, zt, ghostX, ghostY, area, H } = model;
     const { h, s, ux, uy, fx, fy, net, rate } = state;
@@ -689,6 +726,8 @@
       if (s[c] < 0) s[c] = 0;
       invertColumn(p, state, c);
     }
+
+    applySinks(model, state, dt);
 
     let outflow = 0;
     if (p.open) {
@@ -935,10 +974,119 @@
     return { footprint, maxColumn, migration, bhp, pMax };
   };
 
+  // CO2 inventory in kg, classified as in co2lab: free plume, structurally trapped
+  // (mobile CO2 above the local spill depth), residually trapped, dissolved, left the
+  // model through an open boundary, and leaked up fault zones.
+  const inventory = (model, state) => {
+    const { n, p, area, zt, traps } = model;
+    const { h, hMax } = state;
+    const mobileFactor = p.rhoG * p.phi * (1 - p.swr) * area;
+    const residualFactor = p.rhoG * p.phi * p.sgr * area;
+    let mobile = 0;
+    let structural = 0;
+    let residual = 0;
+    for (let c = 0; c < n; c++) {
+      if (state.s[c] <= 0) continue;
+      mobile += h[c] * mobileFactor;
+      residual += (hMax[c] - h[c]) * residualFactor;
+      const closure = traps.zSpill[c] - zt[c];
+      if (closure > 0) structural += Math.min(h[c], closure) * mobileFactor;
+    }
+    const result = {
+      injected: state.injected,
+      free: Math.max(0, mobile - structural),
+      structural,
+      residual: Math.max(0, residual),
+      dissolved: state.dissolved,
+      exited: state.exited,
+      leaked: state.leaked
+    };
+    result.balance = result.injected - (result.free + result.structural + result.residual + result.dissolved + result.exited + result.leaked);
+    return result;
+  };
+
+  const MAX_STEPS = 400000;
+
+  const modelViewOf = model => ({
+    nx: model.nx,
+    ny: model.ny,
+    dx: model.dx,
+    dy: model.dy,
+    Lx: model.Lx,
+    Ly: model.Ly,
+    H: model.H,
+    depth: model.scenario.depth,
+    years: model.scenario.years,
+    injYears: model.scenario.injYears,
+    open: model.p.open,
+    zt: Float32Array.from(model.zt),
+    zSpill: Float32Array.from(model.traps.zSpill),
+    trapId: Int32Array.from(model.traps.trapId),
+    traps: model.traps.traps.map(({ id, crestCell, spillCell, spillDepth, capacity, cells }) => ({ id, crestCell, spillCell, spillDepth, capacity, size: cells.length })),
+    faults: model.scenario.faults.map(fault => ({ ...fault })),
+    faultLines: model.faultLines.map(line => line.slice()),
+    leakCells: model.leakCells.map(cell => ({ ...cell })),
+    well: model.well,
+    wellX: model.xc[model.well % model.nx],
+    wellY: model.yc[Math.floor(model.well / model.nx)],
+    phi: model.p.phi,
+    swr: model.p.swr,
+    sgr: model.p.sgr,
+    rhoG: model.p.rhoG,
+    disCapacity: model.p.disCap * model.p.phi * model.H
+  });
+
+  const snapshotOf = (model, state, year) => ({
+    year,
+    h: Float32Array.from(state.h),
+    hMax: Float32Array.from(state.hMax),
+    md: Float32Array.from(state.md),
+    p: Float32Array.from(state.p),
+    fx: Float32Array.from(state.fx),
+    fy: Float32Array.from(state.fy),
+    leaking: Uint8Array.from(state.leaking),
+    inv: inventory(model, state),
+    kpi: kpis(model, state)
+  });
+
+  // Run a scenario from year 0 to scenario.years. History rows every year, field
+  // snapshots every `snapshotYears`. Ends early (truncated) if the step budget runs out.
+  const run = (rawScenario, options = {}) => {
+    const model = buildModel(rawScenario);
+    const state = createState(model);
+    const modelView = modelViewOf(model);
+    const snapshotYears = options.snapshotYears || 5;
+    const keepSnapshots = options.keepSnapshots !== false;
+    const maxSteps = options.maxSteps || MAX_STEPS;
+    options.onModel?.(modelView);
+    const history = [];
+    const snapshots = [];
+    let bhpPeak = 0;
+    let truncated = false;
+    const record = year => {
+      const inv = inventory(model, state);
+      const kpi = kpis(model, state);
+      bhpPeak = Math.max(bhpPeak, kpi.bhp);
+      history.push({ year, ...inv, footprint: kpi.footprint, maxColumn: kpi.maxColumn, migration: kpi.migration, bhp: kpi.bhp, bhpPeak });
+      if (year % snapshotYears === 0) {
+        const snap = snapshotOf(model, state, year);
+        if (keepSnapshots) snapshots.push(snap);
+        options.onSnapshot?.(snap);
+      }
+    };
+    record(0);
+    for (let year = 1; year <= model.scenario.years; year++) {
+      advance(model, state, year * YEAR);
+      record(year);
+      if (state.steps > maxSteps) { truncated = true; break; }
+    }
+    return { modelView, snapshots, history, truncated, steps: state.steps, scenario: model.scenario };
+  };
+
   return {
     YEAR, MT, MD, BAR, KM, GRAVITY, LX, LY, GRIDS,
     LIMITS, FAULT_LIMITS, DEFAULTS, PRESETS, MAX_FAULTS,
     normalizeScenario, topDepth, buildModel, roughnessField, trapAnalysis, contourSegments,
-    createState, advance, kpis
+    createState, advance, kpis, inventory, run
   };
 });
