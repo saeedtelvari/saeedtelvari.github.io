@@ -21,7 +21,7 @@ for (const page of ['index.html', 'simulator.html']) {
   has(page, /application\/ld\+json/, `${page} needs structured data`);
 }
 
-has('SubsurfaceHero.jsx', /Try VE Simulator/, 'hero needs a primary simulator CTA');
+has('SubsurfaceHero.jsx', /Open the CO₂ simulator/, 'hero needs a primary simulator CTA');
 has('SubsurfaceHero.jsx', /aria-label=\{label\}/, 'social links need distinct accessible names');
 has('SubsurfaceHero.jsx', /aria-label="Simulation year"/, 'hero timeline slider needs an accessible name');
 has('SubsurfaceHero.jsx', /new Worker\(['"]\.\/hero-simulation-worker\.js/, 'hero precomputation must run off the main thread');
