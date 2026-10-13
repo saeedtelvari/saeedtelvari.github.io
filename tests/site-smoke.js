@@ -29,8 +29,13 @@ assert.ok(fs.existsSync(path.join(root, 'hero-simulation-worker.js')), 'hero wor
 
 lacks('CVPage.jsx', /Saeed-Telvari-CV\.pdf/, 'CV page must not request a missing PDF asset');
 has('CVPage.jsx', /window\.print\(\)/, 'CV page print action must invoke browser print');
-has('CVPage.jsx', /Print \/ Save as PDF/, 'CV page must offer browser print and PDF export');
-has('CVPage.jsx', /Selected Publications/, 'CV page needs evidence beyond education and skills');
+has('CVPage.jsx', /Print or save as PDF/, 'CV page must offer browser print and PDF export');
+has('CVPage.jsx', /SITE_PUBLICATIONS/, 'CV page needs evidence beyond education and skills');
+lacks('CVPage.jsx', /headerbg3|backgroundImage/, 'CV has no photo background');
+has('cv.html', /<title>CV — Sa'eed Telvari<\/title>/, 'CV needs its own title');
+has('cv.html', /rel="canonical" href="https:\/\/saeedtelvari\.github\.io\/cv\.html"/, 'CV needs a canonical URL');
+has('cv.html', /data-page="cv"/, 'CV renders its own entry');
+lacks('cv.html', /font-awesome/, 'CV must not load Font Awesome');
 
 has('site-content.js', /Telvari[^\n]+Ramachandran[^\n]+Wang[^\n]+Doster/, 'three-phase publication metadata must be corrected');
 has('site-content.js', /year: 2026,\s*title: 'A Vertical Equilibrium Model[^']*'[\s\S]*?venue: 'EarthArXiv preprint'/, 'EarthArXiv preprint year must be 2026');
