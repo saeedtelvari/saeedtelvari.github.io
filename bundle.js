@@ -930,7 +930,7 @@ const Footer = ({
     href: './index.html#publications'
   }, {
     id: 'simulator',
-    label: 'VE Simulator',
+    label: 'CO₂ Simulator',
     href: './simulator.html'
   }, {
     id: 'contact',

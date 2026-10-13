@@ -4,7 +4,7 @@ const Footer = ({ onNavigate, geological = false }) => {
     { id: 'home',         label: 'Home', href: './index.html' },
     { id: 'about',        label: 'About', href: './index.html#about' },
     { id: 'publications', label: 'Research', href: './index.html#publications' },
-    { id: 'simulator',    label: 'VE Simulator', href: './simulator.html' },
+    { id: 'simulator',    label: 'CO₂ Simulator', href: './simulator.html' },
     { id: 'contact',      label: 'Contact', href: './index.html#contact' },
     { id: 'cv',           label: 'CV', href: './index.html#cv' },
   ];
