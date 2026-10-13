@@ -355,12 +355,171 @@
 
     const well = clamp(Math.floor(scenario.wellY * KM / dy), 0, ny - 1) * nx + clamp(Math.floor(scenario.wellX * KM / dx), 0, nx - 1);
 
-    return { scenario, nx, ny, n, dx, dy, Lx: LX, Ly: LY, area: dx * dy, H, p, xc, yc, zt, tx, ty, mx, my, ghostX, ghostY, leakCells, faultLines, well, depthAt };
+    const model = { scenario, nx, ny, n, dx, dy, Lx: LX, Ly: LY, area: dx * dy, H, p, xc, yc, zt, tx, ty, mx, my, ghostX, ghostY, leakCells, faultLines, well, depthAt, domes: cache.domes };
+    model.traps = trapAnalysis(model);
+    return model;
+  };
+
+  // Binary min-heap of (key, cell) pairs for the priority flood.
+  const createHeap = capacity => {
+    let size = 0;
+    const keys = new Float64Array(capacity);
+    const cells = new Int32Array(capacity);
+    return {
+      get size() { return size; },
+      push(key, cell) {
+        let i = size++;
+        while (i > 0) {
+          const parent = (i - 1) >> 1;
+          if (keys[parent] <= key) break;
+          keys[i] = keys[parent];
+          cells[i] = cells[parent];
+          i = parent;
+        }
+        keys[i] = key;
+        cells[i] = cell;
+      },
+      pop() {
+        const top = cells[0];
+        const key = keys[--size];
+        const cell = cells[size];
+        let i = 0;
+        for (;;) {
+          let child = 2 * i + 1;
+          if (child >= size) break;
+          if (child + 1 < size && keys[child + 1] < keys[child]) child++;
+          if (keys[child] >= key) break;
+          keys[i] = keys[child];
+          cells[i] = cells[child];
+          i = child;
+        }
+        keys[i] = key;
+        cells[i] = cell;
+        return top;
+      }
+    };
+  };
+
+  // Visit the four face neighbours of a cell that are connected through a passable face.
+  const forEachNeighbour = (model, cell, visit) => {
+    const { nx, ny, mx, my } = model;
+    const i = cell % nx;
+    const j = (cell - i) / nx;
+    if (i > 0 && mx[j * (nx + 1) + i] > 0) visit(cell - 1);
+    if (i < nx - 1 && mx[j * (nx + 1) + i + 1] > 0) visit(cell + 1);
+    if (j > 0 && my[j * nx + i] > 0) visit(cell - nx);
+    if (j < ny - 1 && my[(j + 1) * nx + i] > 0) visit(cell + nx);
+  };
+
+  const TRAP_COLUMN = 1e-3;
+
+  // Spill-point analysis (priority flood, Barnes et al. 2014) on the caprock depth: CO2
+  // rises to shallower depth, so domes are "pits" of depth. As in co2lab, the model edge
+  // is always a spill path; compartments sealed off from the edge never spill.
+  const trapAnalysis = model => {
+    const { nx, ny, n, zt } = model;
+    const zSpill = new Float64Array(n).fill(Infinity);
+    const from = new Int32Array(n).fill(-1);
+    const done = new Uint8Array(n);
+    const heap = createHeap(5 * n + 8);
+    for (let c = 0; c < n; c++) {
+      const i = c % nx;
+      const j = (c - i) / nx;
+      if (i === 0 || j === 0 || i === nx - 1 || j === ny - 1) {
+        zSpill[c] = zt[c];
+        heap.push(zt[c], c);
+      }
+    }
+    while (heap.size) {
+      const c = heap.pop();
+      if (done[c]) continue;
+      done[c] = 1;
+      forEachNeighbour(model, c, nb => {
+        if (done[nb]) return;
+        const level = Math.max(zt[nb], zSpill[c]);
+        if (level < zSpill[nb]) {
+          zSpill[nb] = level;
+          from[nb] = c;
+          heap.push(level, nb);
+        }
+      });
+    }
+
+    const trapId = new Int32Array(n).fill(-1);
+    const traps = [];
+    const capacityFactor = model.p.phi * (1 - model.p.swr) * model.area;
+    for (let seed = 0; seed < n; seed++) {
+      if (trapId[seed] !== -1 || !(zSpill[seed] - zt[seed] > TRAP_COLUMN)) continue;
+      const id = traps.length;
+      const cells = [];
+      trapId[seed] = id;
+      for (let q = [seed]; q.length;) {
+        const c = q.pop();
+        cells.push(c);
+        forEachNeighbour(model, c, nb => {
+          if (trapId[nb] === -1 && zSpill[nb] - zt[nb] > TRAP_COLUMN) {
+            trapId[nb] = id;
+            q.push(nb);
+          }
+        });
+      }
+      let crestCell = cells[0];
+      let spillCell = -1;
+      let capacity = 0;
+      for (const c of cells) {
+        if (zt[c] < zt[crestCell]) crestCell = c;
+        if (spillCell === -1 && from[c] !== -1 && trapId[from[c]] !== id) spillCell = from[c];
+        capacity += Math.min(model.H, zSpill[c] - zt[c]) * capacityFactor;
+      }
+      traps.push({ id, cells: Int32Array.from(cells), crestCell, spillCell, spillDepth: zSpill[crestCell], capacity });
+    }
+    return { zSpill, trapId, traps };
+  };
+
+  // Marching squares on cell-centre values. Segments are [x0, y0, x1, y1, ...] in
+  // cell-index coordinates (cell (i, j) centre at x = i, y = j).
+  const contourSegments = (values, nx, ny, level) => {
+    const out = [];
+    const t = (v0, v1) => (level - v0) / (v1 - v0);
+    for (let j = 0; j < ny - 1; j++) {
+      for (let i = 0; i < nx - 1; i++) {
+        const a = values[j * nx + i];
+        const b = values[j * nx + i + 1];
+        const c = values[(j + 1) * nx + i + 1];
+        const d = values[(j + 1) * nx + i];
+        if (!(Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && Number.isFinite(d))) continue;
+        const code = (a > level ? 1 : 0) | (b > level ? 2 : 0) | (c > level ? 4 : 0) | (d > level ? 8 : 0);
+        if (code === 0 || code === 15) continue;
+        const bottom = () => [i + t(a, b), j];
+        const right = () => [i + 1, j + t(b, c)];
+        const top = () => [i + t(d, c), j + 1];
+        const left = () => [i, j + t(a, d)];
+        const segment = (p, q) => out.push(p[0], p[1], q[0], q[1]);
+        const centreAbove = (a + b + c + d) / 4 > level;
+        switch (code) {
+          case 1: case 14: segment(left(), bottom()); break;
+          case 2: case 13: segment(bottom(), right()); break;
+          case 3: case 12: segment(left(), right()); break;
+          case 4: case 11: segment(right(), top()); break;
+          case 6: case 9: segment(bottom(), top()); break;
+          case 7: case 8: segment(left(), top()); break;
+          case 5:
+            if (centreAbove) { segment(bottom(), right()); segment(left(), top()); }
+            else { segment(left(), bottom()); segment(right(), top()); }
+            break;
+          case 10:
+            if (centreAbove) { segment(left(), bottom()); segment(right(), top()); }
+            else { segment(bottom(), right()); segment(left(), top()); }
+            break;
+        }
+      }
+    }
+    return Float64Array.from(out);
   };
 
   return {
     YEAR, MT, MD, BAR, KM, GRAVITY, LX, LY, GRIDS,
     LIMITS, FAULT_LIMITS, DEFAULTS, PRESETS, MAX_FAULTS,
-    normalizeScenario, topDepth, buildModel, roughnessField
+    normalizeScenario, topDepth, buildModel, roughnessField, trapAnalysis, contourSegments
   };
 });

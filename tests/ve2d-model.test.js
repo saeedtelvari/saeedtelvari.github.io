@@ -81,3 +81,65 @@ test('the injector sits in the cell containing the well', () => {
   const model = VE2D.buildModel(flat({ wellX: 14.1, wellY: 6.1 }));
   assert.equal(model.well, Math.floor(6100 / model.dy) * model.nx + Math.floor(14100 / model.dx));
 });
+
+// ---------------------------------------------------------------- Task 2
+
+test('a single dome forms one trap whose crest is the dome top', () => {
+  const model = VE2D.buildModel(flat({ domes: 1, domeRelief: 40 }));
+  const { zSpill, trapId, traps } = model.traps;
+  const crest = model.zt.indexOf(Math.min(...model.zt));
+  assert.equal(traps.length, 1);
+  assert.equal(traps[0].crestCell, crest);
+  assert.equal(trapId[crest], 0);
+  // The model edge is a spill path, so the dome fills down to the shallowest edge cell.
+  let shallowestEdge = Infinity;
+  for (let c = 0; c < model.n; c++) {
+    const i = c % model.nx;
+    const j = Math.floor(c / model.nx);
+    if (i === 0 || j === 0 || i === model.nx - 1 || j === model.ny - 1) shallowestEdge = Math.min(shallowestEdge, model.zt[c]);
+  }
+  near(zSpill[crest], shallowestEdge, 1e-9, 'spill depth');
+  assert.ok(zSpill[crest] - model.zt[crest] > 30, 'a 40 m dome holds a tall column');
+  assert.ok(traps[0].capacity > 0, 'trap has storage capacity');
+  for (let c = 0; c < model.n; c++) assert.ok(zSpill[c] >= model.zt[c], 'filled level never above the surface');
+});
+
+test('a sealing fault through a dome splits it into two fault-bounded traps', () => {
+  const domed = VE2D.buildModel(flat({ domes: 1, domeRelief: 40 }));
+  const centre = domed.domes[0];
+  const fault = { x: centre.x / 1000, y: 6, strike: 0, length: 30, throw: 0, sealCap: 0, kf: 0 };
+  const open = VE2D.buildModel(flat({ domes: 1, domeRelief: 40, faults: [{ ...fault, trans: 1 }] }));
+  const sealed = VE2D.buildModel(flat({ domes: 1, domeRelief: 40, faults: [{ ...fault, trans: 0 }] }));
+  assert.equal(open.traps.traps.length, 1);
+  assert.equal(sealed.traps.traps.length, 2);
+});
+
+test('a closed fault compartment is a trap without a spill point', () => {
+  const seal = { throw: 0, trans: 0, sealCap: 0, kf: 0 };
+  const triangle = [
+    { ...seal, x: 10, y: 3, strike: 90, length: 7 },
+    { ...seal, x: 11.5, y: 6, strike: 153.4, length: 7.6 },
+    { ...seal, x: 8.5, y: 6, strike: 26.6, length: 7.6 }
+  ];
+  const model = VE2D.buildModel(flat({ dipDeg: 0.5, faults: triangle }));
+  const inside = Math.floor(5000 / model.dy) * model.nx + Math.floor(10000 / model.dx);
+  const trap = model.traps.traps[model.traps.trapId[inside]];
+  assert.ok(trap, 'the enclosed cell belongs to a trap');
+  assert.equal(trap.spillCell, -1);
+  assert.equal(model.traps.zSpill[inside], Infinity);
+});
+
+test('contour segments trace a level set between cell centres', () => {
+  const nx = 6;
+  const ny = 5;
+  const values = Float64Array.from({ length: nx * ny }, (_, c) => c % nx);
+  const segments = VE2D.contourSegments(values, nx, ny, 2.5);
+  assert.equal(segments.length, (ny - 1) * 4);
+  let covered = 0;
+  for (let s = 0; s < segments.length; s += 4) {
+    near(segments[s], 2.5, 1e-12, 'x0');
+    near(segments[s + 2], 2.5, 1e-12, 'x1');
+    covered += Math.abs(segments[s + 3] - segments[s + 1]);
+  }
+  near(covered, ny - 1, 1e-12, 'segments cover the full height');
+});
