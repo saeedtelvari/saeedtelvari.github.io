@@ -60,6 +60,47 @@ test('a fault leaks only once its mobile column exceeds the entry height', () =>
   assert.ok(leaked || G.frameOf(run, run.years).inventory.leaked === 0);
 });
 
+test('per-fault leaked volume accumulates the fault flux and adds up to the leaked inventory', () => {
+  const random = rng(5);
+  let checked = 0;
+  for (let n = 0; n < 30; n++) {
+    const g = G.randomGeology(random);
+    const run = G.simulate(g, { years: 300 });
+    let before = new Float64Array(run.faults);
+    for (let y = 0; y <= run.years; y++) {
+      const f = G.frameOf(run, y);
+      const total = f.faultLeaked.reduce((a, b) => a + b, 0);
+      // Leaked CO2 can only arrive through the faults, so the two ledgers must agree.
+      assert.ok(Math.abs(total - f.inventory.leaked) <= 1e-4 * Math.max(1e-6, f.inventory.leaked), `fault ledger at year ${y}`);
+      f.faultLeaked.forEach((v, i) => assert.ok(v >= before[i], 'cumulative leakage never decreases'));
+      before = Float64Array.from(f.faultLeaked);
+    }
+    if (G.frameOf(run, run.years).inventory.leaked > 0) checked++;
+  }
+  assert.ok(checked > 3, 'enough geologies leak to exercise the ledger');
+});
+
+test('leak readout names the leaking fault, its column and entry height in metres, and the leaked share', () => {
+  const g = G.randomGeology(rng(9));
+  const sec = G.section(g);
+  const frame = (flows, column) => {
+    const h = new Float32Array(201);
+    flows.forEach((v, i) => { if (v > 0) h[sec.faultCells[i][0]] = column; });
+    return { faultFlow: Float32Array.from(flows), h, inventory: { mobile: 70, residual: 20, leaked: 10, injected: 100 } };
+  };
+  const quiet = g.faults.map(() => 0);
+  assert.equal(G.leakReadout(g, sec, frame(quiet, 2)), null, 'no label while every fault seals');
+  const flows = g.faults.map((_, i) => (i === g.faults.length - 1 ? 0.1 : 0));
+  const last = g.faults.length - 1;
+  const column = g.faults[last].thresholdHeight + 2;
+  assert.deepEqual(G.leakReadout(g, sec, frame(flows, column)), {
+    fault: last, state: 'leaking',
+    column: Math.round(column * 45), entry: Math.round(g.faults[last].thresholdHeight * 45), leakedPct: 10,
+  });
+  // The year a leak drains its own column back below the entry height, the fault is sealing again.
+  assert.equal(G.leakReadout(g, sec, frame(flows, g.faults[last].thresholdHeight / 2)).state, 'sealing');
+});
+
 test('worker and in-page fallback produce identical frames', () => {
   const g = G.randomGeology(rng(3));
   let posted, transfers;
