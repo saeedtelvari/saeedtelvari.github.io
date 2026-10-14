@@ -7,8 +7,38 @@ const { useEffect, useMemo, useRef, useState } = React;
 // ---- hero playback helpers (pure; tests/hero-model.test.js evaluates this block)
 const heroInitialPlayback = reducedMotion => ({ year: reducedMotion ? 400 : 0, playing: !reducedMotion });
 const heroShouldTick = ({ playing, visible, hidden }) => playing && visible && !hidden;
-const heroPhase = (year, injectionYears) => year < injectionYears ? 'injecting' : 'migrating';
+const heroPhase = (year, injectionYears, ship = 'moored') => {
+  if (year >= injectionYears) return 'migrating';
+  if (ship === 'arriving' || ship === 'away') return 'carrier arriving';
+  return ship === 'connecting' ? 'connecting the hose' : 'injecting';
+};
+// The CO2 carrier: away -> arriving -> connecting -> moored (injection runs) -> disconnecting -> departing -> away.
+// Manoeuvres take real seconds; injection years only advance while the carrier is moored and connected.
+const HERO_SHIP_SECONDS = { arriving: 8, connecting: 1.5, disconnecting: 1.5, departing: 10 };
+const HERO_SHIP_NEXT = { arriving: 'connecting', connecting: 'moored', disconnecting: 'departing', departing: 'away' };
+const heroShipStep = (ship, dt, wantMoored, seconds = HERO_SHIP_SECONDS) => {
+  let { phase, p } = ship;
+  if (wantMoored) {
+    // A restart reconnects a hose that is still coming off, or brings the carrier back in.
+    if (phase === 'disconnecting') { phase = 'connecting'; p = 1 - p; }
+    else if (phase === 'away' || phase === 'departing') { phase = 'arriving'; p = 0; }
+  } else if (phase === 'moored') { phase = 'disconnecting'; p = 0; }
+  else if (phase === 'connecting') { phase = 'disconnecting'; p = 1 - p; }
+  else if (phase === 'arriving') return { phase: 'away', p: 1 };
+  if (phase === 'moored' || phase === 'away') return { phase, p: 1 };
+  p += seconds[phase] > 0 ? dt / seconds[phase] : 1;
+  return p < 1 ? { phase, p } : { phase: HERO_SHIP_NEXT[phase], p: HERO_SHIP_NEXT[phase] === 'moored' || HERO_SHIP_NEXT[phase] === 'away' ? 1 : 0 };
+};
+const heroCanAdvance = (year, injectionYears, ship) => year >= injectionYears || ship === 'moored';
+// Scrubbing is a jump in time, so the carrier jumps to where it belongs in that year.
+const heroShipFor = (year, injectionYears) => (year < injectionYears ? { phase: 'moored', p: 1 } : { phase: 'away', p: 1 });
 // ---- end hero playback helpers
+
+// Percent of injected CO2 for display: a trace that rounds to nothing still reads as "<0.1".
+const heroPercentText = (value, total) => {
+  const share = HeroGeology.percent(value, total);
+  return share === 0 && value > 0 ? '<0.1' : String(share);
+};
 
 const HERO_YEARS = 2000;
 const HERO_UNIT = 15; // SVG units per solver unit of height
@@ -69,8 +99,6 @@ const HERO_FAULTS = heroGeology.faults.map(fault => {
     rise: { x: to.x, y: heroOverlying.roofR[Math.max(0, Math.min(200, Math.round(to.x / 5)))] + 3 },
   };
 });
-// Leak dots advance this many pixels per unit of CO2 a fault has passed.
-const HERO_LEAK_DOTS = 12;
 
 // Labels sit at mid-depth of each unit: far right on wide screens, just right of the axis on phones.
 const HERO_LABELS = [['wide', 980], ['narrow', 160]].flatMap(([set, x]) => {
@@ -135,6 +163,10 @@ const SubsurfaceHero = ({ onNavigate }) => {
   const [visible, setVisible] = useState(true);
   const [hidden, setHidden] = useState(() => document.hidden);
   const [exaggeration, setExaggeration] = useState(2);
+  const [ship, setShip] = useState({ phase: 'away', p: 1 });
+  const shipRef = useRef(ship);
+  // Under reduced motion the carrier's manoeuvres complete at once.
+  const shipSeconds = useMemo(() => (siteReducedMotion() ? { arriving: 0, connecting: 0, disconnecting: 0, departing: 0 } : HERO_SHIP_SECONDS), []);
   yearRef.current = year;
 
   // The model runs once per page load, off the main thread when possible.
@@ -144,7 +176,7 @@ const SubsurfaceHero = ({ onNavigate }) => {
       const timer = setTimeout(() => setRun(HeroGeology.simulate(heroGeology, options)), 0);
       return () => clearTimeout(timer);
     }
-    const worker = new Worker('./hero-simulation-worker.js?v=8');
+    const worker = new Worker('./hero-simulation-worker.js?v=9');
     worker.onmessage = event => setRun(event.data);
     worker.onerror = () => setRun(HeroGeology.simulate(heroGeology, options));
     worker.postMessage({ geology: heroGeology, options });
@@ -172,30 +204,49 @@ const SubsurfaceHero = ({ onNavigate }) => {
     return () => sizes.disconnect();
   }, []);
 
+  // One clock drives the carrier and the model: injection years wait until the carrier is moored and connected.
   useEffect(() => {
-    if (!run || !heroShouldTick({ playing, visible, hidden })) return undefined;
+    if (!heroShouldTick({ playing, visible, hidden })) return undefined;
     let frameId = 0, last = 0;
     const tick = now => {
       const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
       last = now;
-      const next = Math.min(HERO_YEARS, yearRef.current + dt * HeroGeology.yearsPerSecond(yearRef.current, run.injectionYears) * speed);
-      setYear(next);
-      if (next >= HERO_YEARS) { setPlaying(false); return; }
+      const injectionEnd = run ? run.injectionYears : 30;
+      const nextShip = heroShipStep(shipRef.current, dt, yearRef.current < injectionEnd, shipSeconds);
+      if (nextShip.phase !== shipRef.current.phase || nextShip.p !== shipRef.current.p) {
+        shipRef.current = nextShip;
+        setShip(nextShip);
+      }
+      if (run && heroCanAdvance(yearRef.current, injectionEnd, nextShip.phase)) {
+        const next = Math.min(HERO_YEARS, yearRef.current + dt * HeroGeology.yearsPerSecond(yearRef.current, injectionEnd) * speed);
+        yearRef.current = next;
+        setYear(next);
+        if (next >= HERO_YEARS) { setPlaying(false); return; }
+      }
       frameId = requestAnimationFrame(tick);
     };
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [run, playing, speed, visible, hidden]);
+  }, [run, playing, speed, visible, hidden, shipSeconds]);
 
   const frame = useMemo(() => (run ? heroFrameAt(run, year) : null), [run, year]);
+  // The strongest leak of this run sets the scale: its dots move about 40 px/s at full migration speed.
+  const leakScale = useMemo(() => {
+    const peak = run ? run.faultFlow.reduce((max, v) => Math.max(max, v), 0) : 0;
+    return { peak, dots: peak > 0 ? 40 / (60 * peak * run.yearLength) : 0 };
+  }, [run]);
   const injectionYears = run ? run.injectionYears : 30;
-  const injecting = !!run && playing && visible && year < injectionYears;
+  const injecting = !!run && playing && visible && year < injectionYears && ship.phase === 'moored';
+  const jumpShip = value => {
+    shipRef.current = heroShipFor(value, injectionYears);
+    setShip(shipRef.current);
+  };
   const controls = {
     toggle: () => {
       if (!playing && yearRef.current >= HERO_YEARS) setYear(0);
       setPlaying(!playing);
     },
-    scrub: value => { setYear(value); setPlaying(false); },
+    scrub: value => { setYear(value); setPlaying(false); jumpShip(value); },
     restart: () => { setYear(0); setPlaying(true); },
     speed: () => setSpeed(s => (s === 1 ? 2 : s === 2 ? 4 : 1)),
   };
@@ -204,14 +255,14 @@ const SubsurfaceHero = ({ onNavigate }) => {
     <section id="home" ref={heroRef} className="hero-scene" aria-labelledby="hero-name" data-visible={visible && !hidden ? 'true' : 'false'}>
       <Sky />
       <HeroSection sectionRef={sectionRef} />
-      <HeroPlume frame={frame} />
+      <HeroPlume frame={frame} leakScale={leakScale} />
       <HeroOverlay injecting={injecting} />
-      <SurfaceSite geology={heroGeology} injecting={injecting} moored={year < injectionYears} />
+      <SurfaceSite geology={heroGeology} injecting={injecting} ship={ship} />
       <HeroLabels />
-      <HeroLeakReadout frame={frame} />
+      <HeroLeakReadout frame={frame} year={year} injectionYears={injectionYears} />
       <Identity onNavigate={onNavigate} />
       <HeroPlayer year={year} playing={playing} speed={speed} frame={frame} injectionYears={injectionYears}
-        exaggeration={exaggeration} controls={controls} />
+        ship={ship.phase} exaggeration={exaggeration} controls={controls} />
     </section>
   );
 };
@@ -324,7 +375,7 @@ const GeologyTexture = ({ faults, geology: g }) => useMemo(() => {
 /* =====================================================
    Plume — CO2 in the simulator's class colours, redrawn per frame
    ===================================================== */
-const HeroPlume = ({ frame }) => {
+const HeroPlume = ({ frame, leakScale }) => {
   if (!frame) return null;
   const storage = heroPlumePaths(heroStorage, frame.h, frame.hMax);
   const overlying = heroPlumePaths(heroOverlying, frame.h2, frame.h2Max);
@@ -358,7 +409,7 @@ const HeroPlume = ({ frame }) => {
       {HERO_FAULTS.map((fault, i) => {
         const flow = frame.faultFlow[i] || 0;
         if (flow <= 0) return null;
-        const strength = Math.min(1, Math.sqrt(flow / heroGeology.faults[i].leakRate));
+        const strength = Math.min(1, Math.sqrt(flow / leakScale.peak));
         const conduit = `M${fault.from.x} ${fault.from.y}L${fault.to.x} ${fault.to.y}`;
         const rise = `M${fault.to.x} ${fault.to.y}L${fault.rise.x} ${heroFixed(fault.rise.y)}`;
         return (
@@ -368,7 +419,7 @@ const HeroPlume = ({ frame }) => {
             <path d={conduit} className="hero-leak" vectorEffect="non-scaling-stroke" />
             {/* Dots advance with the volume this fault has passed: they move at the leak rate and stop when paused. */}
             <path d={conduit + rise.replace('M', 'L')} className="hero-leak-dots" strokeDasharray="0 11"
-              strokeDashoffset={heroFixed(-frame.faultLeaked[i] * HERO_LEAK_DOTS)} vectorEffect="non-scaling-stroke" />
+              strokeDashoffset={heroFixed(-frame.faultLeaked[i] * leakScale.dots)} vectorEffect="non-scaling-stroke" />
           </g>
         );
       })}
@@ -429,8 +480,8 @@ const HeroLabels = React.memo(() => (
 /* =====================================================
    Leak readout — beside a leaking fault, from the model's own numbers
    ===================================================== */
-const HeroLeakReadout = ({ frame }) => {
-  const leak = frame && HeroGeology.leakReadout(heroGeology, heroSection, frame);
+const HeroLeakReadout = ({ frame, year, injectionYears }) => {
+  const leak = frame && HeroGeology.leakReadout(heroGeology, heroSection, frame, year, injectionYears);
   if (!leak) return null;
   const { to } = HERO_FAULTS[leak.fault];
   // Sit on the side of the fault away from the well, unless that side has no room for the label.
@@ -440,9 +491,9 @@ const HeroLeakReadout = ({ frame }) => {
     <div className="hero-leak-readout" aria-hidden="true" style={{ ...side, top: heroDepthTop(to.y) }}>
       <strong>F{leak.fault + 1} leaking</strong>
       <span>{leak.state === 'above'
-        ? `CO₂ column ${leak.column} m, above the ${leak.entry} m entry height`
-        : `CO₂ column held at the ${leak.entry} m entry height`}</span>
-      <span className="hero-leak-readout__share">{leak.leakedPct}% of injected CO₂ has leaked</span>
+        ? `Buoyancy ${leak.buoyancy} bar${leak.overpressure > 0 ? ` + overpressure ${leak.overpressure} bar` : ''} > entry ${leak.entry} bar`
+        : `${leak.overpressure > 0 ? 'Buoyancy + overpressure' : 'Buoyancy'} held at the ${leak.entry} bar entry pressure`}</span>
+      <span className="hero-leak-readout__share">{heroPercentText(frame.inventory.leaked, frame.inventory.injected)}% of injected CO₂ has leaked</span>
     </div>
   );
 };
@@ -450,10 +501,10 @@ const HeroLeakReadout = ({ frame }) => {
 /* =====================================================
    Player — controls, the CO2 inventory and the scale note
    ===================================================== */
-const HeroPlayer = ({ year, playing, speed, frame, injectionYears, exaggeration, controls }) => {
-  const phase = heroPhase(year, injectionYears);
+const HeroPlayer = ({ year, playing, speed, frame, injectionYears, ship, exaggeration, controls }) => {
+  const phase = heroPhase(year, injectionYears, ship);
   const inventory = frame ? frame.inventory : { mobile: 0, residual: 0, leaked: 0, injected: 0 };
-  const share = value => (inventory.injected > 0 ? Math.round(100 * value / inventory.injected) : 0);
+  const share = value => heroPercentText(value, inventory.injected);
   const classes = [['mobile', 'Mobile', inventory.mobile], ['residual', 'Residual', inventory.residual], ['leaked', 'Leaked', inventory.leaked]];
   const shownYear = Math.round(year);
   return (
@@ -669,10 +720,74 @@ const Sky = () => {
 
 // Decorative equipment stays anchored to the same surface and well as the live model:
 // an offshore injection platform over the well, and a CO₂ carrier moored alongside while injecting.
+// Where the carrier is in its manoeuvre. It approaches from the distance on the right, slowing as it
+// comes alongside, and leaves bow-first to the left, accelerating away behind the platform.
+const heroShipPose = ({ phase, p }) => {
+  if (phase === 'away') return null;
+  if (phase === 'arriving') {
+    const left = (1 - p) ** 3;
+    return { x: 330 * left, y: -42 * left, s: 1 - 0.58 * left, opacity: Math.min(1, p / 0.15), wake: (1 - p) ** 2, hose: 0, lights: 0 };
+  }
+  if (phase === 'departing') {
+    const gone = p * p;
+    return { x: -440 * gone, y: -46 * gone, s: 1 - 0.6 * gone, opacity: p < 0.8 ? 1 : (1 - p) / 0.2, wake: Math.min(1, 2 * p), hose: 0, lights: 0 };
+  }
+  const hose = phase === 'connecting' ? p : phase === 'disconnecting' ? 1 - p : 1;
+  return { x: 0, y: 0, s: 1, opacity: 1, wake: 0, hose, lights: 1 };
+};
+
+const HeroShip = ({ ship, injecting }) => {
+  const pose = heroShipPose(ship);
+  if (!pose) return null;
+  const engine = 0.15 + 0.85 * pose.wake;
+  return (
+    <g className="hero-ship" style={{ transform: `translate(${heroFixed(pose.x)}px, ${heroFixed(pose.y)}px) scale(${pose.s.toFixed(3)})`, opacity: pose.opacity }}>
+      {/* Wake astern and the bow wave grow with the carrier's speed. */}
+      <g opacity={heroFixed(pose.wake)}>
+        <path d="M394 151q30 1 70 -1M392 153q50 2 120 0M396 155q30 3 80 3" stroke="#cfdbe8" strokeWidth="1" strokeDasharray="18 6 30 8" opacity=".75" />
+        <ellipse cx="400" cy="153" rx="12" ry="1.6" fill="#dfe7f0" opacity=".55" />
+        <path d="M157 151q-12 -4 -26 0M154 153q-18 -2 -36 4" stroke="#e7eef7" strokeWidth="1" opacity=".8" />
+      </g>
+      <g className="hero-ship__hull">
+        <path d="M150 154H392" stroke="#08111d" strokeWidth="3" opacity=".6" />
+        <path d="M146 127L166 134H394V147Q394 152 388 152H174Q160 152 155 143Z" fill="url(#ship-hull)" stroke="#6f87a6" strokeOpacity=".35" strokeWidth=".6" />
+        <path d="M158 148H392" stroke="#5a2f35" strokeWidth="1.6" opacity=".7" />
+        <path d="M146 127L166 134H394" stroke="#9fb3c8" strokeOpacity=".45" strokeWidth=".7" />
+        <path d="M150 128H172V134H166Z" fill="#22344c" />
+        <path d="M162 128V108M158 112h8" stroke="#7d93ad" strokeWidth="1" />
+        <circle cx="162" cy="107" r="1.3" fill="#f4f7fb" />
+        {/* Insulated cargo tanks and the midship manifold the hose connects to. */}
+        {[205, 262, 319].map(x => <rect key={x} x={x - 26} y="120" width="52" height="15" rx="7.5" fill="url(#ship-tank)" stroke="#9fb3c8" strokeOpacity=".3" strokeWidth=".5" />)}
+        <path d="M233 134V113h6" stroke="#7d93ad" strokeWidth="1" />
+        {/* Accommodation and bridge aft, funnel, mast; the red port light faces the viewer. */}
+        <path d="M350 134V98H390V134Z" fill="#22344c" stroke="#7d93ad" strokeOpacity=".35" strokeWidth=".6" />
+        <path d="M346 98H394V93H346Z" fill="#2c4060" />
+        {[104, 111, 118, 125].map((y, i) => <path key={y} d={`M354 ${y}h32`} stroke="#e9c98f" strokeWidth="2" strokeDasharray="3 2" opacity={i ? .4 : .9} />)}
+        <path d="M374 93V81h9v12Z" fill="#1b2a3d" /><path d="M374 85h9" stroke="#5a2f35" strokeWidth="1.4" />
+        <path d="M362 93V77M358 81h8" stroke="#7d93ad" strokeWidth="1" />
+        <circle cx="362" cy="76" r="1.3" fill="#f4f7fb" />
+        <circle cx="347" cy="96" r="1.2" fill="#ff5a4f" />
+        <circle cx="394" cy="137" r="1" fill="#f4f7fb" opacity=".8" />
+        {/* Deck floodlights come on alongside, for the transfer. */}
+        <g opacity={pose.lights}>
+          <ellipse cx="236" cy="126" rx="26" ry="9" fill="url(#ship-worklight)" />
+          <ellipse cx="368" cy="128" rx="22" ry="8" fill="url(#ship-worklight)" />
+        </g>
+        {/* Exhaust thickens while the engines work. */}
+        {[[386, 74, 4], [396, 68, 5.5], [409, 63, 7]].map(([x, y, r]) => <circle key={x} cx={x} cy={y} r={r} fill="#8b9bb0" opacity={heroFixed(engine * .22)} />)}
+        {[356, 366, 376].map(x => <rect key={x} x={x} y="153" width="1.4" height="7" fill="url(#ship-light-reflection)" />)}
+      </g>
+      {/* The transfer hose is lowered from the platform to the manifold, then pulses while CO₂ is injected. */}
+      {pose.hose > 0 && <use href="#site-feed-route" stroke="#0e1a28" strokeWidth="3.4" strokeDasharray="1 1" strokeDashoffset={(1 - pose.hose).toFixed(3)} />}
+      {injecting && <use className="hero-feed-flow" href="#site-feed-route" strokeWidth="1" style={{ stroke: 'var(--sim-glow-free)' }} />}
+    </g>
+  );
+};
+
 const HERO_RIG_WINDOWS = [[2, 76, 9], [2, 84, 9], [2, 92, 9], [66, 64, 7], [66, 71, 7], [66, 78, 7], [66, 85, 7], [66, 92, 7]]
   .flatMap(([x0, y, n]) => Array.from({ length: n }, (_, i) => [x0 + i * 6, y, (i * 7 + y * 3) % 5]))
   .filter(([, , lit]) => lit < 3);
-const SurfaceSite = ({ geology, injecting, moored }) => (
+const SurfaceSite = ({ geology, injecting, ship }) => (
   <div className="hero-surface-site" aria-hidden="true" style={{ left: `${geology.wellXPct}%` }}>
     <svg viewBox="-140 0 540 160" width="100%" height="100%" fill="none">
       <defs>
@@ -691,28 +806,12 @@ const SurfaceSite = ({ geology, injecting, moored }) => (
         <linearGradient id="ship-light-reflection" x1="0" y1="0" x2="0" y2="1">
           <stop stopColor="#e9c98f" stopOpacity=".4" /><stop offset="1" stopColor="#e9c98f" stopOpacity="0" />
         </linearGradient>
-        <path id="site-feed-route" d="M238 114Q176 150 112 101" />
+        <radialGradient id="ship-worklight">
+          <stop stopColor="#f2deb0" stopOpacity=".28" /><stop offset="1" stopColor="#f2deb0" stopOpacity="0" />
+        </radialGradient>
+        <path id="site-feed-route" pathLength="1" d="M112 101Q176 150 236 114" />
       </defs>
-      {/* The carrier is moored through the injection period and sails once injection ends. */}
-      <g className={`hero-ship${moored ? '' : ' is-away'}`}>
-        <path d="M150 154H392" stroke="#08111d" strokeWidth="3" opacity=".6" />
-        <path d="M150 152Q146 152 146 146L144 134H382Q392 134 398 126L394 142Q388 152 372 152Z" fill="url(#ship-hull)" stroke="#6f87a6" strokeOpacity=".35" strokeWidth=".6" />
-        <path d="M147 148H391" stroke="#5a2f35" strokeWidth="1.6" opacity=".7" />
-        <path d="M144 134H382Q392 134 398 126" stroke="#9fb3c8" strokeOpacity=".45" strokeWidth=".7" />
-        {[226, 284, 342].map(x => <rect key={x} x={x - 26} y="120" width="52" height="15" rx="7.5" fill="url(#ship-tank)" stroke="#9fb3c8" strokeOpacity=".3" strokeWidth=".5" />)}
-        <path d="M160 134V98H194V134Z" fill="#22344c" stroke="#7d93ad" strokeOpacity=".35" strokeWidth=".6" />
-        <path d="M155 98H199V93H155Z" fill="#2c4060" />
-        {[104, 111, 118, 125].map((y, i) => <path key={y} d={`M164 ${y}h26`} stroke="#e9c98f" strokeWidth="2" strokeDasharray="3 2" opacity={i ? .4 : .9} />)}
-        <path d="M168 93V84h8v9" fill="#1b2a3d" />
-        <path d="M184 93V78M180 82h8" stroke="#7d93ad" strokeWidth="1" />
-        <circle cx="184" cy="77" r="1.4" fill="#f4f7fb" />
-        <circle cx="395" cy="127" r="1.2" fill="#f4f7fb" />
-        <path d="M238 120V112h5" stroke="#7d93ad" strokeWidth="1" />
-        {[166, 176, 186].map(x => <rect key={x} x={x} y="153" width="1.4" height="7" fill="url(#ship-light-reflection)" />)}
-        {moored && <use href="#site-feed-route" stroke="#0e1a28" strokeWidth="3.4" />}
-        {/* The transfer hose pulses only while CO₂ is being injected. */}
-        {injecting && <use className="hero-feed-flow" href="#site-feed-route" strokeWidth="1" style={{ stroke: 'var(--sim-glow-free)' }} />}
-      </g>
+      <HeroShip ship={ship} injecting={injecting} />
       {/* Jacket: two visible legs with K-bracing, battered out towards the sea floor. */}
       <path d="M10 160L20 104M86 160L76 104" stroke="url(#rig-steel)" strokeWidth="5" />
       <path d="M13 143H83M16 124H80M13 143L48 124L83 143M16 124L48 106L80 124" stroke="#34475f" strokeWidth="1.5" />
