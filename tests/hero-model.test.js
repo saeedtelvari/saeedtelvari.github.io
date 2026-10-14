@@ -197,12 +197,12 @@ test('the carrier berths before injection starts and sails once it ends', () => 
     return [ship, t];
   };
   let [ship, t] = until({ phase: 'away', p: 1 }, true, 'moored');
-  assert.ok(Math.abs(t - 9.5) < 0.2, `arrives in 8 s and connects in 1.5 s (took ${t.toFixed(2)} s)`);
+  assert.ok(Math.abs(t - 4) < 0.2, `arrives in 3.2 s and connects in 0.8 s (took ${t.toFixed(2)} s)`);
   assert.equal(h.heroCanAdvance(0, 30, 'connecting'), false, 'no injection before the hose is connected');
   assert.equal(h.heroCanAdvance(0, 30, 'moored'), true);
   assert.equal(h.heroCanAdvance(30, 30, 'departing'), true, 'migration never waits for the ship');
   [ship, t] = until(ship, false, 'away');
-  assert.ok(Math.abs(t - 11.5) < 0.2, `disconnects in 1.5 s and sails for 10 s (took ${t.toFixed(2)} s)`);
+  assert.ok(Math.abs(t - 11) < 0.2, `disconnects in 1 s and sails for 10 s (took ${t.toFixed(2)} s)`);
   // Restarting while the hose is coming off reconnects from where it was.
   const mid = h.heroShipStep({ phase: 'disconnecting', p: 0.25 }, 0, true);
   assert.equal(mid.phase, 'connecting');

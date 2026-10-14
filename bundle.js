@@ -1151,9 +1151,9 @@ const heroPhase = (year, injectionYears, ship = 'moored') => {
 // The CO2 carrier: away -> arriving -> connecting -> moored (injection runs) -> disconnecting -> departing -> away.
 // Manoeuvres take real seconds; injection years only advance while the carrier is moored and connected.
 const HERO_SHIP_SECONDS = {
-  arriving: 8,
-  connecting: 1.5,
-  disconnecting: 1.5,
+  arriving: 3.2,
+  connecting: 0.8,
+  disconnecting: 1,
   departing: 10
 };
 const HERO_SHIP_NEXT = {
@@ -2380,13 +2380,13 @@ const Sky = () => {
     x2: "0",
     y2: "1"
   }, /*#__PURE__*/React.createElement("stop", {
-    stopColor: "#1a2c45"
+    stopColor: "#1d3150"
   }), /*#__PURE__*/React.createElement("stop", {
-    offset: ".35",
-    stopColor: "#0f1d31"
+    offset: ".3",
+    stopColor: "#11203a"
   }), /*#__PURE__*/React.createElement("stop", {
     offset: "1",
-    stopColor: "#060d18"
+    stopColor: "#050c18"
   })), /*#__PURE__*/React.createElement("linearGradient", {
     id: "sea-haze",
     x1: "0",
@@ -2415,37 +2415,70 @@ const Sky = () => {
     stroke: "#3a5577",
     strokeOpacity: ".7",
     vectorEffect: "non-scaling-stroke"
-  }), Array.from({
-    length: 90
-  }, (_, i) => {
-    const t = i * 0.618034 % 1,
-      x = (i * 137.51 + 29) % 1440;
-    return /*#__PURE__*/React.createElement("path", {
-      key: i,
-      d: `M${heroFixed(x)} ${heroFixed(94 + t * t * 84)}h${heroFixed(10 + t * 70)}`,
-      stroke: "#4a6688",
-      strokeOpacity: heroFixed(.07 + t * .17),
-      vectorEffect: "non-scaling-stroke"
-    });
-  })), /*#__PURE__*/React.createElement("svg", {
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "hero-sea"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "hero-sea__drift"
+  }, /*#__PURE__*/React.createElement("svg", {
+    viewBox: `0 0 ${HERO_SEA_TILE * 10} 90`,
+    preserveAspectRatio: "xMinYMax meet"
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("g", {
+    id: "sea-tile",
+    fill: "none",
+    strokeLinecap: "round"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: HERO_SEA_RIPPLES.troughs,
+    stroke: "#02060d",
+    strokeWidth: "1.1",
+    strokeOpacity: ".35"
+  }), HERO_SEA_RIPPLES.crests.map((d, band) => /*#__PURE__*/React.createElement("path", {
+    key: band,
+    d: d,
+    stroke: "#86a6cc",
+    strokeWidth: [0.45, 0.6, 0.85, 1.2][band],
+    strokeOpacity: [0.13, 0.17, 0.21, 0.25][band]
+  })))), Array.from({
+    length: 10
+  }, (_, i) => /*#__PURE__*/React.createElement("use", {
+    key: i,
+    href: "#sea-tile",
+    x: i * HERO_SEA_TILE
+  }))))), /*#__PURE__*/React.createElement("svg", {
     className: "hero-glitter",
     viewBox: "0 0 120 90",
     preserveAspectRatio: "none"
-  }, Array.from({
-    length: 26
-  }, (_, i) => {
-    const t = i / 25,
-      w = 6 + t * 50 * (.6 + i * .37 % .4);
-    return /*#__PURE__*/React.createElement("rect", {
-      key: i,
-      x: heroFixed(60 - w / 2 + Math.sin(i * 2.3) * (4 + t * 10)),
-      y: heroFixed(2 + t * 86),
-      width: heroFixed(w),
-      height: "1.2",
-      fill: "#d6e1ef",
-      opacity: heroFixed(.6 - t * .4)
-    });
-  })), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+    id: "glint-glow",
+    x1: "0",
+    y1: "0",
+    x2: "1",
+    y2: "0"
+  }, /*#__PURE__*/React.createElement("stop", {
+    stopColor: "#c9d8ec",
+    stopOpacity: "0"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: ".5",
+    stopColor: "#c9d8ec",
+    stopOpacity: ".12"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "1",
+    stopColor: "#c9d8ec",
+    stopOpacity: "0"
+  }))), /*#__PURE__*/React.createElement("path", {
+    d: "M56 0H64L104 90H16Z",
+    fill: "url(#glint-glow)"
+  }), HERO_SEA_GLINTS.map((set, i) => /*#__PURE__*/React.createElement("g", {
+    key: i,
+    className: "hero-glitter__set",
+    fill: "none",
+    stroke: "#e8f0fb",
+    strokeLinecap: "round"
+  }, set.map((glint, k) => /*#__PURE__*/React.createElement("path", {
+    key: k,
+    d: glint.d,
+    strokeWidth: glint.w,
+    strokeOpacity: glint.o
+  }))))), /*#__PURE__*/React.createElement("div", {
     className: "hero-horizon"
   }, /*#__PURE__*/React.createElement("svg", {
     className: "hero-horizon__item",
@@ -2523,10 +2556,60 @@ const Sky = () => {
   })))), []);
 };
 
+// Sea surface, built once. Rows of ripple crests crowd together and shrink towards the horizon
+// (y = 0) and open out towards the viewer (y = 90); a tile repeats seamlessly across the strip.
+const heroSeaRandom = seed => () => (seed = seed * 1664525 + 1013904223 >>> 0) / 4294967296;
+const HERO_SEA_TILE = 360;
+const HERO_SEA_RIPPLES = (() => {
+  const random = heroSeaRandom(42);
+  const bands = [[], [], [], []],
+    troughs = [];
+  for (let j = 0; j < 30; j++) {
+    const t = (j + 0.5) / 30,
+      y = 1 + 88 * t ** 1.8,
+      length = 2 + 24 * t * t,
+      rise = 0.25 + 1.6 * t;
+    for (let x = random() * length * 2; x < HERO_SEA_TILE;) {
+      const w = length * (0.6 + 0.8 * random());
+      if (x + w < HERO_SEA_TILE) {
+        const crest = y + (random() - 0.5) * rise;
+        bands[Math.min(3, Math.floor(t * 4))].push(`M${heroFixed(x)} ${heroFixed(crest)}q${heroFixed(w / 2)} ${heroFixed(-rise)} ${heroFixed(w)} 0`);
+        // Nearer waves show the shaded trough below each crest.
+        if (t > 0.4) troughs.push(`M${heroFixed(x + w * 0.15)} ${heroFixed(crest + rise)}q${heroFixed(w * 0.35)} ${heroFixed(rise * 0.5)} ${heroFixed(w * 0.7)} 0`);
+      }
+      x += w * (1.6 + 2.2 * random());
+    }
+  }
+  return {
+    crests: bands.map(band => band.join('')),
+    troughs: troughs.join('')
+  };
+})();
+// Glints in the moon's path: brightest on its centre line, the path widening towards the viewer.
+const HERO_SEA_GLINTS = (() => {
+  const random = heroSeaRandom(7);
+  const sets = [[], [], []];
+  for (let j = 0; j < 26; j++) {
+    const t = (j + 0.5) / 26,
+      y = 1 + 88 * t ** 1.8,
+      half = 5 + 50 * t;
+    for (let k = 0, n = 2 + Math.round(4 * t); k < n; k++) {
+      const offset = (random() * 2 - 1) * half * (0.35 + 0.65 * random());
+      const w = (1.5 + 9 * t) * (0.5 + random());
+      sets[(j + k) % 3].push({
+        d: `M${heroFixed(60 + offset - w / 2)} ${heroFixed(y)}q${heroFixed(w / 2)} ${heroFixed(-(0.3 + 1.2 * t))} ${heroFixed(w)} 0`,
+        w: heroFixed(0.5 + 0.8 * t),
+        o: heroFixed(0.3 + 0.65 * (1 - Math.abs(offset) / half))
+      });
+    }
+  }
+  return sets;
+})();
+
 // Decorative equipment stays anchored to the same surface and well as the live model:
 // an offshore injection platform over the well, and a CO₂ carrier moored alongside while injecting.
-// Where the carrier is in its manoeuvre. It approaches from the distance on the right, slowing as it
-// comes alongside, and leaves bow-first to the left, accelerating away behind the platform.
+// Where the carrier is in its manoeuvre. It runs in from the right, slowing as it comes alongside,
+// and leaves bow-first to the left, accelerating away behind the platform into the distance.
 const heroShipPose = ({
   phase,
   p
@@ -2535,10 +2618,10 @@ const heroShipPose = ({
   if (phase === 'arriving') {
     const left = (1 - p) ** 3;
     return {
-      x: 330 * left,
-      y: -42 * left,
-      s: 1 - 0.58 * left,
-      opacity: Math.min(1, p / 0.15),
+      x: 200 * left,
+      y: -24 * left,
+      s: 1 - 0.3 * left,
+      opacity: Math.min(1, p / 0.12),
       wake: (1 - p) ** 2,
       hose: 0,
       lights: 0
@@ -2714,7 +2797,13 @@ const HeroShip = ({
     r: r,
     fill: "#8b9bb0",
     opacity: heroFixed(engine * .22)
-  })), [356, 366, 376].map(x => /*#__PURE__*/React.createElement("rect", {
+  })), /*#__PURE__*/React.createElement("path", {
+    d: "M172 154.5H388M180 156.8H380M194 159H366",
+    stroke: "#03070e",
+    strokeWidth: "1.6",
+    strokeDasharray: "22 3 40 4 16 3",
+    opacity: ".55"
+  }), [356, 366, 376].map(x => /*#__PURE__*/React.createElement("rect", {
     key: x,
     x: x,
     y: "153",
