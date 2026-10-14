@@ -1006,7 +1006,8 @@ const HeroGeology = (() => {
   };
 
   // What the label beside a leaking fault says: which fault, its CO2 column against its entry height
-  // (both in metres of section depth), and the share of injected CO2 that has leaked.
+  // (both in metres of section depth), and the share of injected CO2 that has leaked. A steady leak
+  // drains the column down to the entry height, so the column is either above it or held at it.
   const leakReadout = (g, sec, frame) => {
     let i = -1;
     frame.faultFlow.forEach((v, j) => {
@@ -1014,17 +1015,17 @@ const HeroGeology = (() => {
     });
     if (i < 0) return null;
     const metres = units => Math.round(units * HERO_UNIT * HERO_DEPTH.metresPerUnit);
-    const column = frame.h[sec.faultCells[i][0]],
-      entry = g.faults[i].thresholdHeight;
+    const column = metres(frame.h[sec.faultCells[i][0]]),
+      entry = metres(g.faults[i].thresholdHeight);
     const {
       leaked,
       injected
     } = frame.inventory;
     return {
       fault: i,
-      state: column > entry ? 'leaking' : 'sealing',
-      column: metres(column),
-      entry: metres(entry),
+      state: column > entry ? 'above' : 'held',
+      column,
+      entry,
       leakedPct: injected > 0 ? Math.round(100 * leaked / injected) : 0
     };
   };
@@ -1346,7 +1347,8 @@ const SubsurfaceHero = ({
     injecting: injecting
   }), /*#__PURE__*/React.createElement(SurfaceSite, {
     geology: heroGeology,
-    injecting: injecting
+    injecting: injecting,
+    moored: year < injectionYears
   }), /*#__PURE__*/React.createElement(HeroLabels, null), /*#__PURE__*/React.createElement(HeroLeakReadout, {
     frame: frame
   }), /*#__PURE__*/React.createElement(Identity, {
@@ -1466,6 +1468,10 @@ const HeroSection = React.memo(({
     width: "1000",
     height: "580",
     className: "hero-rock--over"
+  }), /*#__PURE__*/React.createElement("rect", {
+    width: "1000",
+    height: "3",
+    fill: "#0b1a2c"
   }), /*#__PURE__*/React.createElement("path", {
     d: HERO_PATHS.caprock,
     fill: "url(#hero-shale)"
@@ -1851,7 +1857,7 @@ const HeroLeakReadout = ({
       ...side,
       top: heroDepthTop(to.y)
     }
-  }, /*#__PURE__*/React.createElement("strong", null, "F", leak.fault + 1, " ", leak.state === 'leaking' ? 'leaking' : 'sealing again'), /*#__PURE__*/React.createElement("span", null, "CO\u2082 column ", leak.column, " m, entry height ", leak.entry, " m"), /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("strong", null, "F", leak.fault + 1, " leaking"), /*#__PURE__*/React.createElement("span", null, leak.state === 'above' ? `CO₂ column ${leak.column} m, above the ${leak.entry} m entry height` : `CO₂ column held at the ${leak.entry} m entry height`), /*#__PURE__*/React.createElement("span", {
     className: "hero-leak-readout__share"
   }, leak.leakedPct, "% of injected CO\u2082 has leaked"));
 };
@@ -2194,183 +2200,139 @@ const Sky = () => {
     viewBox: "0 0 1440 180",
     preserveAspectRatio: "none"
   }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
-    id: "highland-distant",
+    id: "sea-surface",
     x1: "0",
     y1: "0",
     x2: "0",
     y2: "1"
   }, /*#__PURE__*/React.createElement("stop", {
-    stopColor: "#2e4053"
+    stopColor: "#1a2c45"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: ".35",
+    stopColor: "#0f1d31"
   }), /*#__PURE__*/React.createElement("stop", {
     offset: "1",
-    stopColor: "#152333"
+    stopColor: "#060d18"
   })), /*#__PURE__*/React.createElement("linearGradient", {
-    id: "highland-near",
+    id: "sea-haze",
     x1: "0",
     y1: "0",
     x2: "0",
     y2: "1"
   }, /*#__PURE__*/React.createElement("stop", {
-    stopColor: "#172b3b"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "1",
-    stopColor: "#0b171f"
-  })), /*#__PURE__*/React.createElement("linearGradient", {
-    id: "highland-mist",
-    x1: "0",
-    y1: "0",
-    x2: "1",
-    y2: "0"
-  }, /*#__PURE__*/React.createElement("stop", {
     stopColor: "#a5bcd3",
     stopOpacity: "0"
   }), /*#__PURE__*/React.createElement("stop", {
-    offset: ".62",
-    stopColor: "#a5bcd3",
-    stopOpacity: ".16"
-  }), /*#__PURE__*/React.createElement("stop", {
     offset: "1",
     stopColor: "#a5bcd3",
-    stopOpacity: "0"
-  })), /*#__PURE__*/React.createElement("filter", {
-    id: "highland-soft"
-  }, /*#__PURE__*/React.createElement("feGaussianBlur", {
-    stdDeviation: "5"
-  })), /*#__PURE__*/React.createElement("path", {
-    id: "highland-ridge",
-    d: "M0 138L80 123L155 130L228 112L292 119L357 90L403 96L457 70L489 74L540 41L568 53L600 48L647 77L693 61L738 80L804 50L846 27L880 44L912 40L950 73L1014 91L1060 81L1131 97L1201 61L1240 69L1290 46L1336 73L1390 64L1440 88V180H0Z"
-  }), /*#__PURE__*/React.createElement("clipPath", {
-    id: "highland-ridge-clip"
-  }, /*#__PURE__*/React.createElement("use", {
-    href: "#highland-ridge"
-  })), /*#__PURE__*/React.createElement("filter", {
-    id: "highland-rock-grain",
-    x: "0",
-    y: "0",
-    width: "100%",
-    height: "100%"
-  }, /*#__PURE__*/React.createElement("feTurbulence", {
-    type: "fractalNoise",
-    baseFrequency: ".18 .32",
-    numOctaves: "2",
-    seed: "18"
-  }), /*#__PURE__*/React.createElement("feColorMatrix", {
-    type: "saturate",
-    values: "0"
-  }), /*#__PURE__*/React.createElement("feComposite", {
-    in2: "SourceGraphic",
-    operator: "in"
-  }))), /*#__PURE__*/React.createElement("use", {
-    href: "#highland-ridge",
-    fill: "url(#highland-distant)"
-  }), /*#__PURE__*/React.createElement("g", {
-    clipPath: "url(#highland-ridge-clip)"
-  }, /*#__PURE__*/React.createElement("path", {
-    d: "M540 41L517 76L489 104L453 121L499 96L533 82L560 111L594 125L568 53Z M846 27L825 61L792 89L747 112L795 96L830 80L866 116L902 126L880 44Z M1290 46L1265 75L1238 104L1197 130L1260 109L1294 91L1333 123L1357 129L1336 73Z",
-    fill: "#111e2b",
-    opacity: ".64"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M543 43L533 60L547 56L555 68L568 53M850 29L838 49L852 43L866 58L878 45M1292 49L1284 64L1298 60L1308 74L1317 66",
-    fill: "none",
-    stroke: "#a0b1ba",
-    strokeWidth: "1.1",
-    strokeOpacity: ".34"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M536 66l-14 27 -28 17m48 -31l17 30 16 12m267 -63l-15 32 -21 15m47 -39l19 30 22 16m395 -33l-22 24 -16 8",
-    fill: "none",
-    stroke: "#718594",
-    strokeWidth: ".8",
-    strokeOpacity: ".25"
-  }), /*#__PURE__*/React.createElement("rect", {
+    stopOpacity: ".14"
+  }))), /*#__PURE__*/React.createElement("rect", {
+    y: "66",
     width: "1440",
-    height: "180",
-    filter: "url(#highland-rock-grain)",
-    opacity: ".075"
-  })), /*#__PURE__*/React.createElement("path", {
-    d: "M0 155Q120 120 220 147T402 118L476 106L528 112L585 91L638 109L694 102L761 126L837 108L910 125L991 110L1057 126L1140 112L1210 126L1290 98L1351 104L1440 128V180H0Z",
-    fill: "url(#highland-near)"
+    height: "24",
+    fill: "url(#sea-haze)"
+  }), /*#__PURE__*/React.createElement("rect", {
+    y: "90",
+    width: "1440",
+    height: "90",
+    fill: "url(#sea-surface)"
   }), /*#__PURE__*/React.createElement("path", {
-    d: "M466 116Q523 125 584 102M743 140Q821 121 889 136M1071 141Q1131 127 1198 140M1223 132Q1291 113 1357 120",
-    fill: "none",
-    stroke: "#536c78",
-    strokeWidth: ".8",
-    strokeOpacity: ".24"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M360 139Q620 112 871 133T1470 128",
-    stroke: "url(#highland-mist)",
-    strokeWidth: "20",
-    fill: "none",
-    filter: "url(#highland-soft)"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M453 158Q513 151 578 156L670 160Q574 168 467 162Z",
-    fill: "#7897a5",
-    opacity: ".16"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M477 159h58m17 2h62m-102 2h22",
-    stroke: "#9cb5c1",
-    strokeWidth: ".6",
-    opacity: ".25"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M0 171Q142 164 264 173T490 165T730 171T958 167T1220 170T1440 164V180H0Z",
-    fill: "#0a151b"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M626 149Q686 151 718 159T842 170Q900 174 949 180H970Q911 170 849 166T728 155Q684 147 626 149Z",
-    fill: "#45504e",
-    opacity: ".42"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M666 151Q723 158 766 161M812 168Q878 172 919 176",
-    stroke: "#9ba69a",
-    strokeWidth: ".7",
-    strokeOpacity: ".21",
-    fill: "none"
-  }), [38, 57, 82, 104, 142, 167, 529, 552, 576, 700, 719].map((x, i) => {
-    const y = 165 + Math.sin(i * 2.1) * 4,
-      h = 11 + i % 4 * 4;
-    return /*#__PURE__*/React.createElement("g", {
-      key: x,
-      opacity: i < 6 ? '.8' : '.65'
-    }, /*#__PURE__*/React.createElement("path", {
-      d: `M${x} ${y}v${-h}`,
-      stroke: "#233b3b",
-      strokeWidth: "1"
-    }), /*#__PURE__*/React.createElement("path", {
-      d: `M${x} ${y - h}l${-h * .3} ${h * .42}h${h * .15}l${-h * .24} ${h * .37}h${h * .78}l${-h * .24} ${-h * .37}h${h * .15}Z`,
-      fill: i % 2 ? '#17302f' : '#112627'
-    }), /*#__PURE__*/React.createElement("path", {
-      d: `M${x + 1} ${y - h + 3}l${h * .2} ${h * .3}`,
-      stroke: "#627f76",
-      strokeWidth: ".7",
-      strokeOpacity: ".3"
-    }));
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M7 177l18 -3 15 2 19 -2 17 3 22 -1 15 3m31 -1l17 -3 22 1 17 -2 13 3 18 -1",
-    stroke: "#667568",
-    strokeOpacity: ".25",
-    strokeWidth: "2",
-    fill: "none"
+    d: "M0 90.5H1440",
+    stroke: "#3a5577",
+    strokeOpacity: ".7",
+    vectorEffect: "non-scaling-stroke"
   }), Array.from({
-    length: 54
+    length: 90
   }, (_, i) => {
-    const x = (i * 137.51 + 43) % 1440,
-      y = 175 + i % 4;
+    const t = i * 0.618034 % 1,
+      x = (i * 137.51 + 29) % 1440;
     return /*#__PURE__*/React.createElement("path", {
       key: i,
-      d: `M${x} ${y}l-2 ${-3 - i % 4}m2 ${3 + i % 4}l3 -4`,
-      stroke: "#53685c",
-      strokeWidth: ".7",
-      opacity: .24 + i % 3 * .08
+      d: `M${heroFixed(x)} ${heroFixed(94 + t * t * 84)}h${heroFixed(10 + t * 70)}`,
+      stroke: "#4a6688",
+      strokeOpacity: heroFixed(.07 + t * .17),
+      vectorEffect: "non-scaling-stroke"
     });
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M720 173L735 168L759 174M1115 172L1130 164L1151 172M1268 173L1280 167L1294 172",
-    fill: "#21333a",
-    stroke: "#48605e",
-    strokeOpacity: ".3"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M607 172l-3 -10m3 10l4 -7m566 8l-3 -13m3 13l5 -8m173 6l-2 -11m2 11l4 -5",
-    stroke: "#527067",
-    strokeWidth: "1",
-    opacity: ".65"
+  })), /*#__PURE__*/React.createElement("svg", {
+    className: "hero-glitter",
+    viewBox: "0 0 120 90",
+    preserveAspectRatio: "none"
+  }, Array.from({
+    length: 26
+  }, (_, i) => {
+    const t = i / 25,
+      w = 6 + t * 50 * (.6 + i * .37 % .4);
+    return /*#__PURE__*/React.createElement("rect", {
+      key: i,
+      x: heroFixed(60 - w / 2 + Math.sin(i * 2.3) * (4 + t * 10)),
+      y: heroFixed(2 + t * 86),
+      width: heroFixed(w),
+      height: "1.2",
+      fill: "#d6e1ef",
+      opacity: heroFixed(.6 - t * .4)
+    });
   })), /*#__PURE__*/React.createElement("div", {
+    className: "hero-horizon"
+  }, /*#__PURE__*/React.createElement("svg", {
+    className: "hero-horizon__item",
+    style: {
+      left: '33%'
+    },
+    width: "34",
+    height: "20",
+    viewBox: "0 0 34 20"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M8 20V11h18v9M10 11V6h8v5M22 11V2",
+    stroke: "#2b3e57",
+    strokeWidth: "1.2",
+    fill: "none"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "22",
+    cy: "2",
+    r: "1",
+    fill: "#ff5a4f",
+    opacity: ".8"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "13",
+    cy: "8.5",
+    r: ".9",
+    fill: "#e9c98f"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "19",
+    cy: "14",
+    r: ".9",
+    fill: "#e9c98f",
+    opacity: ".7"
+  })), /*#__PURE__*/React.createElement("svg", {
+    className: "hero-horizon__item",
+    style: {
+      left: '50%'
+    },
+    width: "200",
+    height: "32",
+    viewBox: "0 0 200 32"
+  }, [[14, 26, 0], [44, 24, 40], [72, 22, 75], [98, 20, 20], [122, 18, 95], [144, 17, 55], [164, 15, 10], [182, 14, 80]].map(([x, h, a]) => {
+    const top = 32 - h,
+      r = h * .42;
+    const blade = k => {
+      const t = (a + k * 120) * Math.PI / 180;
+      return `M${x} ${top}l${heroFixed(r * Math.cos(t))} ${heroFixed(r * Math.sin(t))}`;
+    };
+    return /*#__PURE__*/React.createElement("g", {
+      key: x
+    }, /*#__PURE__*/React.createElement("path", {
+      d: `M${x} 32V${top}${blade(0)}${blade(1)}${blade(2)}`,
+      stroke: "#3a5070",
+      strokeWidth: ".9",
+      fill: "none"
+    }), /*#__PURE__*/React.createElement("circle", {
+      cx: x,
+      cy: top,
+      r: "1.1",
+      fill: "#ff5a4f",
+      opacity: ".8"
+    }));
+  }))), /*#__PURE__*/React.createElement("div", {
     className: "hero-rain"
   }, Array.from({
     length: 64
@@ -2387,10 +2349,15 @@ const Sky = () => {
   })))), []);
 };
 
-// Decorative equipment stays anchored to the same surface and well as the live model.
+// Decorative equipment stays anchored to the same surface and well as the live model:
+// an offshore injection platform over the well, and a CO₂ carrier moored alongside while injecting.
+const HERO_RIG_WINDOWS = [[2, 76, 9], [2, 84, 9], [2, 92, 9], [66, 64, 7], [66, 71, 7], [66, 78, 7], [66, 85, 7], [66, 92, 7]].flatMap(([x0, y, n]) => Array.from({
+  length: n
+}, (_, i) => [x0 + i * 6, y, (i * 7 + y * 3) % 5])).filter(([,, lit]) => lit < 3);
 const SurfaceSite = ({
   geology,
-  injecting
+  injecting,
+  moored
 }) => /*#__PURE__*/React.createElement("div", {
   className: "hero-surface-site",
   "aria-hidden": "true",
@@ -2403,479 +2370,288 @@ const SurfaceSite = ({
   height: "100%",
   fill: "none"
 }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
-  id: "site-wall",
+  id: "rig-steel",
   x1: "0",
   y1: "0",
   x2: "1",
-  y2: "1"
+  y2: "0"
 }, /*#__PURE__*/React.createElement("stop", {
-  stopColor: "#43535a"
+  stopColor: "#1b293b"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: ".7",
+  stopColor: "#2c3e55"
 }), /*#__PURE__*/React.createElement("stop", {
   offset: "1",
-  stopColor: "#25363d"
-})), /*#__PURE__*/React.createElement("radialGradient", {
-  id: "site-lamplight"
-}, /*#__PURE__*/React.createElement("stop", {
-  stopColor: "#dec99d",
-  stopOpacity: ".2"
-}), /*#__PURE__*/React.createElement("stop", {
-  offset: "1",
-  stopColor: "#dec99d",
-  stopOpacity: "0"
+  stopColor: "#5d7493"
 })), /*#__PURE__*/React.createElement("linearGradient", {
-  id: "site-metal",
+  id: "rig-module",
   x1: "0",
   y1: "0",
   x2: "0",
   y2: "1"
 }, /*#__PURE__*/React.createElement("stop", {
-  stopColor: "#98abae"
-}), /*#__PURE__*/React.createElement("stop", {
-  offset: ".3",
-  stopColor: "#597078"
-}), /*#__PURE__*/React.createElement("stop", {
-  offset: ".65",
-  stopColor: "#334850"
+  stopColor: "#2a3c54"
 }), /*#__PURE__*/React.createElement("stop", {
   offset: "1",
-  stopColor: "#17272e"
+  stopColor: "#18263a"
 })), /*#__PURE__*/React.createElement("linearGradient", {
-  id: "site-roof",
+  id: "ship-hull",
   x1: "0",
   y1: "0",
-  x2: "1",
+  x2: "0",
   y2: "1"
 }, /*#__PURE__*/React.createElement("stop", {
-  stopColor: "#6f8188"
+  stopColor: "#24364e"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: "1",
+  stopColor: "#111c2c"
+})), /*#__PURE__*/React.createElement("linearGradient", {
+  id: "ship-tank",
+  x1: "0",
+  y1: "0",
+  x2: "0",
+  y2: "1"
+}, /*#__PURE__*/React.createElement("stop", {
+  stopColor: "#7d93ad"
 }), /*#__PURE__*/React.createElement("stop", {
   offset: ".35",
-  stopColor: "#425961"
+  stopColor: "#3d5270"
 }), /*#__PURE__*/React.createElement("stop", {
   offset: "1",
-  stopColor: "#293c45"
+  stopColor: "#1c2a3e"
 })), /*#__PURE__*/React.createElement("linearGradient", {
-  id: "site-pad",
+  id: "ship-light-reflection",
   x1: "0",
   y1: "0",
   x2: "0",
   y2: "1"
 }, /*#__PURE__*/React.createElement("stop", {
-  stopColor: "#52605c"
+  stopColor: "#e9c98f",
+  stopOpacity: ".4"
 }), /*#__PURE__*/React.createElement("stop", {
   offset: "1",
-  stopColor: "#263732"
-})), /*#__PURE__*/React.createElement("linearGradient", {
-  id: "site-window",
-  x1: "0",
-  y1: "0",
-  x2: "1",
-  y2: "1"
-}, /*#__PURE__*/React.createElement("stop", {
-  stopColor: "#d3c09a"
-}), /*#__PURE__*/React.createElement("stop", {
-  offset: "1",
-  stopColor: "#89754e"
-})), /*#__PURE__*/React.createElement("linearGradient", {
-  id: "site-worklight",
-  x1: "0",
-  y1: "0",
-  x2: "0",
-  y2: "1"
-}, /*#__PURE__*/React.createElement("stop", {
-  stopColor: "#e2d3ac",
-  stopOpacity: ".12"
-}), /*#__PURE__*/React.createElement("stop", {
-  offset: "1",
-  stopColor: "#e2d3ac",
+  stopColor: "#e9c98f",
   stopOpacity: "0"
 })), /*#__PURE__*/React.createElement("path", {
   id: "site-feed-route",
-  d: "M289 118H252Q246 118 246 124V130Q246 136 240 136H95Q87 136 87 128V120Q87 114 81 114H60"
-}), /*#__PURE__*/React.createElement("clipPath", {
-  id: "site-gravel-clip"
+  d: "M238 114Q176 150 112 101"
+})), /*#__PURE__*/React.createElement("g", {
+  className: `hero-ship${moored ? '' : ' is-away'}`
 }, /*#__PURE__*/React.createElement("path", {
-  d: "M-124 153L-94 140L335 137L396 153L385 160H-131Z"
-}))), /*#__PURE__*/React.createElement("path", {
-  d: "M-124 153L-94 140L335 137L396 153L385 160H-131Z",
-  fill: "url(#site-pad)"
-}), /*#__PURE__*/React.createElement("g", {
-  clipPath: "url(#site-gravel-clip)"
-}, Array.from({
-  length: 100
-}, (_, i) => /*#__PURE__*/React.createElement("path", {
-  key: i,
-  d: `M${-132 + i * 97.37 % 535} ${139 + i * 7.31 % 22}l${1 + i % 3} -.4`,
-  stroke: i % 3 ? '#8b9485' : '#131f22',
-  strokeWidth: ".6",
-  opacity: i % 3 ? '.25' : '.5'
-})), /*#__PURE__*/React.createElement("path", {
-  d: "M-70 151l124 -1m54 5l55 -1m80 -7l96 -1m-152 11l28 -1",
-  stroke: "#a0afaa",
-  strokeOpacity: ".15",
-  strokeWidth: ".8"
-})), /*#__PURE__*/React.createElement("path", {
-  d: "M-124 153L-94 140L335 137L396 153",
-  stroke: "#7c8b80",
-  strokeOpacity: ".3",
+  d: "M150 154H392",
+  stroke: "#08111d",
+  strokeWidth: "3",
+  opacity: ".6"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M150 152Q146 152 146 146L144 134H382Q392 134 398 126L394 142Q388 152 372 152Z",
+  fill: "url(#ship-hull)",
+  stroke: "#6f87a6",
+  strokeOpacity: ".35",
   strokeWidth: ".6"
-}), /*#__PURE__*/React.createElement("ellipse", {
-  cx: "172",
-  cy: "148",
-  rx: "62",
-  ry: "8",
-  fill: "#09171a",
-  opacity: ".6"
-}), /*#__PURE__*/React.createElement("ellipse", {
-  cx: "292",
-  cy: "143",
-  rx: "45",
-  ry: "4",
-  fill: "#09171a",
-  opacity: ".6"
-}), /*#__PURE__*/React.createElement("ellipse", {
-  cx: "49",
-  cy: "156",
-  rx: "28",
-  ry: "3",
-  fill: "#07161a",
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M147 148H391",
+  stroke: "#5a2f35",
+  strokeWidth: "1.6",
   opacity: ".7"
 }), /*#__PURE__*/React.createElement("path", {
-  d: "M-92 147h37l-5 4h-37Z",
-  fill: "#3b4c49"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M-78 147V99m0 8h13m-1 -4v7m-12 -6l-7 -3m7 3l8 -3",
-  stroke: "#7b9090",
-  strokeWidth: "1.1"
-}), /*#__PURE__*/React.createElement("circle", {
-  cx: "-78",
-  cy: "97",
-  r: "1.6",
-  fill: "#93a7a1"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M-95 121l22 -3 7 13 -23 3Z",
-  fill: "#213946",
-  stroke: "#6c8489",
+  d: "M144 134H382Q392 134 398 126",
+  stroke: "#9fb3c8",
+  strokeOpacity: ".45",
   strokeWidth: ".7"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M-89 121l6 12m1 -13l6 12m1 -13l6 12m-22 -7l20 -2",
-  stroke: "#a0b2b1",
-  strokeWidth: ".5",
-  strokeOpacity: ".28"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M-83 135v12",
-  stroke: "#5f7778",
-  strokeWidth: "1.4"
-}), /*#__PURE__*/React.createElement("rect", {
-  x: "-61",
-  y: "131",
-  width: "12",
-  height: "15",
-  rx: "1",
-  fill: "#33484c",
-  stroke: "#7a8d85",
-  strokeWidth: ".5"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M-58 135h6m-6 3h6",
-  stroke: "#11272d"
-}), /*#__PURE__*/React.createElement("g", {
-  stroke: "#7b8e87",
-  strokeOpacity: ".38",
-  strokeWidth: ".8"
-}, /*#__PURE__*/React.createElement("path", {
-  d: "M258 135V100M291 138V103M326 141V106M361 144V109M395 147V112M258 104L395 116M258 127L395 139"
-}), [267, 276, 303, 312, 338, 347, 372, 381].map(x => /*#__PURE__*/React.createElement("path", {
+}), [226, 284, 342].map(x => /*#__PURE__*/React.createElement("rect", {
   key: x,
-  d: `M${x} ${104 + (x - 258) * .087}l0 23`,
-  strokeOpacity: ".2"
-}))), /*#__PURE__*/React.createElement("path", {
-  d: "M95 138v11m-5 0h10m144 -13v10m-5 0h10",
-  stroke: "#657b76",
-  strokeWidth: "1.5"
-}), /*#__PURE__*/React.createElement("use", {
+  x: x - 26,
+  y: "120",
+  width: "52",
+  height: "15",
+  rx: "7.5",
+  fill: "url(#ship-tank)",
+  stroke: "#9fb3c8",
+  strokeOpacity: ".3",
+  strokeWidth: ".5"
+})), /*#__PURE__*/React.createElement("path", {
+  d: "M160 134V98H194V134Z",
+  fill: "#22344c",
+  stroke: "#7d93ad",
+  strokeOpacity: ".35",
+  strokeWidth: ".6"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M155 98H199V93H155Z",
+  fill: "#2c4060"
+}), [104, 111, 118, 125].map((y, i) => /*#__PURE__*/React.createElement("path", {
+  key: y,
+  d: `M164 ${y}h26`,
+  stroke: "#e9c98f",
+  strokeWidth: "2",
+  strokeDasharray: "3 2",
+  opacity: i ? .4 : .9
+})), /*#__PURE__*/React.createElement("path", {
+  d: "M168 93V84h8v9",
+  fill: "#1b2a3d"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M184 93V78M180 82h8",
+  stroke: "#7d93ad",
+  strokeWidth: "1"
+}), /*#__PURE__*/React.createElement("circle", {
+  cx: "184",
+  cy: "77",
+  r: "1.4",
+  fill: "#f4f7fb"
+}), /*#__PURE__*/React.createElement("circle", {
+  cx: "395",
+  cy: "127",
+  r: "1.2",
+  fill: "#f4f7fb"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M238 120V112h5",
+  stroke: "#7d93ad",
+  strokeWidth: "1"
+}), [166, 176, 186].map(x => /*#__PURE__*/React.createElement("rect", {
+  key: x,
+  x: x,
+  y: "153",
+  width: "1.4",
+  height: "7",
+  fill: "url(#ship-light-reflection)"
+})), moored && /*#__PURE__*/React.createElement("use", {
   href: "#site-feed-route",
-  stroke: "#0e2027",
-  strokeWidth: "6"
-}), /*#__PURE__*/React.createElement("use", {
-  href: "#site-feed-route",
-  stroke: "url(#site-metal)",
-  strokeWidth: "3.8"
+  stroke: "#0e1a28",
+  strokeWidth: "3.4"
 }), injecting && /*#__PURE__*/React.createElement("use", {
   className: "hero-feed-flow",
   href: "#site-feed-route",
-  strokeWidth: ".8",
+  strokeWidth: "1",
   style: {
     stroke: 'var(--sim-glow-free)'
   }
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M101 132v8m4 -8v8m136 -12v8m4 -8v8",
-  stroke: "#a1b0a7",
-  strokeWidth: ".6",
-  opacity: ".55"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M126 145H210L234 134V140L210 151H126Z",
-  fill: "#182b2e",
-  stroke: "#73857b",
-  strokeOpacity: ".35",
-  strokeWidth: ".6"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M128 76L165 54L208 76V145H128Z",
-  fill: "url(#site-wall)"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M208 76L232 65V134L208 145Z",
-  fill: "#1a2d35",
-  stroke: "#62757a",
-  strokeOpacity: ".35",
-  strokeWidth: ".6"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M122 78L165 52L190 41L148 66Z",
-  fill: "#263d47"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M165 52L211 78L238 65L190 41Z",
-  fill: "url(#site-roof)",
-  stroke: "#809397",
-  strokeOpacity: ".65",
-  strokeWidth: ".7"
-}), [0, 1, 2, 3, 4, 5].map(i => /*#__PURE__*/React.createElement("path", {
-  key: i,
-  d: `M${168 + i * 4} ${52 - i * 1.7}l43 24`,
-  stroke: "#a7b6b5",
-  strokeWidth: ".6",
-  strokeOpacity: ".23"
 })), /*#__PURE__*/React.createElement("path", {
-  d: "M121 79L165 54L210 79L238 66M210 79V145M128 145H208",
-  stroke: "#93a5a3",
-  strokeOpacity: ".45",
-  strokeWidth: ".8"
-}), /*#__PURE__*/React.createElement("g", {
-  stroke: "#99aaa3",
-  strokeWidth: ".55",
-  strokeOpacity: ".15"
-}, [84, 91, 98, 105, 112, 119, 126, 133, 140].map(y => /*#__PURE__*/React.createElement("path", {
-  key: y,
-  d: `M130 ${y}H206M212 ${y - 2}l18 -8`
-}))), /*#__PURE__*/React.createElement("path", {
-  d: "M134 89H163V113H134Z",
-  fill: "#172b33",
-  stroke: "#9aa79b",
-  strokeWidth: ".7"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M137 92H160V110H137Z",
-  fill: "url(#site-window)",
-  opacity: ".86"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M148 92V110M137 101H160M133 114H165",
-  stroke: "#405254",
-  strokeWidth: "1"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M137 93H159",
-  stroke: "#edddbd",
-  strokeWidth: ".5",
-  opacity: ".6"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M177 91H201V145H177Z",
-  fill: "#122831",
-  stroke: "#758881",
-  strokeWidth: ".7"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M180 94H198V137H180Z",
-  stroke: "#566d70",
-  strokeOpacity: ".45",
-  strokeWidth: ".6"
-}), /*#__PURE__*/React.createElement("rect", {
-  x: "183",
-  y: "98",
-  width: "11",
-  height: "9",
-  fill: "#38515a",
-  stroke: "#718781",
-  strokeWidth: ".5"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M195 121h3",
-  stroke: "#abb8a8",
-  strokeWidth: "1"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M175 145H202L205 149H173Z",
-  fill: "#6b7970"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M173 149H205V152H171V155H208",
-  stroke: "#52675f",
-  strokeWidth: "2"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M214 90l13 -6v15l-13 6Z",
-  fill: "#0d222a",
-  stroke: "#647b7a",
-  strokeWidth: ".5"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M216 94l9 -4m-9 7l9 -4m-9 7l9 -4",
-  stroke: "#62797c",
-  strokeWidth: ".7"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M231 74V134l-6 3",
-  stroke: "#7b8c88",
-  strokeWidth: "1",
-  strokeOpacity: ".6"
-}), /*#__PURE__*/React.createElement("ellipse", {
-  cx: "148",
-  cy: "146",
-  rx: "39",
-  ry: "10",
-  fill: "url(#site-lamplight)"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M259 137H328L336 140H265Z",
-  fill: "#4b625f",
-  stroke: "#7b9187",
-  strokeWidth: ".6"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M267 135V127m50 9v-9M262 118H327",
-  stroke: "#587277",
-  strokeWidth: "2"
-}), /*#__PURE__*/React.createElement("rect", {
-  x: "268",
-  y: "112",
-  width: "55",
-  height: "14",
-  rx: "6",
-  fill: "url(#site-metal)",
-  stroke: "#96aaa7",
-  strokeWidth: ".65"
-}), /*#__PURE__*/React.createElement("ellipse", {
-  cx: "272",
-  cy: "119",
-  rx: "4",
-  ry: "6",
-  fill: "#4a6068",
-  stroke: "#9aadaa",
-  strokeWidth: ".6"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M284 113V126M307 113V126",
-  stroke: "#a5b3ac",
-  strokeWidth: "1",
-  strokeOpacity: ".45"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M284 112V104h9m12 8v-10h9",
-  stroke: "#718b88",
-  strokeWidth: "2"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M289 101v6m21 -8v6",
-  stroke: "#a1b2a6",
-  strokeWidth: "1"
-}), /*#__PURE__*/React.createElement("circle", {
-  cx: "302",
-  cy: "109",
-  r: "3",
-  fill: "#1a3039",
-  stroke: "#9baea8",
-  strokeWidth: ".6"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M302 109l1 -1.5",
-  stroke: "#c5d0bb",
-  strokeWidth: ".7"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M332 109l13 -3v29l-13 3Z",
-  fill: "#243c43",
-  stroke: "#738b82",
-  strokeWidth: ".65"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M335 114l7 -1.5m-7 4.5l7 -1.5m-7 4.5l7 -1.5",
-  stroke: "#526d70",
-  strokeWidth: ".6"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M359 147V58h-17",
-  stroke: "#869a97",
-  strokeWidth: "1.8"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M348 60L320 147H379Z",
-  fill: "url(#site-worklight)"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M337 58h16l-2 3h-13Z",
-  fill: "#263f47",
-  stroke: "#9aada5",
-  strokeWidth: ".6"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M339 61h11",
-  stroke: "#dfcea4",
-  strokeWidth: "1.3"
-}), /*#__PURE__*/React.createElement("ellipse", {
-  cx: "349",
-  cy: "146",
-  rx: "43",
-  ry: "8",
-  fill: "url(#site-lamplight)"
-}), /*#__PURE__*/React.createElement("g", {
-  className: "hero-wellhead"
-}, /*#__PURE__*/React.createElement("rect", {
-  x: "27",
-  y: "156",
-  width: "42",
-  height: "4",
-  rx: "1",
-  fill: "#354c50",
-  stroke: "#8b9e97",
-  strokeWidth: ".7"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M48 107V157M33 119H61",
-  stroke: "url(#site-metal)",
+  d: "M10 160L20 104M86 160L76 104",
+  stroke: "url(#rig-steel)",
   strokeWidth: "5"
 }), /*#__PURE__*/React.createElement("path", {
-  d: "M41 145H55M41 138H55M41 129H55M41 110H55",
-  stroke: "#8da19b",
+  d: "M13 143H83M16 124H80M13 143L48 124L83 143M16 124L48 106L80 124",
+  stroke: "#34475f",
   strokeWidth: "1.5"
-}), /*#__PURE__*/React.createElement("rect", {
-  x: "42",
-  y: "132",
-  width: "12",
-  height: "9",
-  rx: "1",
-  fill: "#304b54",
-  stroke: "#91a6a0",
-  strokeWidth: ".65"
-}), /*#__PURE__*/React.createElement("rect", {
-  x: "42",
-  y: "114",
-  width: "12",
-  height: "9",
-  rx: "1",
-  fill: "#304b54",
-  stroke: "#91a6a0",
-  strokeWidth: ".65"
 }), /*#__PURE__*/React.createElement("path", {
-  d: "M42 137H35m0 -3v6M60 114v8M45 109H51",
-  stroke: "#b1bdb0",
-  strokeWidth: "1"
-}), /*#__PURE__*/React.createElement("circle", {
-  cx: "33",
-  cy: "119",
-  r: "4",
-  stroke: "#899f96",
-  strokeWidth: ".9"
+  d: "M86 160L76 104",
+  stroke: "#8fa5bd",
+  strokeOpacity: ".45",
+  strokeWidth: ".8"
 }), /*#__PURE__*/React.createElement("path", {
-  d: "M29 119h8m-4 -4v8",
-  stroke: "#718a82",
+  d: "M2 159q8 -3 16 0m60 0q8 -3 16 0",
+  stroke: "#c9d6e6",
+  strokeOpacity: ".35",
+  strokeWidth: ".8"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M-8 104L-4 110H114L118 104Z",
+  fill: "#141f2e"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M-8 104H118V98H-8Z",
+  fill: "#1b2a3d",
+  stroke: "#7d93ad",
+  strokeOpacity: ".4",
+  strokeWidth: ".6"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M-2 98V70H58V98Z",
+  fill: "url(#rig-module)",
+  stroke: "#7d93ad",
+  strokeOpacity: ".35",
+  strokeWidth: ".6"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M62 98V58H112V98Z",
+  fill: "url(#rig-module)",
+  stroke: "#7d93ad",
+  strokeOpacity: ".35",
+  strokeWidth: ".6"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M112 58V98",
+  stroke: "#9fb3c8",
+  strokeOpacity: ".45",
   strokeWidth: ".7"
+}), HERO_RIG_WINDOWS.map(([x, y, lit]) => /*#__PURE__*/React.createElement("rect", {
+  key: `${x}-${y}`,
+  x: x,
+  y: y,
+  width: "3.4",
+  height: "2.4",
+  fill: "#e9c98f",
+  opacity: lit ? .5 : .9
+})), [92, 104].map(x => /*#__PURE__*/React.createElement("rect", {
+  key: x,
+  x: x,
+  y: "105",
+  width: "10",
+  height: "4",
+  rx: "2",
+  fill: "#c98a3a",
+  opacity: ".8"
+})), /*#__PURE__*/React.createElement("path", {
+  d: "M64 58L72 64M118 56L108 64",
+  stroke: "#34475f",
+  strokeWidth: "1.2"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M58 56H124L128 52H62Z",
+  fill: "#2c4060",
+  stroke: "#9fb3c8",
+  strokeOpacity: ".5",
+  strokeWidth: ".6"
+}), [61, 79, 97, 115, 125].map(x => /*#__PURE__*/React.createElement("circle", {
+  key: x,
+  cx: x,
+  cy: "55.5",
+  r: ".8",
+  fill: "#f2c14e"
+})), /*#__PURE__*/React.createElement("path", {
+  d: "M37 98L44 22H52L59 98",
+  stroke: "#4a5f7a",
+  strokeWidth: "1.6"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M38 88H58M39.5 76H56.5M41 62H55M42.5 48H53.5M43.5 34H52.5M38 88L56.5 76M58 88L39.5 76M39.5 76L55 62M56.5 76L41 62M41 62L53.5 48M55 62L42.5 48M42.5 48L52.5 34M53.5 48L43.5 34",
+  stroke: "#3a4f69",
+  strokeWidth: ".8"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M59 98L52 22",
+  stroke: "#9fb3c8",
+  strokeOpacity: ".4",
+  strokeWidth: ".6"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M43 22H53V18H43Z",
+  fill: "#2c4060"
 }), /*#__PURE__*/React.createElement("circle", {
   cx: "48",
-  cy: "104",
-  r: "4",
-  fill: "#152e38",
-  stroke: "#9bafa8",
-  strokeWidth: ".7"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M46 106l3 -3",
-  stroke: "#c3d1bf",
-  strokeWidth: ".8"
+  cy: "16",
+  r: "1.8",
+  fill: "#ff5a4f"
 }), /*#__PURE__*/React.createElement("circle", {
   "data-site-status": "true",
-  cx: "51",
-  cy: "136",
-  r: "1.2",
+  cx: "48",
+  cy: "95",
+  r: "1.5",
   style: {
     fill: injecting ? 'var(--sim-glow-free)' : '#647b79'
   }
 }), /*#__PURE__*/React.createElement("path", {
-  d: "M32 159h3m27 0h3",
-  stroke: "#a6b4a6",
-  strokeWidth: "1"
-}))));
+  d: "M4 70V60H12V70Z",
+  fill: "#22344b"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M8 60L-62 26",
+  stroke: "#4a5f7a",
+  strokeWidth: "2.2"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M2 63L-62 26",
+  stroke: "#3a4f69",
+  strokeWidth: ".7"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M-62 26V52",
+  stroke: "#7d93ad",
+  strokeOpacity: ".6",
+  strokeWidth: ".6"
+}), /*#__PURE__*/React.createElement("circle", {
+  cx: "-62",
+  cy: "25",
+  r: "1.4",
+  fill: "#ff5a4f"
+})));
 const HeroName = ({
   variant
 }) => {

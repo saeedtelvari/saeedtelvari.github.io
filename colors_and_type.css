@@ -624,6 +624,31 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   height: clamp(100px, 16vh, 180px);
 }
 
+/* The sea is the lower half of the landscape; glitter and horizon items line up with it. */
+.hero-glitter {
+  position: absolute;
+  bottom: 0;
+  left: calc(82% + clamp(28px, 2.5vw, 38px) / 2);
+  width: 120px;
+  height: calc(clamp(100px, 16vh, 180px) / 2);
+  transform: translateX(-50%);
+}
+.hero-horizon {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(clamp(100px, 16vh, 180px) / 2);
+}
+.hero-horizon__item {
+  position: absolute;
+  bottom: 0;
+  overflow: visible;
+  transform: translateX(-50%);
+}
+
+.hero-ship { transition: transform 5s var(--ease-emil-in-out), opacity 4s linear; }
+.hero-ship.is-away { transform: translateX(140px); opacity: 0; }
+
 .hero-surface-site {
   position: absolute;
   bottom: calc(100% - var(--hero-surface));
@@ -641,6 +666,8 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   .hero-scene { --hero-surface: max(42vh, 430px); }
   .hero-moon { left: auto; right: 24px; top: 26%; width: 28px; }
   .hero-landscape { height: 85px; }
+  .hero-glitter { left: auto; right: 38px; height: 42.5px; transform: translateX(50%); }
+  .hero-horizon { bottom: 42.5px; }
 }
 
 .hero-reveal {
@@ -1054,6 +1081,9 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   .hero-label--wide { display: none; }
   /* Too little room beside the fault on phones; the player's legend still reports the leaked share. */
   .hero-leak-readout { display: none; }
+  /* Keep the horizon distant on narrow screens: a smaller wind farm and no second platform. */
+  .hero-horizon__item { transform: translateX(-50%) scale(.55); transform-origin: 50% 100%; }
+  .hero-horizon__item:first-child { display: none; }
   .hero-label--narrow { display: block; }
   .hero-identity { top: calc(var(--site-header-h) + 16px); left: 20px; right: 20px; }
   .hero-role { font-size: 14px; }
