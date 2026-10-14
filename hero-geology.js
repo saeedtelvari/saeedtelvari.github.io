@@ -20,12 +20,15 @@ const HeroGeology = (() => {
       x2 = minX2 <= 54 ? Math.floor(random() * (54 - minX2 + 1)) + minX2 : 54;
       if ((x2 * 10 + dip2 * 580) - (x1 * 10 + dip1 * 580) < 60) { dip1 = -slope1; dip2 = slope2; }
     }
-    const fault = (xPercent, dipSlope, angleDeg) => ({
-      xPercent, dipSlope, angleDeg: parseFloat(angleDeg.toFixed(1)),
-      // Entry height of the fault rock (column height of mobile CO2) and the leak rate above it.
-      thresholdHeight: parseFloat((random() * 0.4 + 0.15).toFixed(2)),
-      leakRate: parseFloat((random() * 0.18 + 0.08).toFixed(2)),
-    });
+    const fault = (xPercent, dipSlope, angleDeg) => {
+      // Damage-zone permeability against the aquifer's CO2 permeability: 0.1-10 mD against about 100 mD.
+      const permeabilityRatio = parseFloat(Math.pow(10, -3 + 2 * random()).toPrecision(3));
+      return {
+        xPercent, dipSlope, angleDeg: parseFloat(angleDeg.toFixed(1)), permeabilityRatio,
+        // Capillary entry pressure of the damage zone in bar, higher for tighter fractures (p_e ~ k^-1/2).
+        entryPressure: parseFloat((0.05 / Math.sqrt(permeabilityRatio) * (0.6 + random())).toFixed(2)),
+      };
+    };
     return [fault(x1, dip1, angle1), fault(x2, dip2, angle2)].sort((a, b) => a.xPercent - b.xPercent);
   };
 
@@ -127,6 +130,42 @@ const HeroGeology = (() => {
   // Depth below the axis break is linear; the overburden above it is drawn compressed.
   const HERO_DEPTH = { breakY: 28, breakDepth: 800, metresPerUnit: 3, sectionWidth: 10000 };
 
+  // Fault leakage after Ramachandran et al. (2026, WRR, doi:10.1029/2025WR041074): CO2 flows up a fault's
+  // damage zone by Darcy's law once psi = buoyancy + injection overpressure - entry pressure is positive.
+  const HERO_HEAD = HERO_UNIT * HERO_DEPTH.metresPerUnit;        // metres per solver unit of height
+  const BAR_PER_HEAD = (1050 - 650) * 9.81 * HERO_HEAD / 1e5;  // brine 1050 and CO2 650 kg/m3: 1.77 bar
+  const HERO_PSI_SMOOTH = 0.01 / BAR_PER_HEAD;                  // onset smoothed over 1 kPa (xi = 1e-3 /Pa)
+  const HERO_FAULT_WIDTH = 5;                                    // damage-zone width in m, as in the paper
+
+  // Flux up a fault in solver units, with psi and the caprock thickness as heights:
+  // Q = A k / mu (psi + drho g Lc) / Lc, smoothed at onset by (1 - exp(-xi psi)).
+  const faultFlux = (conductance, psi, caprock) =>
+    psi > 0 ? conductance * (psi + caprock) / caprock * (1 - Math.exp(-psi / HERO_PSI_SMOOTH)) : 0;
+
+  // Exponential integral E1: series below 1, Abramowitz & Stegun 5.1.56 above.
+  const expint = u => {
+    if (u < 1) {
+      let sum = -0.5772156649 - Math.log(u), term = 1;
+      for (let k = 1; k < 25; k++) { term *= -u / k; sum -= term / k; }
+      return sum;
+    }
+    return (u * u + 2.334733 * u + 0.250621) / (u * u + 3.330657 * u + 1.681534) * Math.exp(-u) / u;
+  };
+  // Injection overpressure (bar) r metres from the well after t years: a Theis line source, superposed off
+  // at the end of injection. 1 Mt/yr into 200 m of 200 mD aquifer: 0.5 bar per unit E1, diffusivity 1.6 m2/s.
+  const overpressure = (r, years, injectionYears = 30) => {
+    if (years <= 0) return 0;
+    const u = Math.max(r, 1) ** 2 / (4 * 1.6 * 3.156e7);
+    return 0.5 * (expint(u / years) - (years > injectionYears ? expint(u / (years - injectionYears)) : 0));
+  };
+
+  // Share of the injected CO2 in percent, with one decimal below 1 %.
+  const percent = (value, total) => {
+    if (!(total > 0)) return 0;
+    const share = 100 * value / total;
+    return share < 1 ? Math.round(share * 10) / 10 : Math.round(share);
+  };
+
   const mobileThickness = (S, hMax, R) => S >= hMax ? S : Math.max(0, Math.min(S, (S - R * hMax) / (1 - R)));
   const storedVolume = (h, hMax, R) => h >= hMax ? h : h + R * (hMax - h);
 
@@ -168,22 +207,34 @@ const HeroGeology = (() => {
     };
     const layers = [layer(1, g.reservoirThickness), layer(0.4, g.shallowThickness)];
     const clampCell = k => Math.max(0, Math.min(HERO_NODES - 1, k));
+    const metresPerX = HERO_DEPTH.sectionWidth / 1000;
     return {
       layers,
       faultCells: g.faults.map(f => layers.map(l => clampCell(Math.round(getFaultIntersection(f, l.depth, g).x / HERO_DX)))),
+      // Each fault's leak path: caprock thickness Lc (solver heights), distance from the well (m), entry
+      // pressure as a height, and A k / mu relative to the aquifer's mobility K (width 5 m per metre of strike).
+      leak: g.faults.map(f => {
+        const base = getFaultIntersection(f, 1, g), top = getStratumFaultIntersection(f, 0.4, g.shallowThickness, g);
+        return {
+          caprock: Math.max(0.5, (base.y - top.y) / HERO_UNIT),
+          distance: Math.abs(base.x - g.wellX) * metresPerX,
+          entryHead: f.entryPressure / BAR_PER_HEAD,
+          conductance: g.K * f.permeabilityRatio * HERO_FAULT_WIDTH * HERO_DX * metresPerX / HERO_HEAD ** 2,
+        };
+      }),
       wellCell: g.wellCellIdx,
       wellBottom: stratumY(g.wellX, g.faults, null, 1, g.reservoirThickness, g) - 20,
     };
   };
 
-  // Gravity-driven migration with residual trapping, fault contacts and threshold-gated fault
-  // leakage into the overlying aquifer. CO2 is injected for `injectionYears`, then migrates.
+  // Gravity-driven migration with residual trapping, fault contacts and fault leakage into the
+  // overlying aquifer. CO2 is injected for `injectionYears`, then migrates.
   const simulate = (g, { years = 2000, injectionYears = 30, injectedVolume = 260 } = {}) => {
     const n = HERO_NODES, R = g.R, K = g.K, nF = g.faults.length;
     const sec = section(g);
     const L = sec.layers.map(l => ({ ...l, S: new Float64Array(n), hMax: new Float64Array(n),
       roof: Float64Array.from(l.roofR, r => r / HERO_UNIT), h: new Float64Array(n), move: new Float64Array(n - 1) }));
-    const out = { years, injectionYears, nodes: n, faults: nF, lost: 0,
+    const out = { years, injectionYears, yearLength: HERO_YEAR, nodes: n, faults: nF, lost: 0,
       S: [0, 1].map(() => new Float32Array((years + 1) * n)),
       h: [0, 1].map(() => new Float32Array((years + 1) * n)),
       hMax: [0, 1].map(() => new Float32Array((years + 1) * n)),
@@ -237,6 +288,8 @@ const HeroGeology = (() => {
     record(0);
     for (let y = 1; y <= years; y++) {
       const flow = new Float64Array(nF);
+      // Overpressure at each fault, held at the year's midpoint, as a height of CO2 column.
+      const over = sec.leak.map(f => overpressure(f.distance, y - 0.5, injectionYears) / BAR_PER_HEAD);
       let t = 0, sweep = 0;
       while (t < HERO_YEAR - 1e-12) {
         let peak = 0;
@@ -249,12 +302,14 @@ const HeroGeology = (() => {
           if (k > 0 && k < n) balanceFaultContact(l.S, k - 1, k, l.roofL[k] / HERO_UNIT, l.roofR[k] / HERO_UNIT, l.cap[k - 1], l.cap[k], l.hMax, R);
         }));
         L.forEach(settle);
-        // Leakage starts once the mobile column at the fault exceeds the fault rock's entry height.
-        g.faults.forEach((fault, i) => {
+        // A fault leaks while buoyancy plus overpressure beats its entry pressure. One step never takes more
+        // than the mobile CO2 at the fault, nor so much that the potential would drop below zero.
+        sec.leak.forEach((fault, i) => {
           const [k, up] = sec.faultCells[i];
           const h = mobileThickness(L[0].S[k], L[0].hMax[k], R);
-          if (h <= fault.thresholdHeight) return;
-          const want = Math.min((h - fault.thresholdHeight) * (1 - R), fault.leakRate * dt);
+          const psi = h + over[i] - fault.entryHead;
+          const want = Math.min(Math.min(h, psi) * (1 - R), faultFlux(fault.conductance, psi, fault.caprock) * dt);
+          if (!(want > 0)) return;
           const moved = want - deposit(L[1], up, want);
           L[0].S[k] -= moved;
           flow[i] += moved;
@@ -290,18 +345,18 @@ const HeroGeology = (() => {
     };
   };
 
-  // What the label beside a leaking fault says: which fault, its CO2 column against its entry height
-  // (both in metres of section depth), and the share of injected CO2 that has leaked. A steady leak
-  // drains the column down to the entry height, so the column is either above it or held at it.
-  const leakReadout = (g, sec, frame) => {
+  // What the label beside a leaking fault says: which fault, and the terms of its driving potential in bar
+  // (CO2 buoyancy, injection overpressure, entry pressure).
+  // A steady leak drains the column until buoyancy plus overpressure sits at the entry pressure: 'held'.
+  const leakReadout = (g, sec, frame, year, injectionYears = 30) => {
     let i = -1;
     frame.faultFlow.forEach((v, j) => { if (v > 0 && (i < 0 || v > frame.faultFlow[i])) i = j; });
     if (i < 0) return null;
-    const metres = units => Math.round(units * HERO_UNIT * HERO_DEPTH.metresPerUnit);
-    const column = metres(frame.h[sec.faultCells[i][0]]), entry = metres(g.faults[i].thresholdHeight);
-    const { leaked, injected } = frame.inventory;
-    return { fault: i, state: column > entry ? 'above' : 'held', column, entry,
-      leakedPct: injected > 0 ? Math.round(100 * leaked / injected) : 0 };
+    const tenth = v => Math.round(v * 10) / 10;
+    const buoyancy = tenth(frame.h[sec.faultCells[i][0]] * BAR_PER_HEAD);
+    const over = tenth(overpressure(sec.leak[i].distance, year, injectionYears));
+    const entry = tenth(g.faults[i].entryPressure);
+    return { fault: i, state: buoyancy + over > entry + 1e-9 ? 'above' : 'held', buoyancy, overpressure: over, entry };
   };
 
   const depthToY = metres => HERO_DEPTH.breakY + (metres - HERO_DEPTH.breakDepth) / HERO_DEPTH.metresPerUnit;
@@ -318,6 +373,7 @@ const HeroGeology = (() => {
   return { randomGeology, capRockBaseProfile, stratumBaseProfile, getStratumFaultIntersection,
     getFaultIntersection, stratumY, capRockY, layerThicknessAt, balanceFaultContact,
     mobileThickness, storedVolume, section, simulate, frameOf, leakReadout,
+    faultFlux, overpressure, percent, BAR_PER_HEAD,
     HERO_DEPTH, depthToY, depthTicks, exaggeration, yearsPerSecond };
 })();
 

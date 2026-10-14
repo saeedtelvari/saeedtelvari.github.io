@@ -646,8 +646,15 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   transform: translateX(-50%);
 }
 
-.hero-ship { transition: transform 5s var(--ease-emil-in-out), opacity 4s linear; }
-.hero-ship.is-away { transform: translateX(140px); opacity: 0; }
+/* The carrier's position comes from the hero clock; scale about its waterline so it shrinks into the distance. */
+.hero-ship,
+.hero-ship__hull { transform-origin: 270px 152px; }
+/* A slow swell lifts and rolls the hull a little. */
+.hero-ship__hull { animation: hero-ship-bob 5.2s ease-in-out infinite alternate; }
+@keyframes hero-ship-bob {
+  from { transform: translateY(0) rotate(-0.35deg); }
+  to { transform: translateY(0.9px) rotate(0.35deg); }
+}
 
 .hero-surface-site {
   position: absolute;
