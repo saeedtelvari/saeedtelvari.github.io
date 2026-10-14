@@ -655,14 +655,18 @@ const HeroGeology = (() => {
         dip2 = slope2;
       }
     }
-    const fault = (xPercent, dipSlope, angleDeg) => ({
-      xPercent,
-      dipSlope,
-      angleDeg: parseFloat(angleDeg.toFixed(1)),
-      // Entry height of the fault rock (column height of mobile CO2) and the leak rate above it.
-      thresholdHeight: parseFloat((random() * 0.4 + 0.15).toFixed(2)),
-      leakRate: parseFloat((random() * 0.18 + 0.08).toFixed(2))
-    });
+    const fault = (xPercent, dipSlope, angleDeg) => {
+      // Damage-zone permeability against the aquifer's CO2 permeability: 0.1-10 mD against about 100 mD.
+      const permeabilityRatio = parseFloat(Math.pow(10, -3 + 2 * random()).toPrecision(3));
+      return {
+        xPercent,
+        dipSlope,
+        angleDeg: parseFloat(angleDeg.toFixed(1)),
+        permeabilityRatio,
+        // Capillary entry pressure of the damage zone in bar, higher for tighter fractures (p_e ~ k^-1/2).
+        entryPressure: parseFloat((0.05 / Math.sqrt(permeabilityRatio) * (0.6 + random())).toFixed(2))
+      };
+    };
     return [fault(x1, dip1, angle1), fault(x2, dip2, angle2)].sort((a, b) => a.xPercent - b.xPercent);
   };
 
@@ -779,6 +783,45 @@ const HeroGeology = (() => {
     metresPerUnit: 3,
     sectionWidth: 10000
   };
+
+  // Fault leakage after Ramachandran et al. (2026, WRR, doi:10.1029/2025WR041074): CO2 flows up a fault's
+  // damage zone by Darcy's law once psi = buoyancy + injection overpressure - entry pressure is positive.
+  const HERO_HEAD = HERO_UNIT * HERO_DEPTH.metresPerUnit; // metres per solver unit of height
+  const BAR_PER_HEAD = (1050 - 650) * 9.81 * HERO_HEAD / 1e5; // brine 1050 and CO2 650 kg/m3: 1.77 bar
+  const HERO_PSI_SMOOTH = 0.01 / BAR_PER_HEAD; // onset smoothed over 1 kPa (xi = 1e-3 /Pa)
+  const HERO_FAULT_WIDTH = 5; // damage-zone width in m, as in the paper
+
+  // Flux up a fault in solver units, with psi and the caprock thickness as heights:
+  // Q = A k / mu (psi + drho g Lc) / Lc, smoothed at onset by (1 - exp(-xi psi)).
+  const faultFlux = (conductance, psi, caprock) => psi > 0 ? conductance * (psi + caprock) / caprock * (1 - Math.exp(-psi / HERO_PSI_SMOOTH)) : 0;
+
+  // Exponential integral E1: series below 1, Abramowitz & Stegun 5.1.56 above.
+  const expint = u => {
+    if (u < 1) {
+      let sum = -0.5772156649 - Math.log(u),
+        term = 1;
+      for (let k = 1; k < 25; k++) {
+        term *= -u / k;
+        sum -= term / k;
+      }
+      return sum;
+    }
+    return (u * u + 2.334733 * u + 0.250621) / (u * u + 3.330657 * u + 1.681534) * Math.exp(-u) / u;
+  };
+  // Injection overpressure (bar) r metres from the well after t years: a Theis line source, superposed off
+  // at the end of injection. 1 Mt/yr into 200 m of 200 mD aquifer: 0.5 bar per unit E1, diffusivity 1.6 m2/s.
+  const overpressure = (r, years, injectionYears = 30) => {
+    if (years <= 0) return 0;
+    const u = Math.max(r, 1) ** 2 / (4 * 1.6 * 3.156e7);
+    return 0.5 * (expint(u / years) - (years > injectionYears ? expint(u / (years - injectionYears)) : 0));
+  };
+
+  // Share of the injected CO2 in percent, with one decimal below 1 %.
+  const percent = (value, total) => {
+    if (!(total > 0)) return 0;
+    const share = 100 * value / total;
+    return share < 1 ? Math.round(share * 10) / 10 : Math.round(share);
+  };
   const mobileThickness = (S, hMax, R) => S >= hMax ? S : Math.max(0, Math.min(S, (S - R * hMax) / (1 - R)));
   const storedVolume = (h, hMax, R) => h >= hMax ? h : h + R * (hMax - h);
 
@@ -832,16 +875,29 @@ const HeroGeology = (() => {
     };
     const layers = [layer(1, g.reservoirThickness), layer(0.4, g.shallowThickness)];
     const clampCell = k => Math.max(0, Math.min(HERO_NODES - 1, k));
+    const metresPerX = HERO_DEPTH.sectionWidth / 1000;
     return {
       layers,
       faultCells: g.faults.map(f => layers.map(l => clampCell(Math.round(getFaultIntersection(f, l.depth, g).x / HERO_DX)))),
+      // Each fault's leak path: caprock thickness Lc (solver heights), distance from the well (m), entry
+      // pressure as a height, and A k / mu relative to the aquifer's mobility K (width 5 m per metre of strike).
+      leak: g.faults.map(f => {
+        const base = getFaultIntersection(f, 1, g),
+          top = getStratumFaultIntersection(f, 0.4, g.shallowThickness, g);
+        return {
+          caprock: Math.max(0.5, (base.y - top.y) / HERO_UNIT),
+          distance: Math.abs(base.x - g.wellX) * metresPerX,
+          entryHead: f.entryPressure / BAR_PER_HEAD,
+          conductance: g.K * f.permeabilityRatio * HERO_FAULT_WIDTH * HERO_DX * metresPerX / HERO_HEAD ** 2
+        };
+      }),
       wellCell: g.wellCellIdx,
       wellBottom: stratumY(g.wellX, g.faults, null, 1, g.reservoirThickness, g) - 20
     };
   };
 
-  // Gravity-driven migration with residual trapping, fault contacts and threshold-gated fault
-  // leakage into the overlying aquifer. CO2 is injected for `injectionYears`, then migrates.
+  // Gravity-driven migration with residual trapping, fault contacts and fault leakage into the
+  // overlying aquifer. CO2 is injected for `injectionYears`, then migrates.
   const simulate = (g, {
     years = 2000,
     injectionYears = 30,
@@ -863,6 +919,7 @@ const HeroGeology = (() => {
     const out = {
       years,
       injectionYears,
+      yearLength: HERO_YEAR,
       nodes: n,
       faults: nF,
       lost: 0,
@@ -938,6 +995,8 @@ const HeroGeology = (() => {
     record(0);
     for (let y = 1; y <= years; y++) {
       const flow = new Float64Array(nF);
+      // Overpressure at each fault, held at the year's midpoint, as a height of CO2 column.
+      const over = sec.leak.map(f => overpressure(f.distance, y - 0.5, injectionYears) / BAR_PER_HEAD);
       let t = 0,
         sweep = 0;
       while (t < HERO_YEAR - 1e-12) {
@@ -951,12 +1010,14 @@ const HeroGeology = (() => {
           if (k > 0 && k < n) balanceFaultContact(l.S, k - 1, k, l.roofL[k] / HERO_UNIT, l.roofR[k] / HERO_UNIT, l.cap[k - 1], l.cap[k], l.hMax, R);
         }));
         L.forEach(settle);
-        // Leakage starts once the mobile column at the fault exceeds the fault rock's entry height.
-        g.faults.forEach((fault, i) => {
+        // A fault leaks while buoyancy plus overpressure beats its entry pressure. One step never takes more
+        // than the mobile CO2 at the fault, nor so much that the potential would drop below zero.
+        sec.leak.forEach((fault, i) => {
           const [k, up] = sec.faultCells[i];
           const h = mobileThickness(L[0].S[k], L[0].hMax[k], R);
-          if (h <= fault.thresholdHeight) return;
-          const want = Math.min((h - fault.thresholdHeight) * (1 - R), fault.leakRate * dt);
+          const psi = h + over[i] - fault.entryHead;
+          const want = Math.min(Math.min(h, psi) * (1 - R), faultFlux(fault.conductance, psi, fault.caprock) * dt);
+          if (!(want > 0)) return;
           const moved = want - deposit(L[1], up, want);
           L[0].S[k] -= moved;
           flow[i] += moved;
@@ -1005,28 +1066,25 @@ const HeroGeology = (() => {
     };
   };
 
-  // What the label beside a leaking fault says: which fault, its CO2 column against its entry height
-  // (both in metres of section depth), and the share of injected CO2 that has leaked. A steady leak
-  // drains the column down to the entry height, so the column is either above it or held at it.
-  const leakReadout = (g, sec, frame) => {
+  // What the label beside a leaking fault says: which fault, and the terms of its driving potential in bar
+  // (CO2 buoyancy, injection overpressure, entry pressure).
+  // A steady leak drains the column until buoyancy plus overpressure sits at the entry pressure: 'held'.
+  const leakReadout = (g, sec, frame, year, injectionYears = 30) => {
     let i = -1;
     frame.faultFlow.forEach((v, j) => {
       if (v > 0 && (i < 0 || v > frame.faultFlow[i])) i = j;
     });
     if (i < 0) return null;
-    const metres = units => Math.round(units * HERO_UNIT * HERO_DEPTH.metresPerUnit);
-    const column = metres(frame.h[sec.faultCells[i][0]]),
-      entry = metres(g.faults[i].thresholdHeight);
-    const {
-      leaked,
-      injected
-    } = frame.inventory;
+    const tenth = v => Math.round(v * 10) / 10;
+    const buoyancy = tenth(frame.h[sec.faultCells[i][0]] * BAR_PER_HEAD);
+    const over = tenth(overpressure(sec.leak[i].distance, year, injectionYears));
+    const entry = tenth(g.faults[i].entryPressure);
     return {
       fault: i,
-      state: column > entry ? 'above' : 'held',
-      column,
-      entry,
-      leakedPct: injected > 0 ? Math.round(100 * leaked / injected) : 0
+      state: buoyancy + over > entry + 1e-9 ? 'above' : 'held',
+      buoyancy,
+      overpressure: over,
+      entry
     };
   };
   const depthToY = metres => HERO_DEPTH.breakY + (metres - HERO_DEPTH.breakDepth) / HERO_DEPTH.metresPerUnit;
@@ -1054,6 +1112,10 @@ const HeroGeology = (() => {
     simulate,
     frameOf,
     leakReadout,
+    faultFlux,
+    overpressure,
+    percent,
+    BAR_PER_HEAD,
     HERO_DEPTH,
     depthToY,
     depthTicks,
@@ -1081,9 +1143,78 @@ const heroShouldTick = ({
   visible,
   hidden
 }) => playing && visible && !hidden;
-const heroPhase = (year, injectionYears) => year < injectionYears ? 'injecting' : 'migrating';
+const heroPhase = (year, injectionYears, ship = 'moored') => {
+  if (year >= injectionYears) return 'migrating';
+  if (ship === 'arriving' || ship === 'away') return 'carrier arriving';
+  return ship === 'connecting' ? 'connecting the hose' : 'injecting';
+};
+// The CO2 carrier: away -> arriving -> connecting -> moored (injection runs) -> disconnecting -> departing -> away.
+// Manoeuvres take real seconds; injection years only advance while the carrier is moored and connected.
+const HERO_SHIP_SECONDS = {
+  arriving: 3.2,
+  connecting: 0.8,
+  disconnecting: 1,
+  departing: 10
+};
+const HERO_SHIP_NEXT = {
+  arriving: 'connecting',
+  connecting: 'moored',
+  disconnecting: 'departing',
+  departing: 'away'
+};
+const heroShipStep = (ship, dt, wantMoored, seconds = HERO_SHIP_SECONDS) => {
+  let {
+    phase,
+    p
+  } = ship;
+  if (wantMoored) {
+    // A restart reconnects a hose that is still coming off, or brings the carrier back in.
+    if (phase === 'disconnecting') {
+      phase = 'connecting';
+      p = 1 - p;
+    } else if (phase === 'away' || phase === 'departing') {
+      phase = 'arriving';
+      p = 0;
+    }
+  } else if (phase === 'moored') {
+    phase = 'disconnecting';
+    p = 0;
+  } else if (phase === 'connecting') {
+    phase = 'disconnecting';
+    p = 1 - p;
+  } else if (phase === 'arriving') return {
+    phase: 'away',
+    p: 1
+  };
+  if (phase === 'moored' || phase === 'away') return {
+    phase,
+    p: 1
+  };
+  p += seconds[phase] > 0 ? dt / seconds[phase] : 1;
+  return p < 1 ? {
+    phase,
+    p
+  } : {
+    phase: HERO_SHIP_NEXT[phase],
+    p: HERO_SHIP_NEXT[phase] === 'moored' || HERO_SHIP_NEXT[phase] === 'away' ? 1 : 0
+  };
+};
+const heroCanAdvance = (year, injectionYears, ship) => year >= injectionYears || ship === 'moored';
+// Scrubbing is a jump in time, so the carrier jumps to where it belongs in that year.
+const heroShipFor = (year, injectionYears) => year < injectionYears ? {
+  phase: 'moored',
+  p: 1
+} : {
+  phase: 'away',
+  p: 1
+};
 // ---- end hero playback helpers
 
+// Percent of injected CO2 for display: a trace that rounds to nothing still reads as "<0.1".
+const heroPercentText = (value, total) => {
+  const share = HeroGeology.percent(value, total);
+  return share === 0 && value > 0 ? '<0.1' : String(share);
+};
 const HERO_YEARS = 2000;
 const HERO_UNIT = 15; // SVG units per solver unit of height
 // One random section per page load; the worker simulates it.
@@ -1166,8 +1297,6 @@ const HERO_FAULTS = heroGeology.faults.map(fault => {
     }
   };
 });
-// Leak dots advance this many pixels per unit of CO2 a fault has passed.
-const HERO_LEAK_DOTS = 12;
 
 // Labels sit at mid-depth of each unit: far right on wide screens, just right of the axis on phones.
 const HERO_LABELS = [['wide', 980], ['narrow', 160]].flatMap(([set, x]) => {
@@ -1246,6 +1375,18 @@ const SubsurfaceHero = ({
   const [visible, setVisible] = useState(true);
   const [hidden, setHidden] = useState(() => document.hidden);
   const [exaggeration, setExaggeration] = useState(2);
+  const [ship, setShip] = useState({
+    phase: 'away',
+    p: 1
+  });
+  const shipRef = useRef(ship);
+  // Under reduced motion the carrier's manoeuvres complete at once.
+  const shipSeconds = useMemo(() => siteReducedMotion() ? {
+    arriving: 0,
+    connecting: 0,
+    disconnecting: 0,
+    departing: 0
+  } : HERO_SHIP_SECONDS, []);
   yearRef.current = year;
 
   // The model runs once per page load, off the main thread when possible.
@@ -1257,7 +1398,7 @@ const SubsurfaceHero = ({
       const timer = setTimeout(() => setRun(HeroGeology.simulate(heroGeology, options)), 0);
       return () => clearTimeout(timer);
     }
-    const worker = new Worker('./hero-simulation-worker.js?v=8');
+    const worker = new Worker('./hero-simulation-worker.js?v=9');
     worker.onmessage = event => setRun(event.data);
     worker.onerror = () => setRun(HeroGeology.simulate(heroGeology, options));
     worker.postMessage({
@@ -1293,8 +1434,10 @@ const SubsurfaceHero = ({
     sizes.observe(element);
     return () => sizes.disconnect();
   }, []);
+
+  // One clock drives the carrier and the model: injection years wait until the carrier is moored and connected.
   useEffect(() => {
-    if (!run || !heroShouldTick({
+    if (!heroShouldTick({
       playing,
       visible,
       hidden
@@ -1304,20 +1447,41 @@ const SubsurfaceHero = ({
     const tick = now => {
       const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
       last = now;
-      const next = Math.min(HERO_YEARS, yearRef.current + dt * HeroGeology.yearsPerSecond(yearRef.current, run.injectionYears) * speed);
-      setYear(next);
-      if (next >= HERO_YEARS) {
-        setPlaying(false);
-        return;
+      const injectionEnd = run ? run.injectionYears : 30;
+      const nextShip = heroShipStep(shipRef.current, dt, yearRef.current < injectionEnd, shipSeconds);
+      if (nextShip.phase !== shipRef.current.phase || nextShip.p !== shipRef.current.p) {
+        shipRef.current = nextShip;
+        setShip(nextShip);
+      }
+      if (run && heroCanAdvance(yearRef.current, injectionEnd, nextShip.phase)) {
+        const next = Math.min(HERO_YEARS, yearRef.current + dt * HeroGeology.yearsPerSecond(yearRef.current, injectionEnd) * speed);
+        yearRef.current = next;
+        setYear(next);
+        if (next >= HERO_YEARS) {
+          setPlaying(false);
+          return;
+        }
       }
       frameId = requestAnimationFrame(tick);
     };
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [run, playing, speed, visible, hidden]);
+  }, [run, playing, speed, visible, hidden, shipSeconds]);
   const frame = useMemo(() => run ? heroFrameAt(run, year) : null, [run, year]);
+  // The strongest leak of this run sets the scale: its dots move about 40 px/s at full migration speed.
+  const leakScale = useMemo(() => {
+    const peak = run ? run.faultFlow.reduce((max, v) => Math.max(max, v), 0) : 0;
+    return {
+      peak,
+      dots: peak > 0 ? 40 / (60 * peak * run.yearLength) : 0
+    };
+  }, [run]);
   const injectionYears = run ? run.injectionYears : 30;
-  const injecting = !!run && playing && visible && year < injectionYears;
+  const injecting = !!run && playing && visible && year < injectionYears && ship.phase === 'moored';
+  const jumpShip = value => {
+    shipRef.current = heroShipFor(value, injectionYears);
+    setShip(shipRef.current);
+  };
   const controls = {
     toggle: () => {
       if (!playing && yearRef.current >= HERO_YEARS) setYear(0);
@@ -1326,6 +1490,7 @@ const SubsurfaceHero = ({
     scrub: value => {
       setYear(value);
       setPlaying(false);
+      jumpShip(value);
     },
     restart: () => {
       setYear(0);
@@ -1342,15 +1507,18 @@ const SubsurfaceHero = ({
   }, /*#__PURE__*/React.createElement(Sky, null), /*#__PURE__*/React.createElement(HeroSection, {
     sectionRef: sectionRef
   }), /*#__PURE__*/React.createElement(HeroPlume, {
-    frame: frame
+    frame: frame,
+    leakScale: leakScale
   }), /*#__PURE__*/React.createElement(HeroOverlay, {
     injecting: injecting
   }), /*#__PURE__*/React.createElement(SurfaceSite, {
     geology: heroGeology,
     injecting: injecting,
-    moored: year < injectionYears
+    ship: ship
   }), /*#__PURE__*/React.createElement(HeroLabels, null), /*#__PURE__*/React.createElement(HeroLeakReadout, {
-    frame: frame
+    frame: frame,
+    year: year,
+    injectionYears: injectionYears
   }), /*#__PURE__*/React.createElement(Identity, {
     onNavigate: onNavigate
   }), /*#__PURE__*/React.createElement(HeroPlayer, {
@@ -1359,6 +1527,7 @@ const SubsurfaceHero = ({
     speed: speed,
     frame: frame,
     injectionYears: injectionYears,
+    ship: ship.phase,
     exaggeration: exaggeration,
     controls: controls
   }));
@@ -1607,7 +1776,8 @@ const GeologyTexture = ({
    Plume — CO2 in the simulator's class colours, redrawn per frame
    ===================================================== */
 const HeroPlume = ({
-  frame
+  frame,
+  leakScale
 }) => {
   if (!frame) return null;
   const storage = heroPlumePaths(heroStorage, frame.h, frame.hMax);
@@ -1701,7 +1871,7 @@ const HeroPlume = ({
   })), HERO_FAULTS.map((fault, i) => {
     const flow = frame.faultFlow[i] || 0;
     if (flow <= 0) return null;
-    const strength = Math.min(1, Math.sqrt(flow / heroGeology.faults[i].leakRate));
+    const strength = Math.min(1, Math.sqrt(flow / leakScale.peak));
     const conduit = `M${fault.from.x} ${fault.from.y}L${fault.to.x} ${fault.to.y}`;
     const rise = `M${fault.to.x} ${fault.to.y}L${fault.rise.x} ${heroFixed(fault.rise.y)}`;
     return /*#__PURE__*/React.createElement("g", {
@@ -1724,7 +1894,7 @@ const HeroPlume = ({
       d: conduit + rise.replace('M', 'L'),
       className: "hero-leak-dots",
       strokeDasharray: "0 11",
-      strokeDashoffset: heroFixed(-frame.faultLeaked[i] * HERO_LEAK_DOTS),
+      strokeDashoffset: heroFixed(-frame.faultLeaked[i] * leakScale.dots),
       vectorEffect: "non-scaling-stroke"
     }));
   }));
@@ -1837,9 +2007,11 @@ const HeroLabels = React.memo(() => /*#__PURE__*/React.createElement("div", {
    Leak readout — beside a leaking fault, from the model's own numbers
    ===================================================== */
 const HeroLeakReadout = ({
-  frame
+  frame,
+  year,
+  injectionYears
 }) => {
-  const leak = frame && HeroGeology.leakReadout(heroGeology, heroSection, frame);
+  const leak = frame && HeroGeology.leakReadout(heroGeology, heroSection, frame, year, injectionYears);
   if (!leak) return null;
   const {
     to
@@ -1858,9 +2030,9 @@ const HeroLeakReadout = ({
       ...side,
       top: heroDepthTop(to.y)
     }
-  }, /*#__PURE__*/React.createElement("strong", null, "F", leak.fault + 1, " leaking"), /*#__PURE__*/React.createElement("span", null, leak.state === 'above' ? `CO₂ column ${leak.column} m, above the ${leak.entry} m entry height` : `CO₂ column held at the ${leak.entry} m entry height`), /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("strong", null, "F", leak.fault + 1, " leaking"), /*#__PURE__*/React.createElement("span", null, leak.state === 'above' ? `Buoyancy ${leak.buoyancy} bar${leak.overpressure > 0 ? ` + overpressure ${leak.overpressure} bar` : ''} > entry ${leak.entry} bar` : `${leak.overpressure > 0 ? 'Buoyancy + overpressure' : 'Buoyancy'} held at the ${leak.entry} bar entry pressure`), /*#__PURE__*/React.createElement("span", {
     className: "hero-leak-readout__share"
-  }, leak.leakedPct, "% of injected CO\u2082 has leaked"));
+  }, heroPercentText(frame.inventory.leaked, frame.inventory.injected), "% of injected CO\u2082 has leaked"));
 };
 
 /* =====================================================
@@ -1872,17 +2044,18 @@ const HeroPlayer = ({
   speed,
   frame,
   injectionYears,
+  ship,
   exaggeration,
   controls
 }) => {
-  const phase = heroPhase(year, injectionYears);
+  const phase = heroPhase(year, injectionYears, ship);
   const inventory = frame ? frame.inventory : {
     mobile: 0,
     residual: 0,
     leaked: 0,
     injected: 0
   };
-  const share = value => inventory.injected > 0 ? Math.round(100 * value / inventory.injected) : 0;
+  const share = value => heroPercentText(value, inventory.injected);
   const classes = [['mobile', 'Mobile', inventory.mobile], ['residual', 'Residual', inventory.residual], ['leaked', 'Leaked', inventory.leaked]];
   const shownYear = Math.round(year);
   return /*#__PURE__*/React.createElement("div", {
@@ -2207,13 +2380,13 @@ const Sky = () => {
     x2: "0",
     y2: "1"
   }, /*#__PURE__*/React.createElement("stop", {
-    stopColor: "#1a2c45"
+    stopColor: "#1d3150"
   }), /*#__PURE__*/React.createElement("stop", {
-    offset: ".35",
-    stopColor: "#0f1d31"
+    offset: ".3",
+    stopColor: "#11203a"
   }), /*#__PURE__*/React.createElement("stop", {
     offset: "1",
-    stopColor: "#060d18"
+    stopColor: "#050c18"
   })), /*#__PURE__*/React.createElement("linearGradient", {
     id: "sea-haze",
     x1: "0",
@@ -2242,37 +2415,70 @@ const Sky = () => {
     stroke: "#3a5577",
     strokeOpacity: ".7",
     vectorEffect: "non-scaling-stroke"
-  }), Array.from({
-    length: 90
-  }, (_, i) => {
-    const t = i * 0.618034 % 1,
-      x = (i * 137.51 + 29) % 1440;
-    return /*#__PURE__*/React.createElement("path", {
-      key: i,
-      d: `M${heroFixed(x)} ${heroFixed(94 + t * t * 84)}h${heroFixed(10 + t * 70)}`,
-      stroke: "#4a6688",
-      strokeOpacity: heroFixed(.07 + t * .17),
-      vectorEffect: "non-scaling-stroke"
-    });
-  })), /*#__PURE__*/React.createElement("svg", {
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "hero-sea"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "hero-sea__drift"
+  }, /*#__PURE__*/React.createElement("svg", {
+    viewBox: `0 0 ${HERO_SEA_TILE * 10} 90`,
+    preserveAspectRatio: "xMinYMax meet"
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("g", {
+    id: "sea-tile",
+    fill: "none",
+    strokeLinecap: "round"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: HERO_SEA_RIPPLES.troughs,
+    stroke: "#02060d",
+    strokeWidth: "1.1",
+    strokeOpacity: ".35"
+  }), HERO_SEA_RIPPLES.crests.map((d, band) => /*#__PURE__*/React.createElement("path", {
+    key: band,
+    d: d,
+    stroke: "#86a6cc",
+    strokeWidth: [0.45, 0.6, 0.85, 1.2][band],
+    strokeOpacity: [0.13, 0.17, 0.21, 0.25][band]
+  })))), Array.from({
+    length: 10
+  }, (_, i) => /*#__PURE__*/React.createElement("use", {
+    key: i,
+    href: "#sea-tile",
+    x: i * HERO_SEA_TILE
+  }))))), /*#__PURE__*/React.createElement("svg", {
     className: "hero-glitter",
     viewBox: "0 0 120 90",
     preserveAspectRatio: "none"
-  }, Array.from({
-    length: 26
-  }, (_, i) => {
-    const t = i / 25,
-      w = 6 + t * 50 * (.6 + i * .37 % .4);
-    return /*#__PURE__*/React.createElement("rect", {
-      key: i,
-      x: heroFixed(60 - w / 2 + Math.sin(i * 2.3) * (4 + t * 10)),
-      y: heroFixed(2 + t * 86),
-      width: heroFixed(w),
-      height: "1.2",
-      fill: "#d6e1ef",
-      opacity: heroFixed(.6 - t * .4)
-    });
-  })), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+    id: "glint-glow",
+    x1: "0",
+    y1: "0",
+    x2: "1",
+    y2: "0"
+  }, /*#__PURE__*/React.createElement("stop", {
+    stopColor: "#c9d8ec",
+    stopOpacity: "0"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: ".5",
+    stopColor: "#c9d8ec",
+    stopOpacity: ".12"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "1",
+    stopColor: "#c9d8ec",
+    stopOpacity: "0"
+  }))), /*#__PURE__*/React.createElement("path", {
+    d: "M56 0H64L104 90H16Z",
+    fill: "url(#glint-glow)"
+  }), HERO_SEA_GLINTS.map((set, i) => /*#__PURE__*/React.createElement("g", {
+    key: i,
+    className: "hero-glitter__set",
+    fill: "none",
+    stroke: "#e8f0fb",
+    strokeLinecap: "round"
+  }, set.map((glint, k) => /*#__PURE__*/React.createElement("path", {
+    key: k,
+    d: glint.d,
+    strokeWidth: glint.w,
+    strokeOpacity: glint.o
+  }))))), /*#__PURE__*/React.createElement("div", {
     className: "hero-horizon"
   }, /*#__PURE__*/React.createElement("svg", {
     className: "hero-horizon__item",
@@ -2350,15 +2556,282 @@ const Sky = () => {
   })))), []);
 };
 
+// Sea surface, built once. Rows of ripple crests crowd together and shrink towards the horizon
+// (y = 0) and open out towards the viewer (y = 90); a tile repeats seamlessly across the strip.
+const heroSeaRandom = seed => () => (seed = seed * 1664525 + 1013904223 >>> 0) / 4294967296;
+const HERO_SEA_TILE = 360;
+const HERO_SEA_RIPPLES = (() => {
+  const random = heroSeaRandom(42);
+  const bands = [[], [], [], []],
+    troughs = [];
+  for (let j = 0; j < 30; j++) {
+    const t = (j + 0.5) / 30,
+      y = 1 + 88 * t ** 1.8,
+      length = 2 + 24 * t * t,
+      rise = 0.25 + 1.6 * t;
+    for (let x = random() * length * 2; x < HERO_SEA_TILE;) {
+      const w = length * (0.6 + 0.8 * random());
+      if (x + w < HERO_SEA_TILE) {
+        const crest = y + (random() - 0.5) * rise;
+        bands[Math.min(3, Math.floor(t * 4))].push(`M${heroFixed(x)} ${heroFixed(crest)}q${heroFixed(w / 2)} ${heroFixed(-rise)} ${heroFixed(w)} 0`);
+        // Nearer waves show the shaded trough below each crest.
+        if (t > 0.4) troughs.push(`M${heroFixed(x + w * 0.15)} ${heroFixed(crest + rise)}q${heroFixed(w * 0.35)} ${heroFixed(rise * 0.5)} ${heroFixed(w * 0.7)} 0`);
+      }
+      x += w * (1.6 + 2.2 * random());
+    }
+  }
+  return {
+    crests: bands.map(band => band.join('')),
+    troughs: troughs.join('')
+  };
+})();
+// Glints in the moon's path: brightest on its centre line, the path widening towards the viewer.
+const HERO_SEA_GLINTS = (() => {
+  const random = heroSeaRandom(7);
+  const sets = [[], [], []];
+  for (let j = 0; j < 26; j++) {
+    const t = (j + 0.5) / 26,
+      y = 1 + 88 * t ** 1.8,
+      half = 5 + 50 * t;
+    for (let k = 0, n = 2 + Math.round(4 * t); k < n; k++) {
+      const offset = (random() * 2 - 1) * half * (0.35 + 0.65 * random());
+      const w = (1.5 + 9 * t) * (0.5 + random());
+      sets[(j + k) % 3].push({
+        d: `M${heroFixed(60 + offset - w / 2)} ${heroFixed(y)}q${heroFixed(w / 2)} ${heroFixed(-(0.3 + 1.2 * t))} ${heroFixed(w)} 0`,
+        w: heroFixed(0.5 + 0.8 * t),
+        o: heroFixed(0.3 + 0.65 * (1 - Math.abs(offset) / half))
+      });
+    }
+  }
+  return sets;
+})();
+
 // Decorative equipment stays anchored to the same surface and well as the live model:
 // an offshore injection platform over the well, and a CO₂ carrier moored alongside while injecting.
+// Where the carrier is in its manoeuvre. It runs in from the right, slowing as it comes alongside,
+// and leaves bow-first to the left, accelerating away behind the platform into the distance.
+const heroShipPose = ({
+  phase,
+  p
+}) => {
+  if (phase === 'away') return null;
+  if (phase === 'arriving') {
+    const left = (1 - p) ** 3;
+    return {
+      x: 200 * left,
+      y: -24 * left,
+      s: 1 - 0.3 * left,
+      opacity: Math.min(1, p / 0.12),
+      wake: (1 - p) ** 2,
+      hose: 0,
+      lights: 0
+    };
+  }
+  if (phase === 'departing') {
+    const gone = p * p;
+    return {
+      x: -440 * gone,
+      y: -46 * gone,
+      s: 1 - 0.6 * gone,
+      opacity: p < 0.8 ? 1 : (1 - p) / 0.2,
+      wake: Math.min(1, 2 * p),
+      hose: 0,
+      lights: 0
+    };
+  }
+  const hose = phase === 'connecting' ? p : phase === 'disconnecting' ? 1 - p : 1;
+  return {
+    x: 0,
+    y: 0,
+    s: 1,
+    opacity: 1,
+    wake: 0,
+    hose,
+    lights: 1
+  };
+};
+const HeroShip = ({
+  ship,
+  injecting
+}) => {
+  const pose = heroShipPose(ship);
+  if (!pose) return null;
+  const engine = 0.15 + 0.85 * pose.wake;
+  return /*#__PURE__*/React.createElement("g", {
+    className: "hero-ship",
+    style: {
+      transform: `translate(${heroFixed(pose.x)}px, ${heroFixed(pose.y)}px) scale(${pose.s.toFixed(3)})`,
+      opacity: pose.opacity
+    }
+  }, /*#__PURE__*/React.createElement("g", {
+    opacity: heroFixed(pose.wake)
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M394 151q30 1 70 -1M392 153q50 2 120 0M396 155q30 3 80 3",
+    stroke: "#cfdbe8",
+    strokeWidth: "1",
+    strokeDasharray: "18 6 30 8",
+    opacity: ".75"
+  }), /*#__PURE__*/React.createElement("ellipse", {
+    cx: "400",
+    cy: "153",
+    rx: "12",
+    ry: "1.6",
+    fill: "#dfe7f0",
+    opacity: ".55"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M157 151q-12 -4 -26 0M154 153q-18 -2 -36 4",
+    stroke: "#e7eef7",
+    strokeWidth: "1",
+    opacity: ".8"
+  })), /*#__PURE__*/React.createElement("g", {
+    className: "hero-ship__hull"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M150 154H392",
+    stroke: "#08111d",
+    strokeWidth: "3",
+    opacity: ".6"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M146 127L166 134H394V147Q394 152 388 152H174Q160 152 155 143Z",
+    fill: "url(#ship-hull)",
+    stroke: "#6f87a6",
+    strokeOpacity: ".35",
+    strokeWidth: ".6"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M158 148H392",
+    stroke: "#5a2f35",
+    strokeWidth: "1.6",
+    opacity: ".7"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M146 127L166 134H394",
+    stroke: "#9fb3c8",
+    strokeOpacity: ".45",
+    strokeWidth: ".7"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M150 128H172V134H166Z",
+    fill: "#22344c"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M162 128V108M158 112h8",
+    stroke: "#7d93ad",
+    strokeWidth: "1"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "162",
+    cy: "107",
+    r: "1.3",
+    fill: "#f4f7fb"
+  }), [205, 262, 319].map(x => /*#__PURE__*/React.createElement("rect", {
+    key: x,
+    x: x - 26,
+    y: "120",
+    width: "52",
+    height: "15",
+    rx: "7.5",
+    fill: "url(#ship-tank)",
+    stroke: "#9fb3c8",
+    strokeOpacity: ".3",
+    strokeWidth: ".5"
+  })), /*#__PURE__*/React.createElement("path", {
+    d: "M233 134V113h6",
+    stroke: "#7d93ad",
+    strokeWidth: "1"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M350 134V98H390V134Z",
+    fill: "#22344c",
+    stroke: "#7d93ad",
+    strokeOpacity: ".35",
+    strokeWidth: ".6"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M346 98H394V93H346Z",
+    fill: "#2c4060"
+  }), [104, 111, 118, 125].map((y, i) => /*#__PURE__*/React.createElement("path", {
+    key: y,
+    d: `M354 ${y}h32`,
+    stroke: "#e9c98f",
+    strokeWidth: "2",
+    strokeDasharray: "3 2",
+    opacity: i ? .4 : .9
+  })), /*#__PURE__*/React.createElement("path", {
+    d: "M374 93V81h9v12Z",
+    fill: "#1b2a3d"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M374 85h9",
+    stroke: "#5a2f35",
+    strokeWidth: "1.4"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M362 93V77M358 81h8",
+    stroke: "#7d93ad",
+    strokeWidth: "1"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "362",
+    cy: "76",
+    r: "1.3",
+    fill: "#f4f7fb"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "347",
+    cy: "96",
+    r: "1.2",
+    fill: "#ff5a4f"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "394",
+    cy: "137",
+    r: "1",
+    fill: "#f4f7fb",
+    opacity: ".8"
+  }), /*#__PURE__*/React.createElement("g", {
+    opacity: pose.lights
+  }, /*#__PURE__*/React.createElement("ellipse", {
+    cx: "236",
+    cy: "126",
+    rx: "26",
+    ry: "9",
+    fill: "url(#ship-worklight)"
+  }), /*#__PURE__*/React.createElement("ellipse", {
+    cx: "368",
+    cy: "128",
+    rx: "22",
+    ry: "8",
+    fill: "url(#ship-worklight)"
+  })), [[386, 74, 4], [396, 68, 5.5], [409, 63, 7]].map(([x, y, r]) => /*#__PURE__*/React.createElement("circle", {
+    key: x,
+    cx: x,
+    cy: y,
+    r: r,
+    fill: "#8b9bb0",
+    opacity: heroFixed(engine * .22)
+  })), /*#__PURE__*/React.createElement("path", {
+    d: "M172 154.5H388M180 156.8H380M194 159H366",
+    stroke: "#03070e",
+    strokeWidth: "1.6",
+    strokeDasharray: "22 3 40 4 16 3",
+    opacity: ".55"
+  }), [356, 366, 376].map(x => /*#__PURE__*/React.createElement("rect", {
+    key: x,
+    x: x,
+    y: "153",
+    width: "1.4",
+    height: "7",
+    fill: "url(#ship-light-reflection)"
+  }))), pose.hose > 0 && /*#__PURE__*/React.createElement("use", {
+    href: "#site-feed-route",
+    stroke: "#0e1a28",
+    strokeWidth: "3.4",
+    strokeDasharray: "1 1",
+    strokeDashoffset: (1 - pose.hose).toFixed(3)
+  }), injecting && /*#__PURE__*/React.createElement("use", {
+    className: "hero-feed-flow",
+    href: "#site-feed-route",
+    strokeWidth: "1",
+    style: {
+      stroke: 'var(--sim-glow-free)'
+    }
+  }));
+};
 const HERO_RIG_WINDOWS = [[2, 76, 9], [2, 84, 9], [2, 92, 9], [66, 64, 7], [66, 71, 7], [66, 78, 7], [66, 85, 7], [66, 92, 7]].flatMap(([x0, y, n]) => Array.from({
   length: n
 }, (_, i) => [x0 + i * 6, y, (i * 7 + y * 3) % 5])).filter(([,, lit]) => lit < 3);
 const SurfaceSite = ({
   geology,
   injecting,
-  moored
+  ship
 }) => /*#__PURE__*/React.createElement("div", {
   className: "hero-surface-site",
   "aria-hidden": "true",
@@ -2433,99 +2906,23 @@ const SurfaceSite = ({
   offset: "1",
   stopColor: "#e9c98f",
   stopOpacity: "0"
+})), /*#__PURE__*/React.createElement("radialGradient", {
+  id: "ship-worklight"
+}, /*#__PURE__*/React.createElement("stop", {
+  stopColor: "#f2deb0",
+  stopOpacity: ".28"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: "1",
+  stopColor: "#f2deb0",
+  stopOpacity: "0"
 })), /*#__PURE__*/React.createElement("path", {
   id: "site-feed-route",
-  d: "M238 114Q176 150 112 101"
-})), /*#__PURE__*/React.createElement("g", {
-  className: `hero-ship${moored ? '' : ' is-away'}`
-}, /*#__PURE__*/React.createElement("path", {
-  d: "M150 154H392",
-  stroke: "#08111d",
-  strokeWidth: "3",
-  opacity: ".6"
+  pathLength: "1",
+  d: "M112 101Q176 150 236 114"
+})), /*#__PURE__*/React.createElement(HeroShip, {
+  ship: ship,
+  injecting: injecting
 }), /*#__PURE__*/React.createElement("path", {
-  d: "M150 152Q146 152 146 146L144 134H382Q392 134 398 126L394 142Q388 152 372 152Z",
-  fill: "url(#ship-hull)",
-  stroke: "#6f87a6",
-  strokeOpacity: ".35",
-  strokeWidth: ".6"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M147 148H391",
-  stroke: "#5a2f35",
-  strokeWidth: "1.6",
-  opacity: ".7"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M144 134H382Q392 134 398 126",
-  stroke: "#9fb3c8",
-  strokeOpacity: ".45",
-  strokeWidth: ".7"
-}), [226, 284, 342].map(x => /*#__PURE__*/React.createElement("rect", {
-  key: x,
-  x: x - 26,
-  y: "120",
-  width: "52",
-  height: "15",
-  rx: "7.5",
-  fill: "url(#ship-tank)",
-  stroke: "#9fb3c8",
-  strokeOpacity: ".3",
-  strokeWidth: ".5"
-})), /*#__PURE__*/React.createElement("path", {
-  d: "M160 134V98H194V134Z",
-  fill: "#22344c",
-  stroke: "#7d93ad",
-  strokeOpacity: ".35",
-  strokeWidth: ".6"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M155 98H199V93H155Z",
-  fill: "#2c4060"
-}), [104, 111, 118, 125].map((y, i) => /*#__PURE__*/React.createElement("path", {
-  key: y,
-  d: `M164 ${y}h26`,
-  stroke: "#e9c98f",
-  strokeWidth: "2",
-  strokeDasharray: "3 2",
-  opacity: i ? .4 : .9
-})), /*#__PURE__*/React.createElement("path", {
-  d: "M168 93V84h8v9",
-  fill: "#1b2a3d"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M184 93V78M180 82h8",
-  stroke: "#7d93ad",
-  strokeWidth: "1"
-}), /*#__PURE__*/React.createElement("circle", {
-  cx: "184",
-  cy: "77",
-  r: "1.4",
-  fill: "#f4f7fb"
-}), /*#__PURE__*/React.createElement("circle", {
-  cx: "395",
-  cy: "127",
-  r: "1.2",
-  fill: "#f4f7fb"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M238 120V112h5",
-  stroke: "#7d93ad",
-  strokeWidth: "1"
-}), [166, 176, 186].map(x => /*#__PURE__*/React.createElement("rect", {
-  key: x,
-  x: x,
-  y: "153",
-  width: "1.4",
-  height: "7",
-  fill: "url(#ship-light-reflection)"
-})), moored && /*#__PURE__*/React.createElement("use", {
-  href: "#site-feed-route",
-  stroke: "#0e1a28",
-  strokeWidth: "3.4"
-}), injecting && /*#__PURE__*/React.createElement("use", {
-  className: "hero-feed-flow",
-  href: "#site-feed-route",
-  strokeWidth: "1",
-  style: {
-    stroke: 'var(--sim-glow-free)'
-  }
-})), /*#__PURE__*/React.createElement("path", {
   d: "M10 160L20 104M86 160L76 104",
   stroke: "url(#rig-steel)",
   strokeWidth: "5"
