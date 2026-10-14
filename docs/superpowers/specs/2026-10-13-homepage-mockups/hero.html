@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hero mockup</title>
+<!-- Static mockup for the 2026-10-13 homepage spec. Variant via #a (brine = rock, recommended) or #b (blue-tinted brine). -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg: #120e0b; --surface: #1a1511; --rule: #352b23; --ink: #f4ede3; --muted: #bcae9c; --faint: #8d7f6e;
+    --accent: #e8a15a; --accent-ink: #1e1206; --accent-soft: rgba(232,161,90,.14);
+    --free: #00a392; --glow-free: #38e8d1; --residual: #c1628a; --glow-residual: #ff99c2; --leaked: #d64a33; --glow-leaked: #ff6247;
+    --over: #17120e; --cap: #3a322b; --sand: #4a3526; --base: #241811;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 'Open Sans', system-ui, sans-serif; }
+  .hero { position: relative; height: 100vh; min-height: 720px; overflow: hidden; --surf: max(42vh, 430px); }
+  .sky { position: absolute; inset: 0 0 auto; height: var(--surf); background: linear-gradient(180deg, #070d1a 0%, #111e32 58%, #253449 100%); overflow: hidden; }
+  .sky::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(8,14,28,.9), rgba(8,14,28,.55) 32%, transparent 62%); }
+  .moon { position: absolute; left: 82%; top: 26%; width: 34px; height: 34px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #edf0e5, #c8d1cf 70%, #97a8b6); box-shadow: 0 0 60px 20px rgba(187,207,224,.08); }
+  .star { position: absolute; width: 1.4px; height: 1.4px; border-radius: 50%; background: #c7dbed; }
+  .land { position: absolute; bottom: 0; width: 100%; height: clamp(90px, 15vh, 170px); }
+  header { position: absolute; z-index: 20; inset: 0 0 auto; height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 36px; }
+  .logo { font: 700 22px 'Montserrat'; color: #8d939a; letter-spacing: -.04em; }
+  nav { display: flex; gap: 4px; }
+  nav a { color: var(--ink); text-decoration: none; font: 600 14px 'Open Sans'; padding: 7px 13px; border-radius: 10px; }
+  nav a.on { background: var(--accent-soft); color: var(--accent); }
+  .id { position: absolute; z-index: 10; left: 6%; top: 104px; max-width: 600px; }
+  .role { color: var(--muted); font-size: 15px; margin: 0 0 6px; }
+  h1 { margin: 0; font: 700 clamp(40px, 6vw, 64px)/1.02 'Montserrat'; letter-spacing: -.02em; background: linear-gradient(165deg, #f6f9fc 12%, #d5e4ef 44%, #b0c7da 72%, #d9e7f1); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sum { font-size: 17px; line-height: 1.6; max-width: 46ch; color: rgba(244,237,227,.88); margin: 16px 0 0; }
+  .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 22px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 10px; font: 600 14px 'Open Sans'; text-decoration: none; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .btn.quiet { border: 1px solid rgba(244,237,227,.35); color: var(--ink); }
+  .profiles { display: flex; gap: 2px; margin-left: 6px; }
+  .profiles span { width: 40px; height: 40px; display: grid; place-items: center; color: var(--muted); }
+  .sub { position: absolute; left: 0; right: 0; top: var(--surf); height: calc(max(100vh, 720px) - var(--surf)); }
+  .sub svg { width: 100%; height: 100%; display: block; }
+  .axis { position: absolute; left: 14px; top: var(--surf); bottom: 0; width: 96px; font: 500 12px 'JetBrains Mono'; color: var(--muted); z-index: 6; }
+  .axis .t { position: absolute; left: 0; display: flex; align-items: center; gap: 6px; transform: translateY(-50%); }
+  .axis .t i { width: 10px; height: 1px; background: var(--muted); display: block; }
+  .axis .title { position: absolute; top: 8px; left: 0; font-family: 'Open Sans'; font-size: 12px; color: var(--faint); }
+  .lab { position: absolute; right: 18px; z-index: 6; font: 600 12px 'Open Sans'; color: rgba(244,237,227,.86); text-shadow: 0 1px 3px #000, 0 0 8px #000; transform: translateY(-50%); }
+  .player { position: absolute; z-index: 12; left: 118px; bottom: 28px; width: 340px; padding: 14px 16px 12px; border-radius: 14px; background: rgba(26,21,17,.92); border: 1px solid var(--rule); }
+  .p1 { display: flex; justify-content: space-between; font-size: 13.5px; font-weight: 600; }
+  .p1 em { font-style: normal; color: var(--muted); font-weight: 400; }
+  .p1 b { font: 500 13px 'JetBrains Mono'; }
+  .inv { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 10px 0 6px; background: var(--rule); }
+  .legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .ctrl { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .play { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; }
+  .track { flex: 1; height: 4px; border-radius: 2px; background: var(--rule); position: relative; }
+  .track::before { content: ''; position: absolute; left: 0; width: 1.5%; top: -3px; bottom: -3px; background: rgba(56,232,209,.35); border-radius: 2px; }
+  .track::after { content: ''; position: absolute; left: 0; width: 21%; height: 100%; background: var(--ink); border-radius: 2px; }
+  .knob { position: absolute; left: 21%; top: 50%; width: 12px; height: 12px; margin: -6px; border-radius: 50%; background: var(--ink); }
+  .mini { font: 500 12px 'JetBrains Mono'; color: var(--muted); border: 1px solid var(--rule); border-radius: 8px; padding: 2px 7px; }
+  .note { font-size: 12px; color: var(--faint); margin-top: 8px; }
+  @media (max-width: 600px) {
+    header { padding: 0 16px; } nav { display: none; }
+    .id { left: 20px; right: 20px; top: 84px; }
+    h1 { font-size: 38px; } .sum { font-size: 15.5px; }
+    .profiles { margin-left: 0; width: 100%; }
+    .axis { width: 70px; } .lab.over { display: none; }
+    .player { left: 12px; right: 12px; width: auto; bottom: 14px; padding: 10px 12px; }
+    .player .legend, .player .note, .player .ctrl .mini, .player .track { display: none; }
+    .player .ctrl { margin: 0; position: absolute; left: 12px; top: 10px; } .player .p1 { padding-left: 44px; } .player .inv { margin: 8px 0 2px 44px; }
+  }
+</style>
+</head>
+<body>
+<section class="hero">
+  <div class="sky" id="sky">
+    <div class="moon"></div>
+    <svg class="land" viewBox="0 0 1440 180" preserveAspectRatio="none">
+      <path d="M0 138L80 123L155 130L228 112L292 119L357 90L403 96L457 70L489 74L540 41L568 53L600 48L647 77L693 61L738 80L804 50L846 27L880 44L912 40L950 73L1014 91L1060 81L1131 97L1201 61L1240 69L1290 46L1336 73L1390 64L1440 88V180H0Z" fill="#22303f"/>
+      <path d="M0 155Q120 120 220 147T402 118L476 106L528 112L585 91L638 109L694 102L761 126L837 108L910 125L991 110L1057 126L1140 112L1210 126L1290 98L1351 104L1440 128V180H0Z" fill="#121d27"/>
+      <path d="M0 171Q142 164 264 173T490 165T730 171T958 167T1220 170T1440 164V180H0Z" fill="#0a1218"/>
+      <g fill="#1e2a31" stroke="#55665f" stroke-width=".8"><path d="M960 170V128L990 112L1020 128V170Z"/><rect x="1030" y="150" width="46" height="20" rx="4"/></g>
+      <path d="M1008 180V138" stroke="#9aa6a0" stroke-width="3"/>
+    </svg>
+  </div>
+  <header>
+    <span class="logo">ST</span>
+    <nav><a class="on">Research</a><a>Projects</a><a>Publications</a><a>Simulator</a><a>CV</a><a>Contact</a></nav>
+  </header>
+  <div class="id">
+    <p class="role">PhD candidate, Heriot-Watt University</p>
+    <h1>Sa’eed Telvari</h1>
+    <p class="sum">I build vertical-equilibrium models of CO₂ storage in depleted gas fields: reduced-order simulators that run up to 100× faster than full 3D compositional models.</p>
+    <div class="acts">
+      <a class="btn primary">▶&nbsp; Open the CO₂ simulator</a>
+      <a class="btn quiet">Read my CV</a>
+      <span class="profiles">
+        <span title="Google Scholar"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 1 9l11 6 9-4.9V17h2V9z"/><path d="M5 13.2v3.3L12 20l7-3.5v-3.3L12 17z"/></svg></span>
+        <span title="ORCID"><svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><text x="12" y="16" text-anchor="middle" font-size="10" font-weight="700" fill="currentColor" font-family="Open Sans">iD</text></svg></span>
+        <span title="GitHub"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5a3.9 3.9 0 0 1 1-2.7 3.6 3.6 0 0 1 .1-2.7s.8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7a3.9 3.9 0 0 1 1 2.7c0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></svg></span>
+        <span title="LinkedIn"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M4 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM2.5 8.5h3V21h-3zM9 8.5h2.9v1.7c.4-.8 1.4-1.9 3.3-1.9 3.5 0 4.1 2.3 4.1 5.3V21h-3v-6.6c0-1.6 0-3.6-2.2-3.6s-2.5 1.7-2.5 3.5V21H9z"/></svg></span>
+        <span title="Email"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg></span>
+      </span>
+    </div>
+  </div>
+  <div class="sub"><svg id="sec" viewBox="0 0 1000 580" preserveAspectRatio="none"></svg></div>
+  <div class="axis" id="axis"><span class="title">Depth (m)</span></div>
+  <div id="labels"></div>
+  <div class="player">
+    <div class="ctrl"><span class="play"><svg width="12" height="12" viewBox="0 0 12 12" fill="#1e1206"><rect x="2" y="1" width="3" height="10"/><rect x="7" y="1" width="3" height="10"/></svg></span><span class="track"><span class="knob"></span></span><span class="mini">↺</span><span class="mini">1×</span></div>
+    <div class="p1" style="margin-top:10px"><span>Live VE model, year 412 <em>migrating</em></span></div>
+    <div class="inv"><span style="width:58%;background:linear-gradient(90deg,var(--glow-free),var(--free))"></span><span style="width:34%;background:repeating-linear-gradient(135deg,var(--glow-residual) 0 2px,var(--residual) 2px 5px)"></span><span style="width:8%;background:var(--glow-leaked)"></span></div>
+    <div class="legend"><span><i style="background:var(--glow-free)"></i>Mobile 58%</span><span><i style="background:var(--residual)"></i>Residual 34%</span><span><i style="background:var(--glow-leaked)"></i>Leaked 8%</span></div>
+    <div class="note">Schematic saline aquifer, 10 km wide, vertical exaggeration ×2.</div>
+  </div>
+</section>
+<script>
+  const variant = (location.hash || '#a').slice(1);
+  const sky = document.getElementById('sky');
+  for (let i = 0; i < 90; i++) { const s = document.createElement('span'); s.className = 'star'; s.style.left = ((i * 61.803 + 3) % 100) + '%'; s.style.top = (8 + (i * i * 17.31) % 60) + '%'; s.style.opacity = .3 + (i % 5) * .12; sky.appendChild(s); }
+  const faults = [{ x: 250, t: 14, s: -.12 }, { x: 480, t: -14, s: .16 }];
+  const fx = (f, y) => f.x + f.s * y;
+  const roofBase = x => 132 + .045 * x - 20 * Math.sin((x + 40) * Math.PI / 230) - 6 * Math.sin(x * Math.PI / 95);
+  const thr = (x, y, k) => faults.reduce((o, f, i) => o + (x > fx(f, y) ? f.t * k : 0), 0);
+  const roof = (x, k = 1) => { const y = roofBase(x) * k; return y + thr(x, y, k === 1 ? 1 : .6); };
+  const floor = x => { const y = roof(x) + 175 + 25 * Math.sin(x / 140); return y; };
+  const up0 = x => roof(x, .42), up1 = x => up0(x) + 24 + 4 * Math.sin(x / 90);
+  const N = 400, X = i => i * 1000 / N;
+  const band = (top, bot) => { let d = 'M' + X(0) + ' ' + top(X(0)); for (let i = 1; i <= N; i++) d += 'L' + X(i) + ' ' + top(X(i)); for (let i = N; i >= 0; i--) d += 'L' + X(i) + ' ' + bot(X(i)); return d + 'Z'; };
+  const brine = variant === 'b';
+  const mob = x => Math.max(0, 70 * Math.exp(-(((x - 640) / 120) ** 2)) + 26 * Math.exp(-(((x - 420) / 70) ** 2)) - 2);
+  const hmax = x => Math.max(mob(x), 92 * Math.exp(-(((x - 650) / 150) ** 2)) + 30 * Math.exp(-(((x - 430) / 90) ** 2)) - 3);
+  const leakUp = x => Math.max(0, 14 * Math.exp(-(((x - 505) / 40) ** 2)) - 1);
+  const svg = document.getElementById('sec');
+  const sec = `
+    <defs>
+      <pattern id="shale" width="18" height="6" patternUnits="userSpaceOnUse"><rect width="18" height="6" fill="var(--cap)"/><path d="M1 3h9M12 1h5" stroke="#8d7f6e" stroke-opacity=".28" stroke-width=".8"/></pattern>
+      <pattern id="sand" width="9" height="9" patternUnits="userSpaceOnUse"><rect width="9" height="9" fill="${brine ? '#283842' : 'var(--sand)'}"/><circle cx="2" cy="2" r=".9" fill="#8d7f6e" fill-opacity=".45"/><circle cx="6.5" cy="6" r=".7" fill="#8d7f6e" fill-opacity=".35"/></pattern>
+      <pattern id="res" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--residual)" fill-opacity=".3"/><rect width="2" height="6" fill="var(--glow-residual)" fill-opacity=".85"/></pattern>
+      <linearGradient id="plume" x1="0" x2="0" y1="0" y2="1"><stop stop-color="var(--glow-free)"/><stop offset="1" stop-color="var(--free)"/></linearGradient>
+      <linearGradient id="leak" x1="0" x2="0" y1="0" y2="1"><stop stop-color="var(--glow-leaked)"/><stop offset="1" stop-color="var(--leaked)"/></linearGradient>
+    </defs>
+    <rect width="1000" height="580" fill="var(--over)"/>
+    ${[.18, .3, .55, .7].map(k => `<path d="${band(x => roof(x, k), x => roof(x, k) + 5)}" fill="#000" opacity=".25"/>`).join('')}
+    <path d="${band(up1, x => roof(x))}" fill="url(#shale)"/>
+    <path d="${band(up0, up1)}" fill="url(#sand)"/>
+    <path d="${band(x => roof(x), floor)}" fill="url(#sand)"/>
+    <path d="${band(floor, () => 580)}" fill="var(--base)"/>
+    <path d="${band(x => roof(x) + mob(x), x => roof(x) + hmax(x))}" fill="url(#res)"/>
+    <path d="${band(x => roof(x), x => roof(x) + mob(x))}" fill="url(#plume)"/>
+    <path d="${band(up0, x => up0(x) + leakUp(x))}" fill="url(#leak)"/>
+    ${faults.map((f, i) => `<line x1="${fx(f, 0)}" y1="0" x2="${fx(f, 480)}" y2="480" stroke="#f4ede3" stroke-opacity=".35" stroke-width="1.2"/><text x="${fx(f, 0) + 6}" y="16" fill="#f4ede3" fill-opacity=".7" font-size="12" font-family="Open Sans" font-weight="700">F${i + 1}</text>`).join('')}
+    <line x1="${fx(faults[1], roof(fx(faults[1], 150)))}" y1="${roof(fx(faults[1], 150))}" x2="${fx(faults[1], up1(500))}" y2="${up1(500)}" stroke="var(--glow-leaked)" stroke-width="2.4"/>
+    <line x1="700" y1="0" x2="700" y2="${floor(700) - 18}" stroke="#f4ede3" stroke-width="2.2"/>
+    ${[.25, .45, .65, .85].map(k => `<line x1="694" x2="706" y1="${roof(700) + k * (floor(700) - roof(700))}" y2="${roof(700) + k * (floor(700) - roof(700))}" stroke="#f4ede3" stroke-width="1.3"/>`).join('')}
+    <line x1="0" y1=".5" x2="1000" y2=".5" stroke="#f4ede3" stroke-opacity=".25"/>`;
+  svg.innerHTML = sec;
+  const subH = () => document.querySelector('.sub').getBoundingClientRect().height;
+  const yToPct = y => `calc(var(--surf) + ${subH() * y / 580}px)`;
+  const depthY = d => 28 + (d - 800) / 3;
+  const axis = document.getElementById('axis');
+  axis.innerHTML += `<span class="t" style="top:0"><i></i>0</span><span class="t" style="top:${subH() * 14 / 580}px;font-family:Open Sans;color:#8d7f6e">≈</span>` +
+    [1000, 1500, 2000].map(d => `<span class="t" style="top:${subH() * depthY(d) / 580}px"><i></i>${d}</span>`).join('');
+  const lab = document.getElementById('labels');
+  const L = [['Overburden', 10, 'over'], ['Overlying aquifer', (up0(980) + up1(980)) / 2], ['Caprock', (up1(980) + roof(980)) / 2], ['Storage aquifer', (roof(980) + floor(980)) / 2], ['Underburden', (floor(980) + 580) / 2]];
+  lab.innerHTML = L.map(([t, y, c]) => `<span class="lab ${c || ''}" style="top:${yToPct(y)}">${t}</span>`).join('');
+</script>
+</body>
+</html>

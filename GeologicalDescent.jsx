@@ -1,16 +1,39 @@
-// A continuous material cutaway, from the hero's aquifer to crystalline basement.
+// A continuous material cutaway, from the hero's aquifer to crystalline basement. The rock is
+// drawn below the hero, behind every section sheet and the footer (the last measured height).
 const GeologicalDescent = ({ children }) => {
   const rootRef = React.useRef(null);
-  const [heights, setHeights] = React.useState([1100, 1500, 850, 240]);
+  const [heights, setHeights] = React.useState([1100, 900, 1500, 850, 240]);
+  // Photographic textures load once the rock scrolls into view; flat colours stand in until then.
+  const [texturesOn, setTexturesOn] = React.useState(false);
+  // The rock lies below the fold: build it after the hero has painted.
+  const [artReady, setArtReady] = React.useState(false);
+  const liveRef = React.useRef(null);
 
   React.useEffect(() => {
-    const sections = [...rootRef.current.querySelectorAll('.section-panel'), rootRef.current.querySelector('footer')];
+    const ready = () => setArtReady(() => true);
+    const idle = window.requestIdleCallback;
+    const id = idle ? idle(ready, { timeout: 1500 }) : window.setTimeout(ready, 250);
+    return () => (idle ? window.cancelIdleCallback(id) : window.clearTimeout(id));
+  }, []);
+
+  // Once drawn: size the textures and pause the flow streaks while they are off-screen.
+  React.useEffect(() => {
+    const live = liveRef.current;
+    if (!artReady || !live || !live.measure) return;
+    live.measure();
+    live.root.querySelectorAll('.descent-motion').forEach(element => live.visibility.observe(element));
+  }, [artReady]);
+
+  React.useEffect(() => {
+    // Captured once: a resize callback can still arrive after React has detached the ref.
+    const root = rootRef.current;
+    const sections = [...root.querySelectorAll('.section-panel'), root.querySelector('footer')];
     const measure = () => {
       const next = sections.map(section => Math.round(section.offsetHeight));
       setHeights(previous => next.some((height, i) => height !== previous[i]) ? next : previous);
       // Compensate for the SVG's horizontal scaling so mineral grains stay round.
-      const width = rootRef.current.clientWidth;
-      if (width) rootRef.current.querySelectorAll('.descent-material').forEach(pattern => {
+      const width = root.clientWidth;
+      if (width) root.querySelectorAll('.descent-material').forEach(pattern => {
         const tileWidth = 840 * 1440 / width;
         pattern.setAttribute('width', tileWidth);
         pattern.querySelector('.descent-tile').setAttribute('transform', `scale(${tileWidth / 840} 1)`);
@@ -18,17 +41,27 @@ const GeologicalDescent = ({ children }) => {
     };
     const sizes = new ResizeObserver(measure);
     sections.forEach(section => sizes.observe(section));
-    sizes.observe(rootRef.current);
+    sizes.observe(root);
     measure();
     const visibility = new IntersectionObserver(entries => {
       entries.forEach(entry => { entry.target.dataset.visible = String(entry.isIntersecting); });
     });
-    rootRef.current.querySelectorAll('.descent-motion').forEach(element => visibility.observe(element));
-    return () => { sizes.disconnect(); visibility.disconnect(); };
+    root.querySelectorAll('.descent-motion').forEach(element => visibility.observe(element));
+    liveRef.current = { root, measure, visibility };
+    const textures = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      setTexturesOn(() => true);
+      textures.disconnect();
+    }, { rootMargin: '0px 0px -5% 0px' });
+    textures.observe(root.querySelector('.section-panel') || root);
+    return () => { sizes.disconnect(); visibility.disconnect(); textures.disconnect(); };
   }, []);
 
-  const [about, research, contact, footer] = heights;
-  const total = about + research + contact + footer;
+  const art = React.useMemo(() => {
+  if (!artReady) return null;
+  const footer = heights[heights.length - 1];
+  const lastSection = heights[heights.length - 2];
+  const total = heights.reduce((sum, height) => sum + height, 0);
   const materials = [
     'shale', 'sandstone', 'sandstone', 'siltstone', 'limestone', 'shale', 'sandstone', 'dolomite',
     'shale', 'siltstone', 'sandstone', 'limestone', 'limestone', 'shale', 'sandstone', 'siltstone',
@@ -36,10 +69,11 @@ const GeologicalDescent = ({ children }) => {
     'shale', 'sandstone', 'siltstone', 'dolomite', 'shale', 'limestone', 'shale', 'sandstone',
     'sandstone', 'siltstone', 'limestone', 'shale', 'dolomite', 'sandstone', 'shale', 'sandstone', 'basement',
   ];
-  const colors = { shale: '#303637', sandstone: '#887353', siltstone: '#63574b', limestone: '#87847a', dolomite: '#958b74', basement: '#786c65' };
+  // Earth-graded flat colours: the whole bed before its texture loads, and a light tint after.
+  const colors = { shale: '#2e2925', sandstone: '#7a6347', siltstone: '#5f5044', limestone: '#7a7468', dolomite: '#857a64', basement: '#6e625a' };
   const random = seed => { const n = Math.sin(seed * 127.1 + 311.7) * 43758.5453; return n - Math.floor(n); };
   const weights = materials.slice(0, -1).map((_, i) => .45 + random(i + 8) * 1.4);
-  const basementLevel = about + research + contact * .42;
+  const basementLevel = total - footer - lastSection * .58;
   const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
   const levels = [0];
   weights.forEach(weight => levels.push(levels[levels.length - 1] + weight / weightTotal * basementLevel));
@@ -103,8 +137,8 @@ const GeologicalDescent = ({ children }) => {
   const middle = (i, x) => (boundaryY(i, x) + boundaryY(i + 1, x)) / 2;
   const bedAt = (material, y) => materials.reduce((best, rock, i) =>
     rock === material && Math.abs(levels[i] - y) < Math.abs(levels[best] - y) ? i : best, materials.indexOf(material));
-  const sandstoneBed = bedAt('sandstone', about * .22);
-  const lowerSandstone = bedAt('sandstone', about + research * .68);
+  const sandstoneBed = bedAt('sandstone', heights[0] * .22);
+  const lowerSandstone = bedAt('sandstone', heights[0] + heights[1] * .68);
   // Brittle carbonate intervals and granite host the fault/joint clusters.
   const fracturedBeds = [4, 12, 27, materials.length - 1];
   const fractureCounts = { shale: 0, siltstone: 1, sandstone: 2, limestone: 5, dolomite: 7, basement: 180 };
@@ -118,7 +152,6 @@ const GeologicalDescent = ({ children }) => {
   }));
 
   return (
-    <div ref={rootRef} className="geological-descent">
       <svg className="geological-descent-art" viewBox={`0 0 1440 ${total}`} preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <linearGradient id="descent-wrap-x">
@@ -131,7 +164,7 @@ const GeologicalDescent = ({ children }) => {
           {[...new Set(materials)].map(material => (
             <React.Fragment key={material}>
               <pattern id={`descent-raw-${material}`} width="840" height="840" patternUnits="userSpaceOnUse">
-                <image href={`./assets/geology-${material}.webp?v=2`} width="840" height="840" preserveAspectRatio="none" />
+                <image href={texturesOn ? `./assets/geology-${material}.webp?v=3` : undefined} width="840" height="840" preserveAspectRatio="none" />
               </pattern>
               <pattern id={`descent-raw-${material}-x`} href={`#descent-raw-${material}`} patternTransform="translate(420 0)" />
               <pattern id={`descent-raw-${material}-y`} href={`#descent-raw-${material}`} patternTransform="translate(0 420)" />
@@ -158,14 +191,14 @@ const GeologicalDescent = ({ children }) => {
             <rect width="160" height="160" filter="url(#descent-mineral-grain)" />
           </pattern>
           <linearGradient id="descent-bridge" x1="0" y1="0" x2="0" y2="1">
-            <stop stopColor="#263038" /><stop offset="1" stopColor="#263038" stopOpacity="0" />
+            <stop stopColor="#1d150f" /><stop offset="1" stopColor="#1d150f" stopOpacity="0" />
           </linearGradient>
           <linearGradient id="descent-reading-veil">
-            <stop stopColor="#13212b" stopOpacity=".3" /><stop offset=".2" stopColor="#13212b" stopOpacity=".48" />
-            <stop offset=".8" stopColor="#13212b" stopOpacity=".48" /><stop offset="1" stopColor="#13212b" stopOpacity=".3" />
+            <stop stopColor="#120e0b" stopOpacity=".45" /><stop offset=".2" stopColor="#120e0b" stopOpacity=".6" />
+            <stop offset=".8" stopColor="#120e0b" stopOpacity=".6" /><stop offset="1" stopColor="#120e0b" stopOpacity=".45" />
           </linearGradient>
         </defs>
-        <rect width="1440" height={total} fill="#151b1f" />
+        <rect width="1440" height={total} fill="#120e0b" />
         {materials.map((material, i) => (
           <g key={i}>
             <path data-bed={i} data-pinch-out={[6, 18, 37].includes(i) ? true : undefined} d={beds[i]} fill={colors[material]} />
@@ -224,15 +257,21 @@ const GeologicalDescent = ({ children }) => {
         {[sandstoneBed, lowerSandstone].map((bed, n) => (
           <g key={bed} className="descent-motion" data-visible="false" clipPath={`url(#descent-bed-${bed})`}>
             {[38, 1240].map(x => <React.Fragment key={x}>
-              <path d={`M${x} ${middle(bed, x)}l108 -4`} fill="none" stroke="#aac5ca" strokeOpacity=".12" strokeWidth="1" />
+              <path d={`M${x} ${middle(bed, x)}l108 -4`} fill="none" stroke="#d8cfc4" strokeOpacity=".12" strokeWidth="1" />
               {[0, 1, 2].map(i => <ellipse key={i} className="descent-flow" cx={x} cy={middle(bed, x)} rx="3" ry="1.1"
-                fill="#bad4d8" style={{ animationDelay: `${-i * 1.1 - n * 9}s` }} />)}
+                fill="#e2d9cd" style={{ animationDelay: `${-i * 1.1 - n * 9}s` }} />)}
             </React.Fragment>)}
           </g>
         ))}
         <rect width="1440" height={total} fill="url(#descent-reading-veil)" />
         <rect width="1440" height="240" fill="url(#descent-bridge)" />
       </svg>
+  );
+  }, [artReady, heights, texturesOn]);
+
+  return (
+    <div ref={rootRef} className="geological-descent">
+      {art}
       {children}
     </div>
   );

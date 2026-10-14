@@ -3,393 +3,88 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Sa'eed Telvari - PhD Candidate in Petroleum Engineering at Heriot-Watt University. Specialized in Vertical Equilibrium Models and CO2 Storage Simulation.">
-  <title>Sa'eed Telvari | Reservoir Simulation & CCUS Researcher</title>
+  <title>Sa'eed Telvari — CO₂ storage and reservoir simulation</title>
+  <meta name="description" content="Sa'eed Telvari is a PhD candidate at Heriot-Watt University who builds vertical-equilibrium models in MRST for CO₂ storage in depleted gas fields.">
   <link rel="canonical" href="https://saeedtelvari.github.io/">
+  <meta name="theme-color" content="#120e0b">
   <meta property="og:type" content="profile">
-  <meta property="og:title" content="Sa'eed Telvari | Reservoir Simulation & CCUS Researcher">
-  <meta property="og:description" content="Research in vertical-equilibrium modeling, CO₂ storage, reservoir simulation, and scientific machine learning.">
+  <meta property="og:title" content="Sa'eed Telvari — CO₂ storage and reservoir simulation">
+  <meta property="og:description" content="Vertical-equilibrium models of CO₂ storage in depleted gas fields, a browser-based CO₂ storage simulator, publications and CV.">
   <meta property="og:url" content="https://saeedtelvari.github.io/">
-  <meta property="og:image" content="https://saeedtelvari.github.io/assets/social-preview.jpg">
+  <meta property="og:image" content="https://saeedtelvari.github.io/assets/social-card.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Sa'eed Telvari reservoir simulation research portfolio">
+  <meta property="og:image:alt" content="Sa'eed Telvari above a live vertical-equilibrium section of CO₂ in a faulted aquifer">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Sa'eed Telvari | Reservoir Simulation & CCUS Researcher">
-  <meta name="twitter:description" content="Research in vertical-equilibrium modeling, CO₂ storage, reservoir simulation, and scientific machine learning.">
-  <meta name="twitter:image" content="https://saeedtelvari.github.io/assets/social-preview.jpg">
-  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Person","name":"Sa'eed Telvari","url":"https://saeedtelvari.github.io/","jobTitle":"PhD Candidate in Petroleum Engineering","affiliation":{"@type":"CollegeOrUniversity","name":"Heriot-Watt University"},"sameAs":["https://orcid.org/0000-0002-4896-295X","https://www.linkedin.com/in/stelvari/","https://github.com/saeedtelvari"]}</script>
-  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <meta name="twitter:title" content="Sa'eed Telvari — CO₂ storage and reservoir simulation">
+  <meta name="twitter:description" content="Vertical-equilibrium models of CO₂ storage in depleted gas fields, a browser-based CO₂ storage simulator, publications and CV.">
+  <meta name="twitter:image" content="https://saeedtelvari.github.io/assets/social-card.jpg">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Person","name":"Sa'eed Telvari","url":"https://saeedtelvari.github.io/","image":"https://saeedtelvari.github.io/assets/social-card.jpg","jobTitle":"PhD Candidate in Petroleum Engineering","affiliation":{"@type":"CollegeOrUniversity","name":"Heriot-Watt University"},"alumniOf":{"@type":"CollegeOrUniversity","name":"Amirkabir University of Technology"},"knowsAbout":["Vertical equilibrium models","CO2 storage","Depleted gas reservoirs","Reservoir simulation","MRST","Machine learning for permeability upscaling"],"email":"mailto:st4014@hw.ac.uk","sameAs":["https://orcid.org/0000-0002-4896-295X","https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ","https://github.com/saeedtelvari","https://www.linkedin.com/in/stelvari/"]}</script>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:wght@400;600;700&family=Arizonia&display=swap">
-  <link rel="stylesheet" href="./colors_and_type.css?v=40.0">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js">
-  <link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js">
-  <link rel="preload" as="script" href="./bundle.js?v=40.1">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="./colors_and_type.css?v=41">
+  <link rel="icon" href="./favicon.ico" sizes="32x32">
   <link rel="icon" href="./assets/logo-minimalist.webp" type="image/webp">
-  <script>
-    window.__pageLoadStart = Date.now();
-    // Real-progress driver: nudge the loader bar on actual asset milestones.
-    (function () {
-      var bar = null, val = 0, trickle = null, done = false;
-      function el() { return bar || (bar = document.getElementById('loader-progress-bar')); }
-      function render() {
-        var b = el();
-        if (b) {
-          b.style.width = val + '%';
-          var track = b.parentNode;
-          if (track && track.hasAttribute('role')) track.setAttribute('aria-valuenow', Math.round(val));
-        }
-      }
-      function tick(p) {
-        if (done) return;
-        val = Math.max(val, Math.min(p, 100));
-        render();
-        if (val >= 100) { done = true; if (trickle) clearInterval(trickle); }
-      }
-      window.__loadTick = tick;
-      window.__appReady = function () { tick(100); };
-      tick(10);
-      // Trickle so the bar keeps creeping on slow connections (caps below done).
-      trickle = setInterval(function () { if (!done) tick(Math.min(val + 2, 88)); }, 500);
-      // Slow-network hint if assets haven't finished after 12s.
-      setTimeout(function () {
-        if (!done) {
-          var hint = document.getElementById('loader-slow-hint');
-          if (hint) hint.classList.add('visible');
-        }
-      }, 12000);
-    })();
-  </script>
+  <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
+  <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script defer src="./bundle.js?v=41"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
-    body {
-      background: linear-gradient(135deg, #211d34 0%, #1c2645 50%, #1d416e 100%);
-      font-family: 'Montserrat', system-ui, sans-serif;
-      overflow-x: hidden;
-    }
-    /* Scrollbar style to match */
+    body { background: #120e0b; color: #f4ede3; overflow-x: hidden; }
     ::-webkit-scrollbar { width: 10px; }
-    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.20); }
-    ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(100,255,218,0.30), rgba(100,255,218,0.10)); border-radius: 6px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(100,255,218,0.40); }
+    ::-webkit-scrollbar-track { background: #120e0b; }
+    ::-webkit-scrollbar-thumb { background: #4a3c30; border-radius: 6px; }
+    ::-webkit-scrollbar-thumb:hover { background: #5e4c3c; }
 
-    /* App Loader — 0ms Instant Native Pre-React Layer */
+    /* The night sky and ground the hero draws, shown until React renders it, then faded out. */
     #app-loader {
       position: fixed;
       inset: 0;
       z-index: 99999;
-      background: #0e0a17;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: 'Montserrat', system-ui, sans-serif;
-      color: #fff;
-      transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
-      overflow: hidden;
+      background: linear-gradient(180deg, #070d1a 0, #111e32 calc(max(42vh, 480px) * 0.58), #253449 max(42vh, 480px), #1d1712 max(42vh, 480px), #17120e 100%);
+      transition: opacity 450ms cubic-bezier(0.23, 1, 0.32, 1);
     }
-
-    #app-loader.loader-finished {
-      opacity: 0;
-      transform: scale(1.025);
-      pointer-events: none;
-    }
-
-    #app-loader.loader-finished .seismic-ring,
-    #app-loader.loader-finished .seismic-beacon {
-      animation: none;
-    }
-
-    .loader-bg {
-      position: absolute;
-      inset: 0;
-      background: 
-        radial-gradient(circle at 50% 45%, rgba(13, 252, 162, 0.12) 0%, rgba(15, 52, 96, 0.18) 45%, transparent 70%),
-        linear-gradient(180deg, #150f24 0%, #0c0814 100%);
-      pointer-events: none;
-    }
-
-    .loader-content {
-      position: relative;
-      z-index: 2;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      max-width: 480px;
-      width: 90%;
-      padding: 20px;
-    }
-
-    /* Seismic Sonar Radar Pulse */
-    .seismic-scanner {
-      position: relative;
-      width: 100px;
-      height: 100px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 28px;
-    }
-
-    .seismic-ring {
-      position: absolute;
-      border-radius: 50%;
-      border: 1.5px solid rgba(13, 252, 162, 0.6);
-      box-shadow: 0 0 14px rgba(13, 252, 162, 0.35);
-      animation: seismicWave 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
-    }
-
-    .ring-1 { width: 40px; height: 40px; animation-delay: 0s; }
-    .ring-2 { width: 70px; height: 70px; animation-delay: 0.7s; }
-    .ring-3 { width: 100px; height: 100px; animation-delay: 1.4s; }
-
-    @keyframes seismicWave {
-      0% { transform: scale(0.35); opacity: 0.9; }
-      60% { opacity: 0.4; }
-      100% { transform: scale(1.45); opacity: 0; }
-    }
-
-    .seismic-beacon {
-      position: relative;
-      z-index: 3;
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      background: rgba(19, 13, 28, 0.92);
-      border: 1px solid rgba(13, 252, 162, 0.8);
-      box-shadow: 0 0 20px rgba(13, 252, 162, 0.5), inset 0 0 10px rgba(13, 252, 162, 0.25);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      animation: beaconPulse 1.8s ease-in-out infinite alternate;
-    }
-
-    @keyframes beaconPulse {
-      0% { transform: scale(0.95); box-shadow: 0 0 12px rgba(13, 252, 162, 0.4); }
-      100% { transform: scale(1.05); box-shadow: 0 0 24px rgba(13, 252, 162, 0.7); }
-    }
-
-    /* Header Typography */
-    .loader-header {
-      margin-bottom: 24px;
-    }
-
-    .loader-name {
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: 0.32em;
-      color: #ffffff;
-      margin-bottom: 8px;
-      text-shadow: 0 2px 10px rgba(0,0,0,0.8);
-    }
-
-    .loader-subtitle {
-      font-size: 10px;
-      font-weight: 500;
-      letter-spacing: 0.18em;
-      color: rgba(100, 255, 218, 0.8);
-      text-transform: uppercase;
-      font-family: ui-monospace, Menlo, Monaco, monospace;
-    }
-
-    /* Precision Neon Progress Track — width driven by real asset milestones (see __loadTick) */
-    .loader-progress-track {
-      width: 280px;
-      height: 3px;
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 4px;
-      overflow: hidden;
-      position: relative;
-      margin-bottom: 18px;
-    }
-
-    .loader-progress-bar {
+    #app-loader.loader-finished { opacity: 0; pointer-events: none; }
+    .shell-progress {
       position: absolute;
       left: 0;
       top: 0;
-      bottom: 0;
-      width: 0%;
-      min-width: 6px;
-      background: linear-gradient(90deg, #1a8e8f, #20c997, #0dfca2);
-      box-shadow: 0 0 10px rgba(13, 252, 162, 0.8);
-      transition: width 0.35s ease-out;
+      width: 28%;
+      height: 2px;
+      background: #e8a15a;
+      animation: shell-progress 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     }
-
-    /* Slow-network hint — only surfaced by the boot script after 12s */
-    .loader-slow-hint {
-      margin-top: 14px;
-      font-size: 11px;
-      font-family: ui-monospace, Menlo, Monaco, monospace;
-      letter-spacing: 0.08em;
-      color: rgba(255, 255, 255, 0.45);
-      opacity: 0;
-      transition: opacity 0.6s ease;
-      pointer-events: none;
-    }
-    .loader-slow-hint.visible { opacity: 1; }
-
-    /* Live Telemetry Cycling Stream — one 4.8s loop, four quarter-phase steps, repeats forever */
-    .loader-telemetry {
-      height: 20px;
-      position: relative;
-      width: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .telemetry-item {
-      position: absolute;
-      font-size: 11px;
-      font-family: ui-monospace, Menlo, Monaco, monospace;
-      color: rgba(255, 255, 255, 0.85);
-      letter-spacing: 0.08em;
-      opacity: 0;
-      transform: translateY(6px);
-      white-space: nowrap;
-    }
-
-    .telemetry-tag {
-      color: #0dfca2;
-      font-weight: 600;
-      margin-right: 4px;
-    }
-
-    /* Single honest status line with a gentle breathing pulse */
-    .telemetry-static {
-      opacity: 1;
-      transform: none;
-      animation: softPulse 2.6s ease-in-out infinite;
-    }
-
-    @keyframes softPulse {
-      0%, 100% { opacity: 0.55; }
-      50%      { opacity: 1; }
-    }
-
-    /* Subsurface hero animations — defined globally so React re-renders can't reset them */
-    @keyframes twinkle {
-      0%, 100% { opacity: 0.25; }
-      50%      { opacity: 0.95; }
-    }
-    @keyframes flow {
-      from { stroke-dashoffset: 0; }
-      to   { stroke-dashoffset: -160; }
-    }
-    @keyframes flow-reverse {
-      from { stroke-dashoffset: 0; }
-      to   { stroke-dashoffset: 160; }
-    }
-    @keyframes cellPulse {
-      0%, 100% { opacity: 0.15; transform: scale(0.85); }
-      50%      { opacity: 0.95; transform: scale(1.25); }
-    }
-    @keyframes bubbleRise {
-      0%   { transform: translate(0, 0)               scale(0.5); opacity: 0; }
-      15%  { transform: translate(calc(var(--drift, 0px) * 0.10), -30px)  scale(0.85); opacity: 0.85; }
-      55%  { transform: translate(calc(var(--drift, 0px) * 0.50), -160px) scale(1);    opacity: 0.75; }
-      85%  { transform: translate(calc(var(--drift, 0px) * 0.85), -260px) scale(1.05); opacity: 0.40; }
-      100% { transform: translate(var(--drift, 0px),              -330px) scale(1.1);  opacity: 0;    }
-    }
-    @keyframes streakRise {
-      0%   { transform: translateY(0);      opacity: 0; }
-      15%  {                                opacity: 0.75; }
-      85%  { transform: translateY(-180px); opacity: 0.45; }
-      100% { transform: translateY(-200px); opacity: 0; }
-    }
-    @keyframes faultRiseTilted {
-      0%   { transform: translate(0, 0) scale(0.8); opacity: 0; }
-      15%  { opacity: 0.95; transform: translate(calc(var(--travel-x, 0px) * 0.15), calc(var(--travel-y, -120px) * 0.15)) scale(0.9); }
-      85%  { opacity: 0.95; transform: translate(calc(var(--travel-x, 0px) * 0.85), calc(var(--travel-y, -120px) * 0.85)) scale(1.0); }
-      100% { transform: translate(var(--travel-x, 0px), var(--travel-y, -120px)) scale(1.2); opacity: 0; }
-    }
-    .hero-night-clouds {
-      animation: night-cloud-drift 110s linear infinite alternate;
-    }
-    @keyframes night-cloud-drift {
-      from { transform: translate3d(-10px, 0, 0); }
-      to { transform: translate3d(12px, 2px, 0); }
+    @keyframes shell-progress {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(360%); }
     }
     @media (prefers-reduced-motion: reduce) {
-      .fault-flow-cue { stroke-dashoffset: 0 !important; }
-      .hero-night-clouds { animation: none !important; }
-    }
-    @keyframes conduitFlow {
-      0%   { stroke-dashoffset: 24; }
-      100% { stroke-dashoffset: 0; }
-    }
-    @keyframes dischargePulse {
-      0%   { transform: scale(0.6); opacity: 0.8; }
-      50%  { transform: scale(1.5); opacity: 0.3; }
-      100% { transform: scale(2.2); opacity: 0; }
-    }
-    @keyframes pulseFlare {
-      0%, 100% { opacity: 0.65; transform: translateX(-50%) scale(1);   }
-      50%      { opacity: 1;    transform: translateX(-50%) scale(1.4); }
-    }
-    @keyframes labelArrow {
-      0%, 100% { opacity: 0.65; }
-      50%      { opacity: 1; }
-    }
-    @keyframes feedBubble {
-      0%   { transform: translateY(0); opacity: 0; }
-      15%  { opacity: 0.85; }
-      85%  { opacity: 0.85; }
-      100% { transform: translateY(calc(42vh - 35px)); opacity: 0; }
-    }
-    @keyframes plumePulse {
-      0%, 100% { opacity: 0.22; transform: scale(1.0); }
-      50%      { opacity: 0.45; transform: scale(1.01); }
+      .shell-progress { width: 100%; opacity: 0.4; animation: none; }
     }
   </style>
-  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" onload="window.__loadTick && window.__loadTick(50)"></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" onload="window.__loadTick && window.__loadTick(65)"></script>
 </head>
 <body>
-  <!-- 0ms Subsurface Seismic & Telemetry HUD Loading Screen -->
-  <div id="app-loader" aria-label="Loading">
-    <div class="loader-bg"></div>
-    <div class="loader-content">
-      <div class="seismic-scanner">
-        <div class="seismic-ring ring-1"></div>
-        <div class="seismic-ring ring-2"></div>
-        <div class="seismic-ring ring-3"></div>
-        <div class="seismic-beacon">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#0dfca2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="12 2 2 12 12 22 22 12 12 2" />
-            <line x1="12" y1="6" x2="12" y2="18" />
-            <line x1="6" y1="12" x2="18" y2="12" />
-          </svg>
-        </div>
-      </div>
-
-      <div class="loader-header">
-        <div class="loader-name">SAEED TELVARI</div>
-        <div class="loader-subtitle">GEOLOGIC CO₂ STORAGE &middot; COMPUTATIONAL RESERVOIR MODELING</div>
-      </div>
-
-      <div class="loader-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="10" aria-label="Loading progress">
-        <div class="loader-progress-bar" id="loader-progress-bar"></div>
-      </div>
-
-      <div class="loader-telemetry">
-        <div class="telemetry-item telemetry-static">
-          <span class="telemetry-tag">SYS</span> PREPARING INTERACTIVE RESERVOIR MODEL...
-        </div>
-      </div>
-
-      <div class="loader-slow-hint" id="loader-slow-hint">SLOW CONNECTION — STILL LOADING ASSETS...</div>
-    </div>
-  </div>
-
+  <div id="app-loader" aria-hidden="true"><div class="shell-progress"></div></div>
   <div id="root"></div>
-
-  <script src="bundle.js?v=40.1" onload="window.__loadTick && window.__loadTick(90)"></script>
+  <noscript>
+    <style>#app-loader { display: none; }</style>
+    <main style="max-width:720px;margin:0 auto;padding:48px 24px;font-family:'Open Sans',system-ui,sans-serif;line-height:1.7">
+      <h1 style="font-family:Montserrat,system-ui,sans-serif">Sa'eed Telvari</h1>
+      <p>PhD candidate, Heriot-Watt University. I build vertical-equilibrium models of CO₂ storage in depleted gas fields: reduced-order simulators that run up to 100× faster than full 3D compositional models.</p>
+      <p>
+        <a href="./simulator.html">CO₂ storage simulator</a> ·
+        <a href="./cv.html">CV</a> ·
+        <a href="https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ">Google Scholar</a> ·
+        <a href="https://orcid.org/0000-0002-4896-295X">ORCID</a> ·
+        <a href="https://github.com/saeedtelvari">GitHub</a> ·
+        <a href="mailto:st4014@hw.ac.uk">st4014@hw.ac.uk</a>
+      </p>
+      <p>The interactive homepage needs JavaScript.</p>
+    </main>
+  </noscript>
 </body>
 </html>
