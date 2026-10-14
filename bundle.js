@@ -1844,11 +1844,12 @@ const HeroLeakReadout = ({
   const {
     to
   } = HERO_FAULTS[leak.fault];
-  // Sit on the open side of the fault so the label never runs off the section.
-  const side = to.x < 600 ? {
-    left: `calc(${heroFixed(to.x / 10)}% + 22px)`
-  } : {
+  // Sit on the side of the fault away from the well, unless that side has no room for the label.
+  const placeLeft = to.x < heroGeology.wellX ? to.x > 380 : to.x > 750;
+  const side = placeLeft ? {
     right: `calc(${heroFixed(100 - to.x / 10)}% + 22px)`
+  } : {
+    left: `calc(${heroFixed(to.x / 10)}% + 22px)`
   };
   return /*#__PURE__*/React.createElement("div", {
     className: "hero-leak-readout",
