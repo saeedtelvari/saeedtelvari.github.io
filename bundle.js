@@ -1356,7 +1356,7 @@ const HeroSection = React.memo(({
     className: "hero-rock--cap"
   }), /*#__PURE__*/React.createElement("path", {
     d: "M1 3h9M12 1h5",
-    stroke: "#8d7f6e",
+    stroke: "#9fb3c8",
     strokeOpacity: ".3",
     strokeWidth: ".8"
   })), /*#__PURE__*/React.createElement("pattern", {
@@ -1372,13 +1372,13 @@ const HeroSection = React.memo(({
     cx: "2",
     cy: "2",
     r: ".9",
-    fill: "#8d7f6e",
+    fill: "#9fb3c8",
     fillOpacity: ".4"
   }), /*#__PURE__*/React.createElement("circle", {
     cx: "6.5",
     cy: "6",
     r: ".7",
-    fill: "#8d7f6e",
+    fill: "#9fb3c8",
     fillOpacity: ".3"
   })), /*#__PURE__*/React.createElement("clipPath", {
     id: "hero-lower-rock"
@@ -1519,7 +1519,7 @@ const GeologyTexture = ({
     cy: (i * i * 13.71 + 11) % 89,
     rx: 0.35 + i % 4 * 0.13,
     ry: 0.25 + i % 3 * 0.12,
-    fill: i % 3 ? '#d8c7b0' : '#0d0906',
+    fill: i % 3 ? '#b8c7d6' : '#05080f',
     opacity: i % 3 ? 0.13 : 0.3
   })))), /*#__PURE__*/React.createElement("rect", {
     width: "1000",
@@ -1542,7 +1542,7 @@ const GeologyTexture = ({
     key: i,
     d: d,
     fill: "none",
-    stroke: "#d9c3a3",
+    stroke: "#93b7c2",
     strokeWidth: "0.7",
     opacity: "0.12",
     strokeDasharray: "47 6 18 4 83 9"
