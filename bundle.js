@@ -979,12 +979,14 @@ const HeroGeology = (() => {
     return out;
   };
 
-  // Views into one recorded year (no copies).
+  // Views into one recorded year (no copies), plus the volume each fault has passed so far.
   const frameOf = (run, year) => {
     const y = Math.max(0, Math.min(run.years, Math.round(year))),
       a = y * run.nodes,
       b = a + run.nodes;
     const [mobile, residual, leaked, injected] = run.inventory.subarray(y * 4, y * 4 + 4);
+    const faultLeaked = new Float64Array(run.faults);
+    for (let t = 1; t <= y; t++) for (let i = 0; i < run.faults; i++) faultLeaked[i] += run.faultFlow[t * run.faults + i] * HERO_YEAR;
     return {
       S: run.S[0].subarray(a, b),
       h: run.h[0].subarray(a, b),
@@ -993,12 +995,37 @@ const HeroGeology = (() => {
       h2: run.h[1].subarray(a, b),
       h2Max: run.hMax[1].subarray(a, b),
       faultFlow: run.faultFlow.subarray(y * run.faults, (y + 1) * run.faults),
+      faultLeaked,
       inventory: {
         mobile,
         residual,
         leaked,
         injected
       }
+    };
+  };
+
+  // What the label beside a leaking fault says: which fault, its CO2 column against its entry height
+  // (both in metres of section depth), and the share of injected CO2 that has leaked.
+  const leakReadout = (g, sec, frame) => {
+    let i = -1;
+    frame.faultFlow.forEach((v, j) => {
+      if (v > 0 && (i < 0 || v > frame.faultFlow[i])) i = j;
+    });
+    if (i < 0) return null;
+    const metres = units => Math.round(units * HERO_UNIT * HERO_DEPTH.metresPerUnit);
+    const column = frame.h[sec.faultCells[i][0]],
+      entry = g.faults[i].thresholdHeight;
+    const {
+      leaked,
+      injected
+    } = frame.inventory;
+    return {
+      fault: i,
+      state: column > entry ? 'leaking' : 'sealing',
+      column: metres(column),
+      entry: metres(entry),
+      leakedPct: injected > 0 ? Math.round(100 * leaked / injected) : 0
     };
   };
   const depthToY = metres => HERO_DEPTH.breakY + (metres - HERO_DEPTH.breakDepth) / HERO_DEPTH.metresPerUnit;
@@ -1025,6 +1052,7 @@ const HeroGeology = (() => {
     section,
     simulate,
     frameOf,
+    leakReadout,
     HERO_DEPTH,
     depthToY,
     depthTicks,
@@ -1116,19 +1144,29 @@ const HERO_PATHS = {
   underburden: heroRibbon(heroFloor(heroStorage), heroStorage.faultBottom, () => 580, HERO_NO_STEPS)
 };
 
-// Fault traces and the segment each one leaks through: storage roof up to the overlying aquifer's base.
-const HERO_FAULTS = heroGeology.faults.map(fault => ({
-  top: {
-    x: fault.xPercent * 10,
-    y: 0
-  },
-  bottom: {
-    x: fault.xPercent * 10 + fault.dipSlope * 480,
-    y: 480
-  },
-  from: getFaultIntersection(fault, 1, heroGeology),
-  to: getStratumFaultIntersection(fault, 0.4, heroGeology.shallowThickness, heroGeology)
-}));
+// Fault traces and the segment each one leaks through: storage roof up to the overlying aquifer's base,
+// then the buoyant rise through the overlying aquifer to its roof, where leaked CO2 pools.
+const HERO_FAULTS = heroGeology.faults.map(fault => {
+  const to = getStratumFaultIntersection(fault, 0.4, heroGeology.shallowThickness, heroGeology);
+  return {
+    top: {
+      x: fault.xPercent * 10,
+      y: 0
+    },
+    bottom: {
+      x: fault.xPercent * 10 + fault.dipSlope * 480,
+      y: 480
+    },
+    from: getFaultIntersection(fault, 1, heroGeology),
+    to,
+    rise: {
+      x: to.x,
+      y: heroOverlying.roofR[Math.max(0, Math.min(200, Math.round(to.x / 5)))] + 3
+    }
+  };
+});
+// Leak dots advance this many pixels per unit of CO2 a fault has passed.
+const HERO_LEAK_DOTS = 12;
 
 // Labels sit at mid-depth of each unit: far right on wide screens, just right of the axis on phones.
 const HERO_LABELS = [['wide', 980], ['narrow', 160]].flatMap(([set, x]) => {
@@ -1189,6 +1227,7 @@ const heroFrameAt = (run, year) => {
     h2: mix(a.h2, b.h2),
     h2Max: mix(a.h2Max, b.h2Max),
     faultFlow: b.faultFlow,
+    faultLeaked: mix(a.faultLeaked, b.faultLeaked),
     inventory
   };
 };
@@ -1302,14 +1341,15 @@ const SubsurfaceHero = ({
   }, /*#__PURE__*/React.createElement(Sky, null), /*#__PURE__*/React.createElement(HeroSection, {
     sectionRef: sectionRef
   }), /*#__PURE__*/React.createElement(HeroPlume, {
-    frame: frame,
-    year: year
+    frame: frame
   }), /*#__PURE__*/React.createElement(HeroOverlay, {
     injecting: injecting
   }), /*#__PURE__*/React.createElement(SurfaceSite, {
     geology: heroGeology,
     injecting: injecting
-  }), /*#__PURE__*/React.createElement(HeroLabels, null), /*#__PURE__*/React.createElement(Identity, {
+  }), /*#__PURE__*/React.createElement(HeroLabels, null), /*#__PURE__*/React.createElement(HeroLeakReadout, {
+    frame: frame
+  }), /*#__PURE__*/React.createElement(Identity, {
     onNavigate: onNavigate
   }), /*#__PURE__*/React.createElement(HeroPlayer, {
     year: year,
@@ -1452,7 +1492,15 @@ const HeroSection = React.memo(({
   })), detail && /*#__PURE__*/React.createElement(GeologyTexture, {
     faults: heroGeology.faults,
     geology: heroGeology
-  }));
+  }), HERO_FAULTS.map((fault, i) => /*#__PURE__*/React.createElement("line", {
+    key: i,
+    x1: fault.from.x,
+    y1: fault.from.y,
+    x2: fault.to.x,
+    y2: fault.to.y,
+    className: "hero-fault-zone",
+    vectorEffect: "non-scaling-stroke"
+  })));
 });
 
 // Static rock detail is built once per geology, independent of simulation frames.
@@ -1553,8 +1601,7 @@ const GeologyTexture = ({
    Plume — CO2 in the simulator's class colours, redrawn per frame
    ===================================================== */
 const HeroPlume = ({
-  frame,
-  year
+  frame
 }) => {
   if (!frame) return null;
   const storage = heroPlumePaths(heroStorage, frame.h, frame.hMax);
@@ -1649,25 +1696,29 @@ const HeroPlume = ({
     const flow = frame.faultFlow[i] || 0;
     if (flow <= 0) return null;
     const strength = Math.min(1, Math.sqrt(flow / heroGeology.faults[i].leakRate));
+    const conduit = `M${fault.from.x} ${fault.from.y}L${fault.to.x} ${fault.to.y}`;
+    const rise = `M${fault.to.x} ${fault.to.y}L${fault.rise.x} ${heroFixed(fault.rise.y)}`;
     return /*#__PURE__*/React.createElement("g", {
       key: i,
       "data-layer": "fault-leak",
-      opacity: 0.35 + 0.65 * strength
-    }, /*#__PURE__*/React.createElement("line", {
-      x1: fault.from.x,
-      y1: fault.from.y,
-      x2: fault.to.x,
-      y2: fault.to.y,
+      opacity: 0.45 + 0.55 * strength
+    }, /*#__PURE__*/React.createElement("path", {
+      d: conduit,
+      className: "hero-leak-halo",
+      vectorEffect: "non-scaling-stroke"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: rise,
+      className: "hero-leak-halo hero-leak-halo--rise",
+      vectorEffect: "non-scaling-stroke"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: conduit,
       className: "hero-leak",
       vectorEffect: "non-scaling-stroke"
-    }), /*#__PURE__*/React.createElement("line", {
-      className: "fault-flow-cue hero-leak-cue",
-      x1: fault.from.x,
-      y1: fault.from.y,
-      x2: fault.to.x,
-      y2: fault.to.y,
-      strokeDasharray: "3 9",
-      strokeDashoffset: -year * 0.6,
+    }), /*#__PURE__*/React.createElement("path", {
+      d: conduit + rise.replace('M', 'L'),
+      className: "hero-leak-dots",
+      strokeDasharray: "0 11",
+      strokeDashoffset: heroFixed(-frame.faultLeaked[i] * HERO_LEAK_DOTS),
       vectorEffect: "non-scaling-stroke"
     }));
   }));
@@ -1775,6 +1826,35 @@ const HeroLabels = React.memo(() => /*#__PURE__*/React.createElement("div", {
     top: heroDepthTop(label.y)
   }
 }, label.text))));
+
+/* =====================================================
+   Leak readout — beside a leaking fault, from the model's own numbers
+   ===================================================== */
+const HeroLeakReadout = ({
+  frame
+}) => {
+  const leak = frame && HeroGeology.leakReadout(heroGeology, heroSection, frame);
+  if (!leak) return null;
+  const {
+    to
+  } = HERO_FAULTS[leak.fault];
+  // Sit on the open side of the fault so the label never runs off the section.
+  const side = to.x < 600 ? {
+    left: `calc(${heroFixed(to.x / 10)}% + 22px)`
+  } : {
+    right: `calc(${heroFixed(100 - to.x / 10)}% + 22px)`
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    className: "hero-leak-readout",
+    "aria-hidden": "true",
+    style: {
+      ...side,
+      top: heroDepthTop(to.y)
+    }
+  }, /*#__PURE__*/React.createElement("strong", null, "F", leak.fault + 1, " ", leak.state === 'leaking' ? 'leaking' : 'sealing again'), /*#__PURE__*/React.createElement("span", null, "CO\u2082 column ", leak.column, " m, entry height ", leak.entry, " m"), /*#__PURE__*/React.createElement("span", {
+    className: "hero-leak-readout__share"
+  }, leak.leakedPct, "% of injected CO\u2082 has leaked"));
+};
 
 /* =====================================================
    Player — controls, the CO2 inventory and the scale note
