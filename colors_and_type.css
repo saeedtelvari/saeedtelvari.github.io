@@ -624,7 +624,32 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   height: clamp(100px, 16vh, 180px);
 }
 
-/* The sea is the lower half of the landscape; glitter and horizon items line up with it. */
+/* The sea is the lower half of the landscape; ripples, glitter and horizon items line up with it. */
+.hero-sea {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(clamp(100px, 16vh, 180px) / 2);
+  overflow: hidden;
+  /* Ripples catch more light towards the moon's side of the sky. */
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, .35), rgba(0, 0, 0, .5) 45%, #000 75%, #000 92%, rgba(0, 0, 0, .75));
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, .35), rgba(0, 0, 0, .5) 45%, #000 75%, #000 92%, rgba(0, 0, 0, .75));
+}
+/* Ten tiles wide; drifting one tile (a tenth) per cycle loops seamlessly. */
+.hero-sea__drift {
+  width: max-content;
+  height: 100%;
+  animation: hero-sea-drift 120s linear infinite;
+  will-change: transform;
+}
+.hero-sea__drift > svg { display: block; height: 100%; width: auto; aspect-ratio: 40 / 1; }
+@keyframes hero-sea-drift { to { transform: translateX(-10%); } }
+/* Three sets of glints shimmer out of step. */
+.hero-glitter__set { animation: hero-glint 2.6s ease-in-out infinite alternate; }
+.hero-glitter__set:nth-of-type(2) { animation-duration: 3.4s; animation-delay: -1.3s; }
+.hero-glitter__set:nth-of-type(3) { animation-duration: 2.1s; animation-delay: -0.7s; }
+@keyframes hero-glint { from { opacity: .3; } to { opacity: 1; } }
 .hero-glitter {
   position: absolute;
   bottom: 0;
@@ -646,8 +671,15 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   transform: translateX(-50%);
 }
 
-.hero-ship { transition: transform 5s var(--ease-emil-in-out), opacity 4s linear; }
-.hero-ship.is-away { transform: translateX(140px); opacity: 0; }
+/* The carrier's position comes from the hero clock; scale about its waterline so it shrinks into the distance. */
+.hero-ship,
+.hero-ship__hull { transform-origin: 270px 152px; }
+/* A slow swell lifts and rolls the hull a little. */
+.hero-ship__hull { animation: hero-ship-bob 5.2s ease-in-out infinite alternate; }
+@keyframes hero-ship-bob {
+  from { transform: translateY(0) rotate(-0.35deg); }
+  to { transform: translateY(0.9px) rotate(0.35deg); }
+}
 
 .hero-surface-site {
   position: absolute;
@@ -667,6 +699,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   .hero-moon { left: auto; right: 24px; top: 26%; width: 28px; }
   .hero-landscape { height: 85px; }
   .hero-glitter { left: auto; right: 38px; height: 42.5px; transform: translateX(50%); }
+  .hero-sea { height: 42.5px; }
   .hero-horizon { bottom: 42.5px; }
 }
 
