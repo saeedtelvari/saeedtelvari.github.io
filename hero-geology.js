@@ -21,8 +21,9 @@ const HeroGeology = (() => {
       if ((x2 * 10 + dip2 * 580) - (x1 * 10 + dip1 * 580) < 60) { dip1 = -slope1; dip2 = slope2; }
     }
     const fault = (xPercent, dipSlope, angleDeg) => {
-      // Damage-zone permeability against the aquifer's CO2 permeability: 0.1-10 mD against about 100 mD.
-      const permeabilityRatio = parseFloat(Math.pow(10, -3 + 2 * random()).toPrecision(3));
+      // Damage-zone permeability against the aquifer's CO2 permeability: 10-100 mD against about 100 mD.
+      // Leakier than the paper's field case on purpose, so the overlying aquifer's plume shows.
+      const permeabilityRatio = parseFloat(Math.pow(10, -1 + random()).toPrecision(3));
       return {
         xPercent, dipSlope, angleDeg: parseFloat(angleDeg.toFixed(1)), permeabilityRatio,
         // Capillary entry pressure of the damage zone in bar, higher for tighter fractures (p_e ~ k^-1/2).

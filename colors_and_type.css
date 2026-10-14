@@ -608,15 +608,6 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   .hero-rain-drop:nth-child(n + 33) { display: none; }
 }
 
-.hero-feed-flow {
-  animation: feedPulse 3.2s var(--ease-emil-in-out) infinite alternate;
-}
-
-@keyframes feedPulse {
-  from { opacity: .12; }
-  to { opacity: .6; }
-}
-
 .hero-landscape {
   position: absolute;
   bottom: 0;
@@ -671,11 +662,8 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   transform: translateX(-50%);
 }
 
-/* The carrier's position comes from the hero clock; scale about its waterline so it shrinks into the distance. */
-.hero-ship,
-.hero-ship__hull { transform-origin: 270px 152px; }
-/* A slow swell lifts and rolls the hull a little. */
-.hero-ship__hull { animation: hero-ship-bob 5.2s ease-in-out infinite alternate; }
+/* The carrier's position comes from the hero clock. A slow swell lifts and rolls the hull a little about its waterline. */
+.hero-ship__hull { transform-origin: 270px 152px; animation: hero-ship-bob 5.2s ease-in-out infinite alternate; }
 @keyframes hero-ship-bob {
   from { transform: translateY(0) rotate(-0.35deg); }
   to { transform: translateY(0.9px) rotate(0.35deg); }
@@ -692,7 +680,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   pointer-events: none;
 }
 
-.hero-surface-site > svg { display: block; }
+.hero-surface-site > svg { display: block; overflow: visible; } /* the carrier sails in and out past its edges */
 
 @media (max-width: 860px) {
   .hero-scene { --hero-surface: max(42vh, 430px); }
@@ -953,8 +941,11 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 .hero-fault { stroke: var(--sim-ink); stroke-opacity: 0.35; stroke-width: 1.2; }
 .hero-well { stroke: var(--sim-ink); stroke-width: 2.5; }
 .hero-perforation { stroke: var(--sim-ink); stroke-width: 1.5; }
-.hero-inject { stroke: var(--sim-glow-free); stroke-width: 2.5; animation: hero-inject 0.9s linear infinite; }
-@keyframes hero-inject { to { stroke-dashoffset: -32; } }
+/* Injected CO₂ on its way from the carrier to the aquifer: the same dashes at the same speed above and below the sea. */
+.hero-flow { fill: none; stroke: var(--sim-glow-free); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 6 10; animation: hero-flow 0.9s linear infinite; }
+.hero-flow--site { stroke-width: 2; }
+.hero-flow--out { stroke: #e3fff4; stroke-width: 2; stroke-dasharray: 4 4; } /* light enough to read on the plume */
+@keyframes hero-flow { to { stroke-dashoffset: -32; } }
 
 .hero-annotations { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 
@@ -1158,7 +1149,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 .hero-scene[data-visible="false"] *::after { animation-play-state: paused !important; }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-inject { animation: none !important; }
+  .hero-flow { animation: none !important; }
 }
 
 /* =====================================================
@@ -1190,8 +1181,7 @@ a:focus:not(:focus-visible) {
   .hero-rain,
   .hero-rain-drop,
   .hero-night-clouds > svg,
-  .hero-star-twinkle::before,
-  .hero-feed-flow { animation: none !important; }
+  .hero-star-twinkle::before { animation: none !important; }
   *,
   *::before,
   *::after {
