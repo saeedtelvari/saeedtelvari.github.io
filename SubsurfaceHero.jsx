@@ -435,8 +435,10 @@ const HeroLeakReadout = ({ frame }) => {
   const side = to.x < 600 ? { left: `calc(${heroFixed(to.x / 10)}% + 22px)` } : { right: `calc(${heroFixed(100 - to.x / 10)}% + 22px)` };
   return (
     <div className="hero-leak-readout" aria-hidden="true" style={{ ...side, top: heroDepthTop(to.y) }}>
-      <strong>F{leak.fault + 1} {leak.state === 'leaking' ? 'leaking' : 'sealing again'}</strong>
-      <span>CO₂ column {leak.column} m, entry height {leak.entry} m</span>
+      <strong>F{leak.fault + 1} leaking</strong>
+      <span>{leak.state === 'above'
+        ? `CO₂ column ${leak.column} m, above the ${leak.entry} m entry height`
+        : `CO₂ column held at the ${leak.entry} m entry height`}</span>
       <span className="hero-leak-readout__share">{leak.leakedPct}% of injected CO₂ has leaked</span>
     </div>
   );

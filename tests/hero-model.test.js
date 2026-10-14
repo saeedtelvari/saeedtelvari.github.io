@@ -94,11 +94,13 @@ test('leak readout names the leaking fault, its column and entry height in metre
   const last = g.faults.length - 1;
   const column = g.faults[last].thresholdHeight + 2;
   assert.deepEqual(G.leakReadout(g, sec, frame(flows, column)), {
-    fault: last, state: 'leaking',
+    fault: last, state: 'above',
     column: Math.round(column * 45), entry: Math.round(g.faults[last].thresholdHeight * 45), leakedPct: 10,
   });
-  // The year a leak drains its own column back below the entry height, the fault is sealing again.
-  assert.equal(G.leakReadout(g, sec, frame(flows, g.faults[last].thresholdHeight / 2)).state, 'sealing');
+  // A steady leak drains the column down to the entry height each year: it is still leaking, held there.
+  assert.equal(G.leakReadout(g, sec, frame(flows, g.faults[last].thresholdHeight * .98)).state, 'held');
+  assert.equal(G.leakReadout(g, sec, frame(flows, g.faults[last].thresholdHeight + .001)).state, 'held',
+    'a column that rounds to the entry height reads as held, not above');
 });
 
 test('worker and in-page fallback produce identical frames', () => {

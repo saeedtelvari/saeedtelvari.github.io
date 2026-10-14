@@ -291,15 +291,16 @@ const HeroGeology = (() => {
   };
 
   // What the label beside a leaking fault says: which fault, its CO2 column against its entry height
-  // (both in metres of section depth), and the share of injected CO2 that has leaked.
+  // (both in metres of section depth), and the share of injected CO2 that has leaked. A steady leak
+  // drains the column down to the entry height, so the column is either above it or held at it.
   const leakReadout = (g, sec, frame) => {
     let i = -1;
     frame.faultFlow.forEach((v, j) => { if (v > 0 && (i < 0 || v > frame.faultFlow[i])) i = j; });
     if (i < 0) return null;
     const metres = units => Math.round(units * HERO_UNIT * HERO_DEPTH.metresPerUnit);
-    const column = frame.h[sec.faultCells[i][0]], entry = g.faults[i].thresholdHeight;
+    const column = metres(frame.h[sec.faultCells[i][0]]), entry = metres(g.faults[i].thresholdHeight);
     const { leaked, injected } = frame.inventory;
-    return { fault: i, state: column > entry ? 'leaking' : 'sealing', column: metres(column), entry: metres(entry),
+    return { fault: i, state: column > entry ? 'above' : 'held', column, entry,
       leakedPct: injected > 0 ? Math.round(100 * leaked / injected) : 0 };
   };
 
