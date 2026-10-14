@@ -804,7 +804,8 @@ const SimUncertainty = ({ scenario, onLoad, theme, hidden }) => {
 const SimulatorPage = () => {
   const reducedMotion = useSimReducedMotion();
   const [scenario, setScenario] = useState(() => simDecodeScenario(window.location.search) || VE2D.normalizeScenario(VE2D.DEFAULTS));
-  const [section, setSection] = useState('simulator');
+  // simulator.html#method and #uncertainty open those tabs directly (linked from the homepage).
+  const [section, setSection] = useState(() => (window.location.hash === '#method' ? 'method' : window.location.hash === '#uncertainty' ? 'uncertainty' : 'simulator'));
   const [view, setView] = useState('map');
   const [theme, setTheme] = useState(() => simStoredTheme(window.localStorage));
   const [paletteId, setPaletteId] = useState(() => simStoredPalette(window.localStorage));

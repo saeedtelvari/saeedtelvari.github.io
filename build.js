@@ -15,6 +15,7 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
 
     const files = [
       'Primitives.jsx',
+      'site-content.js',
       'Header.jsx',
       'Footer.jsx',
       'hero-geology.js',
@@ -103,6 +104,7 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
         useMemo: (fn) => fn(),
         useRef: (v) => ({ current: v }),
         useCallback: (fn) => fn,
+        memo: (component) => component,
         createElement: () => ({}),
         Fragment: 'Fragment'
       },

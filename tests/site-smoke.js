@@ -21,7 +21,7 @@ for (const page of ['index.html', 'simulator.html']) {
   has(page, /application\/ld\+json/, `${page} needs structured data`);
 }
 
-has('SubsurfaceHero.jsx', /Try VE Simulator/, 'hero needs a primary simulator CTA');
+has('SubsurfaceHero.jsx', /Open the CO₂ simulator/, 'hero needs a primary simulator CTA');
 has('SubsurfaceHero.jsx', /aria-label=\{label\}/, 'social links need distinct accessible names');
 has('SubsurfaceHero.jsx', /aria-label="Simulation year"/, 'hero timeline slider needs an accessible name');
 has('SubsurfaceHero.jsx', /new Worker\(['"]\.\/hero-simulation-worker\.js/, 'hero precomputation must run off the main thread');
@@ -29,11 +29,16 @@ assert.ok(fs.existsSync(path.join(root, 'hero-simulation-worker.js')), 'hero wor
 
 lacks('CVPage.jsx', /Saeed-Telvari-CV\.pdf/, 'CV page must not request a missing PDF asset');
 has('CVPage.jsx', /window\.print\(\)/, 'CV page print action must invoke browser print');
-has('CVPage.jsx', /Print \/ Save as PDF/, 'CV page must offer browser print and PDF export');
-has('CVPage.jsx', /Selected Publications/, 'CV page needs evidence beyond education and skills');
+has('CVPage.jsx', /Print or save as PDF/, 'CV page must offer browser print and PDF export');
+has('CVPage.jsx', /SITE_PUBLICATIONS/, 'CV page needs evidence beyond education and skills');
+lacks('CVPage.jsx', /headerbg3|backgroundImage/, 'CV has no photo background');
+has('cv.html', /<title>CV — Sa'eed Telvari<\/title>/, 'CV needs its own title');
+has('cv.html', /rel="canonical" href="https:\/\/saeedtelvari\.github\.io\/cv\.html"/, 'CV needs a canonical URL');
+has('cv.html', /data-page="cv"/, 'CV renders its own entry');
+lacks('cv.html', /font-awesome/, 'CV must not load Font Awesome');
 
-has('HomeSections.jsx', /Telvari[^\n]+Ramachandran[^\n]+Wang[^\n]+Doster/, 'three-phase publication metadata must be corrected');
-has('HomeSections.jsx', /EarthArXiv preprint[^\n]*2026|2026[^\n]*EarthArXiv preprint/, 'EarthArXiv preprint year must be 2026');
+has('site-content.js', /Telvari[^\n]+Ramachandran[^\n]+Wang[^\n]+Doster/, 'three-phase publication metadata must be corrected');
+has('site-content.js', /year: 2026,\s*title: 'A Vertical Equilibrium Model[^']*'[\s\S]*?venue: 'EarthArXiv preprint'/, 'EarthArXiv preprint year must be 2026');
 
 has('GuidePage.jsx', /educational model/i, 'guide must state the simulator scope accurately');
 lacks('GuidePage.jsx', /schemes running inside the simulator/, 'guide must not claim unimplemented constitutive laws are running');
@@ -57,7 +62,20 @@ has('build.js', /simulator-bundle\.js/, 'the heavy simulator must have a page-sp
 const simulatorBundleVersions = [...read('simulator.html').matchAll(/simulator-bundle\.js\?v=([^"']+)/g)].map(match => match[1]);
 assert.ok(simulatorBundleVersions.length >= 2, 'simulator bundle must be preloaded and executed');
 assert.equal(new Set(simulatorBundleVersions).size, 1, 'simulator preload and script URLs must use the same cache version');
-assert.equal(simulatorBundleVersions[0], '23', 'simulator page must load the current bundle version');
+assert.equal(simulatorBundleVersions[0], '24', 'simulator page must load the current bundle version');
 lacks('index.html', /simulator-bundle\.js/, 'home page must not download the simulator bundle');
 
+for (const page of ['index.html', 'cv.html']) {
+  lacks(page, /font-awesome/, page + ' uses inline icons');
+  has(page, /<script defer src="https:\/\/unpkg\.com\/react@18\.3\.1/, page + ' defers React');
+  has(page, /<noscript>/, page + ' has a no-JavaScript fallback');
+  has(page, /rel="apple-touch-icon"/, page + ' has a touch icon');
+}
+const bundleVersion = page => [...read(page).matchAll(/(?<!simulator-)bundle\.js\?v=([\d.]+)/g)].map(m => m[1]);
+const versions = new Set(['index.html', 'cv.html', 'simulator.html'].flatMap(bundleVersion));
+assert.equal(versions.size, 1, 'all pages load the same bundle.js version');
+const cssVersions = new Set(['index.html', 'cv.html', 'simulator.html'].flatMap(page => [...read(page).matchAll(/colors_and_type\.css\?v=([\d.]+)/g)].map(m => m[1])));
+assert.equal(cssVersions.size, 1, 'all pages load the same colors_and_type.css version');
+assert.ok(fs.existsSync(path.join(root, 'robots.txt')) && fs.existsSync(path.join(root, 'sitemap.xml')), 'robots.txt and sitemap.xml exist');
+has('SimulatorPage.jsx', /location\.hash === '#method'/, 'the method guide can be linked directly');
 console.log('site smoke contracts passed');

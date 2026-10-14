@@ -9,7 +9,7 @@ test('pinch-outs and local fault offsets share contacts and resize without cross
   const bundle = fs.readFileSync(path.join(root, 'bundle.js'), 'utf8');
   const code = bundle.slice(bundle.indexOf('// File: GeologicalDescent.jsx'), bundle.indexOf('// File: HomeSections.jsx'));
   assert.ok(code.includes('const GeologicalDescent'), 'build the current source before testing');
-  const cases = [[1100, 1500, 850, 240], [2600, 1900, 1200, 350], [1000, 600, 800, 200]];
+  const cases = [[1100, 1500, 850, 240], [2600, 1900, 1200, 350], [1000, 600, 800, 200], [1100, 900, 1500, 850, 240]];
   for (const heights of cases) {
     const nodes = [], observers = [];
     const sections = heights.map(offsetHeight => ({ offsetHeight }));
@@ -33,11 +33,12 @@ test('pinch-outs and local fault offsets share contacts and resize without cross
         Fragment: 'fragment', Children: { map: (children, fn) => children.map(fn) },
         useRef: () => ({ current: {
           clientWidth: heights[0] > 2000 ? 360 : 1280,
-          querySelectorAll: selector => selector === '.section-panel' ? sections.slice(0, 3) : selector === '.descent-material' ? [pattern] : [motion],
-          querySelector: () => sections[3],
+          querySelectorAll: selector => selector === '.section-panel' ? sections.slice(0, -1) : selector === '.descent-material' ? [pattern] : [motion],
+          querySelector: () => sections[sections.length - 1],
         } }),
         useState: () => [heights, fn => { updated = fn(heights); }],
         useEffect: fn => { effect = fn; },
+        useMemo: fn => fn(),
         createElement: (type, props, ...children) => {
           const node = { type, props: props || {}, children };
           nodes.push(node);
@@ -127,6 +128,7 @@ test('pinch-outs and local fault offsets share contacts and resize without cross
   const hero = fs.readFileSync(path.join(root, 'SubsurfaceHero.jsx'), 'utf8');
   assert.match(hero, /clipPath id="hero-lower-rock"><path d=\{AQUIFER_PATH\}/, 'new hero textures must be clipped below the reservoir');
   assert.match(hero, /id="hero-lower-texture-mask" maskUnits="userSpaceOnUse" x="0" y="0"/, 'the texture mask must cover the entire lower rock without default negative offsets');
-  assert.match(hero, /id="hero-descent-bridge"[\s\S]*?<stop stopColor="#263038"/, 'both sides must meet in the same slate colour');
-  assert.match(code, /id: "descent-bridge"[\s\S]*?stopColor: "#263038"/);
+  const heroBridge = hero.match(/id="hero-descent-bridge"[\s\S]*?<stop stopColor="(#[0-9a-f]{6})"/)[1];
+  const descentBridge = code.match(/id: "descent-bridge"[\s\S]*?stopColor: "(#[0-9a-f]{6})"/)[1];
+  assert.equal(heroBridge, descentBridge, 'the hero and the descent must meet in the same colour');
 });
