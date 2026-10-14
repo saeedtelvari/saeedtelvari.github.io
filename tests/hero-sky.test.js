@@ -31,6 +31,7 @@ test('sky interaction brightens fixed stars and resets on leave, reduced motion,
     useRef: () => ({ current: sky }),
     useEffect: fn => { effect = fn; },
     useMemo: fn => fn(),
+    heroFixed: value => Math.round(value * 10) / 10,
     React: { createElement: (type, props) => {
       if (props?.className === 'hero-rain-drop') rain.push(props.style);
       return {};

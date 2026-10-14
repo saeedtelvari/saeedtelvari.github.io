@@ -624,6 +624,31 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   height: clamp(100px, 16vh, 180px);
 }
 
+/* The sea is the lower half of the landscape; glitter and horizon items line up with it. */
+.hero-glitter {
+  position: absolute;
+  bottom: 0;
+  left: calc(82% + clamp(28px, 2.5vw, 38px) / 2);
+  width: 120px;
+  height: calc(clamp(100px, 16vh, 180px) / 2);
+  transform: translateX(-50%);
+}
+.hero-horizon {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(clamp(100px, 16vh, 180px) / 2);
+}
+.hero-horizon__item {
+  position: absolute;
+  bottom: 0;
+  overflow: visible;
+  transform: translateX(-50%);
+}
+
+.hero-ship { transition: transform 5s var(--ease-emil-in-out), opacity 4s linear; }
+.hero-ship.is-away { transform: translateX(140px); opacity: 0; }
+
 .hero-surface-site {
   position: absolute;
   bottom: calc(100% - var(--hero-surface));
@@ -641,6 +666,8 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   .hero-scene { --hero-surface: max(42vh, 430px); }
   .hero-moon { left: auto; right: 24px; top: 26%; width: 28px; }
   .hero-landscape { height: 85px; }
+  .hero-glitter { left: auto; right: 38px; height: 42.5px; transform: translateX(50%); }
+  .hero-horizon { bottom: 42.5px; }
 }
 
 .hero-reveal {
@@ -817,7 +844,8 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 
 /* =====================================================
    HERO — layout, section layers, labels, depth axis and player.
-   Rock follows the simulator's section view at night; CO₂ uses its class colours.
+   The section keeps the original night palette: navy aquifers, plum seals,
+   slate underburden and neon-green CO₂. Leaked CO₂ is amber so a leak reads apart.
    ===================================================== */
 .hero-scene {
   position: relative;
@@ -826,10 +854,17 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   overflow: hidden;
   color: var(--sim-ink);
   background: #070d1a;
-  --hero-over: #1d1712;
-  --hero-cap: #3b322b;
-  --hero-sand: #4d3828;
-  --hero-base: #24180f;
+  --hero-over: #1c1726;
+  --hero-cap: #2b2336;
+  --hero-sand: #0f3460;
+  --hero-base: #2c3238;
+  --hero-accent: #64ffda;
+  --sim-glow-free: #0dfca2;
+  --sim-c-free: #1a8e8f;
+  --sim-glow-residual: #20c997;
+  --sim-c-residual: #125672;
+  --sim-glow-leaked: #ffb547;
+  --sim-c-leaked: #a8541c;
 }
 
 .hero-svg {
@@ -842,7 +877,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   pointer-events: none;
 }
 .hero-svg--rock { z-index: 1; }
-.hero-svg--plume { z-index: 2; }
+.hero-svg--plume { z-index: 2; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--sim-glow-free) 45%, transparent)); }
 .hero-svg--overlay { z-index: 3; }
 
 .hero-rock--over { fill: var(--hero-over); }
@@ -859,8 +894,28 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 .hero-stop--leaked { stop-color: var(--sim-c-leaked); }
 
 .hero-contact { stroke: var(--sim-glow-free); stroke-width: 1; stroke-opacity: 0.9; }
-.hero-leak { stroke: var(--sim-glow-leaked); stroke-width: 2.5; stroke-linecap: round; }
-.hero-leak-cue { stroke: #ffd7cc; stroke-width: 1.5; stroke-linecap: round; }
+.hero-fault-zone { stroke: #9fb3c8; stroke-opacity: 0.22; stroke-width: 6; stroke-linecap: round; }
+.hero-leak-halo { fill: none; stroke: var(--sim-glow-leaked); stroke-opacity: 0.22; stroke-width: 11; stroke-linecap: round; }
+.hero-leak-halo--rise { stroke-opacity: 0.12; stroke-width: 7; }
+.hero-leak { fill: none; stroke: var(--sim-glow-leaked); stroke-width: 2.5; stroke-linecap: round; }
+.hero-leak-dots { fill: none; stroke: #fff3dc; stroke-width: 4; stroke-linecap: round; }
+.hero-leak-readout {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--sim-glow-leaked) 45%, transparent);
+  border-radius: 8px;
+  background: rgba(8, 14, 28, 0.82);
+  color: var(--sim-ink);
+  font: 12px/1.45 var(--sim-font-ui);
+  white-space: nowrap;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.hero-leak-readout strong { color: var(--sim-glow-leaked); font-weight: 600; }
+.hero-leak-readout__share { color: var(--sim-ink-muted); }
 .hero-surface-line { stroke: var(--sim-ink); stroke-opacity: 0.28; stroke-width: 1; }
 .hero-fault { stroke: var(--sim-ink); stroke-opacity: 0.35; stroke-width: 1.2; }
 .hero-well { stroke: var(--sim-ink); stroke-width: 2.5; }
@@ -964,9 +1019,9 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   bottom: 24px;
   width: 340px;
   padding: 12px 14px 10px;
-  border: 1px solid var(--sim-rule);
+  border: 1px solid color-mix(in srgb, var(--hero-accent) 28%, transparent);
   border-radius: 14px;
-  background: rgba(26, 21, 17, 0.93);
+  background: rgba(8, 14, 28, 0.82);
   color: var(--sim-ink);
   font-family: var(--sim-font-ui);
 }
@@ -981,11 +1036,11 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--sim-accent);
-  color: var(--sim-accent-ink);
+  background: var(--hero-accent);
+  color: #04201a;
   cursor: pointer;
 }
-.hero-player__scrub { flex: 1; min-width: 0; height: 20px; margin: 0; accent-color: var(--sim-accent); cursor: pointer; }
+.hero-player__scrub { flex: 1; min-width: 0; height: 20px; margin: 0; accent-color: var(--hero-accent); cursor: pointer; }
 .hero-player__small {
   display: inline-flex;
   flex: none;
@@ -1024,6 +1079,11 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 
 @media (max-width: 600px) {
   .hero-label--wide { display: none; }
+  /* Too little room beside the fault on phones; the player's legend still reports the leaked share. */
+  .hero-leak-readout { display: none; }
+  /* Keep the horizon distant on narrow screens: a smaller wind farm and no second platform. */
+  .hero-horizon__item { transform: translateX(-50%) scale(.55); transform-origin: 50% 100%; }
+  .hero-horizon__item:first-child { display: none; }
   .hero-label--narrow { display: block; }
   .hero-identity { top: calc(var(--site-header-h) + 16px); left: 20px; right: 20px; }
   .hero-role { font-size: 14px; }

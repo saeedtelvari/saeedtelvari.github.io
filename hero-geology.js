@@ -276,16 +276,32 @@ const HeroGeology = (() => {
     return out;
   };
 
-  // Views into one recorded year (no copies).
+  // Views into one recorded year (no copies), plus the volume each fault has passed so far.
   const frameOf = (run, year) => {
     const y = Math.max(0, Math.min(run.years, Math.round(year))), a = y * run.nodes, b = a + run.nodes;
     const [mobile, residual, leaked, injected] = run.inventory.subarray(y * 4, y * 4 + 4);
+    const faultLeaked = new Float64Array(run.faults);
+    for (let t = 1; t <= y; t++) for (let i = 0; i < run.faults; i++) faultLeaked[i] += run.faultFlow[t * run.faults + i] * HERO_YEAR;
     return {
       S: run.S[0].subarray(a, b), h: run.h[0].subarray(a, b), hMax: run.hMax[0].subarray(a, b),
       S2: run.S[1].subarray(a, b), h2: run.h[1].subarray(a, b), h2Max: run.hMax[1].subarray(a, b),
-      faultFlow: run.faultFlow.subarray(y * run.faults, (y + 1) * run.faults),
+      faultFlow: run.faultFlow.subarray(y * run.faults, (y + 1) * run.faults), faultLeaked,
       inventory: { mobile, residual, leaked, injected },
     };
+  };
+
+  // What the label beside a leaking fault says: which fault, its CO2 column against its entry height
+  // (both in metres of section depth), and the share of injected CO2 that has leaked. A steady leak
+  // drains the column down to the entry height, so the column is either above it or held at it.
+  const leakReadout = (g, sec, frame) => {
+    let i = -1;
+    frame.faultFlow.forEach((v, j) => { if (v > 0 && (i < 0 || v > frame.faultFlow[i])) i = j; });
+    if (i < 0) return null;
+    const metres = units => Math.round(units * HERO_UNIT * HERO_DEPTH.metresPerUnit);
+    const column = metres(frame.h[sec.faultCells[i][0]]), entry = metres(g.faults[i].thresholdHeight);
+    const { leaked, injected } = frame.inventory;
+    return { fault: i, state: column > entry ? 'above' : 'held', column, entry,
+      leakedPct: injected > 0 ? Math.round(100 * leaked / injected) : 0 };
   };
 
   const depthToY = metres => HERO_DEPTH.breakY + (metres - HERO_DEPTH.breakDepth) / HERO_DEPTH.metresPerUnit;
@@ -301,7 +317,7 @@ const HeroGeology = (() => {
 
   return { randomGeology, capRockBaseProfile, stratumBaseProfile, getStratumFaultIntersection,
     getFaultIntersection, stratumY, capRockY, layerThicknessAt, balanceFaultContact,
-    mobileThickness, storedVolume, section, simulate, frameOf,
+    mobileThickness, storedVolume, section, simulate, frameOf, leakReadout,
     HERO_DEPTH, depthToY, depthTicks, exaggeration, yearsPerSecond };
 })();
 
