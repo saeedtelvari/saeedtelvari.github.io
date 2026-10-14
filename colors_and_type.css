@@ -817,7 +817,8 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 
 /* =====================================================
    HERO — layout, section layers, labels, depth axis and player.
-   Rock follows the simulator's section view at night; CO₂ uses its class colours.
+   The section keeps the original night palette: navy aquifers, plum seals,
+   slate underburden and neon-green CO₂. Leaked CO₂ is amber so a leak reads apart.
    ===================================================== */
 .hero-scene {
   position: relative;
@@ -826,10 +827,17 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   overflow: hidden;
   color: var(--sim-ink);
   background: #070d1a;
-  --hero-over: #1d1712;
-  --hero-cap: #3b322b;
-  --hero-sand: #4d3828;
-  --hero-base: #24180f;
+  --hero-over: #1c1726;
+  --hero-cap: #2b2336;
+  --hero-sand: #0f3460;
+  --hero-base: #2c3238;
+  --hero-accent: #64ffda;
+  --sim-glow-free: #0dfca2;
+  --sim-c-free: #1a8e8f;
+  --sim-glow-residual: #20c997;
+  --sim-c-residual: #125672;
+  --sim-glow-leaked: #ffb547;
+  --sim-c-leaked: #a8541c;
 }
 
 .hero-svg {
@@ -842,7 +850,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   pointer-events: none;
 }
 .hero-svg--rock { z-index: 1; }
-.hero-svg--plume { z-index: 2; }
+.hero-svg--plume { z-index: 2; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--sim-glow-free) 45%, transparent)); }
 .hero-svg--overlay { z-index: 3; }
 
 .hero-rock--over { fill: var(--hero-over); }
@@ -860,7 +868,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 
 .hero-contact { stroke: var(--sim-glow-free); stroke-width: 1; stroke-opacity: 0.9; }
 .hero-leak { stroke: var(--sim-glow-leaked); stroke-width: 2.5; stroke-linecap: round; }
-.hero-leak-cue { stroke: #ffd7cc; stroke-width: 1.5; stroke-linecap: round; }
+.hero-leak-cue { stroke: #ffe9c7; stroke-width: 1.5; stroke-linecap: round; }
 .hero-surface-line { stroke: var(--sim-ink); stroke-opacity: 0.28; stroke-width: 1; }
 .hero-fault { stroke: var(--sim-ink); stroke-opacity: 0.35; stroke-width: 1.2; }
 .hero-well { stroke: var(--sim-ink); stroke-width: 2.5; }
@@ -964,9 +972,9 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   bottom: 24px;
   width: 340px;
   padding: 12px 14px 10px;
-  border: 1px solid var(--sim-rule);
+  border: 1px solid color-mix(in srgb, var(--hero-accent) 28%, transparent);
   border-radius: 14px;
-  background: rgba(26, 21, 17, 0.93);
+  background: rgba(8, 14, 28, 0.82);
   color: var(--sim-ink);
   font-family: var(--sim-font-ui);
 }
@@ -981,11 +989,11 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--sim-accent);
-  color: var(--sim-accent-ink);
+  background: var(--hero-accent);
+  color: #04201a;
   cursor: pointer;
 }
-.hero-player__scrub { flex: 1; min-width: 0; height: 20px; margin: 0; accent-color: var(--sim-accent); cursor: pointer; }
+.hero-player__scrub { flex: 1; min-width: 0; height: 20px; margin: 0; accent-color: var(--hero-accent); cursor: pointer; }
 .hero-player__small {
   display: inline-flex;
   flex: none;

@@ -225,12 +225,12 @@ const HeroSection = React.memo(({ sectionRef }) => {
       <defs>
         <pattern id="hero-shale" width="18" height="6" patternUnits="userSpaceOnUse">
           <rect width="18" height="6" className="hero-rock--cap" />
-          <path d="M1 3h9M12 1h5" stroke="#8d7f6e" strokeOpacity=".3" strokeWidth=".8" />
+          <path d="M1 3h9M12 1h5" stroke="#9fb3c8" strokeOpacity=".3" strokeWidth=".8" />
         </pattern>
         <pattern id="hero-sand" width="9" height="9" patternUnits="userSpaceOnUse">
           <rect width="9" height="9" className="hero-rock--sand" />
-          <circle cx="2" cy="2" r=".9" fill="#8d7f6e" fillOpacity=".4" />
-          <circle cx="6.5" cy="6" r=".7" fill="#8d7f6e" fillOpacity=".3" />
+          <circle cx="2" cy="2" r=".9" fill="#9fb3c8" fillOpacity=".4" />
+          <circle cx="6.5" cy="6" r=".7" fill="#9fb3c8" fillOpacity=".3" />
         </pattern>
         <clipPath id="hero-lower-rock"><path d={AQUIFER_PATH}/></clipPath>
         <linearGradient id="hero-lower-texture" x1="0" y1="280" x2="0" y2="580" gradientUnits="userSpaceOnUse">
@@ -291,7 +291,7 @@ const GeologyTexture = ({ faults, geology: g }) => useMemo(() => {
         {Array.from({ length: 90 }, (_, i) => <ellipse key={i}
           cx={(i * 47.13 + 7) % 137} cy={(i * i * 13.71 + 11) % 89}
           rx={0.35 + (i % 4) * 0.13} ry={0.25 + (i % 3) * 0.12}
-          fill={i % 3 ? '#d8c7b0' : '#0d0906'} opacity={i % 3 ? 0.13 : 0.3}/>) }
+          fill={i % 3 ? '#b8c7d6' : '#05080f'} opacity={i % 3 ? 0.13 : 0.3}/>) }
       </pattern>
     </defs>
     <rect width="1000" height="580" fill="url(#rock-grain)" opacity="0.5"/>
@@ -302,7 +302,7 @@ const GeologyTexture = ({ faults, geology: g }) => useMemo(() => {
     </g>
     <g clipPath="url(#rock-reservoirs)">
       {reservoirLines.map((d, i) => <path key={i} d={d} fill="none"
-        stroke="#d9c3a3" strokeWidth="0.7" opacity="0.12" strokeDasharray="47 6 18 4 83 9"/>) }
+        stroke="#93b7c2" strokeWidth="0.7" opacity="0.12" strokeDasharray="47 6 18 4 83 9"/>) }
     </g>
   </g>;
 }, [faults, g]);
