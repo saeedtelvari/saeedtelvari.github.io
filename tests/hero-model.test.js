@@ -6,7 +6,7 @@ const G = require('../hero-geology.js');
 const heroHelpers = () => {
   const src = fs.readFileSync(require.resolve('../SubsurfaceHero.jsx'), 'utf8');
   return new Function(src.slice(src.indexOf('// ---- hero playback helpers'), src.indexOf('// ---- end hero playback helpers')) +
-    '\nreturn { heroInitialPlayback, heroShouldTick, heroPhase, heroShipStep, heroCanAdvance, heroShipFor, heroShipPose };')();
+    '\nreturn { heroInitialPlayback, heroShouldTick, heroPhase, heroShipStep, heroCanAdvance, heroShipFor, heroShipPose, heroWellLayout, heroFlowPhase };')();
 };
 const rng = seed => () => ((seed = (1664525 * seed + 1013904223) >>> 0) / 2 ** 32);
 
@@ -233,4 +233,17 @@ test('the carrier slides in from the right and sails off to the left without cha
   assert.equal(h.heroShipPose({ phase: 'moored', p: 1 }).x, 0);
   assert.equal(h.heroShipPose({ phase: 'departing', p: 1 }).opacity, 0, 'gone by the end of its departure');
   assert.equal(h.heroShipPose({ phase: 'away', p: 1 }), null);
+});
+
+test('the well is completed through the storage aquifer and its flow follows the injection clock', () => {
+  const h = heroHelpers();
+  const { packer, perforations, td } = h.heroWellLayout(300, 410);
+  assert.equal(td, 410, 'the hole bottoms where the model says the well ends');
+  assert.ok(packer < 300, 'the packer sits above the storage roof, in the caprock');
+  assert.ok(perforations.length >= 10, 'the perforations cover the interval');
+  assert.ok(perforations.every(y => y > 300 && y < td), 'every perforation lies between the roof and TD');
+  for (let i = 1; i < perforations.length; i++) assert.ok(Math.abs(perforations[i] - perforations[i - 1] - 8) < 1e-9, 'evenly spaced');
+  assert.equal(h.heroFlowPhase(0), 0);
+  assert.ok(h.heroFlowPhase(10) > h.heroFlowPhase(9), 'the flow markers advance with the injection years');
+  assert.equal(h.heroFlowPhase(12.345), 74.1, 'rounded to a tenth, so attributes stay stable');
 });
