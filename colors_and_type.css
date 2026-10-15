@@ -939,13 +939,28 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 .hero-leak-readout__share { color: var(--sim-ink-muted); }
 .hero-surface-line { stroke: var(--sim-ink); stroke-opacity: 0.28; stroke-width: 1; }
 .hero-fault { stroke: var(--sim-ink); stroke-opacity: 0.35; stroke-width: 1.2; }
-.hero-well { stroke: var(--sim-ink); stroke-width: 2.5; }
-.hero-perforation { stroke: var(--sim-ink); stroke-width: 1.5; }
-/* Injected CO₂ on its way from the carrier to the aquifer: the same dashes at the same speed above and below the sea. */
-.hero-flow { fill: none; stroke: var(--sim-glow-free); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 6 10; animation: hero-flow 0.9s linear infinite; }
-.hero-flow--site { stroke-width: 2; }
-.hero-flow--out { stroke: #e3fff4; stroke-width: 2; stroke-dasharray: 4 4; } /* light enough to read on the plume */
-@keyframes hero-flow { to { stroke-dashoffset: -32; } }
+
+/* The well is its own strip over the section, pixel-true across so the casing never stretches with the viewport. */
+.hero-well {
+  position: absolute;
+  top: var(--hero-surface);
+  width: 80px;
+  height: var(--hero-depth);
+  margin-left: -40px;
+  z-index: 3;
+  overflow: visible;
+  pointer-events: none;
+}
+.hero-well__casing { fill: none; stroke: var(--sim-ink); stroke-opacity: .6; stroke-width: 6; }
+.hero-well__casing--surface { stroke-width: 11; }
+.hero-well__bore { fill: none; stroke: #0b1220; stroke-width: 4; }
+.hero-well__bore--surface { stroke-width: 9; }
+.hero-well__packer { fill: none; stroke: #d7e3f0; stroke-opacity: .85; stroke-width: 2.5; }
+.hero-well__perforations { fill: none; stroke: var(--sim-ink); stroke-opacity: .5; stroke-width: 1.2; }
+/* CO₂ in the pipes: a green core with soft white pulses that the injection clock slides along; it glows while it flows. */
+.hero-well__flow { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--sim-glow-free) 60%, transparent)); }
+.hero-well__co2 { fill: none; stroke: var(--sim-glow-free); stroke-opacity: .85; stroke-width: 2.6; stroke-linecap: round; }
+.hero-well__pulse { fill: none; stroke-width: 2.6; stroke-linecap: round; }
 
 .hero-annotations { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 
@@ -1147,10 +1162,6 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 .hero-scene[data-visible="false"] *,
 .hero-scene[data-visible="false"] *::before,
 .hero-scene[data-visible="false"] *::after { animation-play-state: paused !important; }
-
-@media (prefers-reduced-motion: reduce) {
-  .hero-flow { animation: none !important; }
-}
 
 /* =====================================================
    ACCESSIBILITY & FOCUS RINGS
