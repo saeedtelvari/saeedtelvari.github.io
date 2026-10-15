@@ -6,7 +6,7 @@ const G = require('../hero-geology.js');
 const heroHelpers = () => {
   const src = fs.readFileSync(require.resolve('../SubsurfaceHero.jsx'), 'utf8');
   return new Function(src.slice(src.indexOf('// ---- hero playback helpers'), src.indexOf('// ---- end hero playback helpers')) +
-    '\nreturn { heroInitialPlayback, heroShouldTick, heroPhase, heroShipStep, heroCanAdvance, heroShipFor };')();
+    '\nreturn { heroInitialPlayback, heroShouldTick, heroPhase, heroShipStep, heroCanAdvance, heroShipFor, heroShipPose, heroWellLayout, heroFlowPhase };')();
 };
 const rng = seed => () => ((seed = (1664525 * seed + 1013904223) >>> 0) / 2 ** 32);
 
@@ -86,18 +86,19 @@ test('a fault leaks only while buoyancy plus overpressure exceeds its entry pres
   assert.ok(leaked || G.frameOf(run, run.years).inventory.leaked === 0);
 });
 
-test('leaked share stays in a realistic range across random geologies', () => {
+test('leaky faults give every section a visible plume in the overlying aquifer, without draining it', () => {
   const random = rng(21);
   const shares = [];
   for (let n = 0; n < 16; n++) {
-    const run = G.simulate(G.randomGeology(random), { years: 800 });
+    const run = G.simulate(G.randomGeology(random), { years: 2000 });
     const { leaked, injected } = G.frameOf(run, run.years).inventory;
     shares.push(leaked / injected);
   }
   shares.sort((a, b) => a - b);
-  assert.ok(shares[shares.length - 1] < 0.1, 'no section loses a tenth of its CO2');
-  assert.ok(shares[shares.length >> 1] < 0.02, 'a typical section leaks under 2 %');
-  assert.ok(shares.some(share => share > 0), 'some faults still leak');
+  assert.ok(shares[0] > 0.02, `every section leaks over 2 % (least ${(100 * shares[0]).toFixed(2)} %)`);
+  const median = shares[shares.length >> 1];
+  assert.ok(median > 0.05 && median < 0.25, `a typical section leaks 5-25 % (median ${(100 * median).toFixed(1)} %)`);
+  assert.ok(shares[shares.length - 1] < 0.4, 'no section loses most of its CO2');
 });
 
 test('per-fault leaked volume accumulates the fault flux and adds up to the leaked inventory', () => {
@@ -213,4 +214,36 @@ test('the carrier berths before injection starts and sails once it ends', () => 
   // Scrubbing jumps straight to the state that belongs to that year.
   assert.deepEqual(h.heroShipFor(10, 30), { phase: 'moored', p: 1 });
   assert.deepEqual(h.heroShipFor(400, 30), { phase: 'away', p: 1 });
+});
+
+test('the carrier slides in from the right and sails off to the left without changing size', () => {
+  const h = heroHelpers();
+  for (const phase of ['arriving', 'departing']) {
+    let previous = Infinity;
+    for (let i = 0; i <= 20; i++) {
+      const pose = h.heroShipPose({ phase, p: i / 20 });
+      assert.equal(pose.s === undefined ? 1 : pose.s, 1, `${phase} at ${i / 20}: no zoom`);
+      assert.equal(pose.y === undefined ? 0 : pose.y, 0, `${phase} at ${i / 20}: stays on the water line`);
+      assert.ok(pose.x <= previous, `${phase} at ${i / 20}: always heading left`);
+      previous = pose.x;
+    }
+  }
+  assert.ok(h.heroShipPose({ phase: 'arriving', p: 0 }).x >= 600, 'starts beyond the right edge of the hero');
+  assert.equal(h.heroShipPose({ phase: 'arriving', p: 1 }).x, 0, 'comes to rest alongside');
+  assert.equal(h.heroShipPose({ phase: 'moored', p: 1 }).x, 0);
+  assert.equal(h.heroShipPose({ phase: 'departing', p: 1 }).opacity, 0, 'gone by the end of its departure');
+  assert.equal(h.heroShipPose({ phase: 'away', p: 1 }), null);
+});
+
+test('the well is completed through the storage aquifer and its flow follows the injection clock', () => {
+  const h = heroHelpers();
+  const { packer, perforations, td } = h.heroWellLayout(300, 410);
+  assert.equal(td, 410, 'the hole bottoms where the model says the well ends');
+  assert.ok(packer < 300, 'the packer sits above the storage roof, in the caprock');
+  assert.ok(perforations.length >= 10, 'the perforations cover the interval');
+  assert.ok(perforations.every(y => y > 300 && y < td), 'every perforation lies between the roof and TD');
+  for (let i = 1; i < perforations.length; i++) assert.ok(Math.abs(perforations[i] - perforations[i - 1] - 8) < 1e-9, 'evenly spaced');
+  assert.equal(h.heroFlowPhase(0), 0);
+  assert.ok(h.heroFlowPhase(10) > h.heroFlowPhase(9), 'the flow markers advance with the injection years');
+  assert.equal(h.heroFlowPhase(12.345), 74.1, 'rounded to a tenth, so attributes stay stable');
 });

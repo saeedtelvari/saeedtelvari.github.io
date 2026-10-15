@@ -1,4 +1,4 @@
-importScripts('./hero-geology.js?v=4');
+importScripts('./hero-geology.js?v=5');
 
 // One shared implementation (hero-geology.js) runs the model; the typed arrays are transferred.
 self.onmessage = ({ data }) => {

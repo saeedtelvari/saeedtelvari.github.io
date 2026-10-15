@@ -32,6 +32,30 @@ const heroShipStep = (ship, dt, wantMoored, seconds = HERO_SHIP_SECONDS) => {
 const heroCanAdvance = (year, injectionYears, ship) => year >= injectionYears || ship === 'moored';
 // Scrubbing is a jump in time, so the carrier jumps to where it belongs in that year.
 const heroShipFor = (year, injectionYears) => (year < injectionYears ? { phase: 'moored', p: 1 } : { phase: 'away', p: 1 });
+// Where the carrier is in its manoeuvre, as a sideways offset in site units at a constant size. It runs in
+// from beyond the right edge, slowing as it comes alongside, and leaves bow-first to the left, behind the
+// platform, fading into the dark.
+const heroShipPose = ({ phase, p }) => {
+  if (phase === 'away') return null;
+  if (phase === 'arriving') {
+    return { x: 640 * (1 - p) ** 3, opacity: Math.min(1, p / 0.1), wake: (1 - p) ** 2, hose: 0, lights: 0 };
+  }
+  if (phase === 'departing') {
+    return { x: -1100 * p * p, opacity: p < 0.55 ? 1 : (1 - p) / 0.45, wake: Math.min(1, 2 * p), hose: 0, lights: 0 };
+  }
+  const hose = phase === 'connecting' ? p : phase === 'disconnecting' ? 1 - p : 1;
+  return { x: 0, opacity: 1, wake: 0, hose, lights: 1 };
+};
+// The completion, in section units of depth: a packer in the caprock above the storage roof, then
+// perforations every 8 units (24 m) down to a short sump above TD, which the model sets.
+const heroWellLayout = (roofY, td) => {
+  const perforations = [];
+  for (let y = roofY + 5; y <= td - 5; y += 8) perforations.push(Math.round(y * 10) / 10);
+  return { packer: roofY - 7, perforations, td };
+};
+// Where the CO2 in the pipes has got to: 6 section units per injection year, so the pulses move at
+// about 35 px/s at normal speed, stand still when the hero is paused and stop with injection.
+const heroFlowPhase = year => Math.round(year * 60) / 10;
 // ---- end hero playback helpers
 
 // Percent of injected CO2 for display: a trace that rounds to nothing still reads as "<0.1".
@@ -176,7 +200,7 @@ const SubsurfaceHero = ({ onNavigate }) => {
       const timer = setTimeout(() => setRun(HeroGeology.simulate(heroGeology, options)), 0);
       return () => clearTimeout(timer);
     }
-    const worker = new Worker('./hero-simulation-worker.js?v=9');
+    const worker = new Worker('./hero-simulation-worker.js?v=10');
     worker.onmessage = event => setRun(event.data);
     worker.onerror = () => setRun(HeroGeology.simulate(heroGeology, options));
     worker.postMessage({ geology: heroGeology, options });
@@ -236,7 +260,8 @@ const SubsurfaceHero = ({ onNavigate }) => {
     return { peak, dots: peak > 0 ? 40 / (60 * peak * run.yearLength) : 0 };
   }, [run]);
   const injectionYears = run ? run.injectionYears : 30;
-  const injecting = !!run && playing && visible && year < injectionYears && ship.phase === 'moored';
+  // CO2 is in the pipes while the carrier is connected during the injection years; its flow follows the clock.
+  const flow = run && year < injectionYears && ship.phase === 'moored' ? heroFlowPhase(year) : null;
   const jumpShip = value => {
     shipRef.current = heroShipFor(value, injectionYears);
     setShip(shipRef.current);
@@ -256,8 +281,9 @@ const SubsurfaceHero = ({ onNavigate }) => {
       <Sky />
       <HeroSection sectionRef={sectionRef} />
       <HeroPlume frame={frame} leakScale={leakScale} />
-      <HeroOverlay injecting={injecting} />
-      <SurfaceSite geology={heroGeology} injecting={injecting} ship={ship} />
+      <HeroOverlay />
+      <HeroWell flow={flow} />
+      <SurfaceSite geology={heroGeology} flow={flow} ship={ship} />
       <HeroLabels />
       <HeroLeakReadout frame={frame} year={year} injectionYears={injectionYears} />
       <Identity onNavigate={onNavigate} />
@@ -287,11 +313,6 @@ const HeroSection = React.memo(({ sectionRef }) => {
           <rect width="18" height="6" className="hero-rock--cap" />
           <path d="M1 3h9M12 1h5" stroke="#9fb3c8" strokeOpacity=".3" strokeWidth=".8" />
         </pattern>
-        <pattern id="hero-sand" width="9" height="9" patternUnits="userSpaceOnUse">
-          <rect width="9" height="9" className="hero-rock--sand" />
-          <circle cx="2" cy="2" r=".9" fill="#9fb3c8" fillOpacity=".4" />
-          <circle cx="6.5" cy="6" r=".7" fill="#9fb3c8" fillOpacity=".3" />
-        </pattern>
         <clipPath id="hero-lower-rock"><path d={AQUIFER_PATH}/></clipPath>
         <linearGradient id="hero-lower-texture" x1="0" y1="280" x2="0" y2="580" gradientUnits="userSpaceOnUse">
           <stop stopColor="white" stopOpacity="0"/><stop offset="1" stopColor="white" stopOpacity=".65"/>
@@ -307,8 +328,8 @@ const HeroSection = React.memo(({ sectionRef }) => {
       {/* Sea water above the seabed: about 90 m, a hairline at this depth scale. */}
       <rect width="1000" height="3" fill="#0b1a2c" />
       <path d={HERO_PATHS.caprock} fill="url(#hero-shale)" />
-      <path d={HERO_PATHS.overlying} fill="url(#hero-sand)" />
-      <path d={HERO_PATHS.storage} fill="url(#hero-sand)" />
+      <path d={HERO_PATHS.overlying} className="hero-rock--sand" />
+      <path d={HERO_PATHS.storage} className="hero-rock--sand" />
       <path d={AQUIFER_PATH} className="hero-rock--base" />
       <g clipPath="url(#hero-lower-rock)">
         <rect width="1000" height="580" fill="url(#descent-rock-shale)" mask="url(#hero-lower-texture-mask)"/>
@@ -428,24 +449,44 @@ const HeroPlume = ({ frame, leakScale }) => {
 };
 
 /* =====================================================
-   Overlay — ground surface, faults and the injection well
+   Overlay — ground surface and the fault traces
    ===================================================== */
-const HeroOverlay = React.memo(({ injecting }) => {
-  const wellTop = heroStorage.roofR[heroSection.wellCell];
-  const { wellBottom } = heroSection;
+const HeroOverlay = React.memo(() => (
+  <svg className="hero-svg hero-svg--overlay" viewBox="0 0 1000 580" preserveAspectRatio="none" aria-hidden="true">
+    <line x1="0" y1="0.5" x2="1000" y2="0.5" className="hero-surface-line" vectorEffect="non-scaling-stroke" />
+    {HERO_FAULTS.map((fault, i) => (
+      <line key={i} x1={fault.top.x} y1={fault.top.y} x2={fault.bottom.x} y2={fault.bottom.y} className="hero-fault" vectorEffect="non-scaling-stroke" />
+    ))}
+  </svg>
+));
+
+/* =====================================================
+   Well — a pixel-true strip over the section: x in px about the well, y in section units
+   ===================================================== */
+const HERO_WELL = heroWellLayout(heroStorage.roofR[heroSection.wellCell], heroSection.wellBottom);
+const HeroWell = React.memo(({ flow }) => {
+  const { packer, perforations, td } = HERO_WELL;
+  const bore = `M0 0V${heroFixed(td)}`;
   return (
-    <svg className="hero-svg hero-svg--overlay" viewBox="0 0 1000 580" preserveAspectRatio="none" aria-hidden="true">
-      <line x1="0" y1="0.5" x2="1000" y2="0.5" className="hero-surface-line" vectorEffect="non-scaling-stroke" />
-      {HERO_FAULTS.map((fault, i) => (
-        <line key={i} x1={fault.top.x} y1={fault.top.y} x2={fault.bottom.x} y2={fault.bottom.y} className="hero-fault" vectorEffect="non-scaling-stroke" />
-      ))}
-      <line x1={heroGeology.wellX} y1="0" x2={heroGeology.wellX} y2={wellBottom} className="hero-well" vectorEffect="non-scaling-stroke" />
-      {[0.2, 0.4, 0.6, 0.8].map(f => {
-        const y = wellTop + f * (wellBottom - wellTop);
-        return <line key={f} x1={heroGeology.wellX - 7} x2={heroGeology.wellX + 7} y1={y} y2={y} className="hero-perforation" vectorEffect="non-scaling-stroke" />;
-      })}
-      {injecting && <line className="hero-inject" x1={heroGeology.wellX} y1="0" x2={heroGeology.wellX} y2={wellTop}
-        strokeDasharray="6 10" vectorEffect="non-scaling-stroke" />}
+    <svg className="hero-well" viewBox="-40 0 80 580" preserveAspectRatio="none" aria-hidden="true" style={{ left: `${heroGeology.wellXPct}%` }}>
+      <defs>
+        {/* Soft pulses that repeat down the tubing; the clock slides them. */}
+        <linearGradient id="hero-well-flow" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="32" spreadMethod="repeat"
+          gradientTransform={`translate(0 ${flow || 0})`}>
+          <stop stopColor="#fff" stopOpacity="0" /><stop offset=".5" stopColor="#fff" stopOpacity=".85" /><stop offset="1" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {/* Production casing to TD and surface casing to the axis break, each a light wall round a dark bore. */}
+      <path d={bore} className="hero-well__casing" vectorEffect="non-scaling-stroke" />
+      <path d={bore} className="hero-well__bore" vectorEffect="non-scaling-stroke" />
+      <path d="M0 0V28" className="hero-well__casing hero-well__casing--surface" vectorEffect="non-scaling-stroke" />
+      <path d="M0 0V28" className="hero-well__bore hero-well__bore--surface" vectorEffect="non-scaling-stroke" />
+      <path d={`M-5 ${heroFixed(packer)}H5`} className="hero-well__packer" vectorEffect="non-scaling-stroke" />
+      <path d={perforations.map(y => `M-3.5 ${y}h-3M3.5 ${y}h3`).join('')} className="hero-well__perforations" vectorEffect="non-scaling-stroke" />
+      {flow !== null && <g className="hero-well__flow">
+        <path d={bore} className="hero-well__co2" vectorEffect="non-scaling-stroke" />
+        <path d={bore} className="hero-well__pulse" stroke="url(#hero-well-flow)" vectorEffect="non-scaling-stroke" />
+      </g>}
     </svg>
   );
 });
@@ -774,28 +815,12 @@ const HERO_SEA_GLINTS = (() => {
 
 // Decorative equipment stays anchored to the same surface and well as the live model:
 // an offshore injection platform over the well, and a CO₂ carrier moored alongside while injecting.
-// Where the carrier is in its manoeuvre. It runs in from the right, slowing as it comes alongside,
-// and leaves bow-first to the left, accelerating away behind the platform into the distance.
-const heroShipPose = ({ phase, p }) => {
-  if (phase === 'away') return null;
-  if (phase === 'arriving') {
-    const left = (1 - p) ** 3;
-    return { x: 200 * left, y: -24 * left, s: 1 - 0.3 * left, opacity: Math.min(1, p / 0.12), wake: (1 - p) ** 2, hose: 0, lights: 0 };
-  }
-  if (phase === 'departing') {
-    const gone = p * p;
-    return { x: -440 * gone, y: -46 * gone, s: 1 - 0.6 * gone, opacity: p < 0.8 ? 1 : (1 - p) / 0.2, wake: Math.min(1, 2 * p), hose: 0, lights: 0 };
-  }
-  const hose = phase === 'connecting' ? p : phase === 'disconnecting' ? 1 - p : 1;
-  return { x: 0, y: 0, s: 1, opacity: 1, wake: 0, hose, lights: 1 };
-};
-
-const HeroShip = ({ ship, injecting }) => {
+const HeroShip = ({ ship }) => {
   const pose = heroShipPose(ship);
   if (!pose) return null;
   const engine = 0.15 + 0.85 * pose.wake;
   return (
-    <g className="hero-ship" style={{ transform: `translate(${heroFixed(pose.x)}px, ${heroFixed(pose.y)}px) scale(${pose.s.toFixed(3)})`, opacity: pose.opacity }}>
+    <g className="hero-ship" style={{ transform: `translateX(${heroFixed(pose.x)}px)`, opacity: heroFixed(pose.opacity * 100) / 100 }}>
       {/* Wake astern and the bow wave grow with the carrier's speed. */}
       <g opacity={heroFixed(pose.wake)}>
         <path d="M394 151q30 1 70 -1M392 153q50 2 120 0M396 155q30 3 80 3" stroke="#cfdbe8" strokeWidth="1" strokeDasharray="18 6 30 8" opacity=".75" />
@@ -833,9 +858,8 @@ const HeroShip = ({ ship, injecting }) => {
         <path d="M172 154.5H388M180 156.8H380M194 159H366" stroke="#03070e" strokeWidth="1.6" strokeDasharray="22 3 40 4 16 3" opacity=".55" />
         {[356, 366, 376].map(x => <rect key={x} x={x} y="153" width="1.4" height="7" fill="url(#ship-light-reflection)" />)}
       </g>
-      {/* The transfer hose is lowered from the platform to the manifold, then pulses while CO₂ is injected. */}
+      {/* The transfer hose is lowered from the platform to the manifold. */}
       {pose.hose > 0 && <use href="#site-feed-route" stroke="#0e1a28" strokeWidth="3.4" strokeDasharray="1 1" strokeDashoffset={(1 - pose.hose).toFixed(3)} />}
-      {injecting && <use className="hero-feed-flow" href="#site-feed-route" strokeWidth="1" style={{ stroke: 'var(--sim-glow-free)' }} />}
     </g>
   );
 };
@@ -843,10 +867,19 @@ const HeroShip = ({ ship, injecting }) => {
 const HERO_RIG_WINDOWS = [[2, 76, 9], [2, 84, 9], [2, 92, 9], [66, 64, 7], [66, 71, 7], [66, 78, 7], [66, 85, 7], [66, 92, 7]]
   .flatMap(([x0, y, n]) => Array.from({ length: n }, (_, i) => [x0 + i * 6, y, (i * 7 + y * 3) % 5]))
   .filter(([, , lit]) => lit < 3);
-const SurfaceSite = ({ geology, injecting, ship }) => (
+const SurfaceSite = ({ geology, flow, ship }) => (
   <div className="hero-surface-site" aria-hidden="true" style={{ left: `${geology.wellXPct}%` }}>
     <svg viewBox="-140 0 540 160" width="100%" height="100%" fill="none">
       <defs>
+        {/* The same pulses as in the well: leftwards along the hose and deck, then down the conductor. */}
+        <linearGradient id="site-flow-x" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="24" y2="0" spreadMethod="repeat"
+          gradientTransform={`translate(${-(flow || 0)} 0)`}>
+          <stop stopColor="#fff" stopOpacity="0" /><stop offset=".5" stopColor="#fff" stopOpacity=".85" /><stop offset="1" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="site-flow-y" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="24" spreadMethod="repeat"
+          gradientTransform={`translate(0 ${flow || 0})`}>
+          <stop stopColor="#fff" stopOpacity="0" /><stop offset=".5" stopColor="#fff" stopOpacity=".85" /><stop offset="1" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
         <linearGradient id="rig-steel" x1="0" y1="0" x2="1" y2="0">
           <stop stopColor="#1b293b" /><stop offset=".7" stopColor="#2c3e55" /><stop offset="1" stopColor="#5d7493" />
         </linearGradient>
@@ -867,8 +900,9 @@ const SurfaceSite = ({ geology, injecting, ship }) => (
         </radialGradient>
         <path id="site-feed-route" pathLength="1" d="M112 101Q176 150 236 114" />
       </defs>
-      <HeroShip ship={ship} injecting={injecting} />
-      {/* Jacket: two visible legs with K-bracing, battered out towards the sea floor. */}
+      <HeroShip ship={ship} />
+      {/* Jacket: two visible legs with K-bracing, battered out towards the sea floor, round the well's conductor. */}
+      <path d="M48 104V160" stroke="#2c3e55" strokeWidth="2.4" />
       <path d="M10 160L20 104M86 160L76 104" stroke="url(#rig-steel)" strokeWidth="5" />
       <path d="M13 143H83M16 124H80M13 143L48 124L83 143M16 124L48 106L80 124" stroke="#34475f" strokeWidth="1.5" />
       <path d="M86 160L76 104" stroke="#8fa5bd" strokeOpacity=".45" strokeWidth=".8" />
@@ -892,13 +926,20 @@ const SurfaceSite = ({ geology, injecting, ship }) => (
       <path d="M59 98L52 22" stroke="#9fb3c8" strokeOpacity=".4" strokeWidth=".6" />
       <path d="M43 22H53V18H43Z" fill="#2c4060" />
       <circle cx="48" cy="16" r="1.8" fill="#ff5a4f" />
-      <circle data-site-status="true" cx="48" cy="95" r="1.5" style={{ fill: injecting ? 'var(--sim-glow-free)' : '#647b79' }} />
+      <circle data-site-status="true" cx="48" cy="95" r="1.5" style={{ fill: flow !== null ? 'var(--sim-glow-free)' : '#647b79' }} />
       {/* Pedestal crane with its boom resting out over the water. */}
       <path d="M4 70V60H12V70Z" fill="#22344b" />
       <path d="M8 60L-62 26" stroke="#4a5f7a" strokeWidth="2.2" />
       <path d="M2 63L-62 26" stroke="#3a4f69" strokeWidth=".7" />
       <path d="M-62 26V52" stroke="#7d93ad" strokeOpacity=".6" strokeWidth=".6" />
       <circle cx="-62" cy="25" r="1.4" fill="#ff5a4f" />
+      {/* While connected, CO₂ runs from the carrier's manifold up the hose, across the deck to the well bay
+          and down the conductor; the section's well carries it on to the aquifer. */}
+      {flow !== null && <g className="hero-well__flow">
+        <path d="M236 114Q176 150 112 101H48V160" className="hero-well__co2" strokeWidth="2" />
+        <path d="M236 114Q176 150 112 101H48" className="hero-well__pulse" strokeWidth="2" stroke="url(#site-flow-x)" />
+        <path d="M48 101V160" className="hero-well__pulse" strokeWidth="2" stroke="url(#site-flow-y)" />
+      </g>}
     </svg>
   </div>
 );

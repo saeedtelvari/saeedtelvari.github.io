@@ -656,8 +656,9 @@ const HeroGeology = (() => {
       }
     }
     const fault = (xPercent, dipSlope, angleDeg) => {
-      // Damage-zone permeability against the aquifer's CO2 permeability: 0.1-10 mD against about 100 mD.
-      const permeabilityRatio = parseFloat(Math.pow(10, -3 + 2 * random()).toPrecision(3));
+      // Damage-zone permeability against the aquifer's CO2 permeability: 10-100 mD against about 100 mD.
+      // Leakier than the paper's field case on purpose, so the overlying aquifer's plume shows.
+      const permeabilityRatio = parseFloat(Math.pow(10, -1 + random()).toPrecision(3));
       return {
         xPercent,
         dipSlope,
@@ -1208,6 +1209,55 @@ const heroShipFor = (year, injectionYears) => year < injectionYears ? {
   phase: 'away',
   p: 1
 };
+// Where the carrier is in its manoeuvre, as a sideways offset in site units at a constant size. It runs in
+// from beyond the right edge, slowing as it comes alongside, and leaves bow-first to the left, behind the
+// platform, fading into the dark.
+const heroShipPose = ({
+  phase,
+  p
+}) => {
+  if (phase === 'away') return null;
+  if (phase === 'arriving') {
+    return {
+      x: 640 * (1 - p) ** 3,
+      opacity: Math.min(1, p / 0.1),
+      wake: (1 - p) ** 2,
+      hose: 0,
+      lights: 0
+    };
+  }
+  if (phase === 'departing') {
+    return {
+      x: -1100 * p * p,
+      opacity: p < 0.55 ? 1 : (1 - p) / 0.45,
+      wake: Math.min(1, 2 * p),
+      hose: 0,
+      lights: 0
+    };
+  }
+  const hose = phase === 'connecting' ? p : phase === 'disconnecting' ? 1 - p : 1;
+  return {
+    x: 0,
+    opacity: 1,
+    wake: 0,
+    hose,
+    lights: 1
+  };
+};
+// The completion, in section units of depth: a packer in the caprock above the storage roof, then
+// perforations every 8 units (24 m) down to a short sump above TD, which the model sets.
+const heroWellLayout = (roofY, td) => {
+  const perforations = [];
+  for (let y = roofY + 5; y <= td - 5; y += 8) perforations.push(Math.round(y * 10) / 10);
+  return {
+    packer: roofY - 7,
+    perforations,
+    td
+  };
+};
+// Where the CO2 in the pipes has got to: 6 section units per injection year, so the pulses move at
+// about 35 px/s at normal speed, stand still when the hero is paused and stop with injection.
+const heroFlowPhase = year => Math.round(year * 60) / 10;
 // ---- end hero playback helpers
 
 // Percent of injected CO2 for display: a trace that rounds to nothing still reads as "<0.1".
@@ -1398,7 +1448,7 @@ const SubsurfaceHero = ({
       const timer = setTimeout(() => setRun(HeroGeology.simulate(heroGeology, options)), 0);
       return () => clearTimeout(timer);
     }
-    const worker = new Worker('./hero-simulation-worker.js?v=9');
+    const worker = new Worker('./hero-simulation-worker.js?v=10');
     worker.onmessage = event => setRun(event.data);
     worker.onerror = () => setRun(HeroGeology.simulate(heroGeology, options));
     worker.postMessage({
@@ -1477,7 +1527,8 @@ const SubsurfaceHero = ({
     };
   }, [run]);
   const injectionYears = run ? run.injectionYears : 30;
-  const injecting = !!run && playing && visible && year < injectionYears && ship.phase === 'moored';
+  // CO2 is in the pipes while the carrier is connected during the injection years; its flow follows the clock.
+  const flow = run && year < injectionYears && ship.phase === 'moored' ? heroFlowPhase(year) : null;
   const jumpShip = value => {
     shipRef.current = heroShipFor(value, injectionYears);
     setShip(shipRef.current);
@@ -1509,11 +1560,11 @@ const SubsurfaceHero = ({
   }), /*#__PURE__*/React.createElement(HeroPlume, {
     frame: frame,
     leakScale: leakScale
-  }), /*#__PURE__*/React.createElement(HeroOverlay, {
-    injecting: injecting
+  }), /*#__PURE__*/React.createElement(HeroOverlay, null), /*#__PURE__*/React.createElement(HeroWell, {
+    flow: flow
   }), /*#__PURE__*/React.createElement(SurfaceSite, {
     geology: heroGeology,
-    injecting: injecting,
+    flow: flow,
     ship: ship
   }), /*#__PURE__*/React.createElement(HeroLabels, null), /*#__PURE__*/React.createElement(HeroLeakReadout, {
     frame: frame,
@@ -1570,27 +1621,6 @@ const HeroSection = React.memo(({
     stroke: "#9fb3c8",
     strokeOpacity: ".3",
     strokeWidth: ".8"
-  })), /*#__PURE__*/React.createElement("pattern", {
-    id: "hero-sand",
-    width: "9",
-    height: "9",
-    patternUnits: "userSpaceOnUse"
-  }, /*#__PURE__*/React.createElement("rect", {
-    width: "9",
-    height: "9",
-    className: "hero-rock--sand"
-  }), /*#__PURE__*/React.createElement("circle", {
-    cx: "2",
-    cy: "2",
-    r: ".9",
-    fill: "#9fb3c8",
-    fillOpacity: ".4"
-  }), /*#__PURE__*/React.createElement("circle", {
-    cx: "6.5",
-    cy: "6",
-    r: ".7",
-    fill: "#9fb3c8",
-    fillOpacity: ".3"
   })), /*#__PURE__*/React.createElement("clipPath", {
     id: "hero-lower-rock"
   }, /*#__PURE__*/React.createElement("path", {
@@ -1646,10 +1676,10 @@ const HeroSection = React.memo(({
     fill: "url(#hero-shale)"
   }), /*#__PURE__*/React.createElement("path", {
     d: HERO_PATHS.overlying,
-    fill: "url(#hero-sand)"
+    className: "hero-rock--sand"
   }), /*#__PURE__*/React.createElement("path", {
     d: HERO_PATHS.storage,
-    fill: "url(#hero-sand)"
+    className: "hero-rock--sand"
   }), /*#__PURE__*/React.createElement("path", {
     d: AQUIFER_PATH,
     className: "hero-rock--base"
@@ -1901,62 +1931,107 @@ const HeroPlume = ({
 };
 
 /* =====================================================
-   Overlay — ground surface, faults and the injection well
+   Overlay — ground surface and the fault traces
    ===================================================== */
-const HeroOverlay = React.memo(({
-  injecting
+const HeroOverlay = React.memo(() => /*#__PURE__*/React.createElement("svg", {
+  className: "hero-svg hero-svg--overlay",
+  viewBox: "0 0 1000 580",
+  preserveAspectRatio: "none",
+  "aria-hidden": "true"
+}, /*#__PURE__*/React.createElement("line", {
+  x1: "0",
+  y1: "0.5",
+  x2: "1000",
+  y2: "0.5",
+  className: "hero-surface-line",
+  vectorEffect: "non-scaling-stroke"
+}), HERO_FAULTS.map((fault, i) => /*#__PURE__*/React.createElement("line", {
+  key: i,
+  x1: fault.top.x,
+  y1: fault.top.y,
+  x2: fault.bottom.x,
+  y2: fault.bottom.y,
+  className: "hero-fault",
+  vectorEffect: "non-scaling-stroke"
+}))));
+
+/* =====================================================
+   Well — a pixel-true strip over the section: x in px about the well, y in section units
+   ===================================================== */
+const HERO_WELL = heroWellLayout(heroStorage.roofR[heroSection.wellCell], heroSection.wellBottom);
+const HeroWell = React.memo(({
+  flow
 }) => {
-  const wellTop = heroStorage.roofR[heroSection.wellCell];
   const {
-    wellBottom
-  } = heroSection;
+    packer,
+    perforations,
+    td
+  } = HERO_WELL;
+  const bore = `M0 0V${heroFixed(td)}`;
   return /*#__PURE__*/React.createElement("svg", {
-    className: "hero-svg hero-svg--overlay",
-    viewBox: "0 0 1000 580",
-    preserveAspectRatio: "none",
-    "aria-hidden": "true"
-  }, /*#__PURE__*/React.createElement("line", {
-    x1: "0",
-    y1: "0.5",
-    x2: "1000",
-    y2: "0.5",
-    className: "hero-surface-line",
-    vectorEffect: "non-scaling-stroke"
-  }), HERO_FAULTS.map((fault, i) => /*#__PURE__*/React.createElement("line", {
-    key: i,
-    x1: fault.top.x,
-    y1: fault.top.y,
-    x2: fault.bottom.x,
-    y2: fault.bottom.y,
-    className: "hero-fault",
-    vectorEffect: "non-scaling-stroke"
-  })), /*#__PURE__*/React.createElement("line", {
-    x1: heroGeology.wellX,
-    y1: "0",
-    x2: heroGeology.wellX,
-    y2: wellBottom,
     className: "hero-well",
-    vectorEffect: "non-scaling-stroke"
-  }), [0.2, 0.4, 0.6, 0.8].map(f => {
-    const y = wellTop + f * (wellBottom - wellTop);
-    return /*#__PURE__*/React.createElement("line", {
-      key: f,
-      x1: heroGeology.wellX - 7,
-      x2: heroGeology.wellX + 7,
-      y1: y,
-      y2: y,
-      className: "hero-perforation",
-      vectorEffect: "non-scaling-stroke"
-    });
-  }), injecting && /*#__PURE__*/React.createElement("line", {
-    className: "hero-inject",
-    x1: heroGeology.wellX,
+    viewBox: "-40 0 80 580",
+    preserveAspectRatio: "none",
+    "aria-hidden": "true",
+    style: {
+      left: `${heroGeology.wellXPct}%`
+    }
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+    id: "hero-well-flow",
+    gradientUnits: "userSpaceOnUse",
+    x1: "0",
     y1: "0",
-    x2: heroGeology.wellX,
-    y2: wellTop,
-    strokeDasharray: "6 10",
+    x2: "0",
+    y2: "32",
+    spreadMethod: "repeat",
+    gradientTransform: `translate(0 ${flow || 0})`
+  }, /*#__PURE__*/React.createElement("stop", {
+    stopColor: "#fff",
+    stopOpacity: "0"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: ".5",
+    stopColor: "#fff",
+    stopOpacity: ".85"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "1",
+    stopColor: "#fff",
+    stopOpacity: "0"
+  }))), /*#__PURE__*/React.createElement("path", {
+    d: bore,
+    className: "hero-well__casing",
     vectorEffect: "non-scaling-stroke"
-  }));
+  }), /*#__PURE__*/React.createElement("path", {
+    d: bore,
+    className: "hero-well__bore",
+    vectorEffect: "non-scaling-stroke"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M0 0V28",
+    className: "hero-well__casing hero-well__casing--surface",
+    vectorEffect: "non-scaling-stroke"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M0 0V28",
+    className: "hero-well__bore hero-well__bore--surface",
+    vectorEffect: "non-scaling-stroke"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: `M-5 ${heroFixed(packer)}H5`,
+    className: "hero-well__packer",
+    vectorEffect: "non-scaling-stroke"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: perforations.map(y => `M-3.5 ${y}h-3M3.5 ${y}h3`).join(''),
+    className: "hero-well__perforations",
+    vectorEffect: "non-scaling-stroke"
+  }), flow !== null && /*#__PURE__*/React.createElement("g", {
+    className: "hero-well__flow"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: bore,
+    className: "hero-well__co2",
+    vectorEffect: "non-scaling-stroke"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: bore,
+    className: "hero-well__pulse",
+    stroke: "url(#hero-well-flow)",
+    vectorEffect: "non-scaling-stroke"
+  })));
 });
 
 /* =====================================================
@@ -2608,51 +2683,8 @@ const HERO_SEA_GLINTS = (() => {
 
 // Decorative equipment stays anchored to the same surface and well as the live model:
 // an offshore injection platform over the well, and a CO₂ carrier moored alongside while injecting.
-// Where the carrier is in its manoeuvre. It runs in from the right, slowing as it comes alongside,
-// and leaves bow-first to the left, accelerating away behind the platform into the distance.
-const heroShipPose = ({
-  phase,
-  p
-}) => {
-  if (phase === 'away') return null;
-  if (phase === 'arriving') {
-    const left = (1 - p) ** 3;
-    return {
-      x: 200 * left,
-      y: -24 * left,
-      s: 1 - 0.3 * left,
-      opacity: Math.min(1, p / 0.12),
-      wake: (1 - p) ** 2,
-      hose: 0,
-      lights: 0
-    };
-  }
-  if (phase === 'departing') {
-    const gone = p * p;
-    return {
-      x: -440 * gone,
-      y: -46 * gone,
-      s: 1 - 0.6 * gone,
-      opacity: p < 0.8 ? 1 : (1 - p) / 0.2,
-      wake: Math.min(1, 2 * p),
-      hose: 0,
-      lights: 0
-    };
-  }
-  const hose = phase === 'connecting' ? p : phase === 'disconnecting' ? 1 - p : 1;
-  return {
-    x: 0,
-    y: 0,
-    s: 1,
-    opacity: 1,
-    wake: 0,
-    hose,
-    lights: 1
-  };
-};
 const HeroShip = ({
-  ship,
-  injecting
+  ship
 }) => {
   const pose = heroShipPose(ship);
   if (!pose) return null;
@@ -2660,8 +2692,8 @@ const HeroShip = ({
   return /*#__PURE__*/React.createElement("g", {
     className: "hero-ship",
     style: {
-      transform: `translate(${heroFixed(pose.x)}px, ${heroFixed(pose.y)}px) scale(${pose.s.toFixed(3)})`,
-      opacity: pose.opacity
+      transform: `translateX(${heroFixed(pose.x)}px)`,
+      opacity: heroFixed(pose.opacity * 100) / 100
     }
   }, /*#__PURE__*/React.createElement("g", {
     opacity: heroFixed(pose.wake)
@@ -2816,13 +2848,6 @@ const HeroShip = ({
     strokeWidth: "3.4",
     strokeDasharray: "1 1",
     strokeDashoffset: (1 - pose.hose).toFixed(3)
-  }), injecting && /*#__PURE__*/React.createElement("use", {
-    className: "hero-feed-flow",
-    href: "#site-feed-route",
-    strokeWidth: "1",
-    style: {
-      stroke: 'var(--sim-glow-free)'
-    }
   }));
 };
 const HERO_RIG_WINDOWS = [[2, 76, 9], [2, 84, 9], [2, 92, 9], [66, 64, 7], [66, 71, 7], [66, 78, 7], [66, 85, 7], [66, 92, 7]].flatMap(([x0, y, n]) => Array.from({
@@ -2830,7 +2855,7 @@ const HERO_RIG_WINDOWS = [[2, 76, 9], [2, 84, 9], [2, 92, 9], [66, 64, 7], [66, 
 }, (_, i) => [x0 + i * 6, y, (i * 7 + y * 3) % 5])).filter(([,, lit]) => lit < 3);
 const SurfaceSite = ({
   geology,
-  injecting,
+  flow,
   ship
 }) => /*#__PURE__*/React.createElement("div", {
   className: "hero-surface-site",
@@ -2844,6 +2869,46 @@ const SurfaceSite = ({
   height: "100%",
   fill: "none"
 }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+  id: "site-flow-x",
+  gradientUnits: "userSpaceOnUse",
+  x1: "0",
+  y1: "0",
+  x2: "24",
+  y2: "0",
+  spreadMethod: "repeat",
+  gradientTransform: `translate(${-(flow || 0)} 0)`
+}, /*#__PURE__*/React.createElement("stop", {
+  stopColor: "#fff",
+  stopOpacity: "0"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: ".5",
+  stopColor: "#fff",
+  stopOpacity: ".85"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: "1",
+  stopColor: "#fff",
+  stopOpacity: "0"
+})), /*#__PURE__*/React.createElement("linearGradient", {
+  id: "site-flow-y",
+  gradientUnits: "userSpaceOnUse",
+  x1: "0",
+  y1: "0",
+  x2: "0",
+  y2: "24",
+  spreadMethod: "repeat",
+  gradientTransform: `translate(0 ${flow || 0})`
+}, /*#__PURE__*/React.createElement("stop", {
+  stopColor: "#fff",
+  stopOpacity: "0"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: ".5",
+  stopColor: "#fff",
+  stopOpacity: ".85"
+}), /*#__PURE__*/React.createElement("stop", {
+  offset: "1",
+  stopColor: "#fff",
+  stopOpacity: "0"
+})), /*#__PURE__*/React.createElement("linearGradient", {
   id: "rig-steel",
   x1: "0",
   y1: "0",
@@ -2920,8 +2985,11 @@ const SurfaceSite = ({
   pathLength: "1",
   d: "M112 101Q176 150 236 114"
 })), /*#__PURE__*/React.createElement(HeroShip, {
-  ship: ship,
-  injecting: injecting
+  ship: ship
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M48 104V160",
+  stroke: "#2c3e55",
+  strokeWidth: "2.4"
 }), /*#__PURE__*/React.createElement("path", {
   d: "M10 160L20 104M86 160L76 104",
   stroke: "url(#rig-steel)",
@@ -3026,7 +3094,7 @@ const SurfaceSite = ({
   cy: "95",
   r: "1.5",
   style: {
-    fill: injecting ? 'var(--sim-glow-free)' : '#647b79'
+    fill: flow !== null ? 'var(--sim-glow-free)' : '#647b79'
   }
 }), /*#__PURE__*/React.createElement("path", {
   d: "M4 70V60H12V70Z",
@@ -3049,7 +3117,23 @@ const SurfaceSite = ({
   cy: "25",
   r: "1.4",
   fill: "#ff5a4f"
-})));
+}), flow !== null && /*#__PURE__*/React.createElement("g", {
+  className: "hero-well__flow"
+}, /*#__PURE__*/React.createElement("path", {
+  d: "M236 114Q176 150 112 101H48V160",
+  className: "hero-well__co2",
+  strokeWidth: "2"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M236 114Q176 150 112 101H48",
+  className: "hero-well__pulse",
+  strokeWidth: "2",
+  stroke: "url(#site-flow-x)"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M48 101V160",
+  className: "hero-well__pulse",
+  strokeWidth: "2",
+  stroke: "url(#site-flow-y)"
+}))));
 const HeroName = ({
   variant
 }) => {
