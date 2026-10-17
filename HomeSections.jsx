@@ -111,11 +111,15 @@ const ProjectsSection = () => {
           <h3>{feature.title}</h3>
           <p>{feature.body}</p>
           <p className="project-links">
-            {feature.links.map(link => <a key={link.href} className="text-link" href={link.href}>{link.label}</a>)}
+            {feature.links.map((link, index) => (
+              <a key={link.href} className={`btn ${index === 0 ? 'btn--primary' : 'btn--quiet'} btn--small`} href={link.href}>{link.label}</a>
+            ))}
           </p>
         </div>
-        <img className="project-feature__shot" src={feature.image.src} width={feature.image.width} height={feature.image.height}
-          alt={feature.image.alt} loading="lazy" decoding="async" />
+        <a className="project-feature__media" href={feature.links[0].href} aria-label={feature.links[0].label}>
+          <img className="project-feature__shot" src={feature.image.src} width={feature.image.width} height={feature.image.height}
+            alt={feature.image.alt} loading="lazy" decoding="async" />
+        </a>
       </article>
       <div className="project-list">
         {others.map(project => (

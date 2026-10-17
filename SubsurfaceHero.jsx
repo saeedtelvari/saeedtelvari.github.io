@@ -124,8 +124,8 @@ const HERO_FAULTS = heroGeology.faults.map(fault => {
   };
 });
 
-// Labels sit at mid-depth of each unit: far right on wide screens, just right of the axis on phones.
-const HERO_LABELS = [['wide', 980], ['narrow', 160]].flatMap(([set, x]) => {
+// Labels sit at mid-depth of each unit on the right margin of the section.
+const HERO_LABELS = [['wide', 980], ['narrow', 960]].flatMap(([set, x]) => {
   const k = Math.round(x / 5);
   const mid = (a, b) => (a + b) / 2;
   return [
