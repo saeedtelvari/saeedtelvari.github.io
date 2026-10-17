@@ -1348,8 +1348,8 @@ const HERO_FAULTS = heroGeology.faults.map(fault => {
   };
 });
 
-// Labels sit at mid-depth of each unit: far right on wide screens, just right of the axis on phones.
-const HERO_LABELS = [['wide', 980], ['narrow', 160]].flatMap(([set, x]) => {
+// Labels sit at mid-depth of each unit on the right margin of the section.
+const HERO_LABELS = [['wide', 980], ['narrow', 960]].flatMap(([set, x]) => {
   const k = Math.round(x / 5);
   const mid = (a, b) => (a + b) / 2;
   return [['Overburden', heroOverlying.roofR[k] / 2, set === 'wide'], ['Overlying aquifer', mid(heroOverlying.roofR[k], heroOverlying.floorR[k]), true], ['Caprock', mid(heroOverlying.floorR[k], heroStorage.roofR[k]), true], ['Storage aquifer', mid(heroStorage.roofR[k], heroStorage.floorR[k]), true], ['Underburden', mid(heroStorage.floorR[k], 580), set === 'wide']].filter(([,, shown]) => shown).map(([text, y]) => ({
@@ -3874,11 +3874,15 @@ const ProjectsSection = () => {
     className: "project-feature__text"
   }, /*#__PURE__*/React.createElement("h3", null, feature.title), /*#__PURE__*/React.createElement("p", null, feature.body), /*#__PURE__*/React.createElement("p", {
     className: "project-links"
-  }, feature.links.map(link => /*#__PURE__*/React.createElement("a", {
+  }, feature.links.map((link, index) => /*#__PURE__*/React.createElement("a", {
     key: link.href,
-    className: "text-link",
+    className: `btn ${index === 0 ? 'btn--primary' : 'btn--quiet'} btn--small`,
     href: link.href
-  }, link.label)))), /*#__PURE__*/React.createElement("img", {
+  }, link.label)))), /*#__PURE__*/React.createElement("a", {
+    className: "project-feature__media",
+    href: feature.links[0].href,
+    "aria-label": feature.links[0].label
+  }, /*#__PURE__*/React.createElement("img", {
     className: "project-feature__shot",
     src: feature.image.src,
     width: feature.image.width,
@@ -3886,7 +3890,7 @@ const ProjectsSection = () => {
     alt: feature.image.alt,
     loading: "lazy",
     decoding: "async"
-  })), /*#__PURE__*/React.createElement("div", {
+  }))), /*#__PURE__*/React.createElement("div", {
     className: "project-list"
   }, others.map(project => /*#__PURE__*/React.createElement("article", {
     key: project.id,
