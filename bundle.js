@@ -198,8 +198,8 @@ const SITE_ACTIVITY = [{
 }, {
   month: '2026-08',
   date: 'Aug 2026',
-  title: 'MuPSI industrial case study',
-  body: 'Built vertical-equilibrium models of depleted gas fields for an industrial case study in the MuPSI CO₂ storage project, and presented the results to the project partners.'
+  title: 'MuPSI field-scale case study',
+  body: 'Built vertical-equilibrium models for a field-scale case study of depleted gas fields in the MuPSI CO₂ storage project, and presented the results to the project partners.'
 }, {
   month: '2026-06',
   date: 'Jun 2026',
@@ -247,7 +247,7 @@ const SITE_PROJECTS = [{
   id: 'mupsi',
   title: 'MuPSI',
   meta: '2026',
-  body: 'Multiscale Pressure-Stress Impacts on fault integrity for multi-site regional CO₂ storage, a Clean Energy Transition Partnership project. I built VE models and a 28-case ensemble for an industrial case study of depleted gas fields, with NORCE, TU Delft and IDAEA-CSIC.'
+  body: 'Multiscale Pressure-Stress Impacts on fault integrity for multi-site regional CO₂ storage, a Clean Energy Transition Partnership project. I built VE models for a field-scale case study of depleted gas fields, with NORCE, TU Delft and IDAEA-CSIC.'
 }, {
   id: 'fault-detection',
   title: '3D fault detection for MRST',
@@ -282,7 +282,7 @@ const SITE_CV = {
     date: '2026',
     title: 'MuPSI: Multiscale Pressure-Stress Impacts on fault integrity for multi-site regional CO₂ storage',
     place: 'Clean Energy Transition Partnership',
-    details: ['VE models and a 28-case ensemble for an industrial case study on depleted gas fields, with NORCE, TU Delft and IDAEA-CSIC.']
+    details: ['VE models for a field-scale case study of depleted gas fields, with NORCE, TU Delft and IDAEA-CSIC.']
   }, {
     date: '',
     title: '3D fault-detection tool for MRST',
@@ -3818,7 +3818,7 @@ const SiteSection = ({
   id: `${id}-title`,
   className: "section-title"
 }, title), children));
-const SITE_THEMES = [['VE models for depleted gas fields', 'Three-phase CO₂–methane–brine VE with a black-oil approximation, checked against compositional simulation and up to 100× faster.'], ['Storage screening under uncertainty', 'Ensembles of fast VE runs, such as the 28-case ensemble study in MuPSI.'], ['Machine learning for upscaling and digital rock', 'CNNs that upscale permeability tensors and predict two-phase flow properties from micro-CT images.']];
+const SITE_THEMES = [['VE models for depleted gas fields', 'Three-phase CO₂–methane–brine VE with a black-oil approximation, checked against compositional simulation and up to 100× faster.'], ['Storage screening under uncertainty', 'Ensembles of fast VE runs that test many scenarios and uncertain reservoir properties at field scale.'], ['Machine learning for upscaling and digital rock', 'CNNs that upscale permeability tensors and predict two-phase flow properties from micro-CT images.']];
 const ActivityList = ({
   items = SITE_ACTIVITY,
   initial = 5
