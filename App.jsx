@@ -13,7 +13,7 @@ const SITE_NAV_ITEMS = [
 ];
 const SITE_SECTION_IDS = ['research', 'projects', 'publications', 'contact'];
 
-// The section whose top has passed the reading line (viewport coordinates); the hero is 'home'.
+// The section whose top has passed the reading line (viewport coordinates); the story at the top is 'home'.
 const siteActiveSection = (rects, line) => {
   let active = 'home';
   for (const rect of rects) if (rect.top <= line) active = rect.id;

@@ -126,7 +126,7 @@ The cutaway is generic but correct for the central North Sea. It uses no formati
 
 Decision of 2026-10-25. The research, projects, publications and contact sections, the footer, the header and the CV use style C. The simulator keeps its own look. This part answers the open questions 1 and 2. The code is in `colors_and_type.css`, `HomeSections.jsx`, `Header.jsx`, `Footer.jsx` and `CVPage.jsx`.
 
-**Ground and edge.** The sections continue on the story sky (`#c9d6dc`), so the page reads as one sheet. The stage and the ground have the same colour, so the end of the pinned story has no colour edge. The first section starts 72 to 128 px below the story. The old dark descent leaves the page: `App.jsx` and `build.js` do not use `GeologicalDescent.jsx`. The file stays until the cleanup.
+**Ground and edge.** The sections continue on the story sky (`#c9d6dc`), so the page reads as one sheet. The stage and the ground have the same colour, so the end of the pinned story has no colour edge. The first section starts 72 to 128 px below the story. The old dark descent leaves the page: `App.jsx` and `build.js` do not use `GeologicalDescent.jsx`. The cleanup deleted the file and its rules. The tag `homepage-archive-2026-10` keeps it.
 
 **Type.** All text is Literata in ink (`#1f2a30`). Years, dates and DOIs use tabular figures (`.tnum`). Text is in sentence case. There are no capitals, no letter-spaced labels and no monospace. The longest measure is 32 em, which gives about 62 characters on a line.
 
