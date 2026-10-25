@@ -693,3 +693,204 @@ test('closed aquifer with variable thickness: build-up fills its pore volume', (
 test('random structures vary the aquifer thickness', () => {
   for (let seed = 1; seed <= 12; seed++) assert.ok(VE2D.randomStructure(seed).thicknessVar > 0, `seed ${seed}`);
 });
+
+// ---------------------------------------------------------------- explicit dome and gas cap
+
+const DOME = { x: 12.125, y: 4.875, along: 2.5, across: 1.5, angle: 20 };
+const capped = patch => flat({ domes: 1, domeRelief: 60, dome: DOME, ...patch });
+const LEAKY_FAULT = { x: 11.5, y: 5, strike: 20, length: 6, throw: 0, trans: 1, sealCap: 10, kf: 60 };
+const co2Mass = (model, state) => state.s.reduce((sum, value, c) => sum + value - state.ch4[c], 0) * model.area * model.p.rhoG;
+const methaneMass = (model, state) => state.ch4.reduce((sum, value) => sum + value, 0) * model.area * model.p.rhoG;
+const largestDifference = (a, b) => a.reduce((most, value, c) => Math.max(most, Math.abs(value - b[c])), 0);
+
+test('the explicit dome and the gas contact are clamped, optional and kept out of LIMITS and DEFAULTS', () => {
+  const wild = VE2D.normalizeScenario({ dome: { x: 25, y: -3, along: 0.1, across: 99, angle: 400 }, gasContactDepth: 99999 });
+  assert.deepEqual(wild.dome, { x: 20, y: 0, along: 0.3, across: 10, angle: 359 });
+  assert.equal(wild.gasContactDepth, VE2D.GAS_CONTACT_LIMITS[1]);
+  const inside = VE2D.normalizeScenario({ dome: DOME, gasContactDepth: 1480 });
+  assert.deepEqual(inside.dome, DOME);
+  assert.equal(inside.gasContactDepth, 1480);
+  const invalid = [undefined, null, 5, 'dome', [], {}, { x: 1, y: 1, along: 1, across: 1 }, { ...DOME, angle: 'abc' }, { ...DOME, x: null }, { ...DOME, y: '' }];
+  for (const dome of invalid) assert.ok(!('dome' in VE2D.normalizeScenario({ dome })), `${JSON.stringify(dome)} gives no dome`);
+  for (const gasContactDepth of [undefined, null, '', 'abc', NaN]) assert.equal(VE2D.normalizeScenario({ gasContactDepth }).gasContactDepth, null);
+  assert.equal(VE2D.normalizeScenario({}).gasContactDepth, null, 'no gas cap by default');
+  for (const key of ['dome', 'gasContactDepth']) assert.ok(!(key in VE2D.LIMITS) && !(key in VE2D.DEFAULTS), `${key} stays out of the UI tables`);
+});
+
+test('an explicit dome puts the shallowest top surface at its map position', () => {
+  const scenario = capped({});
+  const model = VE2D.buildModel(scenario);
+  const crest = Math.floor(4875 / model.dy) * model.nx + Math.floor(12125 / model.dx);
+  assert.equal(model.zt.indexOf(Math.min(...model.zt)), crest);
+  assert.equal(model.traps.traps[0].crestCell, crest);
+  near(model.zt[crest], scenario.depth - 60, 1e-9, 'crest depth');
+  const [main] = model.domes;
+  near(main.x, 12125, 1e-9, 'x in metres');
+  near(main.y, 4875, 1e-9, 'y in metres');
+  assert.equal(main.relief, 1);
+  // At one Gaussian radius from the crest, along or across the axis, the surface is exp(-1/2) of the relief above the background.
+  const depthAt = VE2D.depthField(scenario);
+  const angle = DOME.angle * Math.PI / 180;
+  const radius = scenario.depth - 60 * Math.exp(-0.5);
+  near(depthAt(12125 + 2500 * Math.cos(angle), 4875 + 2500 * Math.sin(angle)), radius, 1e-9, 'one along radius');
+  near(depthAt(12125 - 1500 * Math.sin(angle), 4875 + 1500 * Math.cos(angle)), radius, 1e-9, 'one across radius');
+});
+
+test('an explicit dome replaces only the main dome and needs domes of at least one', () => {
+  const seeded = VE2D.buildModel(flat({ domes: 2, domeRelief: 60, seed: 77 }));
+  const placed = VE2D.buildModel(flat({ domes: 2, domeRelief: 60, seed: 77, dome: DOME }));
+  assert.deepEqual(placed.domes[1], seeded.domes[1], 'the satellite is unchanged');
+  assert.notDeepEqual(placed.domes[0], seeded.domes[0]);
+  const none = VE2D.buildModel(flat({ domes: 0, dome: DOME }));
+  assert.equal(none.domes.length, 0);
+  assert.ok(none.zt.every(depth => depth === none.scenario.depth), 'no dome without domes');
+});
+
+test('a gas cap starts as a flat contact with methane in every column above it', () => {
+  // The crest is at 1440 m and the background top at 1500 m. A 1480 m contact gives a 40 m cap
+  // at the crest. A 1495 m contact fills the 50 m aquifer there. Variable thickness limits the
+  // columns that it makes thin.
+  for (const [contact, thicknessVar, crestColumn] of [[1480, 0, 40], [1495, 0, 50], [1490, 40, null]]) {
+    const model = VE2D.buildModel(capped({ gasContactDepth: contact, thicknessVar }));
+    const state = VE2D.createState(model);
+    const drain = model.p.phi * (1 - model.p.swr);
+    const crest = model.zt.indexOf(Math.min(...model.zt));
+    let gas = 0;
+    for (let c = 0; c < model.n; c++) {
+      const expected = model.zt[c] < contact ? Math.min(contact - model.zt[c], model.Hc[c]) : 0;
+      near(state.h[c], expected, 1e-12, `h in cell ${c}`);
+      assert.equal(state.hMax[c], state.h[c], 'no residual gas at the start');
+      near(state.s[c], drain * expected, 1e-12, 'stored volume of a drained column');
+      near(state.s[c] / drain, state.h[c], 1e-12, 'the column inverts back to the same h');
+      assert.equal(state.ch4[c], state.s[c], 'all the gas is methane');
+      if (expected > 0) gas++;
+      else assert.ok(state.s[c] === 0 && state.ch4[c] === 0, 'no gas below the contact');
+    }
+    assert.ok(gas > 0 && gas < model.n, 'the cap covers part of the model');
+    if (crestColumn !== null) near(state.h[crest], crestColumn, 1e-9, 'crest column');
+    assert.equal(state.hasMethane, true);
+  }
+  const state = VE2D.createState(VE2D.buildModel(capped({})));
+  assert.ok(state.ch4.every(value => value === 0) && state.hasMethane === false, 'no gas cap by default');
+});
+
+test('CO2 figures ignore the methane of the gas cap', () => {
+  const model = VE2D.buildModel(capped({ grid: 'coarse', gasContactDepth: 1480 }));
+  const state = VE2D.createState(model);
+  const inv = VE2D.inventory(model, state);
+  const kpi = VE2D.kpis(model, state);
+  for (const key of ['injected', 'free', 'structural', 'residual', 'dissolved', 'exited', 'leaked', 'balance']) near(inv[key], 0, 0, `${key} is CO2 only`);
+  for (const key of ['footprint', 'maxColumn', 'migration']) near(kpi[key], 0, 0, `${key} is CO2 only`);
+  assert.ok(inv.methane > 0);
+  near(inv.methane, methaneMass(model, state), 1e-9 * inv.methane, 'methane in place');
+  VE2D.advance(model, state, YEARS(20));
+  assert.ok(VE2D.kpis(model, state).footprint > 0 && VE2D.kpis(model, state).maxColumn > 0, 'the CO2 plume appears once CO2 is injected');
+});
+
+test('with a gas cap the CO2 mass balance holds to 1e-9, through every sink', () => {
+  for (const boundary of ['open', 'closed']) {
+    const model = VE2D.buildModel(capped({ boundary, grid: 'coarse', gasContactDepth: 1480, wellX: 14.1, wellY: 6.1, faults: [LEAKY_FAULT] }));
+    const state = VE2D.createState(model);
+    VE2D.advance(model, state, YEARS(300));
+    const accounted = co2Mass(model, state) + state.exited + state.leaked + state.dissolved;
+    assert.ok(state.injected > 0 && state.leaked > 0 && state.dissolved > 0, 'CO2 was injected, leaked and dissolved');
+    assert.ok(Math.abs(state.injected - accounted) / state.injected < 1e-9, `${boundary}: ${state.injected} vs ${accounted}`);
+    const inv = VE2D.inventory(model, state);
+    assert.ok(Math.abs(inv.balance) / inv.injected < 1e-9, `${boundary}: reported balance`);
+    for (const key of ['free', 'structural', 'residual', 'dissolved', 'exited', 'leaked']) assert.ok(inv[key] >= 0, `${key} >= 0`);
+  }
+});
+
+test('methane is conserved: in place plus exited, leaked and dissolved equals the start', () => {
+  for (const boundary of ['open', 'closed']) {
+    const model = VE2D.buildModel(capped({ boundary, grid: 'coarse', gasContactDepth: 1480, wellX: 14.1, wellY: 6.1, faults: [LEAKY_FAULT] }));
+    const state = VE2D.createState(model);
+    const initial = methaneMass(model, state);
+    VE2D.advance(model, state, YEARS(300));
+    const inv = VE2D.inventory(model, state);
+    const accounted = inv.methane + inv.methaneExited + inv.methaneLeaked + inv.methaneDissolved;
+    assert.ok(Math.abs(initial - accounted) / initial < 1e-9, `${boundary}: ${initial} vs ${accounted}`);
+    assert.ok(inv.methaneLeaked > 0 && inv.methaneDissolved > 0, 'methane leaks up the fault and dissolves');
+    if (boundary === 'open') assert.ok(inv.methaneExited > 0, 'methane leaves through the open boundary');
+    else assert.equal(inv.methaneExited, 0);
+    for (let c = 0; c < model.n; c++) assert.ok(state.ch4[c] >= 0 && state.ch4[c] <= state.s[c], `0 <= ch4 <= s in cell ${c}`);
+  }
+});
+
+test('leakage and dissolution remove methane and CO2 in proportion to the methane share', () => {
+  const model = VE2D.buildModel(flat({ grid: 'coarse', boundary: 'closed', injYears: 1, faults: [LEAKY_FAULT] }));
+  model.p.rate = 0;
+  const state = VE2D.createState(model);
+  uniformLayer(model, state, 30);
+  state.ch4.set(state.s.map(value => 0.3 * value));
+  state.hasMethane = true;
+  VE2D.advance(model, state, YEARS(30));
+  assert.ok(state.leaked > 0 && state.dissolved > 0);
+  near(state.methaneLeaked / (state.methaneLeaked + state.leaked), 0.3, 1e-9, 'leaked share');
+  near(state.methaneDissolved / (state.methaneDissolved + state.dissolved), 0.3, 1e-9, 'dissolved share');
+  for (let c = 0; c < model.n; c++) near(state.ch4[c], 0.3 * state.s[c], 1e-9 * Math.max(state.s[c], 1e-12), `share in cell ${c}`);
+});
+
+test('snapshots carry the methane fraction of the gas, between 0 and 1', () => {
+  const scenario = capped({ grid: 'coarse', gasContactDepth: 1490, wellX: 17.9, wellY: 6.1, years: 100 });
+  const result = VE2D.run(scenario, { snapshotYears: 20 });
+  let mixed = 0;
+  for (const snap of result.snapshots) {
+    assert.ok(snap.ch4 instanceof Float32Array, 'a Float32Array next to h and hMax');
+    assert.equal(snap.ch4.length, snap.h.length);
+    for (let c = 0; c < snap.ch4.length; c++) {
+      assert.ok(snap.ch4[c] >= 0 && snap.ch4[c] <= 1, `year ${snap.year}, cell ${c}: ${snap.ch4[c]}`);
+      if (snap.h[c] === 0 && snap.hMax[c] === 0) assert.equal(snap.ch4[c], 0, 'no gas, no fraction');
+      if (snap.ch4[c] > 0 && snap.ch4[c] < 1) mixed++;
+    }
+  }
+  const first = result.snapshots[0];
+  for (let c = 0; c < first.ch4.length; c++) assert.equal(first.ch4[c], first.h[c] > 0 ? 1 : 0, 'the cap starts as pure methane');
+  assert.ok(mixed > 0, 'the injected CO2 meets and mixes with the methane');
+  const plain = VE2D.run({ ...VE2D.DEFAULTS, grid: 'coarse', years: 50 });
+  for (const snap of plain.snapshots) assert.ok(snap.ch4.every(value => value === 0), 'no gas cap, no methane');
+});
+
+test('with no injection and no dissolution the methane in place stays at its initial value', () => {
+  // The rate input has a lower bound, so this test switches the injector off on the model, as the tests above do.
+  const model = VE2D.buildModel(capped({ grid: 'coarse', boundary: 'closed', gasContactDepth: 1480, disRate: 0 }));
+  model.p.rate = 0;
+  const state = VE2D.createState(model);
+  const initial = methaneMass(model, state);
+  for (const year of [10, 50, 150]) {
+    VE2D.advance(model, state, YEARS(year));
+    const inv = VE2D.inventory(model, state);
+    near(inv.methane, initial, 1e-9 * initial, `methane in place at year ${year}`);
+    near(inv.methaneExited + inv.methaneLeaked + inv.methaneDissolved, 0, 0, 'no methane sink');
+    near(co2Mass(model, state), 0, 1e-9 * initial, 'no CO2 appears');
+  }
+});
+
+test('injection away from the cap pushes the gas cap through the pressure response', () => {
+  const run = injecting => {
+    const model = VE2D.buildModel(capped({ grid: 'coarse', gasContactDepth: 1490, wellX: 17.9, wellY: 6.1, disRate: 0 }));
+    if (!injecting) model.p.rate = 0;
+    const state = VE2D.createState(model);
+    const start = Float64Array.from(state.ch4);
+    VE2D.advance(model, state, YEARS(60));
+    return { model, state, start };
+  };
+  const pushed = run(true);
+  const still = run(false);
+  const peak = Math.max(...still.start);
+  assert.equal(pushed.start[pushed.model.well], 0, 'the well starts outside the cap');
+  assert.ok(largestDifference(still.state.ch4, still.start) < 0.01 * peak, 'without injection the cap stays in place');
+  assert.ok(largestDifference(pushed.state.ch4, still.state.ch4) > 0.1 * peak, 'with injection the methane distribution moves');
+  assert.ok(pushed.state.s[pushed.model.well] - pushed.state.ch4[pushed.model.well] > 0, 'CO2 is at the well');
+});
+
+test('without a dome or a gas contact the run is the plain CO2 run', () => {
+  const scenario = { ...VE2D.DEFAULTS, grid: 'coarse', years: 300 };
+  const plain = VE2D.run(scenario, { keepSnapshots: false });
+  const explicit = VE2D.run({ ...scenario, gasContactDepth: null, dome: undefined }, { keepSnapshots: false });
+  assert.deepEqual(explicit.history, plain.history);
+  assert.deepEqual(explicit.scenario, plain.scenario);
+  for (const row of plain.history) {
+    for (const key of ['methane', 'methaneExited', 'methaneLeaked', 'methaneDissolved']) assert.equal(row[key], 0, `${key} is zero`);
+  }
+});
