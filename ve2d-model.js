@@ -57,6 +57,12 @@
     sealCap: [0, 200, 1],
     kf: [0, 1000, 1]
   });
+  // Optional inputs. They are not in LIMITS or DEFAULTS, so the simulator UI does not list,
+  // encode or show them. dome replaces the main dome (x, y, along, across in km, angle in
+  // degrees). gasContactDepth is the depth, in metres, of a flat gas-water contact at the
+  // start. The gas above the contact is methane.
+  const DOME_LIMITS = Object.freeze({ x: [0, 20], y: [0, 12], along: [0.3, 10], across: [0.3, 10], angle: [0, 359] });
+  const GAS_CONTACT_LIMITS = Object.freeze([0, 6000]);
   const INTEGER_KEYS = new Set(['years', 'seed', 'injYears', 'domes', 'dipAz']);
   const MAX_FAULTS = 3;
 
@@ -137,6 +143,18 @@
     return fault;
   };
 
+  // A dome needs all five numbers. Any other input gives no dome, so the seed places it.
+  const normalizeDome = raw => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const dome = {};
+    for (const [key, [min, max]] of Object.entries(DOME_LIMITS)) {
+      const value = Number(raw[key]);
+      if (!Number.isFinite(value) || raw[key] === '' || raw[key] === null) return null;
+      dome[key] = clamp(value, min, max);
+    }
+    return dome;
+  };
+
   const normalizeScenario = (raw = {}) => {
     const scenario = {
       preset: typeof raw.preset === 'string' ? raw.preset : DEFAULTS.preset,
@@ -151,6 +169,11 @@
     }
     const faults = Array.isArray(raw.faults) ? raw.faults : DEFAULTS.faults;
     scenario.faults = faults.slice(0, MAX_FAULTS).map(normalizeFault);
+    const dome = normalizeDome(raw.dome);
+    if (dome) scenario.dome = dome;
+    const contact = Number(raw.gasContactDepth);
+    scenario.gasContactDepth = Number.isFinite(contact) && raw.gasContactDepth !== '' && raw.gasContactDepth !== null
+      ? clamp(contact, GAS_CONTACT_LIMITS[0], GAS_CONTACT_LIMITS[1]) : null;
     return scenario;
   };
 
@@ -166,8 +189,12 @@
   const strikeAngle = scenario => Math.PI - scenario.dipAz * Math.PI / 180;
 
   // Gaussian domes elongated along strike (±15°). The first is the main closure; any others
-  // are smaller satellites.
+  // are smaller satellites. An explicit scenario.dome (km and degrees) replaces the main one.
   const domeCentres = scenario => Array.from({ length: scenario.domes }, (_, index) => {
+    if (index === 0 && scenario.dome) {
+      const { x, y, along, across, angle } = scenario.dome;
+      return { x: x * KM, y: y * KM, angle: angle * Math.PI / 180, along: along * KM, across: across * KM, relief: 1 };
+    }
     const hash = (a, b, salt) => hashNoise(index * a, b, scenario.seed + salt);
     const main = index === 0;
     return {
@@ -582,14 +609,34 @@
   // balance is still exact) and they no longer throttle the time step everywhere.
   const H_EPS = 1e-6;
 
+  // The start state is brine, plus a methane gas cap when the scenario sets gasContactDepth.
+  // A column above the contact holds gas from its top down to the contact, or down to the
+  // aquifer base. It has no residual gas. Methane is the same light phase as CO2, so it
+  // has the same stored volume s. The array ch4 holds the methane part of s.
   const createState = model => {
-    const { n, nx, ny } = model;
+    const { n, nx, ny, p, zt, Hc } = model;
+    const h = new Float64Array(n);
+    const hMax = new Float64Array(n);
+    const s = new Float64Array(n);
+    const ch4 = new Float64Array(n);
+    const contact = model.scenario.gasContactDepth;
+    let hasMethane = false;
+    if (contact !== null) {
+      const drain = p.phi * (1 - p.swr);
+      for (let c = 0; c < n; c++) {
+        if (!(zt[c] < contact)) continue;
+        h[c] = hMax[c] = Math.min(contact - zt[c], Hc[c]);
+        s[c] = ch4[c] = drain * h[c];
+        hasMethane = true;
+      }
+    }
     return {
       t: 0,
       steps: 0,
-      h: new Float64Array(n),
-      hMax: new Float64Array(n),
-      s: new Float64Array(n),
+      h,
+      hMax,
+      s,
+      ch4,
       md: new Float64Array(n),
       p: new Float64Array(n),
       ux: new Float64Array((nx + 1) * ny),
@@ -599,13 +646,24 @@
       net: new Float64Array(n),
       rate: new Float64Array(n),
       leaking: new Uint8Array(model.scenario.faults.length),
+      // The injected, exited, leaked and dissolved totals count CO2 only (kg). The methane
+      // totals are kept apart. The tracer runs only while hasMethane is true.
       injected: 0,
       exited: 0,
       leaked: 0,
       dissolved: 0,
+      methaneExited: 0,
+      methaneLeaked: 0,
+      methaneDissolved: 0,
+      hasMethane,
+      frac: new Float64Array(n),
+      dMethane: new Float64Array(n),
       pressureActive: true
     };
   };
+
+  // The CO2 part of the gas in column c (1 where the column holds no methane).
+  const co2Share = (state, c) => state.ch4[c] > 0 && state.s[c] > 0 ? 1 - state.ch4[c] / state.s[c] : 1;
 
   // CO2 volume per area s = phi[(1 - Swr) h + Sgr (hMax - h)] -> (h, hMax).
   const invertColumn = (p, state, c) => {
@@ -665,10 +723,13 @@
 
   // Operator-split sinks after each transport step: vertical leakage up leaky fault zones
   // (only above the seal capacity, never draining a column below it) and convective
-  // dissolution into the brine column until it is saturated.
+  // dissolution into the brine column until it is saturated. Each sink removes methane and
+  // CO2 in proportion to the methane share of the column. The dissolved mass per area md
+  // counts both gases, because they share the brine capacity.
   const applySinks = (model, state, dt) => {
     const { p, area, Hc } = model;
-    const { h, s, md } = state;
+    const { h, s, ch4, md } = state;
+    const tracer = state.hasMethane;
     const imbibe = p.phi * Math.max(1e-3, 1 - p.swr - p.sgr);
     state.leaking.fill(0);
     for (const { cell, length, fault } of model.leakCells) {
@@ -678,8 +739,13 @@
       const rate = length * FAULT_ZONE_WIDTH * kf * MD * (p.krg / p.muG) * p.dRho * p.g * (excess / CAPROCK_THICKNESS + 1);
       const volume = Math.min(rate * dt, excess * imbibe * area);
       if (!(volume > 0)) continue;
+      const share = tracer ? 1 - co2Share(state, cell) : 0;
       s[cell] -= volume / area;
-      state.leaked += volume * p.rhoG;
+      state.leaked += volume * (1 - share) * p.rhoG;
+      if (share > 0) {
+        state.methaneLeaked += volume * share * p.rhoG;
+        ch4[cell] = clamp(ch4[cell] - volume * share / area, 0, s[cell]);
+      }
       state.leaking[fault] = 1;
       invertColumn(p, state, cell);
     }
@@ -689,12 +755,77 @@
         if (s[c] <= 0 || md[c] >= capacity) continue;
         const mass = Math.min(p.disRate * dt, capacity - md[c], p.rhoG * s[c]);
         if (!(mass > 0)) continue;
+        const share = tracer ? 1 - co2Share(state, c) : 0;
         md[c] += mass;
         s[c] = Math.max(0, s[c] - mass / p.rhoG);
-        state.dissolved += mass * area;
+        state.dissolved += mass * (1 - share) * area;
+        if (share > 0) {
+          state.methaneDissolved += mass * share * area;
+          ch4[c] = clamp(ch4[c] - mass * share / p.rhoG, 0, s[c]);
+        }
         invertColumn(p, state, c);
       }
     }
+  };
+
+  // Methane share of the gas in each column, taken before a transport step.
+  const methaneFractions = state => {
+    const { s, ch4, frac } = state;
+    for (let c = 0; c < s.length; c++) frac[c] = s[c] > 0 ? Math.min(1, ch4[c] / s[c]) : 0;
+  };
+
+  // Move the methane tracer with the gas face fluxes of the step. A face carries the methane
+  // share of its upwind column (from methaneFractions), so the tracer does not change the
+  // flow. Injection adds CO2 only. Call this after s is updated: it keeps 0 <= ch4 <= s.
+  // It returns the methane volume rate that leaves through the open boundaries.
+  const moveMethane = (model, state, dt) => {
+    const { nx, ny, n, area } = model;
+    const { s, ch4, fx, fy, frac, dMethane } = state;
+    let outflow = 0;
+    dMethane.fill(0);
+    for (let j = 0; j < ny; j++) {
+      for (let f = 0; f <= nx; f++) {
+        const index = j * (nx + 1) + f;
+        const flux = fx[index];
+        if (flux === 0) continue;
+        if (f === 0 || f === nx) {
+          // Boundary faces let gas out only. The stored flux is negative at the west edge.
+          const c = j * nx + (f === 0 ? 0 : nx - 1);
+          const methane = (f === 0 ? -flux : flux) * frac[c];
+          dMethane[c] -= methane;
+          outflow += methane;
+          continue;
+        }
+        const L = j * nx + f - 1;
+        const methane = flux * (flux > 0 ? frac[L] : frac[L + 1]);
+        dMethane[L] -= methane;
+        dMethane[L + 1] += methane;
+      }
+    }
+    for (let f = 0; f <= ny; f++) {
+      for (let i = 0; i < nx; i++) {
+        const index = f * nx + i;
+        const flux = fy[index];
+        if (flux === 0) continue;
+        if (f === 0 || f === ny) {
+          const c = (f === 0 ? 0 : ny - 1) * nx + i;
+          const methane = (f === 0 ? -flux : flux) * frac[c];
+          dMethane[c] -= methane;
+          outflow += methane;
+          continue;
+        }
+        const S = (f - 1) * nx + i;
+        const methane = flux * (flux > 0 ? frac[S] : frac[S + nx]);
+        dMethane[S] -= methane;
+        dMethane[S + nx] += methane;
+      }
+    }
+    for (let c = 0; c < n; c++) {
+      if (dMethane[c] !== 0) ch4[c] += dt * dMethane[c] / area;
+      if (ch4[c] < 0) ch4[c] = 0;
+      else if (ch4[c] > s[c]) ch4[c] = s[c];
+    }
+    return outflow;
   };
 
   const stepTransport = (model, state, dtMax) => {
@@ -779,12 +910,15 @@
       if (net[c] < 0 && s[c] + dt * net[c] / area < 0) dt = Math.min(dt, 0.999 * s[c] * area / -net[c]);
     }
 
+    const tracer = state.hasMethane;
+    if (tracer) methaneFractions(state);
     for (let c = 0; c < n; c++) {
       if (net[c] === 0) continue;
       s[c] += dt * net[c] / area;
       if (s[c] < 0) s[c] = 0;
       invertColumn(p, state, c);
     }
+    const methaneOut = tracer ? moveMethane(model, state, dt) : 0;
 
     applySinks(model, state, dt);
 
@@ -793,7 +927,8 @@
       for (let j = 0; j < ny; j++) outflow += fx[j * (nx + 1) + nx] - fx[j * (nx + 1)];
       for (let i = 0; i < nx; i++) outflow += fy[ny * nx + i] - fy[i];
     }
-    state.exited += outflow * dt * p.rhoG;
+    state.exited += (outflow - methaneOut) * dt * p.rhoG;
+    state.methaneExited += methaneOut * dt * p.rhoG;
     state.injected += volumeRate * dt * p.rhoG;
     state.t += dt;
     state.steps++;
@@ -1007,7 +1142,8 @@
     }
   };
 
-  // Key performance indicators at the current state (SI).
+  // Key performance indicators at the current state (SI). Footprint, column and migration
+  // count the CO2 part of the gas only.
   const kpis = (model, state) => {
     const { n, nx, p, Hc, area, xc, yc } = model;
     const a = p.krg / p.muG;
@@ -1019,9 +1155,10 @@
     const wx = xc[model.well % nx];
     const wy = yc[Math.floor(model.well / nx)];
     for (let c = 0; c < n; c++) {
-      if (state.s[c] > 1e-3) footprint += area;
-      if (state.h[c] > maxColumn) maxColumn = state.h[c];
-      if (state.h[c] > 0.1) migration = Math.max(migration, Math.hypot(xc[c % nx] - wx, yc[Math.floor(c / nx)] - wy));
+      const column = state.h[c] * co2Share(state, c);
+      if (state.s[c] - state.ch4[c] > 1e-3) footprint += area;
+      if (column > maxColumn) maxColumn = column;
+      if (column > 0.1) migration = Math.max(migration, Math.hypot(xc[c % nx] - wx, yc[Math.floor(c / nx)] - wy));
       if (state.p[c] > pMax) pMax = state.p[c];
     }
     let bhp = state.p[model.well];
@@ -1036,7 +1173,8 @@
 
   // CO2 inventory in kg, classified as in co2lab: free plume, structurally trapped
   // (mobile CO2 above the local spill depth), residually trapped, dissolved, left the
-  // model through an open boundary, and leaked up fault zones.
+  // model through an open boundary, and leaked up fault zones. Every class counts the CO2
+  // part of the gas only. The methane rows give the methane in place and its three sinks.
   const inventory = (model, state) => {
     const { n, p, area, zt, traps } = model;
     const { h, hMax } = state;
@@ -1045,12 +1183,15 @@
     let mobile = 0;
     let structural = 0;
     let residual = 0;
+    let methane = 0;
     for (let c = 0; c < n; c++) {
       if (state.s[c] <= 0) continue;
-      mobile += h[c] * mobileFactor;
-      residual += (hMax[c] - h[c]) * residualFactor;
+      const co2 = co2Share(state, c);
+      mobile += h[c] * mobileFactor * co2;
+      residual += (hMax[c] - h[c]) * residualFactor * co2;
       const closure = traps.zSpill[c] - zt[c];
-      if (closure > 0) structural += Math.min(h[c], closure) * mobileFactor;
+      if (closure > 0) structural += Math.min(h[c], closure) * mobileFactor * co2;
+      methane += state.ch4[c];
     }
     const result = {
       injected: state.injected,
@@ -1059,7 +1200,11 @@
       residual: Math.max(0, residual),
       dissolved: state.dissolved,
       exited: state.exited,
-      leaked: state.leaked
+      leaked: state.leaked,
+      methane: methane * area * p.rhoG,
+      methaneExited: state.methaneExited,
+      methaneLeaked: state.methaneLeaked,
+      methaneDissolved: state.methaneDissolved
     };
     result.balance = result.injected - (result.free + result.structural + result.residual + result.dissolved + result.exited + result.leaked);
     return result;
@@ -1097,10 +1242,18 @@
     disCapacity: Float32Array.from(model.Hc, H => model.p.disCap * model.p.phi * H)
   });
 
+  // Methane share of the gas in each column, 0 to 1 (0 where there is no gas).
+  const methaneShare = state => {
+    const share = new Float32Array(state.s.length);
+    for (let c = 0; c < share.length; c++) if (state.ch4[c] > 0 && state.s[c] > 0) share[c] = Math.min(1, state.ch4[c] / state.s[c]);
+    return share;
+  };
+
   const snapshotOf = (model, state, year) => ({
     year,
     h: Float32Array.from(state.h),
     hMax: Float32Array.from(state.hMax),
+    ch4: methaneShare(state),
     md: Float32Array.from(state.md),
     p: Float32Array.from(state.p),
     fx: Float32Array.from(state.fx),
@@ -1377,7 +1530,7 @@
 
   return {
     YEAR, MT, MD, BAR, KM, GRAVITY, LX, LY, GRIDS,
-    LIMITS, FAULT_LIMITS, DEFAULTS, PRESETS, MAX_FAULTS,
+    LIMITS, FAULT_LIMITS, DOME_LIMITS, GAS_CONTACT_LIMITS, DEFAULTS, PRESETS, MAX_FAULTS,
     normalizeScenario, topDepth, depthField, thicknessField, buildModel, trapAnalysis, contourSegments,
     RANDOM_STYLES, randomStructure, faultSeal,
     createState, advance, kpis, inventory, run,
