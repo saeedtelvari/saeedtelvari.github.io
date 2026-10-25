@@ -11,8 +11,8 @@ const between = (text, from, to) => text.slice(text.indexOf(from), text.indexOf(
 const plain = value => JSON.parse(JSON.stringify(value));
 
 const helpers = new Function(between(read('StoryStage.jsx'), '// ---- story helpers', '// ---- end story helpers') +
-  '\nreturn { STORY_SCREENS, STORY_CHAPTERS, STORY_CAPTION_COUNT, STORY_COLORS, STORY_COUNT_MS, storyProgress, storyChapterAt, storyCaptionIndex, storyRail, storyInline, storyCount };')();
-const { STORY_SCREENS, STORY_CHAPTERS, STORY_CAPTION_COUNT, STORY_COLORS, STORY_COUNT_MS, storyProgress, storyChapterAt, storyCaptionIndex, storyRail, storyInline, storyCount } = helpers;
+  '\nreturn { STORY_SCREENS, STORY_CHAPTERS, STORY_CAPTION_COUNT, STORY_COLORS, STORY_COUNT_MS, STORY_EXIT_SPAN, storyProgress, storyChapterAt, storyCaptionIndex, storyRail, storyInline, storyCount, storyExit };')();
+const { STORY_SCREENS, STORY_CHAPTERS, STORY_CAPTION_COUNT, STORY_COLORS, STORY_COUNT_MS, STORY_EXIT_SPAN, storyProgress, storyChapterAt, storyCaptionIndex, storyRail, storyInline, storyCount, storyExit } = helpers;
 const IDS = ['orbit', 'descent', 'rock', 'grid', 've', 'live'];
 const sweep = (step = 0.001) => Array.from({ length: Math.round(1 / step) + 1 }, (_, i) => Math.min(1, i * step));
 
@@ -96,6 +96,30 @@ test('the progress rail fills in order, never goes back and is full at the end',
     });
     last = rail;
   }
+});
+
+test('the exit is 0 while the stage is pinned, grows as the story leaves and ends at 1', () => {
+  const viewport = 800;
+  const span = viewport * STORY_EXIT_SPAN;
+  assert.equal(storyExit({ bottom: 7 * viewport, viewport }), 0, 'at the top of the story');
+  assert.equal(storyExit({ bottom: viewport + 1, viewport }), 0, 'pinned: the bottom is below the viewport');
+  assert.equal(storyExit({ bottom: viewport, viewport }), 0, 'the last pinned pixel');
+  assert.ok(Math.abs(storyExit({ bottom: viewport - span / 2, viewport }) - 0.5) < 1e-12, 'half of the fade');
+  assert.equal(storyExit({ bottom: viewport - span, viewport }), 1, 'the fade ends');
+  assert.equal(storyExit({ bottom: 0, viewport }), 1, 'the story is gone');
+  assert.equal(storyExit({ bottom: -3000, viewport }), 1, 'far below the story');
+  assert.equal(storyExit({ bottom: NaN, viewport }), 0);
+  assert.equal(storyExit({ bottom: 100, viewport: 0 }), 0, 'no viewport, no fade');
+  let last = 0;
+  for (let bottom = 2 * viewport; bottom >= -100; bottom -= 5) {
+    const exit = storyExit({ bottom, viewport });
+    assert.ok(exit >= last && exit >= 0 && exit <= 1, 'the exit never goes back while the visitor scrolls on');
+    last = exit;
+  }
+  // The pinned scroll range never reaches the fade: progress 1 is the last pinned pixel.
+  const height = STORY_SCREENS * viewport;
+  assert.equal(storyProgress({ top: viewport - height, height, viewport }), 1, 'the story is at its end when the bottom meets the viewport');
+  assert.equal(storyExit({ bottom: viewport, viewport }), 0, 'and the exit has not started');
 });
 
 test('captions mark italic text with asterisks', () => {
@@ -286,13 +310,15 @@ const startPinned = () => {
   const layer = {};
   const fills = Array.from({ length: 6 }, () => ({ style: {} }));
   const section = { getBoundingClientRect: () => rect };
-  page.refs.push({ clientWidth: 1200, clientHeight: 800 }, canvas, layer, { querySelectorAll: () => fills });
+  const rail = { style: { opacity: '', visibility: '' }, querySelectorAll: () => fills };
+  const skip = { style: { opacity: '', visibility: '' } };
+  page.refs.push({ clientWidth: 1200, clientHeight: 800 }, canvas, layer, rail);
   // draws keeps a plain copy of each frame. frames keeps the frame objects, with their requestDraw function.
   for (const id of IDS) page.renderers[id] = { draw: (c, frame) => { draws.push({ id, frame: plain(frame) }); frames.push(frame); } };
-  const element = page.get('StoryPinned')({ sectionRef: { current: section }, onNavigate: null });
+  const element = page.get('StoryPinned')({ sectionRef: { current: section }, skipRef: { current: skip }, onNavigate: null });
   const cleanup = page.effects.shift()();
   const scrollTo = p => { rect.top = -p * (rect.height - 800); page.fire('window:scroll'); page.flush(); };
-  return { page, draws, frames, ctx, canvas, layer, fills, element, cleanup, scrollTo, section, rect };
+  return { page, draws, frames, ctx, canvas, layer, fills, rail, skip, element, cleanup, scrollTo, section, rect };
 };
 
 test('the pinned stage draws once at the start, then only when the progress changes', () => {
@@ -510,6 +536,68 @@ test('the listeners and observers are removed when the story unmounts', () => {
   assert.ok(page.observers.every(observer => observer.disconnected));
   assert.equal(page.queue.length, 0, 'no animation frame is waiting');
   assert.equal(draws.length, 1);
+});
+
+test('the skip control and the rail fade out when the stage starts to leave, and not while it is pinned', () => {
+  const { page, skip, rail, rect, cleanup, scrollTo } = startPinned();
+  page.flush(0);
+  assert.deepEqual([skip.style.opacity, skip.style.visibility, rail.style.opacity, rail.style.visibility], ['', '', '', ''], 'untouched at the start');
+  const writes = [];
+  for (const element of [skip, rail]) {
+    let opacity = element.style.opacity;
+    let visibility = element.style.visibility;
+    Object.defineProperties(element.style, {
+      opacity: { get: () => opacity, set: value => { opacity = value; writes.push('opacity'); }, enumerable: true },
+      visibility: { get: () => visibility, set: value => { visibility = value; writes.push('visibility'); }, enumerable: true },
+    });
+  }
+  // The whole pinned range, from the first to the last pixel: the fade does not write anything.
+  for (const p of [0.1, 0.3, 0.55, 0.8, 0.99, 1]) {
+    scrollTo(p);
+    assert.deepEqual([skip.style.opacity, skip.style.visibility, rail.style.opacity, rail.style.visibility], ['', '', '', ''], `pinned at ${p}`);
+  }
+  assert.equal(writes.length, 0, 'no style write while the stage is pinned');
+
+  // The stage leaves: the bottom of the story rises above the bottom of the viewport (800 px).
+  const leave = pixels => { rect.top = -(rect.height - 800) - pixels; page.fire('window:scroll'); page.flush(); };
+  leave(16);
+  assert.equal(skip.style.opacity, '0.9', 'a tenth of the fade: 16 of 160 px');
+  assert.equal(rail.style.opacity, '0.9', 'the rail fades with the skip control');
+  assert.equal(skip.style.visibility, '');
+  leave(80);
+  assert.equal(skip.style.opacity, '0.5');
+  assert.equal(rail.style.opacity, '0.5');
+  leave(160);
+  assert.equal(skip.style.opacity, '0');
+  assert.equal(skip.style.visibility, 'hidden', 'hidden at the end, so the keyboard cannot reach the link');
+  assert.equal(rail.style.visibility, 'hidden');
+  leave(2000);
+  assert.deepEqual([skip.style.opacity, skip.style.visibility], ['0', 'hidden'], 'and it stays hidden below the story');
+  writes.length = 0;
+  leave(2400);
+  assert.equal(writes.length, 0, 'no write when nothing changes');
+
+  // The visitor scrolls back up: both come back.
+  leave(80);
+  assert.deepEqual([skip.style.opacity, skip.style.visibility], ['0.5', '']);
+  scrollTo(1);
+  assert.deepEqual([skip.style.opacity, skip.style.visibility, rail.style.opacity, rail.style.visibility], ['', '', '', ''], 'back in the pinned range');
+  leave(100);
+  cleanup();
+  assert.deepEqual([skip.style.opacity, skip.style.visibility, rail.style.opacity, rail.style.visibility], ['', '', '', ''], 'the unmount restores both');
+});
+
+test('the fade needs no reduced-motion rule: it has no transition, and the static layout never runs it', () => {
+  const css = read('colors_and_type.css');
+  for (const selector of ['.story-skip-wrap', '.story-rail']) {
+    const open = css.indexOf(`${selector} {`);
+    assert.ok(open >= 0, selector);
+    assert.doesNotMatch(css.slice(open, css.indexOf('}', open)), /transition|animation/, `${selector} has no timer`);
+  }
+  const source = read('StoryStage.jsx');
+  const staticPart = source.slice(source.indexOf('const StoryFrame'), source.indexOf('const StoryStage'));
+  assert.doesNotMatch(staticPart, /storyExit|storyFadeOut/, 'the static frames of reduced motion do not fade anything');
+  assert.match(source, /reduced\s*\?\s*STORY_CHAPTERS\.map\(chapter => <StoryFrame/, 'reduced motion shows the static frames, not the pinned stage');
 });
 
 const nodes = tree => {

@@ -41,7 +41,7 @@
 // The place of each caption is in colors_and_type.css: .story-chapter[data-chapter="id"].
 // To change the caption colour for one chapter, set --story-text on .story-stage[data-chapter="id"].
 // The site header covers the top 64 px of the stage. The skip control is at the top right under the header.
-// The progress rail is in the bottom 12 px. Below 640 px of width, the captions are at the top: keep that band clear.
+// The progress rail is in the bottom 12 px. The skip control and the rail fade out when the stage starts to leave. Below 640 px of width, the captions are at the top: keep that band clear.
 
 const { useEffect, useRef, useState } = React;
 
@@ -89,6 +89,13 @@ const storyCaptionIndex = (id, local) => {
   return Math.min(count - 1, Math.floor(storyClamp(local) * count));
 };
 
+// The stage starts to leave when the bottom of the story rises above the bottom of the viewport.
+// Then the skip control and the progress rail fade out. The fade is as long as this share of the viewport height.
+const STORY_EXIT_SPAN = 0.2;
+
+// How far the stage has left: 0 while it is pinned, 1 when the fade ends. bottom is the bounding-rect bottom of the story.
+const storyExit = ({ bottom, viewport }) => (viewport > 0 ? storyClamp((viewport - bottom) / (viewport * STORY_EXIT_SPAN)) : 0);
+
 // Six fill fractions for the progress rail, one for each chapter.
 const storyRail = p => STORY_CHAPTERS.map(({ from, to }) => storyClamp((p - from) / (to - from)));
 
@@ -132,6 +139,15 @@ const storyPaint = (ctx, id, frame) => {
   ctx.save();
   storyGuard(`${id}.draw`, () => entry.draw(ctx, frame));
   ctx.restore();
+};
+
+// The fade follows the scroll position. It has no timer and no transition, so it needs no rule for reduced motion.
+// A visitor with reduced motion gets the static frames, and these never run it.
+// At exit 1 the element is hidden, so the keyboard cannot reach the skip link when it is not on screen.
+const storyFadeOut = (element, exit) => {
+  if (!element) return;
+  element.style.opacity = exit > 0 ? String(1 - exit) : '';
+  element.style.visibility = exit >= 1 ? 'hidden' : '';
 };
 
 // A plain click goes to a section of the page with the same helper as the header. Other clicks keep the link.
@@ -234,7 +250,7 @@ const StoryWords = ({ chapter, on, caption, onNavigate }) => {
 
 // The pinned story. One scroll listener and one animation frame loop draw the canvas from refs.
 // React state holds only the chapter and the caption that the captions need.
-const StoryPinned = ({ sectionRef, onNavigate }) => {
+const StoryPinned = ({ sectionRef, skipRef, onNavigate }) => {
   const stageRef = useRef(null);
   const canvasRef = useRef(null);
   const layerRef = useRef(null);
@@ -247,6 +263,7 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
     const canvas = canvasRef.current;
     const layer = layerRef.current;
     const rail = railRef.current;
+    const skip = skipRef ? skipRef.current : null;
     if (!section || !stage || !canvas || !layer || !rail) return undefined;
     const ctx = canvas.getContext('2d');
     const fills = Array.from(rail.querySelectorAll('i'));
@@ -259,6 +276,7 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
     let height = 0;
     let dpr = 1;
     let p = 0;
+    let exit = 0;
     let drawn = -1;
     let current = storyChapterAt(0);
     let shown = view;
@@ -293,6 +311,13 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
       const box = section.getBoundingClientRect();
       p = storyProgress({ top: box.top, height: box.height, viewport: height });
       current = storyChapterAt(p);
+      // The skip control and the rail fade out while the stage leaves. They do not change while the story is pinned.
+      const leaving = storyExit({ bottom: box.top + box.height, viewport: height });
+      if (leaving !== exit) {
+        exit = leaving;
+        storyFadeOut(skip, exit);
+        storyFadeOut(rail, exit);
+      }
       const caption = storyCaptionIndex(current.id, current.local);
       if (current.index !== shown.index || caption !== shown.caption) {
         shown = { index: current.index, caption };
@@ -346,9 +371,11 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
       document.removeEventListener('visibilitychange', onVisibility);
       sizes.disconnect();
       watcher.disconnect();
+      storyFadeOut(skip, 0);
+      storyFadeOut(rail, 0);
       syncLayer('');
     };
-  }, [sectionRef]);
+  }, [sectionRef, skipRef]);
 
   return (
     <div ref={stageRef} className="story-stage" data-chapter={STORY_CHAPTERS[view.index].id}>
@@ -416,17 +443,18 @@ const StoryFrame = ({ chapter, onNavigate }) => {
 
 const StoryStage = ({ onNavigate }) => {
   const sectionRef = useRef(null);
+  const skipRef = useRef(null);
   const reduced = useStoryReducedMotion();
   return (
     <section ref={sectionRef} id="story" aria-label={SITE_STORY.label}
       className={reduced ? 'story story--static' : 'story story--pinned'}
       style={reduced ? undefined : { '--story-screens': STORY_SCREENS }}>
-      <div className="story-skip-wrap">
+      <div ref={skipRef} className="story-skip-wrap">
         <a className="story-skip" href="#research" onClick={event => storyGo(event, 'research', onNavigate)}>Skip to research</a>
       </div>
       {reduced
         ? STORY_CHAPTERS.map(chapter => <StoryFrame key={chapter.id} chapter={chapter} onNavigate={onNavigate} />)
-        : <StoryPinned sectionRef={sectionRef} onNavigate={onNavigate} />}
+        : <StoryPinned sectionRef={sectionRef} skipRef={skipRef} onNavigate={onNavigate} />}
     </section>
   );
 };
