@@ -938,7 +938,7 @@ test('the build puts StoryBlock.jsx after StoryChapters.jsx and the bundle has i
   assert.ok(files.indexOf('story-geometry.js') < files.indexOf('StoryBlock.jsx'), 'StoryGeometry exists before the block');
   const bundle = read('bundle.js');
   assert.ok(bundle.includes('// File: StoryBlock.jsx'), 'build the current source before testing');
-  assert.ok(bundle.includes('const storyBlockLayout') && bundle.includes('STORY_RENDERERS.live = {'), 'the bundle holds the current block code');
+  assert.ok(bundle.includes('const storyBlockLayout') && /STORY_RENDERERS\.live\s*=\s*\{/.test(bundle), 'the bundle holds the current block code');
   assert.ok(bundle.indexOf('// File: StoryChapters.jsx') < bundle.indexOf('// File: StoryBlock.jsx'));
   assert.ok(!/<StoryBlock|React\.createElement/.test(blockSource), 'the block has no React markup: the controls are plain DOM');
   assert.ok(fs.existsSync(path.join(root, 'story-worker.js')));

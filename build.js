@@ -31,7 +31,8 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
     ];
     const simulatorFiles = ['ve2d-model.js', 'sim-block3d.js', 'GuidePage.jsx', 'SimCharts.jsx', 'SimViews.jsx', 'SimulatorPage.jsx'];
 
-    // The site bundle drops the comments: the sources keep them, and the page loads about 17 KB less after gzip.
+    // The site bundle drops the comments and the extra white space. The sources keep both.
+    // It is 176 KB instead of 282 KB, and 56 KB instead of 81 KB after gzip. A test that reads bundle.js must not depend on spacing.
     // The simulator bundle keeps its output as it was.
     const compile = (sourceFiles, options = {}) => {
       let output = '"use strict";\n';
@@ -45,7 +46,7 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
       return output;
     };
 
-    const combined = compile(files, { comments: false });
+    const combined = compile(files, { comments: false, compact: true });
     const simulatorCombined = compile(simulatorFiles);
 
     fs.writeFileSync('bundle.js', combined, 'utf8');

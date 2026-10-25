@@ -71,7 +71,8 @@ const SiteHome = () => {
   const [active, setActive] = useState('home');
   const navigate = (id, event) => siteNavigate('home', id, event);
 
-  useEffect(() => dismissLoader(), []);
+  // A layout effect hides the loader before the first paint of the story, so the name is not late by one frame.
+  React.useLayoutEffect(() => dismissLoader(), []);
 
   // Old and new anchors: pages redirect, sections scroll into view after the first layout.
   useEffect(() => {

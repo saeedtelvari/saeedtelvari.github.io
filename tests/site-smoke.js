@@ -10,6 +10,7 @@ const lacks = (file, pattern, message) => assert.doesNotMatch(read(file), patter
 has('App.jsx', /hashchange/, 'home navigation must react to same-document hash changes');
 has('App.jsx', /history\.(pushState|replaceState)/, 'navigation must keep browser history in sync');
 lacks('App.jsx', /minDuration\s*=\s*900/, 'the loader must not force a 900ms delay');
+has('App.jsx', /React\.useLayoutEffect\(\(\) => dismissLoader\(\), \[\]\)/, 'the homepage hides the loader before the first paint of the story');
 
 has('Header.jsx', /href=\{it\.href\}/, 'header navigation needs real link destinations');
 has('Header.jsx', /mobileOpen\s*&&/, 'the closed mobile drawer must not remain focusable');
