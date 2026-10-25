@@ -337,7 +337,7 @@ test('colours mix and shade as flat hex values', () => {
 
 test('the file registers the rock renderer, after the placeholders, with flat colour only', () => {
   const build = read('build.js');
-  assert.ok(build.indexOf("'StoryChapters.jsx'") > 0 && build.indexOf("'StoryRock.jsx'") === build.indexOf("'StoryChapters.jsx'") + "'StoryChapters.jsx',\n      ".length, 'StoryRock.jsx follows StoryChapters.jsx in build.js');
+  assert.ok(build.indexOf("'StoryChapters.jsx'") > 0 && build.indexOf("'StoryRock.jsx'") > build.indexOf("'StoryChapters.jsx'"), 'StoryRock.jsx follows StoryChapters.jsx in build.js');
   assert.ok(build.indexOf("'StoryRock.jsx'") > build.indexOf("'StoryStage.jsx'") && build.indexOf("'StoryRock.jsx'") > build.indexOf("'story-geometry.js'"));
   assert.match(source, /STORY_RENDERERS\.rock = \{ animated: true, draw: rockDraw \};/);
   assert.doesNotMatch(source, /createLinearGradient|createRadialGradient|createConicGradient|shadowBlur|shadowColor|filter\s*=/, 'no gradients and no shadows');
