@@ -206,7 +206,7 @@ The heading "Research". Desktop uses two columns, about 62/38; phones use one.
 - Body paragraph: *My main tool is the vertical-equilibrium (VE) model, which assumes that CO₂, methane and brine separate vertically under buoyancy. That reduces a 3D reservoir model to 2D and makes it fast enough for screening, uncertainty quantification and optimisation studies. I build these models in MRST, apply them to depleted gas fields in the MuPSI project, and teach MRST's rapid-prototyping framework at Heriot-Watt.*
 - **Themes**, a definition list, not cards:
   - *VE models for depleted gas fields*: three-phase CO₂–methane–brine VE with a black-oil approximation, checked against compositional simulation, up to 100× faster.
-  - *Storage screening under uncertainty*: ensembles of fast VE runs, such as the 28-case ensemble study in MuPSI.
+  - *Storage screening under uncertainty*: ensembles of fast VE runs that test many scenarios and uncertain reservoir properties at field scale.
   - *Machine learning for upscaling and digital rock*: CNNs that upscale permeability tensors and predict two-phase flow properties from micro-CT images.
 - **Methods and tools**: two short lines.
   - VE modelling, multiphase and compositional simulation, permeability upscaling, scientific machine learning.
@@ -221,7 +221,7 @@ The heading "Research". Desktop uses two columns, about 62/38; phones use one.
 | --- | --- |
 | Sep 2026 | Talk and session co-chair, 9th InterPore UK Chapter Conference, Edinburgh: *A Compositional Vertical Equilibrium Model for CO₂ Storage in Depleted Gas Reservoirs*. |
 | Sep 2026 | Approved as MSc demonstrator for Formation Evaluation and Production Technology, from November 2026. |
-| Aug 2026 | MuPSI industrial case study: VE models of depleted gas fields, presented to the project partners. |
+| Aug 2026 | MuPSI field-scale case study: VE models of depleted gas fields, presented to the project partners. |
 | Jun 2026 | Team runner-up, EAGE "The Energy–AI Nexus" Hackathon, EAGE Annual 2026, Aberdeen: a Python AI agent that manages an energy grid under growing AI demand. |
 | May 2026 | Talk at InterPore2026, Nantes: *Vertical-Equilibrium Modelling of CO₂ Migration in Depleted Reservoirs*. Preprint posted on EarthArXiv. |
 | Mar 2026 | Led the MRST rapid-prototyping session of the SET-IT MATLAB/MRST workshop series: building a single-phase flow simulator from scratch. |
@@ -234,7 +234,7 @@ The heading "Research". Desktop uses two columns, about 62/38; phones use one.
 - Text: *A vertical-equilibrium simulator of CO₂ plume migration, structural, residual and dissolution trapping, fault leakage and pressure build-up in a saline aquifer, in SI units with a visible mass balance and an uncertainty study. It runs in the browser.*
 - Links: **Open the simulator** (`simulator.html`) and **Read the method** (`simulator.html#method`).
 
-**MuPSI** (2026): *Multiscale Pressure-Stress Impacts on fault integrity for multi-site regional CO₂ storage*, a Clean Energy Transition Partnership project. VE models and a 28-case ensemble for an industrial case study of depleted gas fields, with NORCE, TU Delft and IDAEA-CSIC.
+**MuPSI** (2026): *Multiscale Pressure-Stress Impacts on fault integrity for multi-site regional CO₂ storage*, a Clean Energy Transition Partnership project. VE models for a field-scale case study of depleted gas fields, with NORCE, TU Delft and IDAEA-CSIC.
 
 **3D fault detection for MRST**: extended a 2D tool to 3D. It finds fault faces with signed distance fields on Cartesian and unstructured grids, and members of the MuPhi group use it.
 

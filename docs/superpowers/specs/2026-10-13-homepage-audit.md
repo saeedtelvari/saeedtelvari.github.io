@@ -111,14 +111,14 @@ The local `main` (`1dfccd2`, 26 Aug) holds edits made on 25 Sep in `CVPage.jsx`,
 | # | Draft content | Where |
 | --- | --- | --- |
 | D1 | **Teaching**: Approved Demonstrator, MSc Petroleum Engineering 2026–27 (Formation Evaluation labs Nov 2026; Production Technology PipeSim tutorials Jan–Feb 2027); MRST workshop co-organiser and lead instructor (Feb–Apr 2026, SET-IT); Teaching Assistant during the MSc (Advanced Naturally Fractured Reservoirs; Advanced EOR) | CV |
-| D2 | **Research projects**: MuPSI (Clean Energy Transition Partnership: VE models and a 28-case ensemble for an industrial case study on depleted gas fields, with NORCE, TU Delft and IDAEA-CSIC); 3D fault-detection tool for MRST (signed-distance fault faces on Cartesian and unstructured grids) | CV, news |
+| D2 | **Research projects**: MuPSI (Clean Energy Transition Partnership: VE models for a field-scale case study of depleted gas fields, with NORCE, TU Delft and IDAEA-CSIC); 3D fault-detection tool for MRST (signed-distance fault faces on Cartesian and unstructured grids) | CV, news |
 | D3 | **Service and leadership**: co-reviewer for *Geophysical Research Letters* (with Prof. Florian Doster); InterPore2026 volunteer; SPE HWU Student Chapter webmaster (chapter won the 2026 SPE Regional Outstanding Student Chapter Award); SET-IT and MuPhi web contributor | CV |
 | D4 | **Invited seminar**: IGE GeoEnergy Seminar Series, Feb 2026 | CV, news |
 | D5 | **Professional training**: SLB Intersect CCS (five days, Sep 2026); CMG CCUS modelling certificate (Mar 2026) | CV |
 | D6 | **Fuller skills**: Rust; TensorFlow, PyTorch, scikit-learn, OpenCV, OpenPNM; Intersect, CMG, PipeSim, Saphir, PVTSim; OpenFOAM, PerGeos, SALOME, MeshLab; Docker, VS Code | CV |
 | D7 | **Older honours**: top 2 % national MSc entrance exam; direct graduate admission (Talented Student Office); top 4 % of 140,000+ BSc entrants; NODET | CV, about |
 | D8 | **Preprint status**: "Under review, *Geoenergy Science and Engineering*", with an abstract naming the Hugin Formation East field case and "speed-ups of up to 100×" | Publications |
-| D9 | **News items**: MSc demonstrator (Sep 2026), MuPSI industrial case study (Aug 2026), EAGE Energy–AI Nexus hackathon (Jun 2026, "as part of a team"), InterPore2026 talk and preprint (May 2026), MRST workshop (Mar 2026), invited seminar and SPE bursary (Feb 2026), EAGE GET poster (Oct 2025) | Activity |
+| D9 | **News items**: MSc demonstrator (Sep 2026), MuPSI field-scale case study (Aug 2026), EAGE Energy–AI Nexus hackathon (Jun 2026, "as part of a team"), InterPore2026 talk and preprint (May 2026), MRST workshop (Mar 2026), invited seminar and SPE bursary (Feb 2026), EAGE GET poster (Oct 2025) | Activity |
 | D10 | **Copy**: "PhD" (no dots); About text ("I study how injected CO₂ migrates through depleted gas reservoirs, and how to simulate it quickly at field scale…"); hero annotation "up to 100× faster than full 3D simulation"; hero caption "a live, simplified VE simulation"; meta description mentioning MRST and teaching | Hero, About, `index.html` |
 
 Two drafts conflict with origin:

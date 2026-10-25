@@ -37,7 +37,7 @@ const SiteSection = ({ id, title, children }) => (
 
 const SITE_THEMES = [
   ['VE models for depleted gas fields', 'Three-phase CO₂–methane–brine VE with a black-oil approximation, checked against compositional simulation and up to 100× faster.'],
-  ['Storage screening under uncertainty', 'Ensembles of fast VE runs, such as the 28-case ensemble study in MuPSI.'],
+  ['Storage screening under uncertainty', 'Ensembles of fast VE runs that test many scenarios and uncertain reservoir properties at field scale.'],
   ['Machine learning for upscaling and digital rock', 'CNNs that upscale permeability tensors and predict two-phase flow properties from micro-CT images.'],
 ];
 
