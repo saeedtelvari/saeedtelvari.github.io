@@ -132,7 +132,7 @@ The cutaway is generic but correct for the central North Sea. It uses no formati
 | Accessibility | axe-core reports 0 violations at 390 px and 1440 px. |
 | Mobile | At 390 px nothing scrolls horizontally and no caption overlaps the art. |
 | Errors | No console errors or failed requests on the three pages. |
-| Tests | All existing tests stay green. New tests cover the chapter functions. |
+| Tests | All existing tests stay green until the cleanup in phase 7. In phase 7, the tests of the old hero and descent go together with their files: `hero-model`, `hero-sky`, `hero-name`, the bedding test in `hero-geology`, `geological-descent`, the hero lines in `site-smoke.js`, and test 3 in `site-tokens`. The archive tag keeps them. New tests cover the chapter functions. |
 
 ## Phases
 
@@ -142,7 +142,7 @@ The cutaway is generic but correct for the central North Sea. It uses no formati
 4. **Geometry and chapters 4 and 5.** The shared scenario (dome, fault, gas–water contact), the gas-cap start state and the methane tracer with their tests, the merge of the vertical cells and the live VE block. These chapters are the core message, so they come first.
 5. **Chapters 0 to 3.** Orbit, descent, the geological cutaway and the rock-to-grid step.
 6. **Sections and CV.** Apply the new tokens to the content below the story.
-7. **QA and release.** Mobile, speed, weight, accessibility, smoke tests and the `?v=N` bump on all three pages. Then open a PR.
+7. **Cleanup, QA and release.** Remove the old hero and descent files, their tests and their CSS (see Tests in the success criteria), and update the README. Then check mobile, speed, weight, accessibility, smoke tests and the `?v=N` bump on all three pages, and open a PR.
 
 ## Open questions
 
