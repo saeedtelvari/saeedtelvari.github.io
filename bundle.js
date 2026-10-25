@@ -3,11 +3,6 @@
 var { useState, useEffect, useMemo, useRef, useCallback } = React;
 
 // File: Primitives.jsx
-/* =====================================================
-   Icon — inline SVG set (replaces Font Awesome on the site pages).
-   UI glyphs are 24-unit stroke paths; brand marks are the CC0 paths
-   from Simple Icons (GitHub, LinkedIn, ORCID, Google Scholar).
-   ===================================================== */
 const SITE_ICONS = {
   menu: {
     d: 'M4 7h16M4 12h16M4 17h16'
@@ -71,7 +66,7 @@ const Icon = ({
 }) => {
   const icon = SITE_ICONS[name];
   if (!icon) return null;
-  return /*#__PURE__*/React.createElement("svg", {
+  return React.createElement("svg", {
     className: `icon ${className}`.trim(),
     width: size,
     height: size,
@@ -83,7 +78,7 @@ const Icon = ({
     strokeWidth: icon.fill ? undefined : 1.8,
     strokeLinecap: "round",
     strokeLinejoin: "round"
-  }, /*#__PURE__*/React.createElement("path", {
+  }, React.createElement("path", {
     d: icon.d
   }));
 };
@@ -93,11 +88,6 @@ Object.assign(window, {
 });
 
 // File: site-content.js
-// site-content.js — one source for the facts the homepage and the CV both show.
-// Verify any new DOI against Crossref before adding it. Wording rules (2026-10-13):
-// "PhD" without dots, the IGE seminar is never "invited", both 2026 awards are runner-up,
-// and the SPE upscaling paper carries no speed-up figure.
-
 const SITE_LINKS = {
   email: 'st4014@hw.ac.uk',
   scholar: 'https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ&hl=en',
@@ -381,16 +371,9 @@ const SITE_CV = {
     place: 'Full tuition waiver'
   }]
 };
-
-// The words of the story at the top of the homepage (docs/superpowers/specs/2026-10-25-homepage-story-design.md).
-// A caption has two sentences at most. *h* marks italic text. Chapters with two captions switch at the middle.
 const SITE_STORY = {
   label: 'From orbit to a live vertical-equilibrium model',
   name: 'Sa’eed Telvari',
-  // The CO₂ numbers of chapter 0. base and baseYear are the start of the count: the level before industry.
-  // value and year come from the NOAA Mauna Loa record: the annual mean of the latest complete year, in ppm.
-  // To update them, read the last row of the file at url, then write its year and its mean here (see the spec, Rules for the story).
-  // The first caption of chapter 0 says "more than 420 ppm". A test fails if value is not above 420.
   co2: {
     base: 280,
     baseYear: 1850,
@@ -399,7 +382,6 @@ const SITE_STORY = {
     source: 'NOAA Global Monitoring Laboratory, Mauna Loa annual mean CO₂',
     url: 'https://gml.noaa.gov/webdata/ccgg/trends/co2/co2_annmean_mlo.txt'
   },
-  // The ppm line, from co2: "280 ppm in 1850. 427 ppm in 2025." The value shows as a whole number.
   get ppm() {
     return `${this.co2.base} ppm in ${this.co2.baseYear}. ${Math.round(this.co2.value)} ppm in ${this.co2.year}.`;
   },
@@ -411,7 +393,6 @@ const SITE_STORY = {
     ve: ['Gas is lighter than brine. Both the CO₂ and the methane rise to the top of each column.', 'The rock stays 3D, but the vertical cells go. VE solves one value per column, the plume thickness *h*, so it runs up to 100× faster.'],
     live: ['This VE model runs in your browser.']
   },
-  // Links under the caption of the last chapter. An entry with an id scrolls to that section of the page.
   actions: [{
     label: 'Open the simulator',
     href: './simulator.html'
@@ -434,13 +415,6 @@ if (typeof module !== 'undefined' && module.exports) {
 
 // File: Header.jsx
 function _extends() { _extends = Object.assign ? Object.assign.bind() : function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; }; return _extends.apply(this, arguments); }
-// Header.jsx — fixed navigation shared by the homepage, the CV and the simulator.
-// The site variant is clear over the pinned story (ink text on the sky). It is a solid bar in the
-// ground colour with an ink hairline after the story, and on the CV page.
-// The workbench variant is the simulator's solid 56 px bar. Do not change how it looks.
-
-// [destructured React]
-
 const HEADER_FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const getHeaderFocusWrapTarget = (focusables, activeElement, backwards) => {
   if (!focusables.length) return null;
@@ -484,10 +458,6 @@ const Header = ({
   const menuButtonRef = useRef(null);
   const closeButtonRef = useRef(null);
   const mobileDrawerRef = useRef(null);
-
-  // The pinned stage fills the screen while the story is on. The bar is clear then.
-  // The bar turns solid when the stage starts to leave, so the art does not slide under the nav text.
-  // Without a stage (the CV, or the static frames for reduced motion) the bar is always solid.
   useEffect(() => {
     if (variant !== 'site') return undefined;
     const onScroll = () => {
@@ -505,8 +475,6 @@ const Header = ({
       window.removeEventListener('resize', onScroll);
     };
   }, [variant]);
-
-  // The open drawer is modal: the page behind is inert, Tab cycles inside, Escape closes.
   useEffect(() => {
     if (!mobileOpen) return undefined;
     const mainContent = document.getElementById('main-content');
@@ -542,34 +510,34 @@ const Header = ({
     if (onNavigate) onNavigate(id, event);
   };
   const classes = ['app-header', `app-header--${variant}`, overStory ? 'is-over-story' : ''].filter(Boolean).join(' ');
-  const navLink = it => /*#__PURE__*/React.createElement("a", {
+  const navLink = it => React.createElement("a", {
     className: "app-nav__link",
     href: it.href,
     "aria-current": active === it.id ? 'page' : undefined,
     onClick: event => handleItemClick(it.id, event)
   }, it.label);
-  return /*#__PURE__*/React.createElement("header", {
+  return React.createElement("header", {
     className: classes
-  }, /*#__PURE__*/React.createElement("div", {
+  }, React.createElement("div", {
     className: "app-header__bar"
-  }, /*#__PURE__*/React.createElement("a", {
+  }, React.createElement("a", {
     className: "app-header__logo",
     href: "./index.html",
     onClick: event => handleItemClick('home', event),
     "aria-label": "Sa\u2019eed Telvari, home"
-  }, /*#__PURE__*/React.createElement("img", {
+  }, React.createElement("img", {
     src: "./assets/logo-minimalist.webp",
     alt: "",
     width: "40",
     height: "40"
-  })), /*#__PURE__*/React.createElement("nav", {
+  })), React.createElement("nav", {
     className: "app-header__nav",
     "aria-label": "Main"
-  }, /*#__PURE__*/React.createElement("ul", {
+  }, React.createElement("ul", {
     className: "app-nav"
-  }, SITE_NAV_ITEMS.map(it => /*#__PURE__*/React.createElement("li", {
+  }, SITE_NAV_ITEMS.map(it => React.createElement("li", {
     key: it.id
-  }, navLink(it))))), /*#__PURE__*/React.createElement("button", {
+  }, navLink(it))))), React.createElement("button", {
     type: "button",
     ref: menuButtonRef,
     className: "app-header__menu",
@@ -577,48 +545,48 @@ const Header = ({
     "aria-expanded": mobileOpen,
     "aria-controls": "site-drawer",
     "aria-label": "Open navigation menu"
-  }, /*#__PURE__*/React.createElement(Icon, {
+  }, React.createElement(Icon, {
     name: "menu",
     size: 20
-  }))), mobileOpen && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }))), mobileOpen && React.createElement(React.Fragment, null, React.createElement("div", {
     className: "app-drawer__backdrop",
     onClick: () => setMobileOpen(false),
     "aria-hidden": "true"
-  }), /*#__PURE__*/React.createElement("div", {
+  }), React.createElement("div", {
     ref: mobileDrawerRef,
     id: "site-drawer",
     className: "app-drawer",
     role: "dialog",
     "aria-modal": "true",
     "aria-label": "Navigation"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, React.createElement("div", {
     className: "app-drawer__head"
-  }, /*#__PURE__*/React.createElement("span", {
+  }, React.createElement("span", {
     className: "app-drawer__name"
-  }, "Sa\u2019eed Telvari"), /*#__PURE__*/React.createElement("button", {
+  }, "Sa\u2019eed Telvari"), React.createElement("button", {
     type: "button",
     ref: closeButtonRef,
     className: "app-drawer__close",
     onClick: () => setMobileOpen(false),
     "aria-label": "Close navigation menu"
-  }, /*#__PURE__*/React.createElement(Icon, {
+  }, React.createElement(Icon, {
     name: "close",
     size: 20
-  }))), /*#__PURE__*/React.createElement("ul", {
+  }))), React.createElement("ul", {
     className: "app-drawer__list"
-  }, SITE_NAV_ITEMS.map(it => /*#__PURE__*/React.createElement("li", {
+  }, SITE_NAV_ITEMS.map(it => React.createElement("li", {
     key: it.id
-  }, navLink(it)))), /*#__PURE__*/React.createElement("ul", {
+  }, navLink(it)))), React.createElement("ul", {
     className: "app-drawer__profiles",
     "aria-label": "Elsewhere"
-  }, HEADER_PROFILES.map(profile => /*#__PURE__*/React.createElement("li", {
+  }, HEADER_PROFILES.map(profile => React.createElement("li", {
     key: profile.label
-  }, /*#__PURE__*/React.createElement("a", _extends({
+  }, React.createElement("a", _extends({
     href: profile.href
   }, profile.href.startsWith('http') ? {
     target: '_blank',
     rel: 'noreferrer'
-  } : {}), /*#__PURE__*/React.createElement(Icon, {
+  } : {}), React.createElement(Icon, {
     name: profile.icon,
     size: 16
   }), profile.label)))))));
@@ -628,8 +596,6 @@ Object.assign(window, {
 });
 
 // File: Footer.jsx
-// Footer.jsx — closing band: name, affiliation, the same links as the header, back to top.
-// It is the base of the page: older rock in flat colour with light text (style C).
 const Footer = ({
   onNavigate
 }) => {
@@ -644,29 +610,29 @@ const Footer = ({
       preventScroll: true
     });
   };
-  return /*#__PURE__*/React.createElement("footer", {
+  return React.createElement("footer", {
     className: "site-footer"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, React.createElement("div", {
     className: "site-footer__inner"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+  }, React.createElement("div", null, React.createElement("p", {
     className: "site-footer__name"
-  }, "\xA9 2024\u20132026 Sa\u2019eed Telvari"), /*#__PURE__*/React.createElement("p", {
+  }, "\xA9 2024\u20132026 Sa\u2019eed Telvari"), React.createElement("p", {
     className: "site-footer__affiliation"
-  }, "Institute of GeoEnergy Engineering, Heriot-Watt University, Edinburgh")), /*#__PURE__*/React.createElement("nav", {
+  }, "Institute of GeoEnergy Engineering, Heriot-Watt University, Edinburgh")), React.createElement("nav", {
     "aria-label": "Footer"
-  }, /*#__PURE__*/React.createElement("ul", {
+  }, React.createElement("ul", {
     className: "site-footer__links"
-  }, SITE_NAV_ITEMS.map(it => /*#__PURE__*/React.createElement("li", {
+  }, SITE_NAV_ITEMS.map(it => React.createElement("li", {
     key: it.id
-  }, /*#__PURE__*/React.createElement(FooterLink, {
+  }, React.createElement(FooterLink, {
     label: it.label,
     href: it.href,
     onClick: event => onNavigate && onNavigate(it.id, event)
-  }))))), /*#__PURE__*/React.createElement("a", {
+  }))))), React.createElement("a", {
     className: "btn btn--quiet btn--small",
     href: "#main-content",
     onClick: toTop
-  }, /*#__PURE__*/React.createElement(Icon, {
+  }, React.createElement(Icon, {
     name: "arrow-up",
     size: 16
   }), "Back to top")));
@@ -675,7 +641,7 @@ const FooterLink = ({
   label,
   href,
   onClick
-}) => /*#__PURE__*/React.createElement("a", {
+}) => React.createElement("a", {
   href: href,
   onClick: onClick
 }, label);
@@ -684,9 +650,6 @@ Object.assign(window, {
 });
 
 // File: ve2d-model.js
-// ve2d-model.js — sharp-interface vertical-equilibrium (VE) model of CO2 storage in a
-// confined saline aquifer. SI units internally; scenarios use display units
-// (Mt, mD, m, km, degrees, years). Shared by the page, the worker and Node tests.
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -706,8 +669,6 @@ Object.assign(window, {
     fine: [120, 72]
   };
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-
-  // [min, max, step] in display units. The UI and the normaliser share these bounds.
   const LIMITS = Object.freeze({
     years: [100, 2000, 50],
     seed: [1, 999999, 1],
@@ -746,10 +707,6 @@ Object.assign(window, {
     sealCap: [0, 200, 1],
     kf: [0, 1000, 1]
   });
-  // Optional inputs. They are not in LIMITS or DEFAULTS, so the simulator UI does not list,
-  // encode or show them. dome replaces the main dome (x, y, along, across in km, angle in
-  // degrees). gasContactDepth is the depth, in metres, of a flat gas-water contact at the
-  // start. The gas above the contact is methane.
   const DOME_LIMITS = Object.freeze({
     x: [0, 20],
     y: [0, 12],
@@ -878,8 +835,6 @@ Object.assign(window, {
     }
     return fault;
   };
-
-  // A dome needs all five numbers. Any other input gives no dome, so the seed places it.
   const normalizeDome = raw => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
     const dome = {};
@@ -899,7 +854,6 @@ Object.assign(window, {
     for (const [key, [min, max]] of Object.entries(LIMITS)) {
       const value = Number(raw[key]);
       const bounded = Number.isFinite(value) && raw[key] !== '' && raw[key] !== null ? clamp(value, min, max) : DEFAULTS[key];
-      // The simulated period snaps to its step so every run ends on a snapshot year.
       scenario[key] = key === 'years' ? Math.round(bounded / 50) * 50 : INTEGER_KEYS.has(key) ? Math.round(bounded) : bounded;
     }
     const faults = Array.isArray(raw.faults) ? raw.faults : DEFAULTS.faults;
@@ -910,20 +864,11 @@ Object.assign(window, {
     scenario.gasContactDepth = Number.isFinite(contact) && raw.gasContactDepth !== '' && raw.gasContactDepth !== null ? clamp(contact, GAS_CONTACT_LIMITS[0], GAS_CONTACT_LIMITS[1]) : null;
     return scenario;
   };
-
-  // ------------------------------------------------------------------ geometry
-
   const hashNoise = (x, y, seed) => {
     const value = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453;
     return value - Math.floor(value);
   };
-
-  // Map angle (from +x, anticlockwise) of the regional strike, at right angles to the dip
-  // direction. Domes and caprock undulations are elongated along it.
   const strikeAngle = scenario => Math.PI - scenario.dipAz * Math.PI / 180;
-
-  // Gaussian domes elongated along strike (±15°). The first is the main closure; any others
-  // are smaller satellites. An explicit scenario.dome (km and degrees) replaces the main one.
   const domeCentres = scenario => Array.from({
     length: scenario.domes
   }, (_, index) => {
@@ -955,10 +900,6 @@ Object.assign(window, {
       relief: main ? 1 : 0.35 + 0.45 * hash(5.9, 2.4, 631)
     };
   });
-
-  // Smooth Gaussian random fields with a self-affine spectrum, stretched along strike: a
-  // sum of random Fourier modes, one per equal step in log wavenumber (amplitude k^-H),
-  // scaled to unit variance.
   const spectralModes = (seed, spec, angle) => {
     const rng = mulberry32(seed);
     const cos = Math.cos(angle);
@@ -976,9 +917,6 @@ Object.assign(window, {
     for (let m = 3; m < modes.length; m += 4) modes[m] /= Math.sqrt(variance);
     return modes;
   };
-
-  // Caprock roughness (Hurst exponent 0.8, wavelengths 8 km to 500 m, stretched 2.5 times
-  // along strike); the roughness input is its RMS height in metres.
   const ROUGH = Object.freeze({
     modes: 48,
     longest: 8000,
@@ -987,10 +925,6 @@ Object.assign(window, {
     stretch: 2.5
   });
   const roughModes = scenario => spectralModes(scenario.seed + 7919, ROUGH, strikeAngle(scenario));
-
-  // Aquifer thickness: the mean times a log-normal factor exp(sG - s^2/2) of a smoother
-  // field (Hurst 0.9, wavelengths 12 km to 1.5 km, sand belts stretched twice along
-  // strike), so the mean is kept, thickness stays positive and s is about its spread.
   const THICK = Object.freeze({
     modes: 32,
     longest: 12000,
@@ -1015,11 +949,6 @@ Object.assign(window, {
       normal: [along[1], -along[0]]
     };
   };
-
-  // Normal-fault displacement. The throw is parabolic along strike (zero at the tips). The
-  // hanging wall, to the right of the strike direction (right-hand rule), drops by 70 % of
-  // it and the footwall rises by 30 %; both decay away from the fault over a fifth of its
-  // length, so each footwall crest is a closure against its fault.
   const FOOTWALL_SHARE = 0.3;
   const faultThrowAt = (fault, frame, x, y) => {
     const dx = x - frame.cx;
@@ -1063,21 +992,14 @@ Object.assign(window, {
     rough: roughModes(scenario),
     thick: thickModes(scenario)
   });
-
-  // The top-surface depth of one (normalised) scenario as a function of x and y in metres,
-  // with its domes, fault frames and roughness modes computed once.
   const depthField = scenario => {
     const cache = depthCache(scenario);
     return (x, y) => topDepth(x, y, scenario, cache);
   };
-
-  // The aquifer thickness of one (normalised) scenario as a function of x and y in metres.
   const thicknessField = scenario => {
     const cache = depthCache(scenario);
     return (x, y) => thicknessAt(x, y, scenario, cache);
   };
-
-  // Segment p–q against the fault trace; returns the along-strike parameter t in [-1, 1] or null.
   const traceCrossing = (frame, px, py, qx, qy) => {
     const ax = frame.cx - frame.along[0] * frame.half;
     const ay = frame.cy - frame.along[1] * frame.half;
@@ -1138,9 +1060,6 @@ Object.assign(window, {
         Hc[j * nx + i] = thicknessAt(xc[i], yc[j], scenario, cache);
       }
     }
-
-    // Face multiplier: cross-fault transmissibility times the juxtaposed fraction of the
-    // aquifer thickness at the face.
     const multiplier = (px, py, qx, qy) => {
       let value = 1;
       scenario.faults.forEach((fault, index) => {
@@ -1175,9 +1094,6 @@ Object.assign(window, {
         if (boundary) ghostY[index] = depthAt(xc[i], f * dy);
       }
     }
-
-    // Fault-zone leakage: trace length inside each cell, so the leak rate per metre of
-    // fault does not depend on the grid.
     const leakCells = [];
     const faultLines = [];
     scenario.faults.forEach((fault, faultIndex) => {
@@ -1237,8 +1153,6 @@ Object.assign(window, {
     model.traps = trapAnalysis(model);
     return model;
   };
-
-  // Binary min-heap of (key, cell) pairs for the priority flood.
   const createHeap = capacity => {
     let size = 0;
     const keys = new Float64Array(capacity);
@@ -1279,8 +1193,6 @@ Object.assign(window, {
       }
     };
   };
-
-  // Visit the four face neighbours of a cell that are connected through a passable face.
   const forEachNeighbour = (model, cell, visit) => {
     const {
       nx,
@@ -1296,10 +1208,6 @@ Object.assign(window, {
     if (j < ny - 1 && my[(j + 1) * nx + i] > 0) visit(cell + nx);
   };
   const TRAP_COLUMN = 1e-3;
-
-  // Spill-point analysis (priority flood, Barnes et al. 2014) on the caprock depth: CO2
-  // rises to shallower depth, so domes are "pits" of depth. As in co2lab, the model edge
-  // is always a spill path; compartments sealed off from the edge never spill.
   const trapAnalysis = model => {
     const {
       nx,
@@ -1374,9 +1282,6 @@ Object.assign(window, {
       traps
     };
   };
-
-  // Marching squares on cell-centre values. Segments are [x0, y0, x1, y1, ...] in
-  // cell-index coordinates (cell (i, j) centre at x = i, y = j).
   const contourSegments = (values, nx, ny, level) => {
     const out = [];
     const t = (v0, v1) => (level - v0) / (v1 - v0);
@@ -1443,18 +1348,8 @@ Object.assign(window, {
     }
     return Float64Array.from(out);
   };
-
-  // ------------------------------------------------------------------ dynamics
-
   const CFL = 0.4;
-  // Films thinner than a micrometre do not move: their mass stays where it is (so the
-  // balance is still exact) and they no longer throttle the time step everywhere.
   const H_EPS = 1e-6;
-
-  // The start state is brine, plus a methane gas cap when the scenario sets gasContactDepth.
-  // A column above the contact holds gas from its top down to the contact, or down to the
-  // aquifer base. It has no residual gas. Methane is the same light phase as CO2, so it
-  // has the same stored volume s. The array ch4 holds the methane part of s.
   const createState = model => {
     const {
       n,
@@ -1495,8 +1390,6 @@ Object.assign(window, {
       net: new Float64Array(n),
       rate: new Float64Array(n),
       leaking: new Uint8Array(model.scenario.faults.length),
-      // The injected, exited, leaked and dissolved totals count CO2 only (kg). The methane
-      // totals are kept apart. The tracer runs only while hasMethane is true.
       injected: 0,
       exited: 0,
       leaked: 0,
@@ -1510,11 +1403,7 @@ Object.assign(window, {
       pressureActive: true
     };
   };
-
-  // The CO2 part of the gas in column c (1 where the column holds no methane).
   const co2Share = (state, c) => state.ch4[c] > 0 && state.s[c] > 0 ? 1 - state.ch4[c] / state.s[c] : 1;
-
-  // CO2 volume per area s = phi[(1 - Swr) h + Sgr (hMax - h)] -> (h, hMax).
   const invertColumn = (p, state, c) => {
     const s = state.s[c];
     const drain = p.phi * (1 - p.swr);
@@ -1529,10 +1418,6 @@ Object.assign(window, {
       state.hMax[c] = residual > 0 ? s / residual : 0;
     }
   };
-
-  // Gas volume flux across one face (positive from side A to side B) with hybrid
-  // upwinding: the viscous part follows the total flux, buoyancy follows the phase
-  // potentials (gas from the deeper interface, brine the other way).
   const faceFlux = (k, T, U, zetaA, zetaB, hA, hB, HA, HB, scratch) => {
     if (hA <= H_EPS && hB <= H_EPS) {
       scratch.bound = 0;
@@ -1559,7 +1444,6 @@ Object.assign(window, {
       const total = gas + brine;
       if (total > 0) {
         viscous = U * gas / total;
-        // df/dh at the upstream column: the local characteristic speed.
         slope = a * b * Hu / (total * total);
       }
     }
@@ -1568,12 +1452,6 @@ Object.assign(window, {
   };
   const FAULT_ZONE_WIDTH = 5;
   const CAPROCK_THICKNESS = 100;
-
-  // Operator-split sinks after each transport step: vertical leakage up leaky fault zones
-  // (only above the seal capacity, never draining a column below it) and convective
-  // dissolution into the brine column until it is saturated. Each sink removes methane and
-  // CO2 in proportion to the methane share of the column. The dissolved mass per area md
-  // counts both gases, because they share the brine capacity.
   const applySinks = (model, state, dt) => {
     const {
       p,
@@ -1631,8 +1509,6 @@ Object.assign(window, {
       }
     }
   };
-
-  // Methane share of the gas in each column, taken before a transport step.
   const methaneFractions = state => {
     const {
       s,
@@ -1641,11 +1517,6 @@ Object.assign(window, {
     } = state;
     for (let c = 0; c < s.length; c++) frac[c] = s[c] > 0 ? Math.min(1, ch4[c] / s[c]) : 0;
   };
-
-  // Move the methane tracer with the gas face fluxes of the step. A face carries the methane
-  // share of its upwind column (from methaneFractions), so the tracer does not change the
-  // flow. Injection adds CO2 only. Call this after s is updated: it keeps 0 <= ch4 <= s.
-  // It returns the methane volume rate that leaves through the open boundaries.
   const moveMethane = (model, state, dt) => {
     const {
       nx,
@@ -1669,7 +1540,6 @@ Object.assign(window, {
         const flux = fx[index];
         if (flux === 0) continue;
         if (f === 0 || f === nx) {
-          // Boundary faces let gas out only. The stored flux is negative at the west edge.
           const c = j * nx + (f === 0 ? 0 : nx - 1);
           const methane = (f === 0 ? -flux : flux) * frac[c];
           dMethane[c] -= methane;
@@ -1744,8 +1614,6 @@ Object.assign(window, {
     };
     net.fill(0);
     rate.fill(0);
-    // Boundary faces use phase-potential upwinding: the hydrostatic ghost holds no gas,
-    // so CO2 leaves only where its own potential drops outward.
     const boundaryFlux = (T, c, ghostDepth) => {
       if (h[c] <= H_EPS) {
         scratch.bound = 0;
@@ -1819,13 +1687,9 @@ Object.assign(window, {
     const injecting = state.t < p.injEnd && p.rate > 0;
     const volumeRate = injecting ? p.rate / p.rhoG : 0;
     net[model.well] += volumeRate;
-
-    // Explicit stability: the smallest storage coefficient (imbibition) bounds the step,
-    // and one step may fill at most a quarter of the injector cell's pore volume.
     const storage = p.phi * Math.max(1e-3, 1 - p.swr - p.sgr) * area;
     let dt = volumeRate > 0 ? Math.min(dtMax, 0.25 * p.phi * (1 - p.swr) * Hc[model.well] * area / volumeRate) : dtMax;
     for (let c = 0; c < n; c++) if (rate[c] > 0) dt = Math.min(dt, CFL * storage / rate[c]);
-    // Never let a column go negative: shrink the step instead of clipping mass.
     for (let c = 0; c < n; c++) {
       if (net[c] < 0 && s[c] + dt * net[c] / area < 0) dt = Math.min(dt, 0.999 * s[c] * area / -net[c]);
     }
@@ -1851,16 +1715,9 @@ Object.assign(window, {
     state.steps++;
     return dt;
   };
-
-  // ------------------------------------------------------------------ pressure
-
   const PRESSURE_TOL = 1e-7;
   const RELAXED_RATE = 0.05 * BAR / YEAR;
   const MAX_RELAX_TIME = 50 * YEAR;
-
-  // Implicit (backward-Euler) brine-potential equation with total compressibility:
-  //   phi ct H_c A (p - p_old)/dt + sum T m LamT (p_c - p_nb) = Qv - sum T m LamG drho g (zeta_c - zeta_nb)
-  // solved matrix-free with Jacobi-preconditioned CG, then converted to total face fluxes.
   const solvePressure = (model, state, dt, injecting) => {
     const {
       nx,
@@ -1932,7 +1789,6 @@ Object.assign(window, {
         if (f === 0 || f === nx) {
           if (!p.open) continue;
           const c = j * nx + (f === 0 ? 0 : nx - 1);
-          // Outward-positive buoyancy flux into the hydrostatic ghost (h = 0, p = 0).
           wx[index] = T * 0.5 * (lamT(c) + b * Hc[c]);
           gx[index] = T * 0.5 * lamG(c) * tg * (zt[c] + h[c] - ghostX[index]);
           diag[c] += wx[index];
@@ -1975,9 +1831,6 @@ Object.assign(window, {
         rhs[N] += gy[index];
       }
     }
-
-    // Five-point stencil per cell: east and north couplings (west/south are the
-    // neighbours' east/north) give a single pass over the grid.
     const {
       wE,
       wN
@@ -2003,8 +1856,6 @@ Object.assign(window, {
         }
       }
     };
-
-    // Start CG from a linear extrapolation of the last two solutions.
     const x = state.p;
     const prev = cg.prev;
     if (cg.prevInterval > 0) {
@@ -2045,8 +1896,6 @@ Object.assign(window, {
       rz = rzNew;
       for (let c = 0; c < n; c++) d[c] = z[c] + beta * d[c];
     }
-
-    // Total face fluxes: interior faces positive in +x/+y; boundary faces store +x/+y too.
     for (let j = 0; j < ny; j++) {
       for (let f = 0; f <= nx; f++) {
         const index = j * (nx + 1) + f;
@@ -2100,9 +1949,6 @@ Object.assign(window, {
       stepTransport(model, state, dtMax);
     }
   };
-
-  // Key performance indicators at the current state (SI). Footprint, column and migration
-  // count the CO2 part of the gas only.
   const kpis = (model, state) => {
     const {
       n,
@@ -2143,11 +1989,6 @@ Object.assign(window, {
       pMax
     };
   };
-
-  // CO2 inventory in kg, classified as in co2lab: free plume, structurally trapped
-  // (mobile CO2 above the local spill depth), residually trapped, dissolved, left the
-  // model through an open boundary, and leaked up fault zones. Every class counts the CO2
-  // part of the gas only. The methane rows give the methane in place and its three sinks.
   const inventory = (model, state) => {
     const {
       n,
@@ -2239,8 +2080,6 @@ Object.assign(window, {
     rhoG: model.p.rhoG,
     disCapacity: Float32Array.from(model.Hc, H => model.p.disCap * model.p.phi * H)
   });
-
-  // Methane share of the gas in each column, 0 to 1 (0 where there is no gas).
   const methaneShare = state => {
     const share = new Float32Array(state.s.length);
     for (let c = 0; c < share.length; c++) if (state.ch4[c] > 0 && state.s[c] > 0) share[c] = Math.min(1, state.ch4[c] / state.s[c]);
@@ -2259,9 +2098,6 @@ Object.assign(window, {
     inv: inventory(model, state),
     kpi: kpis(model, state)
   });
-
-  // Run a scenario from year 0 to scenario.years. History rows every year, field
-  // snapshots every `snapshotYears`. Ends early (truncated) if the step budget runs out.
   const run = (rawScenario, options = {}) => {
     const model = buildModel(rawScenario);
     const state = createState(model);
@@ -2311,13 +2147,6 @@ Object.assign(window, {
       scenario: model.scenario
     };
   };
-
-  // ------------------------------------------------------------------ random structures
-
-  // Fault rock from the shale gouge ratio (SGR) of the faulted interval: permeability (mD)
-  // and thickness (throw / 66) after Manzocchi et al. (1999), giving the cross-fault
-  // multiplier between two 250 m cells (the standard grid), and the CO2 column the fault
-  // rock holds from the Bretan et al. (2003) calibration for burial above 3 km.
   const faultSeal = (throwM, sgr, permMd, dRho) => {
     const kf = 10 ** (0.4 - 4 * sgr - 0.25 * Math.log10(Math.max(1, throwM)) * (1 - sgr) ** 5);
     return {
@@ -2339,10 +2168,6 @@ Object.assign(window, {
       description: 'A dipping aquifer whose caprock undulates along strike. Rising CO₂ fills many small traps on its way up-dip.'
     }
   });
-
-  // A random structure from one geological setting, so that dip, folds, faults and fault
-  // rock agree: a fault set shares the regional strike, throw grows with length (D = γL),
-  // seals follow the shale gouge ratio and the injector sits down-dip of the main closure.
   const randomStructure = (seed, base = DEFAULTS, style) => {
     const rng = mulberry32(seed);
     const between = (min, max) => min + (max - min) * rng();
@@ -2371,9 +2196,6 @@ Object.assign(window, {
       wellY: round(clamp(y, 1.5, 10.5))
     });
     if (kind === 'random-fault-blocks') {
-      // Domino blocks: the faults dip one way and the beds the other, so each block rises
-      // to a footwall crest against the next fault up-dip. The injector sits in the block
-      // down-dip of the fault nearest the centre.
       const strike = between(0, 360);
       const along = unit(strike);
       const hanging = unit(strike + 90);
@@ -2404,8 +2226,6 @@ Object.assign(window, {
     const dipAz = Math.floor(rng() * 360);
     const down = unit(dipAz);
     if (kind === 'random-dome') {
-      // Crestal faults strike along the dome with their hanging walls facing the crest: one
-      // fault, or a pair bounding a crestal graben.
       const domes = rng() < 0.35 ? 2 : 1;
       const [main] = domeCentres({
         seed,
@@ -2432,9 +2252,6 @@ Object.assign(window, {
         ...well(main.x / KM + distance * down[0], main.y / KM + distance * down[1])
       };
     }
-
-    // Homocline: the injector sits down-dip of the centre so the plume crosses the
-    // undulations on its way up.
     const faults = rng() < 0.5 ? [] : [fault(between(5, 15), between(3, 9), dipAz + (rng() < 0.5 ? -90 : 90) + between(-20, 20), between(3, 8), logBetween(0.002, 0.006))];
     const along = between(-3, 3);
     return {
@@ -2450,10 +2267,6 @@ Object.assign(window, {
       ...well(10 + 5 * down[0] + along * down[1], 6 + 5 * down[1] - along * down[0])
     };
   };
-
-  // ------------------------------------------------------------------ uncertainty
-
-  // Inputs the uncertainty study may vary. `fault0.*` addresses the first fault.
   const UQ_PARAMS = Object.freeze([{
     key: 'permMd',
     label: 'Permeability',
@@ -2652,11 +2465,6 @@ Object.assign(window, {
 });
 
 // File: story-geometry.js
-// story-geometry.js — the shared geometry of the story homepage (chapters 2 to 5).
-// It describes one depleted gas field: a sandstone dome with a methane gas cap at the crest,
-// a fault on the west flank and a CO2 injection well on the east flank. The section drawing,
-// the 3D grid and the live VE model all read this one scenario. The module draws nothing.
-// Units: map positions in km, depths in m (positive down), gas thickness in m or as a fraction.
 (function (root, factory) {
   const VE2D = typeof module === 'object' && module.exports ? require('./ve2d-model.js') : root.VE2D;
   const api = factory(VE2D);
@@ -2665,19 +2473,6 @@ Object.assign(window, {
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (VE2D) {
   const KM = VE2D.KM;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-
-  // Why these values:
-  // - The dome has no regional dip. A dip with a flat gas contact lets the gas cap flood the
-  //   up-dip side. The contact is 50 m below the crest, and 40 m above the spill depth.
-  // - The fault strikes north-south, along the dome. Its east side is the dome side and goes down.
-  //   The fault is 3.25 km from the crest, so the gas cap does not touch it.
-  // - The boundary is closed. The injection pressure then moves the gas cap by up to 220 m.
-  //   An open boundary moves it by 75 m for the same plume. An open boundary needs 1.5 Mt/yr
-  //   for the same push, and then the plume comes within 1 km of the gas cap.
-  // - The rate is 0.5 Mt/yr and the permeability is 25 mD. The closest cells of the two gases
-  //   stay 2 km apart. At 100 mD they are 1.5 km apart, and at 500 mD they touch.
-  // - The residual gas saturation is 0.35, so the inventory shows a clear residual part.
-  // - The run is 100 years, the shortest run that VE2D accepts. Injection stops at year 30.
   const STORY_SCENARIO = Object.freeze({
     preset: 'story',
     grid: 'coarse',
@@ -2717,21 +2512,13 @@ Object.assign(window, {
       kf: 20
     })])
   });
-
-  // Map window of the 3D block, in km. Its edges are on cell faces of the coarse model grid.
   const STORY_WINDOW = Object.freeze({
     x0: 4.5,
     x1: 19.5,
     y0: 1.5,
     y1: 10.5
   });
-
-  // Years that the precomputed run stores.
   const STORY_YEARS = Object.freeze([0, 1, 2, 5, 10, 15, 20, 25, 30, 40, 60, 100]);
-
-  // Overburden horizons above the reservoir. Each depth is the depth at the crest. A horizon
-  // follows the relief of the reservoir top by the drape fraction. The fault offsets the
-  // horizons from the base of the chalk down.
   const OVERBURDEN = Object.freeze([{
     id: 'sea-floor',
     name: 'Sea floor',
@@ -2759,10 +2546,6 @@ Object.assign(window, {
   }]);
   const LAYER_NAMES = Object.freeze(['Sea', 'Young sands and clays', 'Mudstone', 'Chalk', 'Shale caprock', 'Reservoir sandstone', 'Older rock']);
   let cache = null;
-
-  // The normalised scenario and its VE2D model, built once. Do not change the returned objects.
-  // crest is the shallowest model cell (x, y in km, depth in m). spillDepth is the spill depth
-  // in m of the trap that holds the crest.
   const storyModel = () => {
     if (cache) return cache;
     const model = VE2D.buildModel(STORY_SCENARIO);
@@ -2786,9 +2569,6 @@ Object.assign(window, {
     };
     return cache;
   };
-
-  // The straight map line through the crest and the well, from one model edge to the other.
-  // The line starts on the fault side. The value s is the distance along the line in km.
   const storySectionLine = () => {
     const {
       scenario,
@@ -2802,7 +2582,6 @@ Object.assign(window, {
     const length = Math.hypot(well.x - crest.x, well.y - crest.y);
     const ux = (well.x - crest.x) / length;
     const uy = (well.y - crest.y) / length;
-    // The line leaves the model at the first edge that it reaches in each direction.
     const reach = (step, from, max) => step > 0 ? (max - from) / step : step < 0 ? from / -step : Infinity;
     const forward = Math.min(reach(ux, crest.x, VE2D.LX / KM), reach(uy, crest.y, VE2D.LY / KM));
     const backward = Math.min(reach(-ux, crest.x, VE2D.LX / KM), reach(-uy, crest.y, VE2D.LY / KM));
@@ -2819,9 +2598,6 @@ Object.assign(window, {
       well
     };
   };
-
-  // Intersection of the section line with a fault trace [x0, y0, x1, y1] in metres.
-  // It returns the distance s along the line in metres and the strike parameter t (-1 to 1).
   const traceCrossing = (line, trace) => {
     const dx = trace[2] - trace[0];
     const dy = trace[3] - trace[1];
@@ -2837,9 +2613,6 @@ Object.assign(window, {
       t: 2 * v - 1
     };
   };
-
-  // Depth of the reservoir top along the line, with and without the faults, as functions of
-  // the distance s in metres.
   const topFunctions = line => {
     const {
       scenario
@@ -2855,9 +2628,6 @@ Object.assign(window, {
       smooth: s => smoothAt(...place(s))
     };
   };
-
-  // The gas cap along the line, as the interval around the crest where the top is above the
-  // contact. A bisection finds each end.
   const capInterval = (top, crestS, length, contact) => {
     if (contact === null || !(top(crestS) < contact)) return null;
     const edge = direction => {
@@ -2879,17 +2649,6 @@ Object.assign(window, {
       end: edge(1)
     };
   };
-
-  // The geological cross-section along the line, with `samples` points.
-  // - s, x, y: position of each sample in km.
-  // - top, base: reservoir top and base in m. Both include the fault offset.
-  // - horizons: the six surfaces from the sea floor to the reservoir base, each with depth in m.
-  // - layers: the seven layers. Each layer has the index of its top and base horizon, or -1
-  //   for the sea surface (top) and for the bottom of the drawing (base).
-  // - contact: depth of the flat gas-water contact in m.
-  // - cap: the s range of the gas cap in km.
-  // - faults: each crossing of the line with a fault. The top just before and after the
-  //   crossing gives the step. downSide names the side of the fault that goes down.
   const storySection = (samples = 200) => {
     const count = Math.max(2, Math.round(samples));
     const {
@@ -2954,8 +2713,6 @@ Object.assign(window, {
         downSide: after > before ? 'end' : 'start'
       });
     });
-
-    // The crest is the shallowest point within 2 km of the dome centre.
     let crest = {
       s: line.crestS,
       depth: Infinity
@@ -2997,9 +2754,6 @@ Object.assign(window, {
       }
     };
   };
-
-  // Overlap of each grid column with the model cells. Column c covers the model cells
-  // cellIndex[cellStart[c] .. cellStart[c + 1] - 1]. The weights of a column sum to 1.
   const mapColumns = (model, xs, ys) => {
     const nx = xs.length - 1;
     const ny = ys.length - 1;
@@ -3039,13 +2793,6 @@ Object.assign(window, {
       centerCell
     };
   };
-
-  // A corner-point grid over STORY_WINDOW for the 3D block. Column c = j * nx + i, with i to the
-  // east and j to the north. The corners of a column are 0 south-west, 1 south-east,
-  // 2 north-east and 3 north-west. top and thickness hold 4 values for each column, in m.
-  // A column line lies on the fault, so each column takes the depth of its own side of the fault.
-  // The fault then shows as a step. The layer k of a corner has the depth
-  // top + thickness * k / nz (see storyNodeDepth).
   const storyGrid = (nx = 30, ny = 18, nz = 5) => {
     const countX = Math.max(2, Math.round(nx));
     const countY = Math.max(1, Math.round(ny));
@@ -3077,7 +2824,6 @@ Object.assign(window, {
     for (let j = 0; j < countY; j++) {
       for (let i = 0; i < countX; i++) {
         const column = j * countX + i;
-        // Each corner is read 1 m inside its own column, so it is on its own side of the fault.
         const xw = xs[i] * KM + inset;
         const xe = xs[i + 1] * KM - inset;
         const ys0 = ys[j] * KM + inset;
@@ -3110,14 +2856,7 @@ Object.assign(window, {
       ...mapColumns(model, xs, ys)
     };
   };
-
-  // Depth in m of layer boundary `layer` (0 to nz) at one corner of one column.
   const storyNodeDepth = (grid, column, corner, layer) => grid.top[4 * column + corner] + grid.thickness[4 * column + corner] * layer / grid.nz;
-
-  // The gas of a model snapshot on the columns of a grid. h is the gas thickness as a fraction
-  // of the column thickness (0 to 1). ch4 is the methane share of the gas (0 to 1), averaged
-  // with the gas thickness of the covered model cells as weight. The snapshot needs h in m, and
-  // ch4 as a fraction, on the model grid. A stored run from story-run.json works too.
   const storyColumns = (snapshot, grid) => {
     const {
       model
@@ -3158,54 +2897,6 @@ Object.assign(window, {
 });
 
 // File: StoryStage.jsx
-// StoryStage.jsx — the story at the top of the homepage: one pinned stage, one canvas, HTML captions.
-//
-// RENDERER API (the art of each chapter plugs in here)
-//
-// STORY_RENDERERS is a global object. Its keys are the chapter ids: orbit, descent, rock, grid, ve, live.
-// Each value is a renderer: { draw(ctx, frame), animated?, mount?(layer), unmount?() }.
-//   draw(ctx, frame)  Draw the chapter. The canvas is cleared before each call.
-//                     ctx is a 2D context, already scaled by dpr. Draw in CSS pixels, from (0, 0) to (width, height).
-//                     ctx.save() and ctx.restore() surround the call.
-//   frame             { local, p, width, height, dpr, time, reducedMotion, requestDraw }
-//     local           Progress in this chapter, from 0 to 1.
-//     p               Progress in the whole story, from 0 to 1.
-//     width, height   Size of the stage in CSS pixels.
-//     dpr             Pixel ratio of the canvas: the device pixel ratio, with a maximum of 2.
-//     time            Milliseconds from the requestAnimationFrame timestamp. It is 0 in a static frame.
-//     reducedMotion   true in the six static frames of the reduced-motion layout. local is 1 in these frames.
-//     requestDraw     requestDraw() asks for one more draw. Call it when late data arrives (a fetch or a worker)
-//                     or when a control changes the picture. Do not dispatch a scroll event for this.
-//                     In the pinned stage: it draws the current chapter once, on the next animation frame.
-//                     Calls that come before that frame make one draw. The stage draws only while it is on screen
-//                     and the tab is visible. A call in any other state draws nothing at once. The stage keeps
-//                     the call and draws once when the stage returns to the screen or the tab is visible again.
-//                     In a static frame: it paints the canvas of that frame again on the next animation frame.
-//                     Calls that come before that frame make one paint. A static frame paints also off screen,
-//                     because it paints only once otherwise.
-//                     A call inside draw() gives a draw on the following animation frame, not on this one.
-//                     requestDraw is the same function in every frame of one stage or one static frame.
-//                     A renderer can keep it and call it later, for example from an event handler.
-//   animated          Set it to true if draw() reads frame.time. Then draw() runs on each animation frame while this
-//                     chapter is current, the stage is on screen and the tab is visible.
-//                     If it is not true, draw() runs only when p or the stage size changes, or after requestDraw.
-//                     The stage reads animated before each draw and again after it. A renderer can set it to true
-//                     inside draw() or in a getter: the next frame then runs with no other event.
-//   mount(layer)      Only the chapter live uses it. layer is an empty div that fills the stage.
-//   unmount()         The layer takes pointer events while live is current. mount runs when live becomes current.
-//                     unmount runs when the visitor scrolls out of live. Neither runs in a static frame.
-// A renderer that throws is reported once in the console. The story then goes on.
-//
-// Colours: STORY_COLORS has the same values as the --story-* tokens in colors_and_type.css.
-// Captions are HTML above the canvas. The words are in SITE_STORY (site-content.js).
-// The place of each caption is in colors_and_type.css: .story-chapter[data-chapter="id"].
-// To change the caption colour for one chapter, set --story-text on .story-stage[data-chapter="id"].
-// The site header covers the top 64 px of the stage. The skip control is at the top right under the header.
-// The progress rail is in the bottom 12 px. The skip control and the rail fade out when the stage starts to leave. Below 640 px of width, the captions are at the top: keep that band clear.
-
-// [destructured React]
-
-// ---- story helpers (pure; tests/story-stage.test.js evaluates this block)
 const STORY_SCREENS = 7;
 const STORY_CHAPTERS = [{
   id: 'orbit',
@@ -3238,8 +2929,6 @@ const STORY_CHAPTERS = [{
   from: 0.80,
   to: 1
 }];
-
-// How many captions each chapter has. A chapter with two captions switches at the middle.
 const STORY_CAPTION_COUNT = {
   orbit: 1,
   descent: 1,
@@ -3248,8 +2937,6 @@ const STORY_CAPTION_COUNT = {
   ve: 2,
   live: 1
 };
-
-// The same values as the --story-* tokens in colors_and_type.css.
 const STORY_COLORS = {
   sky: '#c9d6dc',
   sea: '#2f5866',
@@ -3264,11 +2951,7 @@ const STORY_COLORS = {
   cream: '#f3efe4',
   muted: '#4a5a62'
 };
-
-// A number from lo to hi. NaN gives lo.
 const storyClamp = (value, lo = 0, hi = 1) => value > lo ? Math.min(value, hi) : lo;
-
-// Story progress from the container's bounding-rect top. The stage is pinned for height - viewport pixels.
 const storyProgress = ({
   top,
   height,
@@ -3277,8 +2960,6 @@ const storyProgress = ({
   const span = height - viewport;
   return span > 0 ? storyClamp(-top / span) : 0;
 };
-
-// The chapter at progress p, and the progress inside it. p = 1 gives the last chapter with local 1.
 const storyChapterAt = p => {
   const at = storyClamp(p);
   const found = STORY_CHAPTERS.findIndex(chapter => at < chapter.to);
@@ -3298,43 +2979,26 @@ const storyCaptionIndex = (id, local) => {
   const count = STORY_CAPTION_COUNT[id] || 1;
   return Math.min(count - 1, Math.floor(storyClamp(local) * count));
 };
-
-// The stage starts to leave when the bottom of the story rises above the bottom of the viewport.
-// Then the skip control and the progress rail fade out. The fade is as long as this share of the viewport height.
 const STORY_EXIT_SPAN = 0.2;
-
-// How far the stage has left: 0 while it is pinned, 1 when the fade ends. bottom is the bounding-rect bottom of the story.
 const storyExit = ({
   bottom,
   viewport
 }) => viewport > 0 ? storyClamp((viewport - bottom) / (viewport * STORY_EXIT_SPAN)) : 0;
-
-// Six fill fractions for the progress rail, one for each chapter.
 const storyRail = p => STORY_CHAPTERS.map(({
   from,
   to
 }) => storyClamp((p - from) / (to - from)));
-
-// Splits a caption at the *marks* into plain and italic parts.
 const storyInline = text => text.split('*').map((part, i) => ({
   text: part,
   em: i % 2 === 1
 })).filter(part => part.text);
-
-// The count-up of the ppm number in chapter 0 takes this long.
 const STORY_COUNT_MS = 1200;
-
-// The whole number on the ppm line, ms milliseconds after the count starts. It goes from from to to with an ease-out curve.
 const storyCount = (ms, from, to) => {
   const left = 1 - storyClamp(ms / STORY_COUNT_MS);
   return Math.round(from + (to - from) * (1 - left * left * left));
 };
-// ---- end story helpers
-
 const STORY_MAX_DPR = 2;
 const STORY_REDUCED_QUERY = '(prefers-reduced-motion: reduce)';
-
-// The renderers of the chapters. StoryChapters.jsx fills it with placeholders.
 const STORY_RENDERERS = {};
 const storyReported = {};
 const storyGuard = (key, run) => {
@@ -3347,8 +3011,6 @@ const storyGuard = (key, run) => {
     }
   }
 };
-
-// Clears the canvas and lets the renderer of one chapter draw one frame.
 const storyPaint = (ctx, id, frame) => {
   ctx.setTransform(frame.dpr, 0, 0, frame.dpr, 0, 0);
   ctx.clearRect(0, 0, frame.width, frame.height);
@@ -3358,17 +3020,18 @@ const storyPaint = (ctx, id, frame) => {
   storyGuard(`${id}.draw`, () => entry.draw(ctx, frame));
   ctx.restore();
 };
-
-// The fade follows the scroll position. It has no timer and no transition, so it needs no rule for reduced motion.
-// A visitor with reduced motion gets the static frames, and these never run it.
-// At exit 1 the element is hidden, so the keyboard cannot reach the skip link when it is not on screen.
-const storyFadeOut = (element, exit) => {
+const storyLeave = (element, exit, fade) => {
   if (!element) return;
-  element.style.opacity = exit > 0 ? String(1 - exit) : '';
+  element.style.opacity = fade && exit > 0 ? String(1 - exit) : '';
   element.style.visibility = exit >= 1 ? 'hidden' : '';
 };
-
-// A plain click goes to a section of the page with the same helper as the header. Other clicks keep the link.
+const StorySkip = ({
+  onNavigate
+}) => React.createElement("a", {
+  className: "story-skip",
+  href: "#research",
+  onClick: event => storyGo(event, 'research', onNavigate)
+}, "Skip to research");
 const storyGo = (event, id, onNavigate) => {
   if (onNavigate) {
     onNavigate(id, event);
@@ -3394,16 +3057,11 @@ const useStoryReducedMotion = () => {
 };
 const StoryText = ({
   text
-}) => /*#__PURE__*/React.createElement(React.Fragment, null, storyInline(text).map((part, i) => part.em ? /*#__PURE__*/React.createElement("em", {
+}) => React.createElement(React.Fragment, null, storyInline(text).map((part, i) => part.em ? React.createElement("em", {
   key: i
-}, part.text) : /*#__PURE__*/React.createElement(React.Fragment, {
+}, part.text) : React.createElement(React.Fragment, {
   key: i
 }, part.text)));
-
-// The ppm line of chapter 0: "280 ppm in 1850. {value} ppm in {year}." (SITE_STORY.co2 holds the numbers).
-// The value counts up from 280 once, when the page loads. A visitor with reduced motion sees the final value at once.
-// While the number counts, a hidden copy of the final number is in the text, and the counting number is aria-hidden.
-// A screen reader reads the final line. When the count ends, the line is plain text again.
 const storyPpmPlayed = {
   done: false
 };
@@ -3437,19 +3095,16 @@ const StoryPpm = ({
     id = requestAnimationFrame(step);
     return () => cancelAnimationFrame(id);
   }, [reduced]);
-  return /*#__PURE__*/React.createElement("p", {
+  return React.createElement("p", {
     className: "story-note story-fade",
     "data-on": on
-  }, shown === end ? SITE_STORY.ppm : /*#__PURE__*/React.createElement(React.Fragment, null, `${base} ppm in ${baseYear}. `, /*#__PURE__*/React.createElement("span", {
+  }, shown === end ? SITE_STORY.ppm : React.createElement(React.Fragment, null, `${base} ppm in ${baseYear}. `, React.createElement("span", {
     className: "story-count",
     "aria-hidden": "true"
-  }, shown), /*#__PURE__*/React.createElement("span", {
+  }, shown), React.createElement("span", {
     className: "visually-hidden"
   }, end), ` ppm in ${year}.`));
 };
-
-// The words of one chapter. In the pinned story, on and caption say which parts the visitor sees now.
-// A caption of null means that all captions are on.
 const StoryWords = ({
   chapter,
   on,
@@ -3458,23 +3113,23 @@ const StoryWords = ({
 }) => {
   const copy = SITE_STORY.captions[chapter.id] || [];
   const actions = chapter.id === 'live' ? SITE_STORY.actions : [];
-  return /*#__PURE__*/React.createElement(React.Fragment, null, chapter.id === 'orbit' && /*#__PURE__*/React.createElement("h1", {
+  return React.createElement(React.Fragment, null, chapter.id === 'orbit' && React.createElement("h1", {
     className: "story-name story-fade",
     "data-on": on
-  }, SITE_STORY.name), /*#__PURE__*/React.createElement("div", {
+  }, SITE_STORY.name), React.createElement("div", {
     className: "story-stack"
-  }, copy.map((text, k) => /*#__PURE__*/React.createElement("p", {
+  }, copy.map((text, k) => React.createElement("p", {
     key: k,
     className: "story-caption story-fade",
     "data-on": on && (caption === null || k === caption)
-  }, /*#__PURE__*/React.createElement(StoryText, {
+  }, React.createElement(StoryText, {
     text: text
-  })))), chapter.id === 'orbit' && /*#__PURE__*/React.createElement(StoryPpm, {
+  })))), chapter.id === 'orbit' && React.createElement(StoryPpm, {
     on: on
-  }), actions.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }), actions.length > 0 && React.createElement("div", {
     className: "story-actions story-fade",
     "data-on": on
-  }, actions.map((action, i) => /*#__PURE__*/React.createElement("a", {
+  }, actions.map((action, i) => React.createElement("a", {
     key: action.href,
     className: i === 0 ? 'story-btn story-btn--primary' : 'story-btn',
     href: action.href,
@@ -3482,18 +3137,15 @@ const StoryWords = ({
     onClick: action.id ? event => storyGo(event, action.id, onNavigate) : undefined
   }, action.label))));
 };
-
-// The pinned story. One scroll listener and one animation frame loop draw the canvas from refs.
-// React state holds only the chapter and the caption that the captions need.
 const StoryPinned = ({
   sectionRef,
-  skipRef,
   onNavigate
 }) => {
   const stageRef = useRef(null);
   const canvasRef = useRef(null);
   const layerRef = useRef(null);
   const railRef = useRef(null);
+  const skipRef = useRef(null);
   const [view, setView] = useState({
     index: 0,
     caption: 0
@@ -3504,7 +3156,7 @@ const StoryPinned = ({
     const canvas = canvasRef.current;
     const layer = layerRef.current;
     const rail = railRef.current;
-    const skip = skipRef ? skipRef.current : null;
+    const skip = skipRef.current;
     if (!section || !stage || !canvas || !layer || !rail) return undefined;
     const ctx = canvas.getContext('2d');
     const fills = Array.from(rail.querySelectorAll('i'));
@@ -3522,8 +3174,6 @@ const StoryPinned = ({
     let current = storyChapterAt(0);
     let shown = view;
     let mounted = null;
-
-    // The layer of the chapter live exists only while that chapter is current.
     const syncLayer = id => {
       if (id === 'live' && !mounted) {
         const entry = STORY_RENDERERS.live;
@@ -3554,15 +3204,14 @@ const StoryPinned = ({
         viewport: height
       });
       current = storyChapterAt(p);
-      // The skip control and the rail fade out while the stage leaves. They do not change while the story is pinned.
       const leaving = storyExit({
         bottom: box.top + box.height,
         viewport: height
       });
       if (leaving !== exit) {
         exit = leaving;
-        storyFadeOut(skip, exit);
-        storyFadeOut(rail, exit);
+        storyLeave(skip, exit, false);
+        storyLeave(rail, exit, true);
       }
       const caption = storyCaptionIndex(current.id, current.local);
       if (current.index !== shown.index || caption !== shown.caption) {
@@ -3574,8 +3223,6 @@ const StoryPinned = ({
       }
       syncLayer(current.id);
       const entry = STORY_RENDERERS[current.id];
-      // A chapter that is animated runs on each frame, but only while the stage is on screen and the tab is visible.
-      // The stage reads animated here and again after the draw, because draw() can turn it on.
       const running = () => !!(entry && entry.animated) && awake();
       if (width && height && (dirty || p !== drawn || wanted && awake() || running())) {
         wanted = false;
@@ -3602,10 +3249,6 @@ const StoryPinned = ({
       if (alive && !frame) frame = requestAnimationFrame(tick);
     };
     const awake = () => visible && !document.hidden;
-
-    // The renderers call this one function, in each frame, to ask for one more draw of the current chapter.
-    // Calls before the next animation frame make one draw. Off screen or in a hidden tab, the stage keeps the
-    // call and draws when it is on screen again.
     const requestDraw = () => {
       wanted = true;
       if (awake()) schedule();
@@ -3630,7 +3273,6 @@ const StoryPinned = ({
       passive: true
     });
     document.addEventListener('visibilitychange', onVisibility);
-    // The canvas text changes when the web fonts arrive.
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
       dirty = true;
       schedule();
@@ -3644,44 +3286,47 @@ const StoryPinned = ({
       document.removeEventListener('visibilitychange', onVisibility);
       sizes.disconnect();
       watcher.disconnect();
-      storyFadeOut(skip, 0);
-      storyFadeOut(rail, 0);
+      storyLeave(skip, 0, false);
+      storyLeave(rail, 0, true);
       syncLayer('');
     };
-  }, [sectionRef, skipRef]);
-  return /*#__PURE__*/React.createElement("div", {
+  }, [sectionRef]);
+  return React.createElement("div", {
     ref: stageRef,
     className: "story-stage",
     "data-chapter": STORY_CHAPTERS[view.index].id
-  }, /*#__PURE__*/React.createElement("canvas", {
+  }, React.createElement("div", {
+    ref: skipRef,
+    className: "story-skip-wrap story-skip-wrap--stage"
+  }, React.createElement(StorySkip, {
+    onNavigate: onNavigate
+  })), React.createElement("canvas", {
     ref: canvasRef,
     className: "story-canvas",
     "aria-hidden": "true"
-  }), /*#__PURE__*/React.createElement("div", {
+  }), React.createElement("div", {
     ref: layerRef,
     className: "story-layer"
-  }), /*#__PURE__*/React.createElement("div", {
+  }), React.createElement("div", {
     className: "story-captions"
-  }, STORY_CHAPTERS.map((chapter, i) => /*#__PURE__*/React.createElement("div", {
+  }, STORY_CHAPTERS.map((chapter, i) => React.createElement("div", {
     key: chapter.id,
     className: "story-chapter",
     "data-chapter": chapter.id,
     "data-active": i === view.index
-  }, /*#__PURE__*/React.createElement(StoryWords, {
+  }, React.createElement(StoryWords, {
     chapter: chapter,
     on: i === view.index,
     caption: view.caption,
     onNavigate: onNavigate
-  })))), /*#__PURE__*/React.createElement("div", {
+  })))), React.createElement("div", {
     ref: railRef,
     className: "story-rail",
     "aria-hidden": "true"
-  }, STORY_CHAPTERS.map(chapter => /*#__PURE__*/React.createElement("span", {
+  }, STORY_CHAPTERS.map(chapter => React.createElement("span", {
     key: chapter.id
-  }, /*#__PURE__*/React.createElement("i", null)))));
+  }, React.createElement("i", null)))));
 };
-
-// One static frame for the reduced-motion layout: a 16:9 canvas drawn once with local = 1, and its captions below.
 const StoryFrame = ({
   chapter,
   onNavigate
@@ -3695,8 +3340,6 @@ const StoryFrame = ({
     const ctx = canvas.getContext('2d');
     let alive = true;
     let queued = 0;
-    // The renderer calls this in the frame to paint the canvas again, for example when late data arrives.
-    // Calls before the next animation frame make one paint. The frame paints also while it is off screen.
     const requestDraw = () => {
       if (!alive || queued) return;
       queued = requestAnimationFrame(() => {
@@ -3732,20 +3375,20 @@ const StoryFrame = ({
       sizes.disconnect();
     };
   }, [chapter]);
-  return /*#__PURE__*/React.createElement("div", {
+  return React.createElement("div", {
     className: "story-frame",
     role: "group",
     "aria-label": chapter.title,
     "data-chapter": chapter.id
-  }, /*#__PURE__*/React.createElement("div", {
+  }, React.createElement("div", {
     ref: boxRef,
     className: "story-frame__art"
-  }, /*#__PURE__*/React.createElement("canvas", {
+  }, React.createElement("canvas", {
     ref: canvasRef,
     "aria-hidden": "true"
-  })), /*#__PURE__*/React.createElement("div", {
+  })), React.createElement("div", {
     className: "story-frame__words"
-  }, /*#__PURE__*/React.createElement(StoryWords, {
+  }, React.createElement(StoryWords, {
     chapter: chapter,
     on: true,
     caption: null,
@@ -3756,9 +3399,8 @@ const StoryStage = ({
   onNavigate
 }) => {
   const sectionRef = useRef(null);
-  const skipRef = useRef(null);
   const reduced = useStoryReducedMotion();
-  return /*#__PURE__*/React.createElement("section", {
+  return React.createElement("section", {
     ref: sectionRef,
     id: "story",
     "aria-label": SITE_STORY.label,
@@ -3766,20 +3408,16 @@ const StoryStage = ({
     style: reduced ? undefined : {
       '--story-screens': STORY_SCREENS
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    ref: skipRef,
+  }, reduced ? React.createElement(React.Fragment, null, React.createElement("div", {
     className: "story-skip-wrap"
-  }, /*#__PURE__*/React.createElement("a", {
-    className: "story-skip",
-    href: "#research",
-    onClick: event => storyGo(event, 'research', onNavigate)
-  }, "Skip to research")), reduced ? STORY_CHAPTERS.map(chapter => /*#__PURE__*/React.createElement(StoryFrame, {
+  }, React.createElement(StorySkip, {
+    onNavigate: onNavigate
+  })), STORY_CHAPTERS.map(chapter => React.createElement(StoryFrame, {
     key: chapter.id,
     chapter: chapter,
     onNavigate: onNavigate
-  })) : /*#__PURE__*/React.createElement(StoryPinned, {
+  }))) : React.createElement(StoryPinned, {
     sectionRef: sectionRef,
-    skipRef: skipRef,
     onNavigate: onNavigate
   }));
 };
@@ -3789,10 +3427,6 @@ Object.assign(window, {
 });
 
 // File: StoryChapters.jsx
-// StoryChapters.jsx — placeholder art for the six chapters of the story.
-// Each placeholder fills the sky colour and writes the chapter title and the value of local in plain text.
-// The final art replaces one entry at a time. The renderer API is at the top of StoryStage.jsx.
-
 const storyPlaceholder = title => ({
   animated: false,
   draw(ctx, frame) {
@@ -3814,27 +3448,15 @@ STORY_CHAPTERS.forEach(chapter => {
 });
 
 // File: StoryEarth.jsx
-// StoryEarth.jsx — the art of the chapters orbit and descent (art direction C, flat colour).
-//
-// orbit    The Earth from orbit, with the North Sea near the top of the disc. Over local 0 to 1 the globe turns and
-//          grows. A round window opens at the North Sea marker and grows into a map card at the right.
-// descent  The map in the card zooms in. Then the card shrinks into the inset at the top right. The side view comes up
-//          behind it: sky, sea, platform, pipeline and well. At the end, CO2 moves in the pipeline and down the well.
-//
-// The land comes from assets/land-110m.json (Natural Earth, TopoJSON). Until the file arrives, the art has no land.
-// storyEarthPlatform and storyEarthLayout are global. The chapter rock can use them to start where descent ends.
-
-// ---- story earth helpers (pure; tests/story-earth.test.js evaluates this block)
 const STORY_EARTH_RAD = Math.PI / 180;
-const STORY_EARTH_TARGET = [2.5, 57.5]; // The North Sea: lon and lat in degrees.
-const STORY_EARTH_VIEW0 = [2, 30]; // The view centre of the globe at local 0 of orbit.
-const STORY_EARTH_VIEW1 = [3, 41]; // The view centre at local 1 of orbit.
-const STORY_EARTH_BOX = [[-5, 50.5], [12, 61.5]]; // The area that the inset shows.
-const STORY_EARTH_EDGE = 2; // The longest edge of a land ring, in degrees.
-const STORY_EARTH_OPEN = 0.3; // The map window starts to open at this local value of orbit.
-const STORY_EARTH_HOLD = 0.7; // From this local value of descent the picture stays.
-const STORY_EARTH_ZOOM = 0.4; // Descent: the map zooms until here. Then the card shrinks.
-
+const STORY_EARTH_TARGET = [2.5, 57.5];
+const STORY_EARTH_VIEW0 = [2, 30];
+const STORY_EARTH_VIEW1 = [3, 41];
+const STORY_EARTH_BOX = [[-5, 50.5], [12, 61.5]];
+const STORY_EARTH_EDGE = 2;
+const STORY_EARTH_OPEN = 0.3;
+const STORY_EARTH_HOLD = 0.7;
+const STORY_EARTH_ZOOM = 0.4;
 const storyEarthClamp = (v, lo = 0, hi = 1) => v > lo ? Math.min(v, hi) : lo;
 const storyEarthMix = (a, b, t) => t >= 1 ? b : t <= 0 ? a : a + (b - a) * t;
 const storyEarthGeo = (a, b, t) => t >= 1 ? b : t <= 0 ? a : a * Math.pow(b / a, t);
@@ -3847,17 +3469,12 @@ const storyEarthInOut = t => {
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 };
 const storyEarthWrap = d => d - 360 * Math.round(d / 360);
-
-// A colour mixed toward another colour. Both are '#rrggbb'.
 const storyEarthTint = (from, to, t) => {
   if (t <= 0) return from;
   const a = [1, 3, 5].map(i => parseInt(from.slice(i, i + 2), 16));
   const b = [1, 3, 5].map(i => parseInt(to.slice(i, i + 2), 16));
   return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * Math.min(t, 1))).join(',')})`;
 };
-
-// The rings of land from the TopoJSON file, as arrays of [lon, lat]. Rings are closed.
-// An arc stores its points as steps. The arc index ~i means the arc i in reverse.
 const storyEarthDecode = topology => {
   const {
     scale,
@@ -3890,13 +3507,6 @@ const storyEarthDecode = topology => {
   return rings;
 };
 const storyEarthMercY = lat => Math.log(Math.tan(Math.PI / 4 + storyEarthClamp(lat, -85.05, 85.05) * STORY_EARTH_RAD / 2));
-
-// One ring, ready to draw. No edge is longer than maxEdge degrees.
-//   lon, lat  in degrees. lon runs on without a jump at 180 degrees.
-//   hole      true for a hole in the land. The points of a hole are in reverse order.
-//   xyz       unit vectors, for the globe.
-//   x, y      longitude in radians and Mercator y, for the map.
-//   bbox      [minLon, minLat, maxLon, maxLat] in degrees.
 const storyEarthBuildRing = (ring, maxEdge = STORY_EARTH_EDGE) => {
   const closed = ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1];
   const count = closed ? ring.length - 1 : ring.length;
@@ -3918,8 +3528,6 @@ const storyEarthBuildRing = (ring, maxEdge = STORY_EARTH_EDGE) => {
     }
     lon += dlon;
   }
-  // A hole (a lake in the land) goes counter-clockwise in the file. Its points go in reverse order. Then the clip of
-  // the ring gives the water of the hole, and the fill rule takes the water out of the land.
   let area = 0;
   for (let i = 0; i < lons.length; i++) {
     const j = (i + 1) % lons.length;
@@ -3957,8 +3565,6 @@ const storyEarthBuildRing = (ring, maxEdge = STORY_EARTH_EDGE) => {
   }
   return out;
 };
-
-// The orthographic view. lon and lat are the point at the centre of the disc.
 const storyEarthView = (lon, lat) => {
   const l = lon * STORY_EARTH_RAD;
   const p = lat * STORY_EARTH_RAD;
@@ -3969,9 +3575,6 @@ const storyEarthView = (lon, lat) => {
     sp: Math.sin(p)
   };
 };
-
-// A point on a globe of radius R with its centre at (cx, cy) on the screen (y goes down).
-// depth is 1 at the centre of the view and 0 on the limb. A point with depth >= 0 is on the near side.
 const storyEarthProject = (view, lon, lat, R = 1, cx = 0, cy = 0) => {
   const l = lon * STORY_EARTH_RAD;
   const p = lat * STORY_EARTH_RAD;
@@ -3989,25 +3592,14 @@ const storyEarthProject = (view, lon, lat, R = 1, cx = 0, cy = 0) => {
   };
 };
 const storyEarthVisible = (view, lon, lat) => storyEarthProject(view, lon, lat).visible;
-
-// The limb clip. A ring goes in as unit vectors (xyz). The land is on the right of the ring.
-// The function writes the screen points of the visible land to out, as x, y, x, y, ... A NaN pair ends a closed shape.
-// A part of the ring on the far side is cut away. Each piece that stays starts where the ring enters the disc
-// and ends where it leaves. The shape goes on along the limb circle, clockwise, to the next entry. So the fill is right
-// for any ring, also for a ring with land on the far side of the globe.
-// The function returns the number of points that it wrote.
 let storyEarthD = new Float64Array(0);
 let storyEarthRt = new Float64Array(0);
 let storyEarthUp = new Float64Array(0);
 const storyEarthTau = 2 * Math.PI;
-
-// The point where the edge from a to b crosses the limb: its angle on the limb circle (y up).
 const storyEarthCross = (a, b) => {
   const t = storyEarthD[a] / (storyEarthD[a] - storyEarthD[b]);
   return Math.atan2(storyEarthUp[a] + (storyEarthUp[b] - storyEarthUp[a]) * t, storyEarthRt[a] + (storyEarthRt[b] - storyEarthRt[a]) * t);
 };
-
-// The points of the limb circle from one angle to another one, clockwise. The two ends are not in the list.
 const storyEarthArc = (from, span, R, cx, cy, out) => {
   const parts = Math.ceil(span / Math.sqrt(2 / Math.max(R, 1)));
   for (let j = 1; j < parts; j++) {
@@ -4045,7 +3637,6 @@ const storyEarthClipRing = (xyz, view, R, cx, cy, out) => {
   if (near === 0) return 0;
   const start = out.length;
   if (near === n) {
-    // A ring that goes counter-clockwise on the screen has its land outside. The disc is a shape too, so the fill is right.
     let area = 0;
     for (let i = 0; i < n; i++) {
       const j = i + 1 < n ? i + 1 : 0;
@@ -4060,7 +3651,6 @@ const storyEarthClipRing = (xyz, view, R, cx, cy, out) => {
     out.push(NaN, NaN);
     return (out.length - start) / 2;
   }
-  // The pieces of the ring in the disc: first and last near point, and the angle of the entry and of the exit.
   const first = [];
   const last = [];
   const entry = [];
@@ -4101,8 +3691,6 @@ const storyEarthClipRing = (xyz, view, R, cx, cy, out) => {
   }
   return (out.length - start) / 2;
 };
-
-// Draws the shapes that storyEarthClipRing wrote to out.
 const storyEarthTrace = (ctx, out) => {
   let open = false;
   for (let i = 0; i < out.length; i += 2) {
@@ -4118,15 +3706,10 @@ const storyEarthTrace = (ctx, out) => {
   }
   if (open) ctx.closePath();
 };
-
-// The Mercator map. A map is { S, lon, y, mx, my }: the point (lon in radians, y) is at (mx, my) on the screen,
-// and S is the number of pixels for one radian.
 const storyEarthMapPoint = (map, lon, lat) => ({
   x: map.mx + map.S * (lon * STORY_EARTH_RAD - map.lon),
   y: map.my - map.S * (storyEarthMercY(lat) - map.y)
 });
-
-// The scale at which a box of lon and lat (degrees) fits into a w by h rectangle. The centre of the box is mid-rectangle.
 const storyEarthFit = (box, w, h) => {
   const [[lon0, lat0], [lon1, lat1]] = box;
   const y0 = storyEarthMercY(lat0);
@@ -4137,16 +3720,6 @@ const storyEarthFit = (box, w, h) => {
     y: (y0 + y1) / 2
   };
 };
-
-// The places of all parts of the art on a stage of width by height pixels. still is true in the static frames of the
-// reduced-motion layout: there the captions are not on the canvas. compact is true below 641 px of width and on a
-// tall screen: there the captions are in a band at the top, and the globe fills the lower half.
-//   globe  The globe at local 0 of orbit: centre and radius.
-//   keep   The corner of the caption. The globe stays away from it while it grows.
-//   card   The map card at the end of orbit.
-//   inset  The map at the end of descent.
-//   scene  The map from the side view to the screen: x = ox + s * x, y = oy + s * y. The side view has 800 by 450 units.
-//   maps   The scale of the map at the start of the zoom (a), at the end of the zoom (b) and in the inset (i).
 const storyEarthLayout = (width, height, still = false) => {
   const W = width;
   const H = height;
@@ -4161,7 +3734,6 @@ const storyEarthLayout = (width, height, still = false) => {
   let clouds;
   if (compact) {
     const R = 0.78 * W;
-    // The bottom of the caption. In the band at the top (below 641 px) it depends on the number of lines.
     const room = W - 32;
     const bottom = W <= 640 ? 128 + 36 + 11 + 25.5 * Math.ceil(1000 / room) + 11 + 21 * Math.ceil(302 / room) : 340;
     globe = {
@@ -4187,7 +3759,6 @@ const storyEarthLayout = (width, height, still = false) => {
       oy: 0.52 * H - 232 * s
     };
     const iw = storyEarthClamp(0.29 * W, 112, 200);
-    // The caption of descent: 25.5 px for each line, below 128 px.
     const below = W <= 640 ? 128 + 25.5 * Math.ceil(640 / room) : 190;
     inset = {
       x: W - 16 - iw,
@@ -4203,7 +3774,6 @@ const storyEarthLayout = (width, height, still = false) => {
     };
     clouds = [[left + 4, 204, 96], [left + 118, 190, 112]];
   } else {
-    // The globe of frame 0. On a screen that is not wide, it gets smaller, so it stays 28 px away from the caption.
     keep = {
       x: 0.43 * W,
       y: 0.45 * H
@@ -4282,9 +3852,6 @@ const storyEarthLayout = (width, height, still = false) => {
     fall: 1.05 * H
   };
 };
-
-// Orbit. At local 0 the globe has the view of the first frame. Then the globe turns and grows. A window opens at the
-// North Sea marker. It grows into the card. The globe fades out. At local 1 the card shows the map that descent starts with.
 const storyEarthOrbitCamera = (local, layout) => {
   const u = storyEarthClamp(local);
   const turn = storyEarthSmooth(u);
@@ -4335,9 +3902,6 @@ const storyEarthOrbitCamera = (local, layout) => {
     lens
   };
 };
-
-// Descent. The map zooms in until local 0.4. Then the card shrinks into the inset, and the side view comes up
-// (fall goes from its full value to 0). From local 0.7 nothing moves, except the CO2 in the pipe.
 const storyEarthDescentCamera = (local, layout) => {
   const u = storyEarthClamp(local);
   const zoom = storyEarthInOut(u / STORY_EARTH_ZOOM);
@@ -4365,8 +3929,6 @@ const storyEarthDescentCamera = (local, layout) => {
     fall: layout.fall * (1 - shrink)
   };
 };
-// ---- end story earth helpers
-
 const STORY_EARTH_COLORS = {
   ringFar: '#dbe6ea',
   ringNear: '#e7eff2',
@@ -4383,17 +3945,11 @@ const STORY_EARTH_COLORS = {
   white: '#ffffff'
 };
 const STORY_EARTH_FONT = 'Literata, Georgia, serif';
-
-// ---- the land data: one request, one decode, shared by orbit and descent
 const storyEarthLand = {
   state: 'idle',
   rings: []
 };
-
-// The draws that ran before the land arrived. Each entry is the frame.requestDraw of a stage or of a static frame.
 const storyEarthWaiting = new Set();
-
-// The data arrives. Each draw that waited asks for one more draw.
 const storyEarthRefresh = () => {
   const calls = Array.from(storyEarthWaiting);
   storyEarthWaiting.clear();
@@ -4417,8 +3973,6 @@ const storyEarthLoad = frame => {
   }
   if (storyEarthLand.state === 'loading' && typeof frame.requestDraw === 'function') storyEarthWaiting.add(frame.requestDraw);
 };
-
-// ---- drawing
 const storyEarthRoundRect = (ctx, x, y, w, h, r) => {
   const radius = Math.max(0, Math.min(r, w / 2, h / 2));
   ctx.moveTo(x + radius, y);
@@ -4435,8 +3989,6 @@ const storyEarthCloud = w => {
   }
   return storyEarthCloudPaths.get(w);
 };
-
-// The shapes of the platform, one set for each length of the legs.
 const storyEarthPlatformShapes = new Map();
 const storyEarthShapes = legDepth => {
   if (!storyEarthPlatformShapes.has(legDepth)) {
@@ -4451,8 +4003,6 @@ const storyEarthShapes = legDepth => {
   }
   return storyEarthPlatformShapes.get(legDepth);
 };
-
-// The offshore platform that stands on (x, y). s is the scale. legDepth is the length of the legs under y.
 const storyEarthPlatform = (ctx, x, y, s = 1, legDepth = 0) => {
   const shapes = storyEarthShapes(legDepth);
   ctx.save();
@@ -4489,17 +4039,13 @@ const storyEarthMarker = (ctx, x, y, size, label) => {
   ctx.lineWidth = 2 * size;
   ctx.strokeStyle = STORY_EARTH_COLORS.white;
   ctx.stroke();
-  // At the globe the label is right and above the marker. In the inset it is below the marker, in the middle.
   ctx.font = `italic 400 ${14 * size}px ${STORY_EARTH_FONT}`;
   ctx.fillStyle = STORY_EARTH_COLORS.white;
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
   const width = ctx.measureText('North Sea').width;
-  // The label goes down first and then to the middle, so it does not cross the marker.
   ctx.fillText('North Sea', x + storyEarthMix(14 * size, -width / 2, storyEarthSmooth(label * 2 - 1)) + 8 * size * label, y + storyEarthMix(-10 * size, 23 * size, storyEarthSmooth(label * 2)));
 };
-
-// The land on the Mercator map, inside the current clip.
 const storyEarthMapLand = (ctx, lens) => {
   const rings = storyEarthLand.rings;
   if (!rings.length) return;
@@ -4524,7 +4070,6 @@ const storyEarthMapLand = (ctx, lens) => {
       const shift = turn * 360;
       if (maxLon + shift < west || minLon + shift > east) continue;
       const offset = turn * 2 * Math.PI - map.lon;
-      // The curve goes through the middle of each edge. The corners of the 110 m data become round.
       const n = ring.count;
       let px = map.mx + map.S * (ring.x[n - 1] + offset);
       let py = map.my - map.S * (ring.y[n - 1] - map.y);
@@ -4545,8 +4090,6 @@ const storyEarthMapLand = (ctx, lens) => {
   ctx.fillStyle = STORY_COLORS.land;
   ctx.fill('evenodd');
 };
-
-// The map card: sea, land, outline and the North Sea marker.
 const storyEarthDrawLens = (ctx, lens, layout, label, size) => {
   if (lens.w < 1 || lens.h < 1) return;
   ctx.save();
@@ -4564,8 +4107,6 @@ const storyEarthDrawLens = (ctx, lens, layout, label, size) => {
   ctx.stroke();
   storyEarthMarker(ctx, lens.mx, lens.my, size, label);
 };
-
-// The molecules of CO2 in the air. The numbers come from a fixed generator, so the picture is the same each time.
 const storyEarthMolecules = (() => {
   let seed = 3;
   const next = () => (seed = seed * 16807 % 2147483647) / 2147483647;
@@ -4634,7 +4175,6 @@ const storyEarthDrawGlobe = (ctx, layout, camera) => {
   }
   ctx.fillStyle = tint(STORY_COLORS.land);
   ctx.fill('evenodd');
-  // The night side: a flat, translucent shape. It is the disc without a circle that is a little to the left.
   ctx.beginPath();
   ctx.rect(cx - R, cy - R, 2 * R, 2 * R);
   ctx.moveTo(cx - 0.35 * R + R, cy);
@@ -4658,8 +4198,6 @@ STORY_RENDERERS.orbit = {
     if (camera.lens) storyEarthDrawLens(ctx, camera.lens, layout, 0, layout.k);else storyEarthMarker(ctx, camera.marker.x, camera.marker.y, layout.k, 0);
   }
 };
-
-// The side view. Units are the 800 by 450 units of the storyboard. The sea is at y = 232 to 310, the sea floor at 396.
 const storyEarthDrawScene = (ctx, layout, state, time) => {
   const {
     s,
@@ -4673,7 +4211,6 @@ const storyEarthDrawScene = (ctx, layout, state, time) => {
   const x1 = (W - ox) / s + 4;
   const bottom = (H - oy - fall) / s + 4;
   const C = STORY_EARTH_COLORS;
-  // The sun is far away, so it moves only a little. The high clouds move faster than the scene.
   ctx.fillStyle = C.sun;
   ctx.beginPath();
   ctx.arc(layout.sun.x, layout.sun.y + fall * 0.12, layout.sun.r, 0, 2 * Math.PI);
@@ -4742,7 +4279,6 @@ const storyEarthDrawScene = (ctx, layout, state, time) => {
     ctx.strokeStyle = C.cut;
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    // Pipeline from shore, riser up the jacket, well that goes on down. The ink pipe goes first; the CO2 dashes go on top.
     const pipe = () => {
       ctx.beginPath();
       ctx.moveTo(x0, 399);
@@ -4772,7 +4308,6 @@ const storyEarthDrawScene = (ctx, layout, state, time) => {
     ctx.stroke();
     well();
     ctx.stroke();
-    // The dashes move with the time: 28 units in one second.
     const flow = -(time * 0.028);
     ctx.lineCap = 'butt';
     ctx.strokeStyle = STORY_COLORS.co2;
@@ -4801,7 +4336,6 @@ const storyEarthDrawScene = (ctx, layout, state, time) => {
   ctx.restore();
 };
 STORY_RENDERERS.descent = (() => {
-  // The CO2 dashes move in the hold. The stage reads animated after each draw, so the next frame runs.
   let running = false;
   return {
     get animated() {
@@ -4825,11 +4359,6 @@ Object.assign(window, {
 });
 
 // File: StoryRock.jsx
-// StoryRock.jsx — the art of chapter 2, "Into the rock": a cutaway of a depleted gas field.
-// The rock comes from StoryGeometry.storySection(). The CO2 plume comes from assets/story-run.json.
-// The renderer API is at the top of StoryStage.jsx.
-
-// ---- story rock helpers (pure; tests/story-rock.test.js evaluates this block)
 const ROCK_SAMPLES = 240;
 const ROCK_BOTTOM = 2.65;
 const ROCK_DOMAIN = {
@@ -4862,10 +4391,6 @@ const rockMix = (a, b, t) => {
   return '#' + pa.map((v, i) => Math.round(v + (pb[i] - v) * t).toString(16).padStart(2, '0')).join('');
 };
 const rockShade = (color, t) => rockMix(color, '#000000', t);
-
-// The screen scales of the block. sx is px per km along the front face. vz is px per km of depth.
-// ratio = vz / sx is the true vertical exaggeration. The camera zoom changes both scales by the same factor.
-// caption: 'side' keeps the left of the stage clear, 'top' keeps the top band clear, 'none' is a static frame.
 const rockLayout = (width, height, options = {}) => {
   const narrow = width <= ROCK_NARROW;
   const caption = options.caption || (narrow ? 'top' : 'side');
@@ -4934,8 +4459,6 @@ const rockLayout = (width, height, options = {}) => {
     }
   };
 };
-
-// Where the camera stands, from local 0 to 1. anchors say where the well and the layers are.
 const rockCameraSpec = (layout, anchors) => {
   const {
     win,
@@ -4955,9 +4478,6 @@ const rockCameraSpec = (layout, anchors) => {
     center: layout.center
   };
 };
-
-// The camera is a world point (s, d) at a screen point (x, y), with a zoom factor.
-// 0 to followEnd: the point goes down the well. followEnd to outEnd: the camera zooms out to the fit view. Then it holds.
 const rockCamera = (local, spec) => {
   const t = rockClamp(local);
   const follow = rockSmooth(t / spec.followEnd);
@@ -4970,20 +4490,13 @@ const rockCamera = (local, spec) => {
     y: rockLerp(spec.anchorIn.y, spec.center.y, out)
   };
 };
-
-// The map from the block to the screen. s is the distance along the section in km, d the depth in km.
-// b is the distance behind the front face in km. It only moves points on the sea surface and the right face.
 const rockView = (layout, cam) => ({
   zoom: cam.zoom,
   x: (s, b = 0) => cam.x + cam.zoom * (layout.sx * (s - cam.s) + layout.qx * b),
   y: (d, b = 0) => cam.y + cam.zoom * (layout.vz * (d - cam.d) - layout.qy * b),
   s: x => cam.s + (x - cam.x) / (cam.zoom * layout.sx)
 });
-
-// The 8 boundaries of the 7 layers at sample k, in km: the sea surface, six horizons and the bottom.
 const rockBands = (section, k) => [0, ...section.horizons.slice(0, 6).map(horizon => horizon.depth[k] / 1000), ROCK_BOTTOM];
-
-// The same boundaries at the distance s in km along the section.
 const rockBandsAt = (section, s) => {
   const u = rockClamp(s / section.length) * (section.samples - 1);
   const k = Math.min(section.samples - 2, Math.floor(u));
@@ -4992,8 +4505,6 @@ const rockBandsAt = (section, s) => {
   const b = rockBands(section, k + 1);
   return a.map((value, i) => rockLerp(value, b[i], t));
 };
-
-// One boundary as a polyline from s0 to s1. A fault gives a vertical step: two points at the same s.
 const rockBoundary = (section, index, s0, s1) => {
   const n = section.samples;
   const s = section.s;
@@ -5024,14 +4535,10 @@ const rockBoundary = (section, index, s0, s1) => {
     d: ds
   };
 };
-
-// A line inside the sandstone at the fraction f of its thickness. Both boundaries must have the same points.
 const rockInner = (top, base, f) => ({
   s: top.s.slice(),
   d: top.d.map((value, i) => rockLerp(value, base.d[i], f))
 });
-
-// The top edge of the gas cap: the reservoir top between the two ends of the cap. The contact closes it.
 const rockCap = section => {
   if (!section.cap) return null;
   const contact = section.contact / 1000;
@@ -5051,9 +4558,6 @@ const rockCap = section => {
     contact
   };
 };
-
-// The gas of one stored frame along the section line. h is the gas thickness in m, share the methane share.
-// The 4 nearest cell centres give a bilinear mean. The share has the gas thickness as weight.
 const rockGasAlong = (section, frame, grid, domain = ROCK_DOMAIN) => {
   const nx = grid[0];
   const ny = grid[1];
@@ -5086,9 +4590,6 @@ const rockGasAlong = (section, frame, grid, domain = ROCK_DOMAIN) => {
     share
   };
 };
-
-// The CO2 plume under the reservoir top: the thickness in m at each sample, with the methane share.
-// Gas that is mostly methane is the gas cap. The cap is drawn from the contact, so the plume skips it.
 const rockPlume = (section, gas) => {
   const th = new Float64Array(section.samples);
   for (let k = 0; k < section.samples; k++) {
@@ -5100,8 +4601,6 @@ const rockPlume = (section, gas) => {
     share: gas.share
   };
 };
-
-// Short wave marks on the sea surface. They stay at the same place in the block.
 const rockWaves = (layout, count = 26) => {
   let seed = 5;
   const next = () => {
@@ -5117,8 +4616,6 @@ const rockWaves = (layout, count = 26) => {
   }
   return waves;
 };
-
-// The box of a label at the fit view, with a rough width for the text. It is null for a band label in a thin layer.
 const rockLabelBox = (layout, section, label) => {
   const em = layout.font;
   const size = label.text.length * em * 0.52;
@@ -5147,10 +4644,6 @@ const rockLabelBox = (layout, section, label) => {
   };
 };
 const rockApart = (a, b) => a.x1 + 2 <= b.x0 || b.x1 + 2 <= a.x0 || a.y1 <= b.y0 || b.y1 <= a.y0;
-
-// The labels, with all places in km. A band label sticks to the left of the window and follows its layer.
-// A point label has a dot on the target, a leader and a text at its place. px is a shift in screen pixels.
-// A label that has no room at the fit view is dropped. The least important label goes first.
 const rockLabels = (layout, section) => {
   const {
     narrow,
@@ -5244,7 +4737,6 @@ const rockLabels = (layout, section) => {
     }, row1(well + 0.4)));
   }
   if (fault !== null) {
-    // The text stands west of the fault line. If it has no room there, it stands east.
     const gap = (narrow ? 8 : 22) / sx;
     const target = {
       s: fault,
@@ -5280,8 +4772,6 @@ const rockLabels = (layout, section) => {
   }
   return Object.keys(options).filter(id => chosen[id]).map(id => chosen[id]);
 };
-// ---- end story rock helpers
-
 const ROCK_FILLS = [STORY_COLORS.sea, '#d9cfae', '#a39a8b', STORY_COLORS.chalk, '#74695c', STORY_COLORS.sand, '#7d6b5d'];
 const ROCK_SIDES = ROCK_FILLS.map(color => rockShade(color, 0.22));
 const ROCK_BED = rockShade(ROCK_FILLS[1], 0.12);
@@ -5290,8 +4780,6 @@ const ROCK_SURFACE = '#3d6c7b';
 const ROCK_WAVE = '#5d8a98';
 const ROCK_TUBING = '#8fb0ff';
 const ROCK_FONT = 'Literata, Georgia, serif';
-
-// waiting holds the frame.requestDraw of each draw that ran before the stored run arrived.
 const rockState = {
   section: null,
   prep: null,
@@ -5303,9 +4791,6 @@ const rockSection = () => {
   if (!rockState.section) rockState.section = StoryGeometry.storySection(ROCK_SAMPLES);
   return rockState.section;
 };
-
-// The stored run is small. It loads once, when the chapter draws for the first time.
-// A draw that runs while the run loads keeps its frame.requestDraw. When the run arrives, each one asks for one more draw.
 const rockLoad = frame => {
   if (rockState.load === 'idle' && typeof fetch === 'function') {
     rockState.load = 'loading';
@@ -5325,8 +4810,6 @@ const rockLoad = frame => {
   }
   if (rockState.load === 'loading' && typeof frame.requestDraw === 'function') rockState.waiting.add(frame.requestDraw);
 };
-
-// Everything that depends on the size of the stage but not on the camera.
 const rockPrepare = frame => {
   const key = `${frame.width}x${frame.height}${frame.reducedMotion ? 's' : 'p'}`;
   if (rockState.prep && rockState.prep.key === key) return rockState.prep;
@@ -5372,8 +4855,6 @@ const rockRound = (ctx, x0, y0, x1, y1, r) => {
   ctx.closePath();
 };
 const rockFont = (px, italic = true) => `${italic ? 'italic ' : ''}400 ${px}px ${ROCK_FONT}`;
-
-// A flat shape with a stroke of the same colour. The stroke closes the thin gap between two layers.
 const rockPaint = (ctx, color) => {
   ctx.fillStyle = color;
   ctx.strokeStyle = color;
@@ -5382,8 +4863,6 @@ const rockPaint = (ctx, color) => {
   ctx.fill();
   ctx.stroke();
 };
-
-// One layer on the front face: its top boundary, and its base boundary backwards.
 const rockFrontPath = (ctx, view, top, base) => {
   ctx.beginPath();
   for (let i = 0; i < top.s.length; i++) {
@@ -5470,7 +4949,6 @@ const rockBlock = (ctx, prep, view) => {
   const plume = rockState.plume;
   if (plume) {
     const section = prep.section;
-    // The colour of each part comes from the methane share: blue for CO2, red for methane.
     if (!plume.colors) plume.colors = Array.from(plume.th, (_, k) => rockMix(STORY_COLORS.co2, STORY_COLORS.ch4, rockClamp((plume.share[k] + plume.share[Math.min(k + 1, plume.share.length - 1)]) / 2)));
     ctx.lineWidth = 0.8;
     for (let k = 0; k < section.samples - 1; k++) {
@@ -5517,8 +4995,6 @@ const rockBlock = (ctx, prep, view) => {
   ctx.lineTo(view.x(layout.s1, layout.back), view.y(0, layout.back));
   ctx.stroke();
 };
-
-// The well: a casing from the platform to the reservoir, perforations in the sandstone, and CO2 dashes in the tubing.
 const rockWell = (ctx, prep, view, time) => {
   const {
     section,
@@ -5558,8 +5034,6 @@ const rockWell = (ctx, prep, view, time) => {
   const seaLocal = (view.y(section.horizons[0].depth[0] / 1000) - top) / k;
   rockPlatform(ctx, x, top, k, seaLocal, grow);
 };
-
-// An offshore platform that stands on (x, y) at the scale k. leg is the length of the legs under the water.
 const rockPlatform = (ctx, x, y, k, leg, grow) => {
   const ink = STORY_COLORS.ink;
   const cream = STORY_COLORS.cream;
@@ -5624,8 +5098,6 @@ const rockPlatform = (ctx, x, y, k, leg, grow) => {
   ctx.stroke();
   ctx.restore();
 };
-
-// A tiny dot with a ring, the end of a leader.
 const rockDot = (ctx, x, y) => {
   ctx.fillStyle = STORY_COLORS.cream;
   ctx.strokeStyle = STORY_COLORS.ink;
@@ -5656,7 +5128,6 @@ const rockLabels2d = (ctx, prep, view, local) => {
       if (thickness < font * 1.3) continue;
       const width = ctx.measureText(label.text).width;
       const lead = layout.narrow ? 16 : 26;
-      // The label fades near the scale tag, near the window edges and where the fault line crosses it.
       let fade = Math.min(rockClamp((y - (win.y0 + font + 24)) / 12), rockClamp((win.y1 - 10 - y) / 10));
       if (prep.faultTip !== null && y > view.y(prep.faultTip)) {
         const line = view.x(section.faults[0].s);
@@ -5706,8 +5177,6 @@ const rockLabels2d = (ctx, prep, view, local) => {
   }
   ctx.textAlign = 'left';
 };
-
-// The depth axis stays on the left of the window. Its ticks follow the camera.
 const rockAxis = (ctx, layout, view) => {
   const {
     y0,
@@ -5738,8 +5207,6 @@ const rockAxis = (ctx, layout, view) => {
   }
   ctx.textAlign = 'left';
 };
-
-// The vertical scale. It stays in the top left corner of the window.
 const rockScaleTag = (ctx, layout) => {
   const font = layout.font;
   ctx.font = rockFont(font);
@@ -5791,15 +5258,6 @@ STORY_RENDERERS.rock = {
 };
 
 // File: StoryBlock.jsx
-// StoryBlock.jsx — the art of the chapters grid, ve and live.
-// The three chapters draw one 3D corner-point block of the gas field (story-geometry.js):
-//   grid  The grid draws onto the rock. Then the 3D run plays from the stored frames, years 0 to 30.
-//   ve    The horizontal cell boundaries fade. Each column is one tall cell with a sharp interface at h.
-//   live  The same block runs live in story-worker.js. The mount function builds the controls.
-// The block is built when the stage size changes. A draw only reads the polygons and changes colours.
-// The renderer API is at the top of StoryStage.jsx.
-
-// ---- story block helpers (pure; tests/story-block.test.js evaluates this block)
 const STORY_BLOCK_HEADER = 64;
 const STORY_BLOCK_NARROW = 640;
 const STORY_BLOCK_GRID_YEARS = 30;
@@ -5819,8 +5277,6 @@ const storyBlockEase = t => {
   const x = storyClamp(t);
   return x * x * (3 - 2 * x);
 };
-
-// The colour between two #rrggbb colours.
 const storyBlockMix = (from, to, t) => {
   let out = '#';
   for (let i = 1; i < 7; i += 2) {
@@ -5830,12 +5286,8 @@ const storyBlockMix = (from, to, t) => {
   }
   return out;
 };
-
-// A positive amount darkens the colour. A negative amount lightens it.
 const storyBlockTint = (hex, amount) => amount >= 0 ? storyBlockMix(hex, '#000000', amount) : storyBlockMix(hex, '#ffffff', -amount);
 const storyBlockInt = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-
-// Grid size. A phone gets fewer cells.
 const storyBlockResolution = width => width <= STORY_BLOCK_NARROW ? {
   nx: 20,
   ny: 12,
@@ -5845,14 +5297,6 @@ const storyBlockResolution = width => width <= STORY_BLOCK_NARROW ? {
   ny: 18,
   nz: 5
 };
-
-// Where the block and the text stand in a stage of width x height pixels.
-// - box: the area for the block and its labels. On a wide stage it stays right of the captions
-//   (bottom left) and above the controls. On a narrow stage it stays below the caption band.
-// - fit: the area for the block itself, inside the box.
-// - clock: top left corner of the run clock and the counter.
-// - view: angles in radians and the share of the width that the depth takes (see storyBlockExaggeration).
-// A reduced-motion frame is a 16:9 canvas with its captions below it, so only the run clock is kept clear.
 const storyBlockLayout = (width, height, reduced = false, captions = {
   top: 150,
   bottom: 190
@@ -5975,10 +5419,6 @@ const storyBlockLayout = (width, height, reduced = false, captions = {
     line: narrow ? 0.6 : 0.8
   };
 };
-
-// The height in px that the captions of the story use, estimated from their length and the caption font of the
-// stylesheet. The estimate is a little high, so the art keeps clear of the words. copy is SITE_STORY.captions.
-// bottom: the captions of grid and ve (bottom left). top: the captions of live and its buttons (top left).
 const storyBlockCaptionHeights = (width, copy) => {
   const narrow = width <= STORY_BLOCK_NARROW;
   const font = storyClamp(width * 0.0145 + 6, 17, 26);
@@ -5989,8 +5429,6 @@ const storyBlockCaptionHeights = (width, copy) => {
     top: Math.round(lines(['live']) * font * 1.5 + 64)
   };
 };
-
-// True when no point (pu[k], pv[k]) falls inside a keep rectangle after the fit.
 const storyBlockClear = (pu, pv, fit, keeps) => {
   for (let k = 0; k < pu.length; k++) {
     const x = fit.ox + pu[k] * fit.scale;
@@ -6001,9 +5439,6 @@ const storyBlockClear = (pu, pv, fit, keeps) => {
   }
   return true;
 };
-
-// The screen vectors of the east axis, the north axis and the vertical axis, in unit lengths.
-// The viewer stands north-east of the block and looks down at the angle `elevation`.
 const storyBlockAxes = view => ({
   ex: Math.cos(view.theta),
   ey: Math.sin(view.theta) * Math.sin(view.elevation),
@@ -6011,15 +5446,10 @@ const storyBlockAxes = view => ({
   ny: Math.cos(view.theta) * Math.sin(view.elevation),
   zy: Math.cos(view.elevation)
 });
-
-// The depth is drawn larger than it is. This factor makes the depth span take `zFrac` of the block width.
-// windowKm is the size of the map window in km. spanM is the depth span of the grid in m.
 const storyBlockExaggeration = (view, windowKm, spanM) => {
   const wide = windowKm.width * Math.abs(Math.cos(view.theta)) + windowKm.height * Math.abs(Math.sin(view.theta));
   return view.zFrac * wide / (Math.max(1, spanM) / 1000);
 };
-
-// Scale and offset that fit the bounds { u0, u1, v0, v1 } into the region, centred.
 const storyBlockFit = (bounds, region) => {
   const w = Math.max(1e-9, bounds.u1 - bounds.u0);
   const h = Math.max(1e-9, bounds.v1 - bounds.v0);
@@ -6030,8 +5460,6 @@ const storyBlockFit = (bounds, region) => {
     oy: region.y0 + (region.y1 - region.y0 - h * scale) / 2 - bounds.v0 * scale
   };
 };
-
-// The largest fit that keeps clear of the rectangles. The left edge of the region moves right in steps, up to its middle.
 const storyBlockPlace = (pu, pv, bounds, region, keeps, steps = 10) => {
   let fit = null;
   for (let s = 0; s <= steps; s++) {
@@ -6043,8 +5471,6 @@ const storyBlockPlace = (pu, pv, bounds, region, keeps, steps = 10) => {
   }
   return fit;
 };
-
-// The index of the cell interval of the sorted edges that holds the value.
 const storyBlockLocate = (edges, value) => {
   let lo = 0;
   let hi = edges.length - 2;
@@ -6059,15 +5485,10 @@ const storyBlockNearest = (edges, value) => {
   for (let i = 2; i < edges.length - 1; i++) if (Math.abs(edges[i] - value) < Math.abs(edges[best] - value)) best = i;
   return best;
 };
-
-// The cut-away quarter: the columns with i >= icut and j >= jcut are not drawn. The corner is at (x, y) km.
 const storyBlockCut = (xs, ys, x, y) => ({
   icut: storyBlockNearest(xs, x),
   jcut: storyBlockNearest(ys, y)
 });
-
-// The columns that stay, from the back to the front. The viewer is north-east, so a column hides only columns
-// with a smaller i + j.
 const storyBlockOrder = (nx, ny, cut) => {
   const order = new Int32Array(nx * ny);
   let n = 0;
@@ -6080,9 +5501,6 @@ const storyBlockOrder = (nx, ny, cut) => {
   }
   return order.subarray(0, n);
 };
-
-// Which side faces of each column are visible. The east face (bit 1) and the north face (bit 2) show at the
-// edge of the block, at the cut and where the depth of the neighbour is different (the fault).
 const storyBlockFaces = (top, nx, ny, cut, tolerance = 2) => {
   const flags = new Uint8Array(nx * ny);
   for (let j = 0; j < ny; j++) {
@@ -6104,27 +5522,15 @@ const storyBlockFaces = (top, nx, ny, cut, tolerance = 2) => {
   }
   return flags;
 };
-
-// The light comes from the back left. A top face that rises toward the viewer is lighter. Result: 0 to 16.
 const storyBlockTone = slope => storyClamp(Math.round(4 - 6.4 * slope), 0, STORY_BLOCK_TOPS - 1);
-
-// The share of cell k (0 is the top cell) that the gas fills, when the gas is h of the column (0 to 1).
 const storyBlockCellFill = (h, k, nz) => storyClamp(h * nz - k);
-
-// 0 for no gas, else 1 to 5: the band of h on the top face.
 const storyBlockBand = h => h < 0.02 ? 0 : 1 + Math.min(STORY_BLOCK_BANDS - 1, Math.floor(h / STORY_BLOCK_BAND_MAX * STORY_BLOCK_BANDS));
-
-// The colour of the gas for a methane share from 0 (CO2) to 1 (methane).
 const storyBlockKind = share => Math.round(storyClamp(share) * (STORY_BLOCK_KINDS - 1));
-
-// The run clock of a typical field model that takes 18 h 40 min for 30 years.
 const storyBlockClock = fraction => {
   const minutes = Math.round(storyClamp(fraction) * STORY_BLOCK_RUN_MINUTES);
   if (minutes < 60) return `${minutes} min`;
   return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`;
 };
-
-// Chapter grid. Local 0 to 0.3 draws the grid: pillars first, then layers. Local 0.3 to 1 plays the years 0 to 30.
 const storyBlockGrid = (local, s = {}) => {
   const l = storyClamp(local);
   s.pillars = storyBlockEase(l / 0.15);
@@ -6140,9 +5546,6 @@ const storyBlockGrid = (local, s = {}) => {
   s.counterAlpha = 0;
   return s;
 };
-
-// Chapter ve, at year 30. Local 0 to 0.5: the layer lines fade and each column gets a sharp interface.
-// Local 0.5 to 1: the top face shows h as bands, a bracket marks h, and the counter goes from cells to columns.
 const storyBlockVe = (local, s = {}) => {
   const l = storyClamp(local);
   s.pillars = 1;
@@ -6158,8 +5561,6 @@ const storyBlockVe = (local, s = {}) => {
   s.counterAlpha = storyBlockEase(l / 0.04);
   return s;
 };
-
-// Chapter live. cells is 0 for the VE columns and 1 for the 3D cells. The notes of chapter ve fade out first.
 const storyBlockLive = (local, cells, year, s = {}) => {
   const note = 1 - storyBlockEase(storyClamp(local) / 0.1);
   s.pillars = 1;
@@ -6175,8 +5576,6 @@ const storyBlockLive = (local, cells, year, s = {}) => {
   s.counterAlpha = note;
   return s;
 };
-
-// The counter of chapter ve. At local 0.5 it shows the cells. At local 1 it shows the columns to solve.
 const storyBlockCounter = (cells, columns, local) => {
   const t = storyClamp((local - 0.5) / 0.5);
   const e = storyBlockEase(t);
@@ -6197,8 +5596,6 @@ const storyBlockCounter = (cells, columns, local) => {
     small: 'to solve in the VE model'
   };
 };
-
-// Position of a year among the sorted years of the frames. Fills out with lo, hi and t.
 const storyBlockFramePair = (years, year, out = {}) => {
   const last = years.length - 1;
   if (!(year > years[0])) {
@@ -6218,8 +5615,6 @@ const storyBlockFramePair = (years, year, out = {}) => {
   }
   return out;
 };
-
-// Blend the columns of two frames. The methane share uses the gas thickness as weight.
 const storyBlockBlend = (out, a, b, t) => {
   for (let c = 0; c < out.h.length; c++) {
     const ha = a.h[c] * (1 - t);
@@ -6229,14 +5624,8 @@ const storyBlockBlend = (out, a, b, t) => {
   }
   return out;
 };
-
-// Time step of the player in ms. A long gap (a hidden tab) counts as 250 ms.
 const storyBlockStep = (time, last) => last === null ? 0 : storyClamp(time - last, 0, 250);
 const storyBlockAdvance = (year, dtMs, lastYear, rate = STORY_BLOCK_RATE) => Math.min(lastYear, year + dtMs / 1000 * rate);
-
-// All colours of the block as arrays of strings. A draw only reads them.
-// - rock[tone]; fill[(kind * TONES + tone) * (STEPS + 1) + step]; band[(kind * BANDS + band - 1) * TOPS + tone]
-// - gas[kind]; edge[kind]; line[i] is the grid line colour with the alpha i / 20.
 const storyBlockPalette = colors => {
   const shades = [];
   for (let k = 0; k < STORY_BLOCK_TOPS; k++) shades.push(-0.06 + 0.02 * k);
@@ -6268,25 +5657,16 @@ const storyBlockPalette = colors => {
     line
   };
 };
-// ---- end story block helpers
-
 const STORY_BLOCK_FONT = "'Literata', Georgia, 'Times New Roman', serif";
 const STORY_BLOCK_RUN_URL = './assets/story-run.json';
 const STORY_BLOCK_WORKER_URL = './story-worker.js?v=1';
-
-// Shared state of the three renderers. They draw one block at a time.
 const storyBlockState = {
   block: null,
   builds: 0,
   palette: null,
   scene: {},
-  // The frame.requestDraw of each draw that ran while the stored run loaded. The arrival of the run calls them.
   waiting: new Set()
 };
-
-// The model frames. stored comes from assets/story-run.json (years in STORY_YEARS).
-// live comes from story-worker.js (one frame for each year). An entry holds the model grid h and ch4,
-// and cols, the same data on the columns of the block grid.
 const storyBlockData = {
   stored: {
     status: 'idle',
@@ -6310,8 +5690,6 @@ const storyBlockBindAll = block => {
   storyBlockData.stored.entries.forEach(entry => storyBlockBind(entry, block));
   storyBlockData.live.entries.forEach(entry => entry && storyBlockBind(entry, block));
 };
-
-// The screen position of a point inside a column: fx and fy from 0 to 1 (east and north), depth from 0 (top) to 1 (base).
 const storyBlockPoint = (block, column, fx, fy, depth = 0) => {
   const o = 4 * column;
   const w0 = (1 - fx) * (1 - fy);
@@ -6322,8 +5700,6 @@ const storyBlockPoint = (block, column, fx, fy, depth = 0) => {
   const top = at(block.YT);
   return [at(block.X), top + (at(block.YB) - top) * depth];
 };
-
-// The screen position of the map point (x, y) in km on the top of the block.
 const storyBlockAt = (block, x, y) => {
   const {
     grid
@@ -6334,9 +5710,6 @@ const storyBlockAt = (block, x, y) => {
   const fy = storyClamp((y - grid.ys[j]) / (grid.ys[j + 1] - grid.ys[j]));
   return storyBlockPoint(block, j * grid.nx + i, fx, fy, 0);
 };
-
-// Labels of the art. at is the map point in km. wide and tall give the leader as [dx, dy, align], with dx and dy
-// as shares of the block width, for the wide view and for the tall view of a phone. The well has its own height.
 const STORY_BLOCK_LABELS = [{
   id: 'cap',
   text: 'Gas cap (methane)',
@@ -6363,8 +5736,6 @@ const STORY_BLOCK_WELL_UP = {
   wide: 0.2,
   tall: 0.3
 };
-
-// Build the polygons of the block for one stage size. The draw loop reads these arrays.
 const storyBlockBuild = (width, height, reduced, captions) => {
   const layout = storyBlockLayout(width, height, reduced, captions);
   const {
@@ -6390,8 +5761,6 @@ const storyBlockBuild = (width, height, reduced, captions) => {
     width: win.x1 - win.x0,
     height: win.y1 - win.y0
   }, maxBase - minTop);
-
-  // Unit coordinates in km: u to the right, v down. Then the fit scales them to pixels.
   const U = new Float64Array(4 * count);
   const VT = new Float64Array(4 * count);
   const VB = new Float64Array(4 * count);
@@ -6492,8 +5861,6 @@ const storyBlockBuild = (width, height, reduced, captions) => {
     counterNote: [],
     depthNote: `Depth exaggerated ×${Math.round(exaggeration)}`
   };
-
-  // The fault: the faces of the columns west of it, with the line along their top edge.
   if (grid.faultLine) {
     const west = grid.faultLine.index - 1;
     for (let j = 0; j < ny; j++) if (flags[j * nx + west] & STORY_BLOCK_FACE_EAST) block.scarp.push(j * nx + west);
@@ -6513,7 +5880,6 @@ const storyBlockBuild = (width, height, reduced, captions) => {
       align
     };
   });
-  // The injection well stands on the cut face, in the column that holds the well.
   const wi = storyBlockLocate(grid.xs, scenario.wellX);
   const wc = (cut.jcut - 1) * nx + wi;
   const wt = storyClamp((scenario.wellX - grid.xs[wi]) / (grid.xs[wi + 1] - grid.xs[wi]));
@@ -6547,8 +5913,6 @@ const storyBlockGet = frame => {
   storyBlockBindAll(block);
   return block;
 };
-
-// The methane column on the east cut face with the thickest gas. The bracket of chapter ve marks its h.
 const storyBlockPickBracket = block => {
   const {
     cut,
@@ -6568,8 +5932,6 @@ const storyBlockPickBracket = block => {
   }
   return best;
 };
-
-// Load the stored run once. Each draw that runs before it arrives asks for one more draw when it arrives.
 const storyBlockLoad = () => {
   const stored = storyBlockData.stored;
   if (stored.status !== 'idle') return;
@@ -6601,15 +5963,11 @@ const storyBlockLoad = () => {
     finish(false);
   });
 };
-
-// The run has arrived, or it has failed. Each draw that waited asks for one more draw.
 const storyBlockNotify = () => {
   const calls = Array.from(storyBlockState.waiting);
   storyBlockState.waiting.clear();
   calls.forEach(call => call());
 };
-
-// The columns of the model at a year, blended from the two nearest frames. It returns false when no frame exists.
 const storyBlockSample = (block, year) => {
   const data = storyBlockData;
   const source = data.live.complete ? data.live : data.stored;
@@ -6634,8 +5992,6 @@ const storyBlockQuad = (ctx, ax, ta, da, bx, tb, db, f0, f1) => {
   ctx.lineTo(ax, ta + da * f1);
   ctx.closePath();
 };
-
-// One side face of column c between the corners ia and ib. g is the gas share of the column (0 to 1).
 const storyBlockFace = (ctx, block, pal, s, c, ia, ib, tone, g, kind) => {
   const pa = 4 * c + ia;
   const pb = 4 * c + ib;
@@ -6697,7 +6053,6 @@ const storyBlockFace = (ctx, block, pal, s, c, ia, ib, tone, g, kind) => {
     ctx.stroke();
   }
   if (s.layers > 0) {
-    // Layer line k grows from the left end of the face. The lines draw one after the other from the top.
     const fade = Math.round((1 - s.sharp) * 20);
     if (fade > 0) {
       ctx.strokeStyle = pal.line[fade];
@@ -6720,8 +6075,6 @@ const storyBlockFace = (ctx, block, pal, s, c, ia, ib, tone, g, kind) => {
     }
   }
 };
-
-// The top face of column c.
 const storyBlockTop = (ctx, block, pal, s, c, g, kind) => {
   const o = 4 * c;
   const X = block.X;
@@ -6747,7 +6100,6 @@ const storyBlockTop = (ctx, block, pal, s, c, g, kind) => {
     ctx.fill();
     ctx.globalAlpha = 1;
   }
-  // The thin line in the colour of the face closes the gap between two faces.
   if (s.pillars < 0.98) {
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
@@ -6759,8 +6111,6 @@ const storyBlockTop = (ctx, block, pal, s, c, g, kind) => {
     ctx.stroke();
   }
 };
-
-// The text of the run clock or the counter, top left.
 const storyBlockHeadline = (ctx, block, big, small, alpha) => {
   if (alpha <= 0.01) return;
   const {
@@ -6803,8 +6153,6 @@ const storyBlockLabel = (ctx, block, label, alpha) => {
   ctx.lineWidth = block.layout.line;
   ctx.globalAlpha = 1;
 };
-
-// Paint the whole block. scene says how much of each effect shows (see storyBlockGrid, storyBlockVe and storyBlockLive).
 const storyBlockPaint = (ctx, block, pal, s) => {
   const {
     order,
@@ -6823,7 +6171,6 @@ const storyBlockPaint = (ctx, block, pal, s) => {
     if (f & STORY_BLOCK_FACE_NORTH) storyBlockFace(ctx, block, pal, s, c, 2, 3, STORY_BLOCK_NORTH, g, kind);
     storyBlockTop(ctx, block, pal, s, c, g, kind);
   }
-  // The fault trace along the top edge of its scarp.
   if (s.pillars > 0.5 && block.scarp.length) {
     ctx.strokeStyle = STORY_COLORS.ink;
     ctx.lineWidth = 1.6;
@@ -6836,7 +6183,6 @@ const storyBlockPaint = (ctx, block, pal, s) => {
     ctx.stroke();
     ctx.lineWidth = block.layout.line;
   }
-  // The injection well.
   const well = block.well;
   ctx.globalAlpha = s.labels;
   ctx.strokeStyle = STORY_COLORS.ink;
@@ -6849,7 +6195,6 @@ const storyBlockPaint = (ctx, block, pal, s) => {
   ctx.lineCap = 'butt';
   ctx.lineWidth = block.layout.line;
   ctx.globalAlpha = 1;
-  // The bracket that marks h on a cut face.
   if (s.bracket > 0.01 && block.bracket >= 0) {
     const o = 4 * block.bracket;
     const mx = (block.X[o + 1] + block.X[o + 2]) / 2;
@@ -6875,8 +6220,6 @@ const storyBlockPaint = (ctx, block, pal, s) => {
     ctx.globalAlpha = 1;
   }
 };
-
-// The labels, the run clock or counter, and the notes. They stay out of the caption areas (see storyBlockLayout).
 const storyBlockAnnotate = (ctx, block, s, id) => {
   const co2 = storyBlockEase((s.year - 3) / 6);
   for (let n = 0; n < block.labels.length; n++) {
@@ -6890,7 +6233,6 @@ const storyBlockAnnotate = (ctx, block, s, id) => {
   }
   storyBlockHeadline(ctx, block, block.clockText, STORY_BLOCK_CLOCK_NOTE, s.clockAlpha);
   if (s.counterAlpha > 0.01) {
-    // The text changes only when the counter moves by half a percent, so a draw makes no new strings.
     const step = Math.round(s.counter * 200);
     if (step !== block.counterStep) {
       block.counterStep = step;
@@ -6915,13 +6257,10 @@ const storyBlockAnnotate = (ctx, block, s, id) => {
   }
 };
 const STORY_BLOCK_CLOCK_NOTE = ['3D run time so far, for a typical', 'field model (for illustration)'];
-
-// Draw one frame of the chapter id. entry is the renderer object.
 const storyBlockDraw = (entry, id, ctx, frame) => {
   const block = storyBlockGet(frame);
   const stored = storyBlockData.stored;
   if (stored.status === 'idle') storyBlockLoad();
-  // This draw shows the rock with no gas. The arrival of the run asks the stage or the static frame for one more draw.
   if (stored.status === 'loading' && typeof frame.requestDraw === 'function') storyBlockState.waiting.add(frame.requestDraw);
   if (id === 'live' && !frame.reducedMotion) storyLive.redraw = frame.requestDraw;
   const pal = storyBlockState.palette || (storyBlockState.palette = storyBlockPalette(STORY_COLORS));
@@ -6932,12 +6271,8 @@ const storyBlockDraw = (entry, id, ctx, frame) => {
   if (s.bracket > 0.01 && block.bracket < 0) block.bracket = storyBlockPickBracket(block);
   storyBlockPaint(ctx, block, pal, s);
   storyBlockAnnotate(ctx, block, s, id);
-  // The stage reads animated after this draw. Only the live player needs the next frame without a request.
   entry.animated = id === 'live' && storyBlockLiveBusy(frame);
 };
-
-// ---- chapter live: the player, the controls and the worker
-
 const storyLive = {
   entry: null,
   nodes: null,
@@ -6952,18 +6287,12 @@ const storyLive = {
   shown: -1,
   shownState: '',
   onVisibility: null,
-  // The frame.requestDraw of the pinned stage. The live draw keeps it for the controls and the worker.
   redraw: null
 };
-
-// The controls, the worker and the tab events run outside draw(). They ask the stage for one more draw here.
-// The draw then sets animated again, so a player that runs keeps its frames.
 const storyBlockRedraw = () => {
   if (storyLive.redraw) storyLive.redraw();
 };
 const storyBlockReducedNow = () => !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-
-// Write the year and the play state to the controls. It writes only when a value changes.
 const storyBlockSyncControls = () => {
   const live = storyLive;
   const n = live.nodes;
@@ -6983,8 +6312,6 @@ const storyBlockSyncControls = () => {
     n.play.setAttribute('aria-label', live.playing ? 'Pause' : 'Play');
   }
 };
-
-// The player advances in the draw call. This returns the scene of the chapter live.
 const storyBlockLiveScene = (entry, frame, s) => {
   const live = storyLive;
   const running = live.mounted && !frame.reducedMotion;
@@ -7006,8 +6333,6 @@ const storyBlockLiveScene = (entry, frame, s) => {
   }
   return storyBlockLive(frame.local, running ? live.cells : 0, running ? live.year : STORY_BLOCK_GRID_YEARS, s);
 };
-
-// The renderer needs frames while the player runs and while the cells change.
 const storyBlockLiveBusy = frame => storyLive.mounted && !frame.reducedMotion && (storyLive.playing || storyLive.cells !== storyLive.target);
 const storyBlockVisibility = live => {
   if (document.hidden) {
@@ -7024,8 +6349,6 @@ const storyBlockVisibility = live => {
     storyBlockRedraw();
   }
 };
-
-// Build the controls in the layer of the stage. The styles are in colors_and_type.css (Story block controls).
 const storyBlockControls = (layer, live) => {
   const make = (tag, className, attrs, text) => {
     const node = document.createElement(tag);
@@ -7109,8 +6432,6 @@ const storyBlockControls = (layer, live) => {
     toggle
   };
 };
-
-// Run the scenario in the worker, once. The page uses the stored frames until all frames arrive.
 const storyBlockStartWorker = () => {
   const live = storyBlockData.live;
   if (live.status !== 'idle' || live.complete) return;
@@ -7193,7 +6514,6 @@ STORY_RENDERERS.live = {
     document.addEventListener('visibilitychange', live.onVisibility);
     storyBlockSyncControls();
     storyBlockStartWorker();
-    // The first draw of the chapter follows in the same tick. It keeps animated true while the player runs.
     this.animated = live.playing;
   },
   unmount() {
@@ -7211,13 +6531,6 @@ STORY_RENDERERS.live = {
 };
 
 // File: HomeSections.jsx
-// HomeSections.jsx — the homepage below the story: research, projects, publications, contact.
-// Facts come from site-content.js, which the CV shares.
-// The sections sit on the sky ground of the story (style C). The CSS is in colors_and_type.css.
-
-// [destructured React]
-
-// ---- copy helper (pure; tests/site-content.test.js evaluates this block)
 const siteCopy = async (text, clipboard) => {
   try {
     if (!clipboard || !clipboard.writeText) return false;
@@ -7227,9 +6540,6 @@ const siteCopy = async (text, clipboard) => {
     return false;
   }
 };
-// ---- end copy helper
-
-// "Copied" / "Copy failed" for two seconds, announced politely.
 const useCopyStatus = () => {
   const [status, setStatus] = useState({});
   const copy = async (key, text) => {
@@ -7245,27 +6555,24 @@ const useCopyStatus = () => {
   };
   return [status, copy];
 };
-
-// A thin strip of four rock beds: sandstone, shale, chalk and older rock. It echoes the cutaway of the story.
-// Use it once for each section heading. It is decoration only.
-const Strata = () => /*#__PURE__*/React.createElement("span", {
+const Strata = () => React.createElement("span", {
   className: "strata",
   "aria-hidden": "true"
-}, /*#__PURE__*/React.createElement("span", null), /*#__PURE__*/React.createElement("span", null), /*#__PURE__*/React.createElement("span", null), /*#__PURE__*/React.createElement("span", null));
+}, React.createElement("span", null), React.createElement("span", null), React.createElement("span", null), React.createElement("span", null));
 const SiteSection = ({
   id,
   title,
   children
-}) => /*#__PURE__*/React.createElement("section", {
+}) => React.createElement("section", {
   id: id,
   className: "site-section",
   "aria-labelledby": `${id}-title`
-}, /*#__PURE__*/React.createElement("div", {
+}, React.createElement("div", {
   className: "site-section__inner"
-}, /*#__PURE__*/React.createElement("h2", {
+}, React.createElement("h2", {
   id: `${id}-title`,
   className: "section-title"
-}, title), /*#__PURE__*/React.createElement(Strata, null), children));
+}, title), React.createElement(Strata, null), children));
 const SITE_THEMES = [['VE models for depleted gas fields', 'Three-phase CO₂–methane–brine VE with a black-oil approximation, checked against compositional simulation and up to 100× faster.'], ['Storage screening under uncertainty', 'Ensembles of fast VE runs that test many scenarios and uncertain reservoir properties at field scale.'], ['Machine learning for upscaling and digital rock', 'CNNs that upscale permeability tensors and predict two-phase flow properties from micro-CT images.']];
 const ActivityList = ({
   items = SITE_ACTIVITY,
@@ -7273,19 +6580,19 @@ const ActivityList = ({
 }) => {
   const [expanded, setExpanded] = useState(false);
   const shown = expanded ? items : items.slice(0, initial);
-  return /*#__PURE__*/React.createElement("div", {
+  return React.createElement("div", {
     className: "activity"
-  }, /*#__PURE__*/React.createElement("h3", {
+  }, React.createElement("h3", {
     className: "activity__title"
-  }, "Recent activity"), /*#__PURE__*/React.createElement("ol", {
+  }, "Recent activity"), React.createElement("ol", {
     className: "activity__list",
     id: "activity-list"
-  }, shown.map(item => /*#__PURE__*/React.createElement("li", {
+  }, shown.map(item => React.createElement("li", {
     key: `${item.month}-${item.title}`,
     className: "activity__item"
-  }, /*#__PURE__*/React.createElement("time", {
+  }, React.createElement("time", {
     dateTime: item.month
-  }, item.date), /*#__PURE__*/React.createElement("h4", null, item.title), /*#__PURE__*/React.createElement("p", null, item.body)))), items.length > initial && /*#__PURE__*/React.createElement("button", {
+  }, item.date), React.createElement("h4", null, item.title), React.createElement("p", null, item.body)))), items.length > initial && React.createElement("button", {
     type: "button",
     className: "btn btn--quiet btn--small",
     "aria-expanded": expanded,
@@ -7293,44 +6600,44 @@ const ActivityList = ({
     onClick: () => setExpanded(!expanded)
   }, expanded ? 'Show recent activity only' : 'Show earlier activity'));
 };
-const ResearchSection = () => /*#__PURE__*/React.createElement(SiteSection, {
+const ResearchSection = () => React.createElement(SiteSection, {
   id: "research",
   title: "Research"
-}, /*#__PURE__*/React.createElement("div", {
+}, React.createElement("div", {
   className: "research"
-}, /*#__PURE__*/React.createElement("div", {
+}, React.createElement("div", {
   className: "research__main"
-}, /*#__PURE__*/React.createElement("p", {
+}, React.createElement("p", {
   className: "lead"
-}, "I\u2019m a PhD candidate in Petroleum Engineering at Heriot-Watt University. I study how injected CO\u2082 migrates through depleted gas reservoirs, and how to simulate it quickly at field scale."), /*#__PURE__*/React.createElement("p", null, "My main tool is the vertical-equilibrium (VE) model, which assumes that CO\u2082, methane and brine separate vertically under buoyancy. That reduces a 3D reservoir model to 2D and makes it fast enough for screening, uncertainty quantification and optimisation studies. I build these models in MRST, apply them to depleted gas fields in the MuPSI project, and teach MRST\u2019s rapid-prototyping framework at Heriot-Watt."), /*#__PURE__*/React.createElement("h3", null, "Themes"), /*#__PURE__*/React.createElement("dl", {
+}, "I\u2019m a PhD candidate in Petroleum Engineering at Heriot-Watt University. I study how injected CO\u2082 migrates through depleted gas reservoirs, and how to simulate it quickly at field scale."), React.createElement("p", null, "My main tool is the vertical-equilibrium (VE) model, which assumes that CO\u2082, methane and brine separate vertically under buoyancy. That reduces a 3D reservoir model to 2D and makes it fast enough for screening, uncertainty quantification and optimisation studies. I build these models in MRST, apply them to depleted gas fields in the MuPSI project, and teach MRST\u2019s rapid-prototyping framework at Heriot-Watt."), React.createElement("h3", null, "Themes"), React.createElement("dl", {
   className: "themes"
-}, SITE_THEMES.map(([term, detail]) => /*#__PURE__*/React.createElement("div", {
+}, SITE_THEMES.map(([term, detail]) => React.createElement("div", {
   key: term
-}, /*#__PURE__*/React.createElement("dt", null, term), /*#__PURE__*/React.createElement("dd", null, detail)))), /*#__PURE__*/React.createElement("h3", null, "Methods and tools"), /*#__PURE__*/React.createElement("p", {
+}, React.createElement("dt", null, term), React.createElement("dd", null, detail)))), React.createElement("h3", null, "Methods and tools"), React.createElement("p", {
   className: "methods"
-}, "VE modelling, multiphase and compositional simulation, permeability upscaling and scientific machine learning, in MATLAB and MRST, Python, and Julia with JutulDarcy."), /*#__PURE__*/React.createElement("h3", null, "Background"), /*#__PURE__*/React.createElement("p", null, "BSc and MSc in Petroleum Engineering from Amirkabir University of Technology, Tehran, focused on reservoir simulation and machine learning for upscaling and digital rock.")), /*#__PURE__*/React.createElement("div", {
+}, "VE modelling, multiphase and compositional simulation, permeability upscaling and scientific machine learning, in MATLAB and MRST, Python, and Julia with JutulDarcy."), React.createElement("h3", null, "Background"), React.createElement("p", null, "BSc and MSc in Petroleum Engineering from Amirkabir University of Technology, Tehran, focused on reservoir simulation and machine learning for upscaling and digital rock.")), React.createElement("div", {
   className: "research__aside"
-}, /*#__PURE__*/React.createElement(ActivityList, null))));
+}, React.createElement(ActivityList, null))));
 const ProjectsSection = () => {
   const [feature, ...others] = SITE_PROJECTS;
-  return /*#__PURE__*/React.createElement(SiteSection, {
+  return React.createElement(SiteSection, {
     id: "projects",
     title: "Projects"
-  }, /*#__PURE__*/React.createElement("article", {
+  }, React.createElement("article", {
     className: "project-feature"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, React.createElement("div", {
     className: "project-feature__text"
-  }, /*#__PURE__*/React.createElement("h3", null, feature.title), /*#__PURE__*/React.createElement("p", null, feature.body), /*#__PURE__*/React.createElement("p", {
+  }, React.createElement("h3", null, feature.title), React.createElement("p", null, feature.body), React.createElement("p", {
     className: "project-links"
-  }, feature.links.map((link, index) => /*#__PURE__*/React.createElement("a", {
+  }, feature.links.map((link, index) => React.createElement("a", {
     key: link.href,
     className: `btn ${index === 0 ? 'btn--primary' : 'btn--quiet'} btn--small`,
     href: link.href
-  }, link.label)))), /*#__PURE__*/React.createElement("a", {
+  }, link.label)))), React.createElement("a", {
     className: "project-feature__media",
     href: feature.links[0].href,
     "aria-label": feature.links[0].label
-  }, /*#__PURE__*/React.createElement("img", {
+  }, React.createElement("img", {
     className: "project-feature__shot",
     src: feature.image.src,
     width: feature.image.width,
@@ -7338,80 +6645,80 @@ const ProjectsSection = () => {
     alt: feature.image.alt,
     loading: "lazy",
     decoding: "async"
-  }))), /*#__PURE__*/React.createElement("div", {
+  }))), React.createElement("div", {
     className: "project-list"
-  }, others.map(project => /*#__PURE__*/React.createElement("article", {
+  }, others.map(project => React.createElement("article", {
     key: project.id,
     className: "project"
-  }, /*#__PURE__*/React.createElement("h3", null, project.title, project.meta && /*#__PURE__*/React.createElement("span", {
+  }, React.createElement("h3", null, project.title, project.meta && React.createElement("span", {
     className: "project__meta"
-  }, project.meta)), /*#__PURE__*/React.createElement("p", null, project.body)))));
+  }, project.meta)), React.createElement("p", null, project.body)))));
 };
 const SiteAuthors = ({
   authors
-}) => /*#__PURE__*/React.createElement("p", {
+}) => React.createElement("p", {
   className: "pub__authors"
-}, authors.map((name, i) => /*#__PURE__*/React.createElement(React.Fragment, {
+}, authors.map((name, i) => React.createElement(React.Fragment, {
   key: name
-}, i > 0 && ', ', name === 'Telvari, S.' ? /*#__PURE__*/React.createElement("strong", null, name) : name)));
+}, i > 0 && ', ', name === 'Telvari, S.' ? React.createElement("strong", null, name) : name)));
 const PublicationsSection = () => {
   const [status, copy] = useCopyStatus();
-  return /*#__PURE__*/React.createElement(SiteSection, {
+  return React.createElement(SiteSection, {
     id: "publications",
     title: "Publications"
-  }, /*#__PURE__*/React.createElement("ol", {
+  }, React.createElement("ol", {
     className: "pubs"
-  }, SITE_PUBLICATIONS.map(pub => /*#__PURE__*/React.createElement("li", {
+  }, SITE_PUBLICATIONS.map(pub => React.createElement("li", {
     key: pub.id,
     className: "pub"
-  }, /*#__PURE__*/React.createElement("span", {
+  }, React.createElement("span", {
     className: "pub__year"
-  }, pub.year), /*#__PURE__*/React.createElement("div", {
+  }, pub.year), React.createElement("div", {
     className: "pub__body"
-  }, /*#__PURE__*/React.createElement("h3", {
+  }, React.createElement("h3", {
     className: "pub__title"
-  }, /*#__PURE__*/React.createElement("a", {
+  }, React.createElement("a", {
     href: pub.url,
     target: "_blank",
     rel: "noreferrer"
-  }, pub.title)), /*#__PURE__*/React.createElement(SiteAuthors, {
+  }, pub.title)), React.createElement(SiteAuthors, {
     authors: pub.authors
-  }), /*#__PURE__*/React.createElement("p", {
+  }), React.createElement("p", {
     className: "pub__venue"
-  }, /*#__PURE__*/React.createElement("span", {
+  }, React.createElement("span", {
     className: "pub__status"
-  }, pub.status), pub.venue), /*#__PURE__*/React.createElement("p", {
+  }, pub.status), pub.venue), React.createElement("p", {
     className: "pub__summary"
-  }, pub.summary), /*#__PURE__*/React.createElement("div", {
+  }, pub.summary), React.createElement("div", {
     className: "pub__actions"
-  }, /*#__PURE__*/React.createElement("a", {
+  }, React.createElement("a", {
     className: "btn btn--quiet btn--small",
     href: pub.url,
     target: "_blank",
     rel: "noreferrer"
-  }, /*#__PURE__*/React.createElement(Icon, {
+  }, React.createElement(Icon, {
     name: "external",
     size: 15
-  }), /*#__PURE__*/React.createElement("span", null, "DOI ", /*#__PURE__*/React.createElement("span", {
+  }), React.createElement("span", null, "DOI ", React.createElement("span", {
     className: "tnum"
-  }, pub.doi))), /*#__PURE__*/React.createElement("button", {
+  }, pub.doi))), React.createElement("button", {
     type: "button",
     className: "btn btn--quiet btn--small",
     onClick: () => copy(pub.id, pub.bibtex),
     "aria-label": `Copy BibTeX for ${pub.title}`
-  }, /*#__PURE__*/React.createElement(Icon, {
+  }, React.createElement(Icon, {
     name: status[pub.id] === 'Copied' ? 'check' : 'copy',
     size: 15
-  }), status[pub.id] || 'Copy BibTeX'), /*#__PURE__*/React.createElement("span", {
+  }), status[pub.id] || 'Copy BibTeX'), React.createElement("span", {
     className: "visually-hidden",
     "aria-live": "polite"
-  }, status[pub.id] ? `${status[pub.id]}: BibTeX for ${pub.title}` : '')))))), /*#__PURE__*/React.createElement("p", {
+  }, status[pub.id] ? `${status[pub.id]}: BibTeX for ${pub.title}` : '')))))), React.createElement("p", {
     className: "pubs__more"
-  }, "Citations and new work: ", /*#__PURE__*/React.createElement("a", {
+  }, "Citations and new work: ", React.createElement("a", {
     href: SITE_LINKS.scholar,
     target: "_blank",
     rel: "noreferrer"
-  }, "Google Scholar"), " and", ' ', /*#__PURE__*/React.createElement("a", {
+  }, "Google Scholar"), " and", ' ', React.createElement("a", {
     href: SITE_LINKS.orcid,
     target: "_blank",
     rel: "noreferrer"
@@ -7420,50 +6727,50 @@ const PublicationsSection = () => {
 const SITE_CONTACT_PROFILES = [['scholar', 'Google Scholar', 'Publications and citations', SITE_LINKS.scholar], ['orcid', 'ORCID', SITE_LINKS.orcidId, SITE_LINKS.orcid], ['github', 'GitHub', SITE_LINKS.githubUser, SITE_LINKS.github], ['linkedin', 'LinkedIn', SITE_LINKS.linkedinUser, SITE_LINKS.linkedin]];
 const ContactSection = () => {
   const [status, copy] = useCopyStatus();
-  return /*#__PURE__*/React.createElement(SiteSection, {
+  return React.createElement(SiteSection, {
     id: "contact",
     title: "Contact"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, React.createElement("div", {
     className: "contact"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, React.createElement("div", {
     className: "contact__main"
-  }, /*#__PURE__*/React.createElement("p", {
+  }, React.createElement("p", {
     className: "lead"
-  }, "For collaborations, preprints or questions about VE models and the simulator, email me."), /*#__PURE__*/React.createElement("div", {
+  }, "For collaborations, preprints or questions about VE models and the simulator, email me."), React.createElement("div", {
     className: "contact__email"
-  }, /*#__PURE__*/React.createElement("a", {
+  }, React.createElement("a", {
     href: `mailto:${SITE_LINKS.email}`
-  }, /*#__PURE__*/React.createElement(Icon, {
+  }, React.createElement(Icon, {
     name: "mail",
     size: 18
-  }), SITE_LINKS.email), /*#__PURE__*/React.createElement("button", {
+  }), SITE_LINKS.email), React.createElement("button", {
     type: "button",
     className: "btn btn--quiet btn--small",
     onClick: () => copy('email', SITE_LINKS.email),
     "aria-label": "Copy email address"
-  }, /*#__PURE__*/React.createElement(Icon, {
+  }, React.createElement(Icon, {
     name: status.email === 'Copied' ? 'check' : 'copy',
     size: 15
-  }), status.email || 'Copy'), /*#__PURE__*/React.createElement("span", {
+  }), status.email || 'Copy'), React.createElement("span", {
     className: "visually-hidden",
     "aria-live": "polite"
-  }, status.email ? `${status.email}: email address` : '')), /*#__PURE__*/React.createElement("p", {
+  }, status.email ? `${status.email}: email address` : '')), React.createElement("p", {
     className: "contact__address"
-  }, /*#__PURE__*/React.createElement(Icon, {
+  }, React.createElement(Icon, {
     name: "pin",
     size: 16
-  }), "Institute of GeoEnergy Engineering, Heriot-Watt University, Edinburgh, UK")), /*#__PURE__*/React.createElement("ul", {
+  }), "Institute of GeoEnergy Engineering, Heriot-Watt University, Edinburgh, UK")), React.createElement("ul", {
     className: "contact__profiles"
-  }, SITE_CONTACT_PROFILES.map(([icon, label, detail, href]) => /*#__PURE__*/React.createElement("li", {
+  }, SITE_CONTACT_PROFILES.map(([icon, label, detail, href]) => React.createElement("li", {
     key: icon
-  }, /*#__PURE__*/React.createElement("a", {
+  }, React.createElement("a", {
     href: href,
     target: "_blank",
     rel: "noreferrer"
-  }, /*#__PURE__*/React.createElement(Icon, {
+  }, React.createElement(Icon, {
     name: icon,
     size: 18
-  }), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("strong", null, label), /*#__PURE__*/React.createElement("small", null, detail))))))));
+  }), React.createElement("span", null, React.createElement("strong", null, label), React.createElement("small", null, detail))))))));
 };
 Object.assign(window, {
   ResearchSection,
@@ -7476,149 +6783,145 @@ Object.assign(window, {
 });
 
 // File: CVPage.jsx
-// CVPage.jsx — the curriculum vitae: a light sheet on the sky ground on screen (style C), black on white in print.
-// Facts come from site-content.js, which the homepage shares.
-// Strata comes from HomeSections.jsx. The bundle loads that file first.
-
 const CVSection = ({
   id,
   title,
   children
-}) => /*#__PURE__*/React.createElement("section", {
+}) => React.createElement("section", {
   className: "cv-section",
   "aria-labelledby": `cv-${id}`
-}, /*#__PURE__*/React.createElement("h2", {
+}, React.createElement("h2", {
   id: `cv-${id}`
-}, title), /*#__PURE__*/React.createElement(Strata, null), children);
+}, title), React.createElement(Strata, null), children);
 const CVRows = ({
   items
-}) => /*#__PURE__*/React.createElement("div", {
+}) => React.createElement("div", {
   className: "cv-rows"
-}, items.map(item => /*#__PURE__*/React.createElement("div", {
+}, items.map(item => React.createElement("div", {
   key: `${item.date}-${item.title}`,
   className: "cv-row"
-}, /*#__PURE__*/React.createElement("span", {
+}, React.createElement("span", {
   className: "cv-date"
-}, item.date), /*#__PURE__*/React.createElement("div", {
+}, item.date), React.createElement("div", {
   className: "cv-entry"
-}, /*#__PURE__*/React.createElement("h3", null, item.title), item.place && /*#__PURE__*/React.createElement("p", {
+}, React.createElement("h3", null, item.title), item.place && React.createElement("p", {
   className: "cv-place"
-}, item.place), (item.details || []).map(detail => /*#__PURE__*/React.createElement("p", {
+}, item.place), (item.details || []).map(detail => React.createElement("p", {
   key: detail,
   className: "cv-detail"
 }, detail))))));
-const CVPublications = () => /*#__PURE__*/React.createElement("div", {
+const CVPublications = () => React.createElement("div", {
   className: "cv-rows"
-}, SITE_PUBLICATIONS.map(pub => /*#__PURE__*/React.createElement("div", {
+}, SITE_PUBLICATIONS.map(pub => React.createElement("div", {
   key: pub.id,
   className: "cv-row"
-}, /*#__PURE__*/React.createElement("span", {
+}, React.createElement("span", {
   className: "cv-date"
-}, pub.year), /*#__PURE__*/React.createElement("div", {
+}, pub.year), React.createElement("div", {
   className: "cv-entry"
-}, /*#__PURE__*/React.createElement("h3", null, /*#__PURE__*/React.createElement("a", {
+}, React.createElement("h3", null, React.createElement("a", {
   href: pub.url
-}, pub.title)), /*#__PURE__*/React.createElement("p", {
+}, pub.title)), React.createElement("p", {
   className: "cv-place"
-}, pub.authors.map((name, i) => /*#__PURE__*/React.createElement(React.Fragment, {
+}, pub.authors.map((name, i) => React.createElement(React.Fragment, {
   key: name
-}, i > 0 && ', ', name === 'Telvari, S.' ? /*#__PURE__*/React.createElement("strong", null, name) : name))), /*#__PURE__*/React.createElement("p", {
+}, i > 0 && ', ', name === 'Telvari, S.' ? React.createElement("strong", null, name) : name))), React.createElement("p", {
   className: "cv-detail"
-}, pub.venue, ". ", pub.status, ". DOI ", /*#__PURE__*/React.createElement("a", {
+}, pub.venue, ". ", pub.status, ". DOI ", React.createElement("a", {
   className: "tnum",
   href: pub.url
 }, pub.doi))))));
-const CVPage = () => /*#__PURE__*/React.createElement("article", {
+const CVPage = () => React.createElement("article", {
   className: "cv"
-}, /*#__PURE__*/React.createElement("div", {
+}, React.createElement("div", {
   className: "cv-sheet"
-}, /*#__PURE__*/React.createElement("header", {
+}, React.createElement("header", {
   className: "cv-head"
-}, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", null, "Sa\u2019eed Telvari"), /*#__PURE__*/React.createElement("p", {
+}, React.createElement("div", null, React.createElement("h1", null, "Sa\u2019eed Telvari"), React.createElement("p", {
   className: "cv-role"
-}, SITE_CV.title), /*#__PURE__*/React.createElement("ul", {
+}, SITE_CV.title), React.createElement("ul", {
   className: "cv-contact"
-}, /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement(Icon, {
+}, React.createElement("li", null, React.createElement(Icon, {
   name: "pin",
   size: 15
-}), SITE_CV.location), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("a", {
+}), SITE_CV.location), React.createElement("li", null, React.createElement("a", {
   href: `mailto:${SITE_LINKS.email}`
-}, /*#__PURE__*/React.createElement(Icon, {
+}, React.createElement(Icon, {
   name: "mail",
   size: 15
-}), SITE_LINKS.email)), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("a", {
+}), SITE_LINKS.email)), React.createElement("li", null, React.createElement("a", {
   href: SITE_LINKS.orcid
-}, /*#__PURE__*/React.createElement(Icon, {
+}, React.createElement(Icon, {
   name: "orcid",
   size: 15
-}), "ORCID ", SITE_LINKS.orcidId)), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("a", {
+}), "ORCID ", SITE_LINKS.orcidId)), React.createElement("li", null, React.createElement("a", {
   href: SITE_LINKS.scholar
-}, /*#__PURE__*/React.createElement(Icon, {
+}, React.createElement(Icon, {
   name: "scholar",
   size: 15
-}), "Google Scholar")), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("a", {
+}), "Google Scholar")), React.createElement("li", null, React.createElement("a", {
   href: SITE_LINKS.linkedin
-}, /*#__PURE__*/React.createElement(Icon, {
+}, React.createElement(Icon, {
   name: "linkedin",
   size: 15
-}), "linkedin.com/in/", SITE_LINKS.linkedinUser)), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("a", {
+}), "linkedin.com/in/", SITE_LINKS.linkedinUser)), React.createElement("li", null, React.createElement("a", {
   href: "https://saeedtelvari.github.io/"
-}, "saeedtelvari.github.io")))), /*#__PURE__*/React.createElement("button", {
+}, "saeedtelvari.github.io")))), React.createElement("button", {
   type: "button",
   className: "btn btn--quiet cv-print",
   onClick: () => window.print()
-}, /*#__PURE__*/React.createElement(Icon, {
+}, React.createElement(Icon, {
   name: "print",
   size: 16
-}), "Print or save as PDF")), /*#__PURE__*/React.createElement(CVSection, {
+}), "Print or save as PDF")), React.createElement(CVSection, {
   id: "interests",
   title: "Research interests"
-}, /*#__PURE__*/React.createElement("p", {
+}, React.createElement("p", {
   className: "cv-interests"
-}, SITE_CV.interests)), /*#__PURE__*/React.createElement(CVSection, {
+}, SITE_CV.interests)), React.createElement(CVSection, {
   id: "education",
   title: "Education"
-}, /*#__PURE__*/React.createElement(CVRows, {
+}, React.createElement(CVRows, {
   items: SITE_CV.education
-})), /*#__PURE__*/React.createElement(CVSection, {
+})), React.createElement(CVSection, {
   id: "experience",
   title: "Research projects and experience"
-}, /*#__PURE__*/React.createElement(CVRows, {
+}, React.createElement(CVRows, {
   items: SITE_CV.experience
-})), /*#__PURE__*/React.createElement(CVSection, {
+})), React.createElement(CVSection, {
   id: "publications",
   title: "Publications"
-}, /*#__PURE__*/React.createElement(CVPublications, null)), /*#__PURE__*/React.createElement(CVSection, {
+}, React.createElement(CVPublications, null)), React.createElement(CVSection, {
   id: "presentations",
   title: "Presentations"
-}, /*#__PURE__*/React.createElement(CVRows, {
+}, React.createElement(CVRows, {
   items: SITE_CV.presentations
-})), /*#__PURE__*/React.createElement(CVSection, {
+})), React.createElement(CVSection, {
   id: "teaching",
   title: "Teaching"
-}, /*#__PURE__*/React.createElement(CVRows, {
+}, React.createElement(CVRows, {
   items: SITE_CV.teaching
-})), /*#__PURE__*/React.createElement(CVSection, {
+})), React.createElement(CVSection, {
   id: "service",
   title: "Service and leadership"
-}, /*#__PURE__*/React.createElement(CVRows, {
+}, React.createElement(CVRows, {
   items: SITE_CV.service
-})), /*#__PURE__*/React.createElement(CVSection, {
+})), React.createElement(CVSection, {
   id: "training",
   title: "Professional training"
-}, /*#__PURE__*/React.createElement(CVRows, {
+}, React.createElement(CVRows, {
   items: SITE_CV.training
-})), /*#__PURE__*/React.createElement(CVSection, {
+})), React.createElement(CVSection, {
   id: "skills",
   title: "Skills"
-}, /*#__PURE__*/React.createElement("dl", {
+}, React.createElement("dl", {
   className: "cv-skills"
-}, SITE_CV.skills.map(([area, list]) => /*#__PURE__*/React.createElement("div", {
+}, SITE_CV.skills.map(([area, list]) => React.createElement("div", {
   key: area
-}, /*#__PURE__*/React.createElement("dt", null, area), /*#__PURE__*/React.createElement("dd", null, list))))), /*#__PURE__*/React.createElement(CVSection, {
+}, React.createElement("dt", null, area), React.createElement("dd", null, list))))), React.createElement(CVSection, {
   id: "recognition",
   title: "Recognition"
-}, /*#__PURE__*/React.createElement(CVRows, {
+}, React.createElement(CVRows, {
   items: SITE_CV.recognition
 }))));
 Object.assign(window, {
@@ -7626,11 +6929,6 @@ Object.assign(window, {
 });
 
 // File: App.jsx
-// App.jsx — entries for the three pages (home, CV, simulator) and their navigation.
-
-// [destructured React]
-
-// ---- navigation helpers (pure; tests/site-nav.test.js evaluates this block)
 const SITE_NAV_ITEMS = [{
   id: 'research',
   label: 'Research',
@@ -7657,15 +6955,11 @@ const SITE_NAV_ITEMS = [{
   href: './index.html#contact'
 }];
 const SITE_SECTION_IDS = ['research', 'projects', 'publications', 'contact'];
-
-// The section whose top has passed the reading line (viewport coordinates); the hero is 'home'.
 const siteActiveSection = (rects, line) => {
   let active = 'home';
   for (const rect of rects) if (rect.top <= line) active = rect.id;
   return active;
 };
-
-// Old anchors from before the redesign keep working.
 const siteLegacyTarget = hash => ({
   '#about': 'research',
   '#research': 'research',
@@ -7675,8 +6969,6 @@ const siteLegacyTarget = hash => ({
   '#cv': 'cv',
   '#simulator': 'simulator'
 })[hash] || 'home';
-// ---- end navigation helpers
-
 const siteHref = id => (SITE_NAV_ITEMS.find(item => item.id === id) || {
   href: './index.html'
 }).href;
@@ -7696,8 +6988,6 @@ const siteScrollTo = id => {
     block: 'start'
   });
 };
-
-// Links are real; only plain clicks on targets within the current page are handled here.
 const siteNavigate = (page, id, event) => {
   if (event && (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
   const samePage = id === page || page === 'home' && SITE_SECTION_IDS.includes(id);
@@ -7718,8 +7008,6 @@ const siteNavigate = (page, id, event) => {
     }, '', window.location.pathname);
   }
 };
-
-// The pre-React shell in each HTML page fades out once React has rendered.
 const dismissLoader = () => {
   if (window.__appReady) window.__appReady();
   const loader = document.getElementById('app-loader');
@@ -7728,7 +7016,7 @@ const dismissLoader = () => {
   const timer = setTimeout(() => loader.remove(), 500);
   return () => clearTimeout(timer);
 };
-const SkipLink = () => /*#__PURE__*/React.createElement("a", {
+const SkipLink = () => React.createElement("a", {
   className: "skip-link",
   href: "#main-content"
 }, "Skip to content");
@@ -7736,8 +7024,6 @@ const SiteHome = () => {
   const [active, setActive] = useState('home');
   const navigate = (id, event) => siteNavigate('home', id, event);
   useEffect(() => dismissLoader(), []);
-
-  // Old and new anchors: pages redirect, sections scroll into view after the first layout.
   useEffect(() => {
     const apply = () => {
       const target = siteLegacyTarget(window.location.hash);
@@ -7755,8 +7041,6 @@ const SiteHome = () => {
       window.removeEventListener('popstate', apply);
     };
   }, []);
-
-  // One scroll spy for the header: the section under a line 45 % down the viewport.
   useEffect(() => {
     let frame = 0;
     const update = () => {
@@ -7787,50 +7071,48 @@ const SiteHome = () => {
       window.removeEventListener('resize', schedule);
     };
   }, []);
-  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SkipLink, null), /*#__PURE__*/React.createElement(Header, {
+  return React.createElement(React.Fragment, null, React.createElement(SkipLink, null), React.createElement(Header, {
     active: active,
     onNavigate: navigate
-  }), /*#__PURE__*/React.createElement(StoryStage, {
+  }), React.createElement(StoryStage, {
     onNavigate: navigate
-  }), /*#__PURE__*/React.createElement("main", {
+  }), React.createElement("main", {
     id: "main-content",
     tabIndex: -1
-  }, /*#__PURE__*/React.createElement(ResearchSection, null), /*#__PURE__*/React.createElement(ProjectsSection, null), /*#__PURE__*/React.createElement(PublicationsSection, null), /*#__PURE__*/React.createElement(ContactSection, null)), /*#__PURE__*/React.createElement(Footer, {
+  }, React.createElement(ResearchSection, null), React.createElement(ProjectsSection, null), React.createElement(PublicationsSection, null), React.createElement(ContactSection, null)), React.createElement(Footer, {
     onNavigate: navigate
   }));
 };
 const CVStandalone = () => {
   const navigate = (id, event) => siteNavigate('cv', id, event);
   useEffect(() => dismissLoader(), []);
-  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SkipLink, null), /*#__PURE__*/React.createElement(Header, {
+  return React.createElement(React.Fragment, null, React.createElement(SkipLink, null), React.createElement(Header, {
     active: "cv",
     onNavigate: navigate
-  }), /*#__PURE__*/React.createElement("main", {
+  }), React.createElement("main", {
     id: "main-content",
     tabIndex: -1
-  }, /*#__PURE__*/React.createElement(CVPage, {
+  }, React.createElement(CVPage, {
     onNavigate: navigate
-  })), /*#__PURE__*/React.createElement(Footer, {
+  })), React.createElement(Footer, {
     onNavigate: navigate
   }));
 };
-
-// Standalone simulator entry — rendered when the page is simulator.html.
 const SimulatorStandalone = () => {
   useEffect(() => dismissLoader(), []);
-  return /*#__PURE__*/React.createElement("div", {
+  return React.createElement("div", {
     className: "ve-standalone",
     "data-screen-label": "03 VE Simulator"
-  }, /*#__PURE__*/React.createElement(SkipLink, null), /*#__PURE__*/React.createElement(Header, {
+  }, React.createElement(SkipLink, null), React.createElement(Header, {
     active: "simulator",
     onNavigate: (id, event) => siteNavigate('simulator', id, event),
     variant: "workbench"
-  }), /*#__PURE__*/React.createElement("main", {
+  }), React.createElement("main", {
     id: "main-content"
-  }, /*#__PURE__*/React.createElement(SimulatorPage, null)));
+  }, React.createElement(SimulatorPage, null)));
 };
 const rootEl = document.getElementById('root');
 const sitePage = rootEl && typeof rootEl.getAttribute === 'function' ? rootEl.getAttribute('data-page') : null;
 const root = ReactDOM.createRoot(rootEl);
-root.render(sitePage === 'simulator' ? /*#__PURE__*/React.createElement(SimulatorStandalone, null) : sitePage === 'cv' ? /*#__PURE__*/React.createElement(CVStandalone, null) : /*#__PURE__*/React.createElement(SiteHome, null));
+root.render(sitePage === 'simulator' ? React.createElement(SimulatorStandalone, null) : sitePage === 'cv' ? React.createElement(CVStandalone, null) : React.createElement(SiteHome, null));
 

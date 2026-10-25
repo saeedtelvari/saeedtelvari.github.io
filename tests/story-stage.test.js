@@ -312,10 +312,10 @@ const startPinned = () => {
   const section = { getBoundingClientRect: () => rect };
   const rail = { style: { opacity: '', visibility: '' }, querySelectorAll: () => fills };
   const skip = { style: { opacity: '', visibility: '' } };
-  page.refs.push({ clientWidth: 1200, clientHeight: 800 }, canvas, layer, rail);
+  page.refs.push({ clientWidth: 1200, clientHeight: 800 }, canvas, layer, rail, skip);
   // draws keeps a plain copy of each frame. frames keeps the frame objects, with their requestDraw function.
   for (const id of IDS) page.renderers[id] = { draw: (c, frame) => { draws.push({ id, frame: plain(frame) }); frames.push(frame); } };
-  const element = page.get('StoryPinned')({ sectionRef: { current: section }, skipRef: { current: skip }, onNavigate: null });
+  const element = page.get('StoryPinned')({ sectionRef: { current: section }, onNavigate: null });
   const cleanup = page.effects.shift()();
   const scrollTo = p => { rect.top = -p * (rect.height - 800); page.fire('window:scroll'); page.flush(); };
   return { page, draws, frames, ctx, canvas, layer, fills, rail, skip, element, cleanup, scrollTo, section, rect };
@@ -538,10 +538,11 @@ test('the listeners and observers are removed when the story unmounts', () => {
   assert.equal(draws.length, 1);
 });
 
-test('the skip control and the rail fade out when the stage starts to leave, and not while it is pinned', () => {
+test('the rail fades out and the skip link hides when the stage starts to leave, and nothing changes while it is pinned', () => {
   const { page, skip, rail, rect, cleanup, scrollTo } = startPinned();
   page.flush(0);
-  assert.deepEqual([skip.style.opacity, skip.style.visibility, rail.style.opacity, rail.style.visibility], ['', '', '', ''], 'untouched at the start');
+  const clear = element => [element.style.opacity, element.style.visibility];
+  assert.deepEqual([clear(skip), clear(rail)], [['', ''], ['', '']], 'untouched at the start');
   const writes = [];
   for (const element of [skip, rail]) {
     let opacity = element.style.opacity;
@@ -551,40 +552,58 @@ test('the skip control and the rail fade out when the stage starts to leave, and
       visibility: { get: () => visibility, set: value => { visibility = value; writes.push('visibility'); }, enumerable: true },
     });
   }
-  // The whole pinned range, from the first to the last pixel: the fade does not write anything.
+  // The whole pinned range, from the first to the last pixel: nothing is written.
   for (const p of [0.1, 0.3, 0.55, 0.8, 0.99, 1]) {
     scrollTo(p);
-    assert.deepEqual([skip.style.opacity, skip.style.visibility, rail.style.opacity, rail.style.visibility], ['', '', '', ''], `pinned at ${p}`);
+    assert.deepEqual([clear(skip), clear(rail)], [['', ''], ['', '']], `pinned at ${p}`);
   }
   assert.equal(writes.length, 0, 'no style write while the stage is pinned');
 
-  // The stage leaves: the bottom of the story rises above the bottom of the viewport (800 px).
+  // The stage leaves: the bottom of the story rises above the bottom of the viewport (800 px). The fade is 160 px long.
   const leave = pixels => { rect.top = -(rect.height - 800) - pixels; page.fire('window:scroll'); page.flush(); };
   leave(16);
-  assert.equal(skip.style.opacity, '0.9', 'a tenth of the fade: 16 of 160 px');
-  assert.equal(rail.style.opacity, '0.9', 'the rail fades with the skip control');
-  assert.equal(skip.style.visibility, '');
+  assert.deepEqual(clear(rail), ['0.9', ''], 'a tenth of the fade: 16 of 160 px');
+  assert.deepEqual(clear(skip), ['', ''], 'the skip link never fades: a half-clear link has too little contrast');
   leave(80);
-  assert.equal(skip.style.opacity, '0.5');
-  assert.equal(rail.style.opacity, '0.5');
+  assert.deepEqual(clear(rail), ['0.5', '']);
+  assert.deepEqual(clear(skip), ['', '']);
   leave(160);
-  assert.equal(skip.style.opacity, '0');
-  assert.equal(skip.style.visibility, 'hidden', 'hidden at the end, so the keyboard cannot reach the link');
-  assert.equal(rail.style.visibility, 'hidden');
+  assert.deepEqual(clear(rail), ['0', 'hidden'], 'the rail is gone at the end of the fade');
+  assert.deepEqual(clear(skip), ['', 'hidden'], 'the skip link is hidden, so the keyboard cannot reach it off screen');
   leave(2000);
-  assert.deepEqual([skip.style.opacity, skip.style.visibility], ['0', 'hidden'], 'and it stays hidden below the story');
+  assert.deepEqual([clear(skip), clear(rail)], [['', 'hidden'], ['0', 'hidden']], 'and both stay hidden below the story');
   writes.length = 0;
   leave(2400);
   assert.equal(writes.length, 0, 'no write when nothing changes');
 
   // The visitor scrolls back up: both come back.
   leave(80);
-  assert.deepEqual([skip.style.opacity, skip.style.visibility], ['0.5', '']);
+  assert.deepEqual([clear(skip), clear(rail)], [['', ''], ['0.5', '']]);
   scrollTo(1);
-  assert.deepEqual([skip.style.opacity, skip.style.visibility, rail.style.opacity, rail.style.visibility], ['', '', '', ''], 'back in the pinned range');
+  assert.deepEqual([clear(skip), clear(rail)], [['', ''], ['', '']], 'back in the pinned range');
   leave(100);
   cleanup();
-  assert.deepEqual([skip.style.opacity, skip.style.visibility, rail.style.opacity, rail.style.visibility], ['', '', '', ''], 'the unmount restores both');
+  assert.deepEqual([clear(skip), clear(rail)], [['', ''], ['', '']], 'the unmount restores both');
+});
+
+test('the skip link is in the pinned stage, so it rides up with the stage; the static frames keep it sticky', () => {
+  const page = fakePage();
+  const element = page.get('StoryPinned')({ sectionRef: { current: null }, onNavigate: null });
+  const wrap = nodes(element).find(node => node.props && node.props.className === 'story-skip-wrap story-skip-wrap--stage');
+  assert.ok(wrap, 'the wrap is inside the stage');
+  assert.equal(wrap.children[0].type, page.get('StorySkip'));
+  const stageChildren = element.children.filter(Boolean);
+  assert.equal(stageChildren[0], wrap, 'it is the first child of the stage, so the keyboard reaches it first');
+  const css = read('colors_and_type.css');
+  const rule = css.slice(css.indexOf('.story-skip-wrap--stage {'), css.indexOf('}', css.indexOf('.story-skip-wrap--stage {')));
+  assert.match(rule, /position: absolute/, 'in the stage it is not sticky');
+
+  const reduced = fakePage({ reduced: true });
+  reduced.refs.push({});
+  const section = reduced.get('StoryStage')({});
+  const staticWrap = nodes(section).find(node => node.props && node.props.className === 'story-skip-wrap');
+  assert.ok(staticWrap, 'the static frames have the sticky wrap');
+  assert.equal(staticWrap.children[0].type, reduced.get('StorySkip'));
 });
 
 test('the fade needs no reduced-motion rule: it has no transition, and the static layout never runs it', () => {
@@ -592,12 +611,13 @@ test('the fade needs no reduced-motion rule: it has no transition, and the stati
   for (const selector of ['.story-skip-wrap', '.story-rail']) {
     const open = css.indexOf(`${selector} {`);
     assert.ok(open >= 0, selector);
-    assert.doesNotMatch(css.slice(open, css.indexOf('}', open)), /transition|animation/, `${selector} has no timer`);
+    assert.doesNotMatch(css.slice(open, css.indexOf('}', open)), /transition|animation|opacity/, `${selector} has no timer`);
   }
   const source = read('StoryStage.jsx');
   const staticPart = source.slice(source.indexOf('const StoryFrame'), source.indexOf('const StoryStage'));
-  assert.doesNotMatch(staticPart, /storyExit|storyFadeOut/, 'the static frames of reduced motion do not fade anything');
-  assert.match(source, /reduced\s*\?\s*STORY_CHAPTERS\.map\(chapter => <StoryFrame/, 'reduced motion shows the static frames, not the pinned stage');
+  assert.doesNotMatch(staticPart, /storyExit|storyLeave/, 'the static frames of reduced motion do not fade anything');
+  assert.match(source, /reduced\s*\n?\s*\?\s*\(/, 'reduced motion shows the static frames, not the pinned stage');
+  assert.match(source, /: <StoryPinned sectionRef=\{sectionRef\} onNavigate=\{onNavigate\} \/>/);
 });
 
 const nodes = tree => {
@@ -642,8 +662,8 @@ test('the skip control is a real link to #research and a plain click uses the pa
     page.refs.push({});
     const calls = [];
     const onNavigate = withHelper ? (id, event) => calls.push([id, event]) : null;
-    const section = page.get('StoryStage')({ onNavigate });
-    const skip = nodes(section).find(node => node.type === 'a' && node.props.className === 'story-skip');
+    const skip = page.get('StorySkip')({ onNavigate });
+    assert.equal(skip.props.className, 'story-skip');
     assert.equal(skip.props.href, '#research');
     assert.equal(skip.children[0], 'Skip to research');
     let prevented = 0;

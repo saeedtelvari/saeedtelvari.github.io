@@ -941,12 +941,18 @@ a:focus:not(:focus-visible) {
   outline-offset: 3px !important;
 }
 
-/* The skip control has no height. It sticks under the site header while the story is on screen. */
+/* The skip control has no height. In the static frames (reduced motion) it sticks under the site header. */
 .story-skip-wrap {
   position: sticky;
   top: calc(var(--site-header-h) + 12px);
   z-index: 4;
   height: 0;
+}
+/* In the pinned story it is inside the stage: it stays while the stage is pinned and rides up with the stage when the stage leaves. */
+.story-skip-wrap--stage {
+  position: absolute;
+  right: 0;
+  left: 0;
 }
 .story-skip {
   position: absolute;

@@ -31,19 +31,21 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
     ];
     const simulatorFiles = ['ve2d-model.js', 'sim-block3d.js', 'GuidePage.jsx', 'SimCharts.jsx', 'SimViews.jsx', 'SimulatorPage.jsx'];
 
-    const compile = (sourceFiles) => {
+    // The site bundle drops the comments: the sources keep them, and the page loads about 17 KB less after gzip.
+    // The simulator bundle keeps its output as it was.
+    const compile = (sourceFiles, options = {}) => {
       let output = '"use strict";\n';
       output += '// Auto-generated bundle — Pre-compiled for instant execution\n';
       output += 'var { useState, useEffect, useMemo, useRef, useCallback } = React;\n\n';
       for (const file of sourceFiles) {
         let code = fs.readFileSync(file, 'utf8');
         code = code.replace(/const\s*\{\s*[^}]+\s*\}\s*=\s*React\s*;?/g, '// [destructured React]');
-        output += '// File: ' + file + '\n' + Babel.transform(code, { presets: ['react'] }).code + '\n\n';
+        output += '// File: ' + file + '\n' + Babel.transform(code, { presets: ['react'], ...options }).code + '\n\n';
       }
       return output;
     };
 
-    const combined = compile(files);
+    const combined = compile(files, { comments: false });
     const simulatorCombined = compile(simulatorFiles);
 
     fs.writeFileSync('bundle.js', combined, 'utf8');
