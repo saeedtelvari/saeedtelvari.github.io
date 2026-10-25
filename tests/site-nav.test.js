@@ -8,7 +8,7 @@ const helpers = new Function(src.slice(src.indexOf('// ---- navigation helpers')
 
 test('the active section is the one under the reading line', () => {
   const rects = [{ id: 'research', top: 900, bottom: 2000 }, { id: 'projects', top: 2100, bottom: 2900 }];
-  assert.equal(helpers.siteActiveSection(rects, 300), 'home', 'hero at the top lights nothing');
+  assert.equal(helpers.siteActiveSection(rects, 300), 'home', 'the story at the top lights nothing');
   assert.equal(helpers.siteActiveSection(rects, 950), 'research');
   assert.equal(helpers.siteActiveSection(rects, 2050), 'research', 'the gap between sheets keeps the previous section');
   assert.equal(helpers.siteActiveSection(rects, 2500), 'projects');

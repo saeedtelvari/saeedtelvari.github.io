@@ -18,28 +18,35 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
       'site-content.js',
       'Header.jsx',
       'Footer.jsx',
-      'hero-geology.js',
-      'SubsurfaceHero.jsx',
-      'GeologicalDescent.jsx',
+      've2d-model.js',
+      'story-geometry.js',
+      'StoryStage.jsx',
+      'StoryChapters.jsx',
+      'StoryEarth.jsx',
+      'StoryRock.jsx',
+      'StoryBlock.jsx',
       'HomeSections.jsx',
       'CVPage.jsx',
       'App.jsx'
     ];
     const simulatorFiles = ['ve2d-model.js', 'sim-block3d.js', 'GuidePage.jsx', 'SimCharts.jsx', 'SimViews.jsx', 'SimulatorPage.jsx'];
 
-    const compile = (sourceFiles) => {
+    // The site bundle drops the comments and the extra white space. The sources keep both.
+    // It is 176 KB instead of 282 KB, and 56 KB instead of 81 KB after gzip. A test that reads bundle.js must not depend on spacing.
+    // The simulator bundle keeps its output as it was.
+    const compile = (sourceFiles, options = {}) => {
       let output = '"use strict";\n';
       output += '// Auto-generated bundle — Pre-compiled for instant execution\n';
       output += 'var { useState, useEffect, useMemo, useRef, useCallback } = React;\n\n';
       for (const file of sourceFiles) {
         let code = fs.readFileSync(file, 'utf8');
         code = code.replace(/const\s*\{\s*[^}]+\s*\}\s*=\s*React\s*;?/g, '// [destructured React]');
-        output += '// File: ' + file + '\n' + Babel.transform(code, { presets: ['react'] }).code + '\n\n';
+        output += '// File: ' + file + '\n' + Babel.transform(code, { presets: ['react'], ...options }).code + '\n\n';
       }
       return output;
     };
 
-    const combined = compile(files);
+    const combined = compile(files, { comments: false, compact: true });
     const simulatorCombined = compile(simulatorFiles);
 
     fs.writeFileSync('bundle.js', combined, 'utf8');

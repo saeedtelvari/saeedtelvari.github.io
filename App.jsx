@@ -13,7 +13,7 @@ const SITE_NAV_ITEMS = [
 ];
 const SITE_SECTION_IDS = ['research', 'projects', 'publications', 'contact'];
 
-// The section whose top has passed the reading line (viewport coordinates); the hero is 'home'.
+// The section whose top has passed the reading line (viewport coordinates); the story at the top is 'home'.
 const siteActiveSection = (rects, line) => {
   let active = 'home';
   for (const rect of rects) if (rect.top <= line) active = rect.id;
@@ -71,7 +71,8 @@ const SiteHome = () => {
   const [active, setActive] = useState('home');
   const navigate = (id, event) => siteNavigate('home', id, event);
 
-  useEffect(() => dismissLoader(), []);
+  // A layout effect hides the loader before the first paint of the story, so the name is not late by one frame.
+  React.useLayoutEffect(() => dismissLoader(), []);
 
   // Old and new anchors: pages redirect, sections scroll into view after the first layout.
   useEffect(() => {
@@ -117,17 +118,15 @@ const SiteHome = () => {
     <React.Fragment>
       <SkipLink />
       <Header active={active} onNavigate={navigate} />
-      {/* The descent's rock starts below the hero and runs behind every section and the footer. */}
-      <GeologicalDescent>
-        <main id="main-content" tabIndex={-1}>
-          <SubsurfaceHero onNavigate={navigate} />
-          <ResearchSection />
-          <ProjectsSection />
-          <PublicationsSection />
-          <ContactSection />
-        </main>
-        <Footer onNavigate={navigate} geological />
-      </GeologicalDescent>
+      {/* The story is first on the page. The sections and the footer follow it on the same sky ground. */}
+      <StoryStage onNavigate={navigate} />
+      <main id="main-content" tabIndex={-1}>
+        <ResearchSection />
+        <ProjectsSection />
+        <PublicationsSection />
+        <ContactSection />
+      </main>
+      <Footer onNavigate={navigate} />
     </React.Fragment>
   );
 };

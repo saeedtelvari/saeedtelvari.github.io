@@ -10,6 +10,7 @@ const lacks = (file, pattern, message) => assert.doesNotMatch(read(file), patter
 has('App.jsx', /hashchange/, 'home navigation must react to same-document hash changes');
 has('App.jsx', /history\.(pushState|replaceState)/, 'navigation must keep browser history in sync');
 lacks('App.jsx', /minDuration\s*=\s*900/, 'the loader must not force a 900ms delay');
+has('App.jsx', /React\.useLayoutEffect\(\(\) => dismissLoader\(\), \[\]\)/, 'the homepage hides the loader before the first paint of the story');
 
 has('Header.jsx', /href=\{it\.href\}/, 'header navigation needs real link destinations');
 has('Header.jsx', /mobileOpen\s*&&/, 'the closed mobile drawer must not remain focusable');
@@ -21,11 +22,16 @@ for (const page of ['index.html', 'simulator.html']) {
   has(page, /application\/ld\+json/, `${page} needs structured data`);
 }
 
-has('SubsurfaceHero.jsx', /Open the CO₂ simulator/, 'hero needs a primary simulator CTA');
-has('SubsurfaceHero.jsx', /aria-label=\{label\}/, 'social links need distinct accessible names');
-has('SubsurfaceHero.jsx', /aria-label="Simulation year"/, 'hero timeline slider needs an accessible name');
-has('SubsurfaceHero.jsx', /new Worker\(['"]\.\/hero-simulation-worker\.js/, 'hero precomputation must run off the main thread');
-assert.ok(fs.existsSync(path.join(root, 'hero-simulation-worker.js')), 'hero worker must exist');
+// The social cards exist, are JPEG files of a sensible size, and the alt text does not describe the old hero.
+for (const page of ['index.html', 'cv.html']) {
+  const card = read(page).match(/property="og:image" content="https:\/\/saeedtelvari\.github\.io\/([^"]+)"/)[1];
+  const bytes = fs.readFileSync(path.join(root, card));
+  assert.ok(bytes.length < 200000 && bytes[0] === 0xff && bytes[1] === 0xd8, page + ' social card must be a JPEG under 200 KB');
+  has(page, /property="og:image:width" content="1200"/, page + ' card width');
+  has(page, /property="og:image:height" content="630"/, page + ' card height');
+  lacks(page, /faulted aquifer|above a live/, page + ' card alt text must not describe the old hero');
+}
+lacks('index.html', /social-card\.jpg/, 'the old social card is gone');
 
 lacks('CVPage.jsx', /Saeed-Telvari-CV\.pdf/, 'CV page must not request a missing PDF asset');
 has('CVPage.jsx', /window\.print\(\)/, 'CV page print action must invoke browser print');
@@ -62,7 +68,7 @@ has('build.js', /simulator-bundle\.js/, 'the heavy simulator must have a page-sp
 const simulatorBundleVersions = [...read('simulator.html').matchAll(/simulator-bundle\.js\?v=([^"']+)/g)].map(match => match[1]);
 assert.ok(simulatorBundleVersions.length >= 2, 'simulator bundle must be preloaded and executed');
 assert.equal(new Set(simulatorBundleVersions).size, 1, 'simulator preload and script URLs must use the same cache version');
-assert.equal(simulatorBundleVersions[0], '24', 'simulator page must load the current bundle version');
+assert.equal(simulatorBundleVersions[0], '25', 'simulator page must load the current bundle version');
 lacks('index.html', /simulator-bundle\.js/, 'home page must not download the simulator bundle');
 
 for (const page of ['index.html', 'cv.html']) {

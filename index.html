@@ -1,52 +1,51 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="site-c">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sa'eed Telvari — CO₂ storage and reservoir simulation</title>
   <meta name="description" content="Sa'eed Telvari is a PhD candidate at Heriot-Watt University who builds vertical-equilibrium models in MRST for CO₂ storage in depleted gas fields.">
   <link rel="canonical" href="https://saeedtelvari.github.io/">
-  <meta name="theme-color" content="#120e0b">
+  <meta name="theme-color" content="#c9d6dc">
   <meta property="og:type" content="profile">
   <meta property="og:title" content="Sa'eed Telvari — CO₂ storage and reservoir simulation">
   <meta property="og:description" content="Vertical-equilibrium models of CO₂ storage in depleted gas fields, a browser-based CO₂ storage simulator, publications and CV.">
   <meta property="og:url" content="https://saeedtelvari.github.io/">
-  <meta property="og:image" content="https://saeedtelvari.github.io/assets/social-card.jpg">
+  <meta property="og:image" content="https://saeedtelvari.github.io/assets/social-card-story.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Sa'eed Telvari above a live vertical-equilibrium section of CO₂ in a faulted aquifer">
+  <meta property="og:image:alt" content="The Earth seen from orbit with the North Sea marked, next to the name Sa’eed Telvari: the first frame of a scroll story about CO₂ storage under the North Sea">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Sa'eed Telvari — CO₂ storage and reservoir simulation">
   <meta name="twitter:description" content="Vertical-equilibrium models of CO₂ storage in depleted gas fields, a browser-based CO₂ storage simulator, publications and CV.">
-  <meta name="twitter:image" content="https://saeedtelvari.github.io/assets/social-card.jpg">
-  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Person","name":"Sa'eed Telvari","url":"https://saeedtelvari.github.io/","image":"https://saeedtelvari.github.io/assets/social-card.jpg","jobTitle":"PhD Candidate in Petroleum Engineering","affiliation":{"@type":"CollegeOrUniversity","name":"Heriot-Watt University"},"alumniOf":{"@type":"CollegeOrUniversity","name":"Amirkabir University of Technology"},"knowsAbout":["Vertical equilibrium models","CO2 storage","Depleted gas reservoirs","Reservoir simulation","MRST","Machine learning for permeability upscaling"],"email":"mailto:st4014@hw.ac.uk","sameAs":["https://orcid.org/0000-0002-4896-295X","https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ","https://github.com/saeedtelvari","https://www.linkedin.com/in/stelvari/"]}</script>
+  <meta name="twitter:image" content="https://saeedtelvari.github.io/assets/social-card-story.jpg">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Person","name":"Sa'eed Telvari","url":"https://saeedtelvari.github.io/","image":"https://saeedtelvari.github.io/assets/social-card-story.jpg","jobTitle":"PhD Candidate in Petroleum Engineering","affiliation":{"@type":"CollegeOrUniversity","name":"Heriot-Watt University"},"alumniOf":{"@type":"CollegeOrUniversity","name":"Amirkabir University of Technology"},"knowsAbout":["Vertical equilibrium models","CO2 storage","Depleted gas reservoirs","Reservoir simulation","MRST","Machine learning for permeability upscaling"],"email":"mailto:st4014@hw.ac.uk","sameAs":["https://orcid.org/0000-0002-4896-295X","https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ","https://github.com/saeedtelvari","https://www.linkedin.com/in/stelvari/"]}</script>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
-  <link rel="stylesheet" href="./colors_and_type.css?v=45">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+  <link rel="stylesheet" href="./colors_and_type.css?v=53">
   <link rel="icon" href="./favicon.ico" sizes="32x32">
   <link rel="icon" href="./assets/logo-minimalist.webp" type="image/webp">
   <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
   <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
   <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-  <script defer src="./bundle.js?v=46"></script>
+  <script defer src="./bundle.js?v=56"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
-    body { background: #120e0b; color: #f4ede3; overflow-x: hidden; }
+    body { background: #c9d6dc; color: #1f2a30; overflow-x: hidden; }
     ::-webkit-scrollbar { width: 10px; }
-    ::-webkit-scrollbar-track { background: #120e0b; }
-    ::-webkit-scrollbar-thumb { background: #4a3c30; border-radius: 6px; }
-    ::-webkit-scrollbar-thumb:hover { background: #5e4c3c; }
+    ::-webkit-scrollbar-track { background: #c9d6dc; }
+    ::-webkit-scrollbar-thumb { background: #7d6b5d; border-radius: 6px; }
+    ::-webkit-scrollbar-thumb:hover { background: #66564a; }
 
-    /* The night sky and ground the hero draws, shown until React renders it, then faded out. */
+    /* The sky of the story shows until React renders the page. Then it goes at once: a fade would hide the name for longer. */
     #app-loader {
       position: fixed;
       inset: 0;
       z-index: 99999;
-      background: linear-gradient(180deg, #070d1a 0, #111e32 calc(max(42vh, 480px) * 0.58), #253449 max(42vh, 480px), #1d1712 max(42vh, 480px), #17120e 100%);
-      transition: opacity 450ms cubic-bezier(0.23, 1, 0.32, 1);
+      background: #c9d6dc;
     }
     #app-loader.loader-finished { opacity: 0; pointer-events: none; }
     .shell-progress {
@@ -55,7 +54,7 @@
       top: 0;
       width: 28%;
       height: 2px;
-      background: #e8a15a;
+      background: #1f2a30;
       animation: shell-progress 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     }
     @keyframes shell-progress {
@@ -72,9 +71,9 @@
   <div id="root"></div>
   <noscript>
     <style>#app-loader { display: none; }</style>
-    <main style="max-width:720px;margin:0 auto;padding:48px 24px;font-family:'Open Sans',system-ui,sans-serif;line-height:1.7">
-      <h1 style="font-family:Montserrat,system-ui,sans-serif">Sa'eed Telvari</h1>
-      <p>PhD candidate, Heriot-Watt University. I build vertical-equilibrium models of CO₂ storage in depleted gas fields: reduced-order simulators that run up to 100× faster than full 3D compositional models.</p>
+    <main style="max-width:720px;margin:0 auto;padding:48px 24px;font-family:Literata,Georgia,serif;line-height:1.7">
+      <h1 style="font-family:Literata,Georgia,serif">Sa'eed Telvari</h1>
+      <p>PhD candidate, Heriot-Watt University. I build vertical-equilibrium models of CO₂ storage in depleted gas fields. They reproduce compositional simulations, with speed-ups of up to 100×.</p>
       <p>
         <a href="./simulator.html">CO₂ storage simulator</a> ·
         <a href="./cv.html">CV</a> ·

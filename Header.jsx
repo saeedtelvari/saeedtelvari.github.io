@@ -1,6 +1,7 @@
 // Header.jsx — fixed navigation shared by the homepage, the CV and the simulator.
-// The site variant is transparent over the hero sky and turns into an Earth surface once
-// the page scrolls; the workbench variant is the simulator's solid 56 px bar.
+// The site variant is clear over the pinned story (ink text on the sky). It is a solid bar in the
+// ground colour with an ink hairline after the story, and on the CV page.
+// The workbench variant is the simulator's solid 56 px bar. Do not change how it looks.
 
 const { useEffect, useState, useRef } = React;
 
@@ -28,27 +29,39 @@ const HEADER_PROFILES = [
 ];
 
 const Header = ({ active, onNavigate, variant = 'site' }) => {
-  const [scrolled, setScrolled] = useState(false);
+  const [overStory, setOverStory] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const menuButtonRef = useRef(null);
   const closeButtonRef = useRef(null);
   const mobileDrawerRef = useRef(null);
 
-  // Over the hero the site header is transparent; it gains a surface once the page moves.
+  // The pinned stage fills the screen while the story is on. The bar is clear then.
+  // The bar turns solid when the stage starts to leave, so the art does not slide under the nav text.
+  // Without a stage (the CV, or the static frames for reduced motion) the bar is always solid.
   useEffect(() => {
     if (variant !== 'site') return undefined;
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    const onScroll = () => {
+      const story = document.getElementById('story');
+      const stage = story && story.querySelector('.story-stage');
+      setOverStory(!!stage && story.getBoundingClientRect().bottom > stage.offsetHeight - 1);
+    };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
   }, [variant]);
 
   // The open drawer is modal: the page behind is inert, Tab cycles inside, Escape closes.
   useEffect(() => {
     if (!mobileOpen) return undefined;
     const mainContent = document.getElementById('main-content');
+    const story = document.getElementById('story');
     const drawer = mobileDrawerRef.current;
     setHeaderBackgroundInert(mainContent, true);
+    setHeaderBackgroundInert(story, true);
     if (closeButtonRef.current) closeButtonRef.current.focus();
     const onModalKeyDown = event => {
       if (event.key === 'Escape') {
@@ -68,6 +81,7 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
     return () => {
       document.removeEventListener('keydown', onModalKeyDown);
       setHeaderBackgroundInert(mainContent, false);
+      setHeaderBackgroundInert(story, false);
       if (menuButtonRef.current) menuButtonRef.current.focus();
     };
   }, [mobileOpen]);
@@ -77,7 +91,7 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
     if (onNavigate) onNavigate(id, event);
   };
 
-  const classes = ['app-header', `app-header--${variant}`, scrolled ? 'is-scrolled' : ''].filter(Boolean).join(' ');
+  const classes = ['app-header', `app-header--${variant}`, overStory ? 'is-over-story' : ''].filter(Boolean).join(' ');
   const navLink = it => (
     <a className="app-nav__link" href={it.href} aria-current={active === it.id ? 'page' : undefined}
       onClick={event => handleItemClick(it.id, event)}>{it.label}</a>

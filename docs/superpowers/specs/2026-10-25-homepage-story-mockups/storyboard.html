@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Story storyboard</title>
+<!-- Storyboard for the 2026-10-25 story homepage spec: one key frame per chapter, in art direction C.
+     Frames 3 to 5 share one reservoir geometry (dome, fault, gas cap, CO2 plume). All values are illustrative. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<style>
+  :root { --page: #dfe2df; --page-ink: #1d2124; --page-muted: #555c61; --page-rule: #c3c8c5;
+    --sky: #c9d6dc; --ink: #1f2a30; --muted: #4a5a62; --cream: #f3efe4; --co2: #3b6cf0; --ch4: #c8463d; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--page); color: var(--page-ink); font: 16px/1.6 'Archivo', system-ui, sans-serif; }
+  main { max-width: 1120px; margin: 0 auto; padding: 40px 16px 80px; }
+  .intro { max-width: 70ch; }
+  .intro h1 { font: 600 30px/1.2 'Archivo'; margin: 0 0 10px; }
+  .intro p { margin: 0 0 10px; color: var(--page-muted); }
+  .chapter { margin-top: 52px; }
+  .chapter > header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-bottom: 12px; }
+  .chapter h2 { font: 600 22px/1.25 'Archivo'; margin: 0; }
+  .chapter .scroll { color: var(--page-muted); font-size: 14px; }
+  .frame { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 6px; background: var(--sky); color: var(--ink); container-type: inline-size; }
+  .frame svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .frame .ov { position: absolute; pointer-events: none; font-family: 'Literata', Georgia, serif; }
+  .ov p { margin: 0; }
+  .name { font: 600 4.6cqw/1.06 'Literata'; letter-spacing: -.01em; }
+  .line { font: 400 1.85cqw/1.5 'Literata'; margin-top: .7em !important; }
+  .ppm { font: italic 400 1.6cqw/1.4 'Literata'; color: #1d3f9e; margin-top: .9em !important; }
+  .cap { font: 400 1.7cqw/1.5 'Literata'; }
+  .cap.on-dark { color: var(--cream); }
+  .big { font: 600 3.6cqw/1.1 'Literata'; }
+  .small { font: italic 400 1.45cqw/1.4 'Literata'; color: var(--muted); }
+  .ui { pointer-events: auto; }
+  .btn { display: inline-flex; align-items: center; min-height: 3.4cqw; padding: 0 1.6cqw; border-radius: 99px; font: 600 1.5cqw 'Literata'; border: 1.5px solid var(--ink); color: var(--ink); background: transparent; text-decoration: none; }
+  .btn.primary { background: var(--ink); color: var(--cream); }
+  .bar { display: flex; align-items: center; gap: 1.4cqw; font: 400 1.5cqw 'Literata'; }
+  .play { width: 3.6cqw; height: 3.6cqw; border-radius: 50%; background: var(--ink); display: grid; place-items: center; }
+  .play::after { content: ''; border-left: 1.1cqw solid var(--cream); border-top: .7cqw solid transparent; border-bottom: .7cqw solid transparent; margin-left: .3cqw; }
+  .track { width: 22cqw; height: .5cqw; border-radius: 99px; background: rgba(31,42,48,.2); position: relative; }
+  .track i { position: absolute; inset: 0 52% 0 0; border-radius: inherit; background: var(--ink); }
+  .track b { position: absolute; left: 48%; top: 50%; width: 1.5cqw; height: 1.5cqw; margin: -.75cqw 0 0 -.75cqw; border-radius: 50%; background: var(--cream); border: 2px solid var(--ink); }
+  .chip { display: inline-flex; align-items: center; gap: .5cqw; }
+  .chip::before { content: ''; width: 1.2cqw; height: 1.2cqw; border-radius: 3px; background: var(--c); }
+  .switch { display: inline-flex; align-items: center; gap: .7cqw; }
+  .switch::before { content: ''; width: 3.2cqw; height: 1.8cqw; border-radius: 99px; border: 1.5px solid var(--ink);
+    background: radial-gradient(circle at 28% 50%, var(--ink) 0 .55cqw, transparent .6cqw); }
+  .notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 24px; margin: 14px 0 0; padding: 0; list-style: none; font-size: 14.5px; color: var(--page-muted); }
+  .notes b { display: block; color: var(--page-ink); font-weight: 600; }
+  @media (max-width: 760px) { .notes { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="intro">
+    <h1>Story homepage: storyboard</h1>
+    <p>One key frame for each of the six chapters, in art direction C (textbook cutaway). The scroll moves the visitor from one frame to the next.</p>
+    <p>Frames 2 to 5 show one depleted gas field: a sandstone dome with a methane gas cap at the crest, a fault on one flank, and a CO₂ plume from a well on the other flank. The shapes and the numbers are illustrative.</p>
+  </div>
+
+  <section class="chapter" id="f0">
+    <header><h2>0. Orbit</h2><span class="scroll">Scroll 0 to 10%</span></header>
+    <div class="frame"><svg viewBox="0 0 800 450" aria-hidden="true"></svg>
+      <div class="ov" style="left:5.5%; top:12%; width:37%">
+        <p class="name">Sa'eed Telvari</p>
+        <p class="line">There is more than 420 ppm of CO₂ in the air. I model how rock under the North Sea can hold it for thousands of years.</p>
+        <p class="ppm">280 ppm in 1850. More than 420 ppm today.</p>
+      </div>
+    </div>
+    <ul class="notes">
+      <li><b>On load</b>The page opens on this frame. The ppm number counts up once, from 280 to today's value.</li>
+      <li><b>On scroll</b>The globe turns and grows until the North Sea fills the screen.</li>
+      <li><b>Phone</b>The text goes above the globe. The globe fills the bottom half.</li>
+    </ul>
+  </section>
+
+  <section class="chapter" id="f1">
+    <header><h2>1. Descent</h2><span class="scroll">Scroll 10 to 26%</span></header>
+    <div class="frame"><svg viewBox="0 0 800 450" aria-hidden="true"></svg>
+      <div class="ov cap" style="left:5.5%; top:10%; width:34%">
+        <p>Carbon capture and storage puts CO₂ back into rock, deep under the sea floor.</p>
+      </div>
+    </div>
+    <ul class="notes">
+      <li><b>Into this frame</b>The coastline map shrinks into the inset at the top right. The camera comes down through the clouds to the platform.</li>
+      <li><b>In the frame</b>CO₂ moves in the pipeline and down the well as blue dashes.</li>
+      <li><b>Out of this frame</b>The camera drops below the waterline and follows the well into the rock.</li>
+    </ul>
+  </section>
+
+  <section class="chapter" id="f2">
+    <header><h2>2. Into the rock</h2><span class="scroll">Scroll 26 to 44%</span></header>
+    <div class="frame"><svg viewBox="0 0 800 450" aria-hidden="true"></svg>
+      <div class="ov cap" style="left:5.5%; bottom:6%; width:22%">
+        <p>The sandstone is a dome that held natural gas for millions of years. Most of the gas is produced, so the dome can now store CO₂.</p>
+      </div>
+    </div>
+    <ul class="notes">
+      <li><b>Into this frame</b>The camera follows the well down. The first caption shows on the way: "The well goes about 2 km down, through clay, chalk and a shale caprock."</li>
+      <li><b>In the frame</b>The camera stops on the whole cutaway. CO₂ leaves the well on the flank, away from the gas cap.</li>
+      <li><b>Phone</b>The block is narrower and the labels move below it in a short key.</li>
+    </ul>
+  </section>
+
+  <section class="chapter" id="f3">
+    <header><h2>3. Rock to grid</h2><span class="scroll">Scroll 44 to 60%</span></header>
+    <div class="frame"><svg viewBox="0 0 800 450" aria-hidden="true"></svg>
+      <div class="ov" style="left:5.5%; top:9%; width:30%">
+        <p class="big">18 h 40 min</p>
+        <p class="small">3D run time so far, for a typical field model</p>
+      </div>
+      <div class="ov cap" style="left:5.5%; bottom:6%; width:27%">
+        <p>A 3D model splits the reservoir into cells that follow the layers and the fault. Field models have millions of cells, and one run can take days.</p>
+      </div>
+    </div>
+    <ul class="notes">
+      <li><b>Into this frame</b>The overburden fades. Grid lines draw onto the sandstone: pillars first, then layers.</li>
+      <li><b>In the frame</b>The plume grows near the well, and the gas cap moves a little. The clock counts up.</li>
+      <li><b>Second caption</b>"Faults cut the reservoir and can leak. In the MuPSI project, which studies fault integrity, I apply these models to depleted gas fields."</li>
+    </ul>
+  </section>
+
+  <section class="chapter" id="f4">
+    <header><h2>4. 3D to VE</h2><span class="scroll">Scroll 60 to 80%</span></header>
+    <div class="frame"><svg viewBox="0 0 800 450" aria-hidden="true"></svg>
+      <div class="ov" style="left:5.5%; top:9%; width:30%">
+        <p class="big">144 columns</p>
+        <p class="small">to solve, not 720 cells</p>
+      </div>
+      <div class="ov cap" style="left:5.5%; bottom:6%; width:27%">
+        <p>The rock stays 3D, but the vertical cells go. VE solves one value per column, the plume thickness h, so it runs up to 100× faster.</p>
+      </div>
+    </div>
+    <ul class="notes">
+      <li><b>Into this frame</b>The same block as frame 3. The horizontal cell lines fade out. The block keeps its height.</li>
+      <li><b>In the frame</b>Each column is one cell. Gas fills it down to h: red for methane, blue for CO₂. The top shows h as stepped bands.</li>
+      <li><b>First caption</b>"Gas is lighter than brine. Both the CO₂ and the methane rise to the top of each column."</li>
+    </ul>
+  </section>
+
+  <section class="chapter" id="f5">
+    <header><h2>5. Live VE</h2><span class="scroll">Scroll 80 to 100%</span></header>
+    <div class="frame"><svg viewBox="0 0 800 450" aria-hidden="true"></svg>
+      <div class="ov ui" style="left:5.5%; top:9%; width:32%">
+        <p class="big" style="font-size:3cqw">This VE model runs in your browser.</p>
+        <p style="display:flex; flex-wrap:wrap; gap:1cqw; margin-top:1.6cqw"><a class="btn primary" href="#">Open the simulator</a><a class="btn" href="#">Read my research</a></p>
+      </div>
+      <div class="ov ui bar" style="left:5.5%; bottom:6%; right:5.5%">
+        <span class="play" aria-label="Play"></span>
+        <span>Year 24</span>
+        <span class="track"><i></i><b></b></span>
+        <span class="chip" style="--c: var(--ch4)">Methane</span>
+        <span class="chip" style="--c: var(--co2)">CO₂</span>
+        <span style="margin-left:auto" class="switch">Show 3D cells</span>
+      </div>
+    </div>
+    <ul class="notes">
+      <li><b>Into this frame</b>The scroll stops. The block from frame 4 starts to run, with no jump.</li>
+      <li><b>In the frame</b>The visitor plays, pauses and scrubs the years. "Show 3D cells" rebuilds the cells in each column from h.</li>
+      <li><b>Below</b>The research, publications, CV and contact sections follow this frame.</li>
+    </ul>
+  </section>
+</main>
+
+<script>
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (name, attrs = {}, parent) => {
+    const node = document.createElementNS(NS, name);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    if (parent) parent.appendChild(node);
+    return node;
+  };
+  const mix = (a, b, t) => {
+    const pa = a.match(/\w\w/g).map(h => parseInt(h, 16)), pb = b.match(/\w\w/g).map(h => parseInt(h, 16));
+    return '#' + pa.map((v, i) => Math.round(v + (pb[i] - v) * t).toString(16).padStart(2, '0')).join('');
+  };
+  const shade = (c, t) => mix(c, '#000000', t);
+  const pts = list => list.map(p => p.map(v => v.toFixed(1)).join(',')).join(' ');
+  let seed = 3;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  const C = {
+    sky: '#c9d6dc', seaTop: '#3d6c7b', sea: '#2f5866', water: '#264b58', land: '#c9b26b',
+    young: '#d9cfae', mud: '#a39a8b', chalk: '#ece6d6', cap: '#74695c', sand: '#d8a657', base: '#7d6b5d',
+    co2: '#3b6cf0', ch4: '#c8463d', ink: '#1f2a30', grid: '#fff4df', cream: '#f3efe4', muted: '#4a5a62'
+  };
+  const FONT = "italic 12.5px 'Literata'";
+  const text = (svg, x, y, str, o = {}) => {
+    const t = el('text', { x, y, fill: o.fill || C.ink, style: `font: ${o.font || FONT}`, 'text-anchor': o.anchor || 'start', ...(o.attrs || {}) }, svg);
+    t.textContent = str;
+    return t;
+  };
+  const frames = [...document.querySelectorAll('.frame svg')];
+
+  // The story chrome: a skip control and a six-part progress rail.
+  const chrome = (svg, chapter, skip = true) => {
+    for (let n = 0; n < 6; n++) {
+      el('rect', { x: 8 + n * 131, y: 444, width: 127, height: 3, rx: 1.5, fill: n <= chapter ? C.ink : 'rgba(31,42,48,.18)' }, svg);
+    }
+    if (!skip) return;
+    el('rect', { x: 662, y: 16, width: 118, height: 28, rx: 14, fill: C.cream, stroke: C.ink, 'stroke-width': 1.2 }, svg);
+    text(svg, 721, 34.5, 'Skip to research', { anchor: 'middle', font: "600 12px 'Literata'" });
+  };
+
+  // An offshore platform, standing on (x, y), at a given scale.
+  const platform = (svg, x, y, s = 1, legDepth = 0) => {
+    const g = el('g', { transform: `translate(${x},${y}) scale(${s})` }, svg);
+    const ink = { stroke: C.ink, 'stroke-width': 2.2 / Math.max(s, 1) * 1.4, fill: 'none', 'stroke-linecap': 'round' };
+    el('path', { d: `M-17,${legDepth} L-12,-26 M17,${legDepth} L12,-26 M-6,${legDepth} L-4,-26 M6,${legDepth} L4,-26`, ...ink }, g);
+    for (let k = 0; k < 3; k++) {
+      const y0 = -26 + k * ((legDepth + 26) / 3), y1 = y0 + (legDepth + 26) / 3;
+      el('path', { d: `M-15,${y1} L14,${y0} M15,${y1} L-14,${y0}`, ...ink, 'stroke-width': 1 }, g);
+    }
+    el('rect', { x: -26, y: -33, width: 52, height: 7, fill: C.ink }, g);
+    el('rect', { x: -22, y: -47, width: 19, height: 14, fill: C.cream, stroke: C.ink, 'stroke-width': 1 }, g);
+    el('rect', { x: -1, y: -42, width: 15, height: 9, fill: C.cream, stroke: C.ink, 'stroke-width': 1 }, g);
+    el('path', { d: 'M15,-33 L20,-64 L25,-33 M16.5,-43 L23.5,-43 M18,-53 L22,-53', ...ink, 'stroke-width': 1.2 }, g);
+    el('path', { d: 'M-12,-47 L-12,-58 L-34,-50', ...ink, 'stroke-width': 1.4 }, g);
+    el('path', { d: 'M26,-36 L38,-36 L38,-31 L26,-31 Z', fill: C.cream, stroke: C.ink, 'stroke-width': 1 }, g);
+    return g;
+  };
+
+  // ---------- Frame 0: orbit (the style C globe from the style board) ----------
+  const GX = 640, GY = 470, R = 330, TARGET = [2.5, 57.5];
+  const drawOrbit = land => {
+    const svg = frames[0]; svg.textContent = '';
+    const proj = d3.geoOrthographic().rotate([-2, -30]).scale(R).translate([GX, GY]).clipAngle(90), path = d3.geoPath(proj);
+    el('rect', { width: 800, height: 450, fill: C.sky }, svg);
+    el('circle', { cx: GX, cy: GY, r: R + 34, fill: '#dbe6ea' }, svg);
+    el('circle', { cx: GX, cy: GY, r: R + 16, fill: '#e7eff2' }, svg);
+    seed = 3;
+    for (let n = 0; n < 26; n++) {
+      const ang = Math.PI * (1.06 + rand() * 0.88), rr = R + 6 + rand() * 24;
+      const x = GX + Math.cos(ang) * rr, y = GY + Math.sin(ang) * rr;
+      const rot = rand() * 180;
+      if (y > 440) continue;
+      const grp = el('g', { transform: `translate(${x.toFixed(1)},${y.toFixed(1)}) rotate(${rot.toFixed(0)})` }, svg);
+      el('circle', { cx: -4.6, cy: 0, r: 2.6, fill: '#b9442f' }, grp);
+      el('circle', { cx: 4.6, cy: 0, r: 2.6, fill: '#b9442f' }, grp);
+      el('circle', { cx: 0, cy: 0, r: 2.9, fill: C.ink }, grp);
+    }
+    el('path', { d: path({ type: 'Sphere' }), fill: C.sea }, svg);
+    if (land) el('path', { d: path(land), fill: C.land }, svg);
+    const defs = el('defs', {}, svg);
+    const clip = el('clipPath', { id: 'f0-globe' }, defs);
+    el('circle', { cx: GX, cy: GY, r: R }, clip);
+    el('path', { d: `M0,0H800V450H0Z M${GX - R * 0.35 + R},${GY}a${R},${R} 0 1,0 ${-2 * R},0a${R},${R} 0 1,0 ${2 * R},0Z`, fill: '#14303a', opacity: 0.45, 'fill-rule': 'evenodd', 'clip-path': 'url(#f0-globe)' }, svg);
+    const [tx, ty] = proj(TARGET);
+    el('circle', { cx: tx, cy: ty, r: 7, fill: C.co2, stroke: '#ffffff', 'stroke-width': 2 }, svg);
+    text(svg, tx + 14, ty - 10, 'North Sea', { fill: '#ffffff', font: "italic 14px 'Literata'" });
+    chrome(svg, 0);
+  };
+
+  // ---------- Frame 1: descent to the platform ----------
+  const drawDescent = land => {
+    const svg = frames[1]; svg.textContent = '';
+    el('rect', { width: 800, height: 450, fill: C.sky }, svg);
+    el('circle', { cx: 410, cy: 118, r: 24, fill: '#f1ead6' }, svg);
+    const cloud = (x, y, w) => el('path', { d: `M${x},${y} h${w} a9,9 0 0 0 -9,-9 a14,14 0 0 0 -26,-6 a12,12 0 0 0 -20,4 a9,9 0 0 0 -${w - 55},11 z`, fill: '#e9eff1' }, svg);
+    cloud(120, 196, 120); cloud(330, 168, 96); cloud(470, 206, 140);
+    // The sea surface, from the horizon to the cut edge.
+    el('rect', { x: 0, y: 232, width: 800, height: 78, fill: C.seaTop }, svg);
+    seed = 9;
+    for (let n = 0; n < 34; n++) {
+      const y = 238 + rand() * 66, x = rand() * 800, w = 8 + (y - 232) * 0.35;
+      el('line', { x1: x, y1: y, x2: x + w, y2: y, stroke: '#5d8a98', 'stroke-width': 1.2, 'stroke-linecap': 'round' }, svg);
+    }
+    // The cut: water column, then the sea floor.
+    el('rect', { x: 0, y: 310, width: 800, height: 140, fill: C.water }, svg);
+    el('path', { d: 'M0,396 C120,390 240,400 400,394 S660,388 800,396 V450 H0 Z', fill: C.young }, svg);
+    el('path', { d: 'M0,424 C160,420 300,428 460,422 S700,418 800,424 V450 H0 Z', fill: shade(C.young, 0.12) }, svg);
+    el('line', { x1: 0, y1: 310, x2: 800, y2: 310, stroke: '#7fa4b1', 'stroke-width': 1.5 }, svg);
+    // Pipeline from shore along the sea floor, then up the jacket.
+    el('path', { d: 'M0,399 C150,393 300,402 470,396 L520,396', fill: 'none', stroke: C.ink, 'stroke-width': 5, 'stroke-linecap': 'round' }, svg);
+    el('path', { d: 'M0,399 C150,393 300,402 470,396 L520,396', fill: 'none', stroke: C.co2, 'stroke-width': 2, 'stroke-dasharray': '7 7' }, svg);
+    // The well goes on down below the sea floor.
+    el('line', { x1: 548, y1: 290, x2: 548, y2: 450, stroke: C.ink, 'stroke-width': 4 }, svg);
+    el('line', { x1: 548, y1: 290, x2: 548, y2: 450, stroke: C.co2, 'stroke-width': 1.6, 'stroke-dasharray': '6 6' }, svg);
+    el('path', { d: 'M520,396 L538,396 L538,300', fill: 'none', stroke: C.ink, 'stroke-width': 4 }, svg);
+    platform(svg, 548, 300, 2.3, 42);
+    text(svg, 30, 386, 'CO₂ pipeline from shore', { fill: C.cream });
+    text(svg, 560, 440, 'Injection well', { fill: C.ink });
+    // Inset: where this is.
+    const ix = 600, iy = 62, iw = 176, ih = 128;
+    el('rect', { x: ix, y: iy, width: iw, height: ih, rx: 6, fill: C.sea, stroke: C.ink, 'stroke-width': 1.2 }, svg);
+    if (land) {
+      const defs = el('defs', {}, svg);
+      const clip = el('clipPath', { id: 'f1-inset' }, defs);
+      el('rect', { x: ix, y: iy, width: iw, height: ih, rx: 6 }, clip);
+      const proj = d3.geoMercator().fitExtent([[ix, iy], [ix + iw, iy + ih]], { type: 'MultiPoint', coordinates: [[-5, 50.5], [12, 61.5]] });
+      el('path', { d: d3.geoPath(proj)(land), fill: C.land, 'clip-path': 'url(#f1-inset)' }, svg);
+      const [tx, ty] = proj(TARGET);
+      el('circle', { cx: tx, cy: ty, r: 5, fill: C.co2, stroke: '#ffffff', 'stroke-width': 1.6 }, svg);
+      text(svg, tx + 9, ty + 4, 'North Sea', { fill: '#ffffff', font: "italic 11.5px 'Literata'" });
+    }
+    chrome(svg, 1);
+  };
+
+  // ---------- Frame 2: the geological cutaway ----------
+  const drawCutaway = () => {
+    const svg = frames[2]; svg.textContent = '';
+    el('rect', { width: 800, height: 450, fill: C.sky }, svg);
+    const LX = 10, LY = 2, VZ = 100;
+    const P = (x, y, d) => [300 + x * 46 - y * 28, 66 + x * 3 + y * 13 + d * VZ];
+    // A wide dome on a regional dip to the right, so the flank under the well keeps dipping.
+    // The dome side of the fault is down.
+    const dome = (x, y) => Math.exp(-(((x - 5.0) / 3.2) ** 2) - (((y - 2) / 1.6) ** 2));
+    const dip = (x, s) => s * (x - 5.0);
+    const faultX = d => 2.1 + 0.35 * (d - 1.75);
+    const faulted = d0 => (x, y) => { const d = d0(x, y); return d + (x > faultX(d) ? 0.12 : 0); };
+    const H = [
+      () => 0, () => 0.1,
+      (x, y) => 0.8 - 0.04 * dome(x, y),
+      (x, y) => 1.4 - 0.2 * dome(x, y) + dip(x, 0.015),
+      faulted((x, y) => 1.8 - 0.4 * dome(x, y) + dip(x, 0.04)),
+      faulted((x, y) => 2.0 - 0.45 * dome(x, y) + dip(x, 0.05)),
+      faulted((x, y) => 2.32 - 0.45 * dome(x, y) + dip(x, 0.05)),
+      () => 2.8
+    ];
+    const FILL = [C.sea, C.young, C.mud, C.chalk, C.cap, C.sand, C.base];
+    const xs = d3.range(0, LX + 1e-9, 0.04), ys = d3.range(0, LY + 1e-9, 0.04);
+    const bandFront = (a, b) => [...xs.map(x => P(x, LY, a(x, LY))), ...xs.slice().reverse().map(x => P(x, LY, b(x, LY)))];
+    const bandRight = (a, b) => [...ys.map(y => P(LX, y, a(LX, y))), ...ys.slice().reverse().map(y => P(LX, y, b(LX, y)))];
+    for (let n = 0; n < FILL.length; n++) {
+      el('polygon', { points: pts(bandFront(H[n], H[n + 1])), fill: FILL[n] }, svg);
+      el('polygon', { points: pts(bandRight(H[n], H[n + 1])), fill: shade(FILL[n], 0.2) }, svg);
+    }
+    // Sea surface.
+    el('polygon', { points: pts([P(0, 0, 0), P(LX, 0, 0), P(LX, LY, 0), P(0, LY, 0)]), fill: C.seaTop }, svg);
+    seed = 5;
+    for (let n = 0; n < 16; n++) {
+      const x = 0.3 + rand() * 9.2, y = 0.2 + rand() * 1.6, [px, py] = P(x, y, 0);
+      el('line', { x1: px, y1: py, x2: px + 14, y2: py + 1.8, stroke: '#5d8a98', 'stroke-width': 1.2, 'stroke-linecap': 'round' }, svg);
+    }
+    // Thin shales inside the sandstone.
+    for (const f of [0.4, 0.72]) {
+      const line = xs.map(x => P(x, LY, H[5](x, LY) + f * (H[6](x, LY) - H[5](x, LY))));
+      el('polyline', { points: pts(line), fill: 'none', stroke: shade(C.sand, 0.3), 'stroke-width': 1.4, 'stroke-dasharray': '22 7' }, svg);
+    }
+    // Gas cap: sandstone above a flat gas-water contact.
+    const gwc = 1.77;
+    const capXs = xs.filter(x => x > faultX(2) && H[5](x, LY) < gwc);
+    el('polygon', { points: pts([...capXs.map(x => P(x, LY, H[5](x, LY))), ...capXs.slice().reverse().map(x => P(x, LY, Math.min(gwc, H[6](x, LY))))]), fill: C.ch4 }, svg);
+    // CO2 plume: thickest at the well, with a long tongue up-dip and a short one down-dip.
+    const xw = 8.4, plumeT = x => 0.15 * Math.max(0, 1 - ((x - xw) / (x < xw ? 1.3 : 0.5)) ** 2);
+    const plXs = xs.filter(x => plumeT(x) > 0);
+    el('polygon', { points: pts([...plXs.map(x => P(x, LY, H[5](x, LY))), ...plXs.slice().reverse().map(x => P(x, LY, H[5](x, LY) + plumeT(x)))]), fill: C.co2 }, svg);
+    // Fault.
+    el('polyline', { points: pts(d3.range(1.72, 2.8001, 0.02).map(d => P(faultX(d), LY, d))), fill: 'none', stroke: C.ink, 'stroke-width': 1.8 }, svg);
+    // Block outline.
+    el('polygon', { points: pts([P(0, LY, 0), P(LX, LY, 0), P(LX, LY, 2.8), P(0, LY, 2.8)]), fill: 'none', stroke: C.ink, 'stroke-width': 1.2 }, svg);
+    el('polyline', { points: pts([P(LX, LY, 0), P(LX, 0, 0), P(LX, 0, 2.8), P(LX, LY, 2.8)]), fill: 'none', stroke: C.ink, 'stroke-width': 1.2 }, svg);
+    el('polyline', { points: pts([P(0, LY, 0), P(0, 0, 0), P(LX, 0, 0)]), fill: 'none', stroke: C.ink, 'stroke-width': 1.2 }, svg);
+    // Well, with CO2 in the tubing and perforations in the sandstone.
+    const top = H[5](xw, LY), [wx, wy0] = P(xw, LY, 0), [, wy1] = P(xw, LY, top + 0.17);
+    el('line', { x1: wx, y1: wy0, x2: wx, y2: wy1, stroke: C.ink, 'stroke-width': 3.2 }, svg);
+    el('line', { x1: wx, y1: wy0, x2: wx, y2: wy1 - 6, stroke: '#8fb0ff', 'stroke-width': 1.4, 'stroke-dasharray': '6 6' }, svg);
+    for (let d = top + 0.04; d < top + 0.16; d += 0.04) { const [, py] = P(xw, LY, d); el('line', { x1: wx - 6, y1: py, x2: wx + 6, y2: py, stroke: C.ink, 'stroke-width': 1.4 }, svg); }
+    platform(svg, wx, wy0, 1, 0);
+    // Depth axis.
+    const [ax, ay0] = P(0, LY, 0), [, ay1] = P(0, LY, 2.8);
+    el('line', { x1: ax - 8, y1: ay0, x2: ax - 8, y2: ay1, stroke: C.ink, 'stroke-width': 1 }, svg);
+    [0, 1, 2].forEach(d => { const [, ty] = P(0, LY, d); el('line', { x1: ax - 13, y1: ty, x2: ax - 8, y2: ty, stroke: C.ink, 'stroke-width': 1 }, svg); text(svg, ax - 17, ty + 4, d ? `${d} km` : '0', { anchor: 'end', font: "12px 'Literata'" }); });
+    const [, sy] = P(0, LY, 0.5);
+    text(svg, 0, 0, 'Vertical scale × 5', { anchor: 'middle', fill: C.muted, attrs: { transform: `translate(${ax - 52},${sy}) rotate(-90)` } });
+    // Layer names.
+    const label = (x, d, str, fill = C.ink) => { const [px, py] = P(x, LY, d); return text(svg, px + 6, py + 4, str, { fill }); };
+    label(0.5, 0.45, 'Sands and clays');
+    label(0.5, 1.1, 'Mudstone');
+    label(0.15, 1.62, 'Chalk');
+    label(0.15, 1.9, 'Shale caprock', C.cream);
+    label(0.15, 2.17, 'Sandstone');
+    label(9.0, 2.3, 'Brine');
+    label(0.15, 2.62, 'Older rock', C.cream);
+    // Call-outs.
+    const callout = (x0, d0, x1, d1, str) => {
+      const [a, b] = [P(x0, LY, d0), P(x1, LY, d1)];
+      el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1] - 11, stroke: C.cream, 'stroke-width': 1 }, svg);
+      el('circle', { cx: a[0], cy: a[1], r: 2.4, fill: C.cream }, svg);
+      text(svg, b[0], b[1] + 2, str, { fill: C.cream, anchor: 'middle' });
+    };
+    callout(4.5, 1.72, 4.6, 2.62, 'Gas cap (methane)');
+    callout(7.6, top + 0.06, 7.4, 2.62, 'CO₂ from the well');
+    const [fx, fy] = P(faultX(2.5) + 0.12, LY, 2.5);
+    text(svg, fx, fy, 'Fault', { fill: C.cream });
+    chrome(svg, 2);
+  };
+
+  // ---------- Frames 3 to 5: one reservoir grid ----------
+  const NX = 18, NY = 9, NZ = 5, HT = 50, AMP = 40, THROW = 12, XF = 3, CX = 7, CY = 5;
+  const PG = (x, y, z) => [262 + x * 25 - y * 22, 112 + x * 6.5 + y * 12 - z];
+  const domeG = (x, y) => Math.exp(-(((x - CX) / 4.6) ** 2) - (((y - CY) / 3.3) ** 2));
+  const topZ = (x, y, right) => AMP * domeG(x, y) - (right ? THROW : 0); // the dome side of the fault is down
+  const cutG = (i, j) => i >= CX && j >= CY;
+  const GWC = AMP - THROW - 10;
+  // Gas thickness in each column, as a fraction of the column. The pressure from injection
+  // pushes the gas cap a little away from the well in later years (shift).
+  const fluids = (i, j, t) => {
+    const x = i + 0.5, y = j + 0.5, right = x > XF;
+    const ch4 = Math.min(1, Math.max(0, topZ(x + t.shift, y, right) - GWC) / HT);
+    const r = 1 - ((x - t.px) / t.rx) ** 2 - ((y - CY) / t.ry) ** 2;
+    const co2 = r > 0 ? t.hc * Math.pow(r, 0.7) : 0;
+    return ch4 > 0 ? { h: ch4, kind: 'ch4' } : { h: co2, kind: 'co2' };
+  };
+  const BANDS = { co2: ['#c7d4fb', '#98b0f7', '#6a8df3', '#3b6cf0', '#2448b8'], ch4: ['#f3cfc8', '#e7a497', '#d97666', '#c8463d', '#9e3027'] };
+  const bandColour = f => f.h <= 0.02 ? C.sand : BANDS[f.kind][Math.min(4, Math.floor(f.h / 0.6 * 5))];
+  const cellFrac = (h, k) => Math.max(0, Math.min(1, h * NZ - k)); // k = 0 is the top cell
+
+  const drawGrid = (svg, mode, t) => {
+    const order = [];
+    for (let i = 0; i < NX; i++) for (let j = 0; j < NY; j++) if (!cutG(i, j)) order.push([i, j]);
+    order.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
+    const poly = (list, fill, extra = {}) => el('polygon', { points: pts(list.map(p => PG(...p))), fill, stroke: C.grid, 'stroke-width': 0.7, 'stroke-linejoin': 'round', ...extra }, svg);
+    for (const [i, j] of order) {
+      const right = i + 0.5 > XF;
+      const z = (x, y) => topZ(x, y, right);
+      const f = fluids(i, j, t);
+      const col = f.kind === 'co2' ? C.co2 : C.ch4;
+      // One vertical face between nodes (x0, y0) and (x1, y1).
+      const face = (x0, y0, x1, y1, dark) => {
+        const t0 = z(x0, y0), t1 = z(x1, y1);
+        if (mode === 'cells') {
+          for (let k = 0; k < NZ; k++) {
+            const a = k * HT / NZ, b = (k + 1) * HT / NZ;
+            poly([[x0, y0, t0 - a], [x1, y1, t1 - a], [x1, y1, t1 - b], [x0, y0, t0 - b]], shade(mix(C.sand, col, cellFrac(f.h, k)), dark));
+          }
+          return;
+        }
+        poly([[x0, y0, t0], [x1, y1, t1], [x1, y1, t1 - HT], [x0, y0, t0 - HT]], shade(C.sand, dark));
+        if (f.h > 0.005) {
+          const d = f.h * HT;
+          poly([[x0, y0, t0], [x1, y1, t1], [x1, y1, t1 - d], [x0, y0, t0 - d]], shade(col, dark), { stroke: 'none' });
+          const [a, b] = [PG(x0, y0, t0 - d), PG(x1, y1, t1 - d)];
+          el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: shade(col, 0.45), 'stroke-width': 1.2 }, svg);
+        }
+      };
+      face(i + 1, j, i + 1, j + 1, 0.22);
+      face(i, j + 1, i + 1, j + 1, 0.1);
+      const topFill = mode === 'cells' ? mix(C.sand, col, cellFrac(f.h, 0)) : bandColour(f);
+      // Light from the back left: faces that slope toward it are lighter, so the dome reads.
+      const slope = (z(i + 1, j) - z(i, j) + z(i + 1, j + 1) - z(i, j + 1)) / 2 + (z(i, j + 1) - z(i, j) + z(i + 1, j + 1) - z(i + 1, j)) / 2;
+      const tone = Math.min(0.3, Math.max(0, 0.1 + 0.012 * slope));
+      poly([[i, j, z(i, j)], [i + 1, j, z(i + 1, j)], [i + 1, j + 1, z(i + 1, j + 1)], [i, j + 1, z(i, j + 1)]], shade(topFill, tone));
+    }
+    // The injection well, on the cut face.
+    const xw = t.px + 0.6, zt = topZ(xw, CY, true);
+    const [a, b] = [PG(xw, CY, zt + 78), PG(xw, CY, zt - HT * 0.7)];
+    el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: C.ink, 'stroke-width': 3 }, svg);
+    text(svg, a[0] - 8, a[1] + 10, 'Injection well', { anchor: 'end' });
+    // Labels.
+    const tag = (x, y, z, dx, dy, str, anchor = 'start') => {
+      const [px, py] = PG(x, y, z);
+      el('line', { x1: px, y1: py, x2: px + dx, y2: py + dy, stroke: C.ink, 'stroke-width': 1 }, svg);
+      el('circle', { cx: px, cy: py, r: 2.4, fill: C.ink }, svg);
+      text(svg, px + dx + (anchor === 'end' ? -4 : 4), py + dy + 4, str, { anchor });
+    };
+    tag(5.8, 3, topZ(5.8, 3, true), 30, -60, 'Gas cap (methane)');
+    tag(t.px - 0.6, CY - 0.8, topZ(t.px - 0.6, CY - 0.8, true), 40, -50, 'CO₂');
+    tag(XF, 0.5, topZ(XF, 0.5, false) - 4, -10, -36, 'Fault', 'end');
+  };
+
+  const T34 = { px: 13, rx: 2.4, ry: 1.9, hc: 0.5, shift: 0 };
+  const T5 = { px: 12.8, rx: 3.1, ry: 2.5, hc: 0.62, shift: 0.5 };
+  const drawGridFrames = () => {
+    [[3, 'cells', T34], [4, 've', T34], [5, 've', T5]].forEach(([n, mode, t]) => {
+      const svg = frames[n]; svg.textContent = '';
+      el('rect', { width: 800, height: 450, fill: C.sky }, svg);
+      drawGrid(svg, mode, t);
+      if (n === 4) {
+        // h, measured on the cut face of one column in the plume.
+        const xb = 12.5, f = fluids(12, CY - 1, t), zt = topZ(xb, CY, true), d = f.h * HT;
+        const [p0, p1] = [PG(xb, CY, zt), PG(xb, CY, zt - d)];
+        const g = el('g', { stroke: C.ink, 'stroke-width': 1.5 }, svg);
+        el('line', { x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1] }, g);
+        el('line', { x1: p0[0] - 5, y1: p0[1], x2: p0[0] + 5, y2: p0[1] }, g);
+        el('line', { x1: p1[0] - 5, y1: p1[1], x2: p1[0] + 5, y2: p1[1] }, g);
+        text(svg, p0[0] + 8, (p0[1] + p1[1]) / 2 + 5, 'h', { fill: C.cream, font: "italic 600 15px 'Literata'" });
+        const [lx, ly] = PG(16.5, CY, topZ(16.5, CY, true) - HT);
+        text(svg, lx + 6, ly + 26, 'One cell per column; brine below h', {});
+      }
+      chrome(svg, n, n < 5);
+    });
+  };
+
+  drawOrbit(null); drawDescent(null); drawCutaway(); drawGridFrames();
+  fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json')
+    .then(r => r.json())
+    .then(world => { const land = topojson.feature(world, world.objects.land); drawOrbit(land); drawDescent(land); })
+    .catch(() => {}); // the globe and the inset stay without coastlines
+})();
+</script>
+</body>
+</html>
