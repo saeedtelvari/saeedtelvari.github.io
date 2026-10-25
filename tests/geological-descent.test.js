@@ -4,7 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-test('pinch-outs and local fault offsets share contacts and resize without crossing beds', () => {
+// The story homepage does not ship the descent, so bundle.js has no GeologicalDescent. The bundle checks run again if the descent returns to the bundle.
+const descentInBundle = fs.readFileSync(path.join(__dirname, '../bundle.js'), 'utf8').includes('// File: GeologicalDescent.jsx');
+
+test('pinch-outs and local fault offsets share contacts and resize without crossing beds', { skip: !descentInBundle && 'the descent is not in bundle.js' }, () => {
   const root = path.join(__dirname, '..');
   const bundle = fs.readFileSync(path.join(root, 'bundle.js'), 'utf8');
   const code = bundle.slice(bundle.indexOf('// File: GeologicalDescent.jsx'), bundle.indexOf('// File: HomeSections.jsx'));
@@ -121,6 +124,11 @@ test('pinch-outs and local fault offsets share contacts and resize without cross
     cleanup();
     assert.ok(observers.every(observer => observer.disconnected));
   }
+});
+
+// These checks read the source files, so they run even when the bundle has no descent.
+test('the descent source, its styles and its textures stay consistent until the cleanup', () => {
+  const root = path.join(__dirname, '..');
   assert.doesNotMatch(fs.readFileSync(path.join(root, 'colors_and_type.css'), 'utf8'), /descent-inspection|descent-sensor/, 'remove unused inspection and monitoring styles');
   for (const material of ['shale', 'sandstone', 'limestone', 'basement', 'siltstone', 'dolomite']) {
     assert.ok(fs.statSync(path.join(root, `assets/geology-${material}.webp`)).size > 0, 'all referenced material textures must exist');
@@ -129,6 +137,7 @@ test('pinch-outs and local fault offsets share contacts and resize without cross
   assert.match(hero, /clipPath id="hero-lower-rock"><path d=\{AQUIFER_PATH\}/, 'new hero textures must be clipped below the reservoir');
   assert.match(hero, /id="hero-lower-texture-mask" maskUnits="userSpaceOnUse" x="0" y="0"/, 'the texture mask must cover the entire lower rock without default negative offsets');
   const heroBridge = hero.match(/id="hero-descent-bridge"[\s\S]*?<stop stopColor="(#[0-9a-f]{6})"/)[1];
-  const descentBridge = code.match(/id: "descent-bridge"[\s\S]*?stopColor: "(#[0-9a-f]{6})"/)[1];
+  const descentSource = fs.readFileSync(path.join(root, 'GeologicalDescent.jsx'), 'utf8');
+  const descentBridge = descentSource.match(/id="descent-bridge"[\s\S]*?<stop stopColor="(#[0-9a-f]{6})"/)[1];
   assert.equal(heroBridge, descentBridge, 'the hero and the descent must meet in the same colour');
 });

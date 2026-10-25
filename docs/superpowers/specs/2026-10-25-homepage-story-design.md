@@ -122,6 +122,62 @@ The cutaway is generic but correct for the central North Sea. It uses no formati
 - The skip control and the chapter 5 controls work with the keyboard and show a visible focus ring.
 - On a phone the story uses a simpler camera path and fewer cells. The six messages stay the same.
 
+## Sections, header, footer and CV
+
+Decision of 2026-10-25. The research, projects, publications and contact sections, the footer, the header and the CV use style C. The simulator keeps its own look. This part answers the open questions 1 and 2. The code is in `colors_and_type.css`, `HomeSections.jsx`, `Header.jsx`, `Footer.jsx` and `CVPage.jsx`.
+
+**Ground and edge.** The sections continue on the story sky (`#c9d6dc`), so the page reads as one sheet. The stage and the ground have the same colour, so the end of the pinned story has no colour edge. The first section starts 72 to 128 px below the story. The old dark descent leaves the page: `App.jsx` and `build.js` do not use `GeologicalDescent.jsx`. The file stays until the cleanup.
+
+**Type.** All text is Literata in ink (`#1f2a30`). Years, dates and DOIs use tabular figures (`.tnum`). Text is in sentence case. There are no capitals, no letter-spaced labels and no monospace. The longest measure is 32 em, which gives about 62 characters on a line.
+
+| Role | Size |
+|---|---|
+| Section heading (h2) | 30 to 44 px |
+| Lead and sub-heading (h3) | 20 px |
+| Body | 17 px |
+| Small text and buttons | 15 px |
+
+**Surfaces.** Publications and activity sit on the ground. Projects, themes, contact links and the CV sheet sit on flat light panels with a hairline. There are two radii: 10 px for panels, images and the header link chips, and 999 px for pills. There are no shadows and no gradients.
+
+**Strata strip.** Each section heading and each CV heading has one strip. It has four flat beds: sandstone, shale, chalk and older rock. It echoes the cutaway. It is 96 px wide with an ink hairline. It is decoration only (`aria-hidden`), and it is off in print.
+
+**Links and buttons.** Links are ink and underlined. Buttons are pills like the story controls: an ink fill (primary) or an ink outline (quiet). Every control has a 3 px ink focus ring (cream in the footer). CO₂ blue and methane red are never used for links, buttons or other chrome.
+
+| Header state | Look |
+|---|---|
+| Homepage, over the pinned story | Clear, with ink text. |
+| Homepage, after the story (the stage starts to leave) | Solid bar in the ground colour, with an ink hairline at the bottom. |
+| CV page and the static story (reduced motion) | The same solid bar, always. |
+| Simulator (workbench variant) | Not changed. |
+
+The mobile drawer has the ground colour, an ink hairline on its left edge and an ink scrim.
+
+**Footer.** The footer is the base of the page: a darker tone of the older rock (`#66564a`) in flat colour, with light text. It uses the same column as the sections.
+
+| Pair | Contrast |
+|---|---|
+| Ink on the sky ground | 9.9 : 1 |
+| Muted ink on the sky ground | 4.8 : 1 |
+| Ink on a panel | 12.5 : 1 |
+| Footer text (`#f3efe4`) on the footer | 6.1 : 1 |
+| Footer small text (`#ddd6c8`) on the footer | 4.9 : 1 |
+
+**CV.** On screen the CV is a light sheet on the sky ground. In print it stays black on white. The rules for print did not change. Two new print rules remove the sheet and the strata.
+
+**New tokens.** The tokens are in the Story token block. Their names have a second word, so `STORY_COLORS` does not list them: the canvas art does not use them.
+
+| Token | Role | Value |
+|---|---|---|
+| `--story-ground` | Page ground | The story sky |
+| `--story-panel-bg` | Light panel | `#e8eef0` |
+| `--story-rock-older` | Older rock bed of the strip | `#7d6b5d` |
+| `--story-footer-bg` and `--story-footer-soft` | Footer ground and small text | `#66564a` and `#ddd6c8` |
+| `--story-rule`, `--story-edge` and `--story-wash` | Hairline, border and hover fill | Ink at 30 %, 60 % and 10 % |
+| `--story-radius` | Radius of panels | 10 px |
+| `--story-measure` and `--story-fs-*` | Line length and type sizes | 32 em and the table above |
+
+**Guards.** `tests/site-style.test.js` keeps the rules that the simulator shares unchanged. It also checks that no site rule uses the old cream, the dark night colours or a `--sim-*` token. It checks the page colours of `index.html` and `cv.html`, the data colours in links and buttons, and the flat look.
+
 ## Success criteria
 
 | Area | Criterion |

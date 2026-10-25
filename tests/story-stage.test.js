@@ -214,12 +214,13 @@ test('the story is wired into the build and the home page, and the old hero is n
   assert.ok(at('StoryStage.jsx') > at('site-content.js'), 'the copy loads before the story');
   assert.ok(at('StoryChapters.jsx') > at('StoryStage.jsx'), 'the registry exists before the placeholders fill it');
   assert.ok(at('StoryChapters.jsx') < at('HomeSections.jsx'));
-  assert.ok(at('StoryChapters.jsx') < at('GeologicalDescent.jsx'), 'tests slice the descent code up to HomeSections.jsx');
+  assert.ok(!files.includes('GeologicalDescent.jsx'), 'the old descent is not in the bundle: the sections sit on the sky ground');
   assert.ok(!files.includes('SubsurfaceHero.jsx') && !files.includes('hero-geology.js'), 'the old hero is not in the bundle');
   const app = read('App.jsx');
   assert.match(app, /<StoryStage onNavigate=\{navigate\} \/>/);
   assert.doesNotMatch(app, /<SubsurfaceHero/);
-  assert.ok(app.indexOf('<StoryStage') < app.indexOf('<GeologicalDescent>'), 'the story is above the descent');
+  assert.doesNotMatch(app, /<GeologicalDescent/);
+  assert.ok(app.indexOf('<StoryStage') < app.indexOf('<main id="main-content"'), 'the story is above the sections');
   const html = read('index.html');
   assert.match(html, /<meta name="theme-color" content="#c9d6dc">/);
   assert.match(html, /family=Literata:ital,opsz,wght@0,7\.\.72,400;0,7\.\.72,600;1,7\.\.72,400/);

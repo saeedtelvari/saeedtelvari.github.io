@@ -1,5 +1,6 @@
 // Footer.jsx — closing band: name, affiliation, the same links as the header, back to top.
-const Footer = ({ onNavigate, geological = false }) => {
+// It is the base of the page: older rock in flat colour with light text (style C).
+const Footer = ({ onNavigate }) => {
   const toTop = event => {
     event.preventDefault();
     window.scrollTo({ top: 0, behavior: siteReducedMotion() ? 'auto' : 'smooth' });
@@ -7,7 +8,7 @@ const Footer = ({ onNavigate, geological = false }) => {
     if (main) main.focus({ preventScroll: true });
   };
   return (
-    <footer className={`site-footer${geological ? ' site-footer--geological' : ''}`}>
+    <footer className="site-footer">
       <div className="site-footer__inner">
         <div>
           <p className="site-footer__name">© 2024–2026 Sa’eed Telvari</p>

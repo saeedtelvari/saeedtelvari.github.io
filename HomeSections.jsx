@@ -1,5 +1,6 @@
-// HomeSections.jsx — the homepage below the hero: research, projects, publications, contact.
+// HomeSections.jsx — the homepage below the story: research, projects, publications, contact.
 // Facts come from site-content.js, which the CV shares.
+// The sections sit on the sky ground of the story (style C). The CSS is in colors_and_type.css.
 
 const { useState } = React;
 
@@ -26,10 +27,17 @@ const useCopyStatus = () => {
   return [status, copy];
 };
 
+// A thin strip of four rock beds: sandstone, shale, chalk and older rock. It echoes the cutaway of the story.
+// Use it once for each section heading. It is decoration only.
+const Strata = () => (
+  <span className="strata" aria-hidden="true"><span /><span /><span /><span /></span>
+);
+
 const SiteSection = ({ id, title, children }) => (
-  <section id={id} className="section-panel" aria-labelledby={`${id}-title`}>
-    <div className="sheet">
+  <section id={id} className="site-section" aria-labelledby={`${id}-title`}>
+    <div className="site-section__inner">
       <h2 id={`${id}-title`} className="section-title">{title}</h2>
+      <Strata />
       {children}
     </div>
   </section>
@@ -156,7 +164,7 @@ const PublicationsSection = () => {
               <p className="pub__summary">{pub.summary}</p>
               <div className="pub__actions">
                 <a className="btn btn--quiet btn--small" href={pub.url} target="_blank" rel="noreferrer">
-                  <Icon name="external" size={15} />DOI {pub.doi}
+                  <Icon name="external" size={15} /><span>DOI <span className="tnum">{pub.doi}</span></span>
                 </a>
                 <button type="button" className="btn btn--quiet btn--small" onClick={() => copy(pub.id, pub.bibtex)}
                   aria-label={`Copy BibTeX for ${pub.title}`}>
@@ -214,4 +222,4 @@ const ContactSection = () => {
   );
 };
 
-Object.assign(window, { ResearchSection, ProjectsSection, PublicationsSection, ContactSection, ActivityList, siteCopy });
+Object.assign(window, { ResearchSection, ProjectsSection, PublicationsSection, ContactSection, ActivityList, Strata, siteCopy });
