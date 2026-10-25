@@ -1767,3 +1767,183 @@ a:focus:not(:focus-visible) {
 .app-header--site.is-over-story .app-header__bar :focus-visible {
   outline-color: var(--story-ink) !important;
 }
+
+/* =====================================================
+   Story block controls — the play button, the year scrubber, the legend and the 3D cells switch of the
+   chapter live (StoryBlock.jsx builds them). Style C: Literata, ink on sky, pill buttons.
+   ===================================================== */
+.story-controls {
+  position: absolute;
+  right: 5.5%;
+  bottom: 6%;
+  left: 5.5%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 28px;
+  color: var(--story-ink);
+  font: 400 clamp(14px, 0.5vw + 8px, 17px)/1.2 var(--story-font);
+  pointer-events: auto;
+}
+.story-controls__play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1.5px solid var(--story-ink);
+  border-radius: 50%;
+  background: var(--story-ink);
+  color: var(--story-cream);
+  cursor: pointer;
+  transition: background-color 160ms var(--sim-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .story-controls__play:hover { background: var(--story-muted); }
+}
+.story-controls__icon {
+  box-sizing: border-box;
+  width: 0;
+  height: 0;
+  margin-left: 4px;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 14px solid currentColor;
+}
+.story-controls__play[data-state="playing"] .story-controls__icon {
+  width: 14px;
+  height: 16px;
+  margin-left: 0;
+  border: 0;
+  border-right: 5px solid currentColor;
+  border-left: 5px solid currentColor;
+}
+.story-controls__time {
+  flex: 1 1 260px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  max-width: 440px;
+}
+.story-controls__year {
+  flex: none;
+  min-width: 5.4em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.story-controls__range {
+  --fill: 30%;
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.story-controls__range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 99px;
+  background: linear-gradient(to right, var(--story-ink) var(--fill), rgba(31, 42, 48, 0.2) var(--fill));
+}
+.story-controls__range::-moz-range-track {
+  height: 6px;
+  border-radius: 99px;
+  background: linear-gradient(to right, var(--story-ink) var(--fill), rgba(31, 42, 48, 0.2) var(--fill));
+}
+.story-controls__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border: 2px solid var(--story-ink);
+  border-radius: 50%;
+  background: var(--story-cream);
+}
+.story-controls__range::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--story-ink);
+  border-radius: 50%;
+  background: var(--story-cream);
+}
+.story-controls__legend {
+  display: flex;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.story-controls__chip { display: inline-flex; align-items: center; gap: 8px; }
+.story-controls__chip::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--chip);
+}
+.story-controls__chip--ch4 { --chip: var(--story-ch4); }
+.story-controls__chip--co2 { --chip: var(--story-co2); }
+.story-controls__switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin-left: auto;
+  cursor: pointer;
+}
+/* The input covers the whole switch and draws nothing, so the focus ring of the page goes around the switch. */
+.story-controls__toggle {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 99px;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.story-controls__track {
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: 46px;
+  height: 26px;
+  border: 1.5px solid var(--story-ink);
+  border-radius: 99px;
+  transition: background-color 160ms var(--sim-ease);
+}
+.story-controls__track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--story-ink);
+  transition: transform 160ms var(--sim-ease), background-color 160ms var(--sim-ease);
+}
+.story-controls__toggle:checked + .story-controls__track { background: var(--story-ink); }
+.story-controls__toggle:checked + .story-controls__track::after {
+  background: var(--story-cream);
+  transform: translateX(20px);
+}
+@media (max-width: 640px) {
+  .story-controls { right: 16px; bottom: 16px; left: 16px; gap: 4px 16px; }
+  .story-controls__time { flex-basis: 200px; gap: 10px; }
+  .story-controls__switch { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .story-controls__play,
+  .story-controls__track,
+  .story-controls__track::after { transition: none; }
+}
