@@ -22,6 +22,7 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
       'story-geometry.js',
       'StoryStage.jsx',
       'StoryChapters.jsx',
+      'StoryEarth.jsx',
       'StoryRock.jsx',
       'StoryBlock.jsx',
       'GeologicalDescent.jsx',
