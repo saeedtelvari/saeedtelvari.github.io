@@ -117,10 +117,10 @@ const SiteHome = () => {
     <React.Fragment>
       <SkipLink />
       <Header active={active} onNavigate={navigate} />
-      {/* The descent's rock starts below the hero and runs behind every section and the footer. */}
+      {/* The story is first on the page. The descent's rock starts below it and runs behind every section and the footer. */}
+      <StoryStage onNavigate={navigate} />
       <GeologicalDescent>
         <main id="main-content" tabIndex={-1}>
-          <SubsurfaceHero onNavigate={navigate} />
           <ResearchSection />
           <ProjectsSection />
           <PublicationsSection />

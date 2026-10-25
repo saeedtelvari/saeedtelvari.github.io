@@ -4,7 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-test('name interaction stays bounded and stops for touch, reduced motion, scrolling and unmount', () => {
+// The story homepage does not ship the hero, so bundle.js has no HeroName. The test runs again if the hero returns to the bundle.
+const heroInBundle = fs.readFileSync(path.join(__dirname, '../bundle.js'), 'utf8').includes('const HeroName =');
+
+test('name interaction stays bounded and stops for touch, reduced motion, scrolling and unmount', { skip: !heroInBundle && 'the hero is not in bundle.js' }, () => {
   const bundle = fs.readFileSync(path.join(__dirname, '../bundle.js'), 'utf8');
   const start = bundle.indexOf('const HeroName =');
   const end = bundle.indexOf('const Identity =', start);

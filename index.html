@@ -6,7 +6,7 @@
   <title>Sa'eed Telvari — CO₂ storage and reservoir simulation</title>
   <meta name="description" content="Sa'eed Telvari is a PhD candidate at Heriot-Watt University who builds vertical-equilibrium models in MRST for CO₂ storage in depleted gas fields.">
   <link rel="canonical" href="https://saeedtelvari.github.io/">
-  <meta name="theme-color" content="#120e0b">
+  <meta name="theme-color" content="#c9d6dc">
   <meta property="og:type" content="profile">
   <meta property="og:title" content="Sa'eed Telvari — CO₂ storage and reservoir simulation">
   <meta property="og:description" content="Vertical-equilibrium models of CO₂ storage in depleted gas fields, a browser-based CO₂ storage simulator, publications and CV.">
@@ -23,14 +23,14 @@
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
-  <link rel="stylesheet" href="./colors_and_type.css?v=45">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&family=JetBrains+Mono:wght@400;500&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+  <link rel="stylesheet" href="./colors_and_type.css?v=46">
   <link rel="icon" href="./favicon.ico" sizes="32x32">
   <link rel="icon" href="./assets/logo-minimalist.webp" type="image/webp">
   <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
   <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
   <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-  <script defer src="./bundle.js?v=46"></script>
+  <script defer src="./bundle.js?v=47"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
@@ -40,12 +40,12 @@
     ::-webkit-scrollbar-thumb { background: #4a3c30; border-radius: 6px; }
     ::-webkit-scrollbar-thumb:hover { background: #5e4c3c; }
 
-    /* The night sky and ground the hero draws, shown until React renders it, then faded out. */
+    /* The sky of the story shows until React renders the page. Then it fades out. */
     #app-loader {
       position: fixed;
       inset: 0;
       z-index: 99999;
-      background: linear-gradient(180deg, #070d1a 0, #111e32 calc(max(42vh, 480px) * 0.58), #253449 max(42vh, 480px), #1d1712 max(42vh, 480px), #17120e 100%);
+      background: #c9d6dc;
       transition: opacity 450ms cubic-bezier(0.23, 1, 0.32, 1);
     }
     #app-loader.loader-finished { opacity: 0; pointer-events: none; }
@@ -55,7 +55,7 @@
       top: 0;
       width: 28%;
       height: 2px;
-      background: #e8a15a;
+      background: #1f2a30;
       animation: shell-progress 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     }
     @keyframes shell-progress {
