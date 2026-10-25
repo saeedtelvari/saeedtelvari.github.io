@@ -21,6 +21,17 @@ for (const page of ['index.html', 'simulator.html']) {
   has(page, /application\/ld\+json/, `${page} needs structured data`);
 }
 
+// The social cards exist, are JPEG files of a sensible size, and the alt text does not describe the old hero.
+for (const page of ['index.html', 'cv.html']) {
+  const card = read(page).match(/property="og:image" content="https:\/\/saeedtelvari\.github\.io\/([^"]+)"/)[1];
+  const bytes = fs.readFileSync(path.join(root, card));
+  assert.ok(bytes.length < 200000 && bytes[0] === 0xff && bytes[1] === 0xd8, page + ' social card must be a JPEG under 200 KB');
+  has(page, /property="og:image:width" content="1200"/, page + ' card width');
+  has(page, /property="og:image:height" content="630"/, page + ' card height');
+  lacks(page, /faulted aquifer|above a live/, page + ' card alt text must not describe the old hero');
+}
+lacks('index.html', /social-card\.jpg/, 'the old social card is gone');
+
 lacks('CVPage.jsx', /Saeed-Telvari-CV\.pdf/, 'CV page must not request a missing PDF asset');
 has('CVPage.jsx', /window\.print\(\)/, 'CV page print action must invoke browser print');
 has('CVPage.jsx', /Print or save as PDF/, 'CV page must offer browser print and PDF export');
