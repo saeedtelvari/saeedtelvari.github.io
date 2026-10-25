@@ -21,12 +21,6 @@ for (const page of ['index.html', 'simulator.html']) {
   has(page, /application\/ld\+json/, `${page} needs structured data`);
 }
 
-has('SubsurfaceHero.jsx', /Open the CO₂ simulator/, 'hero needs a primary simulator CTA');
-has('SubsurfaceHero.jsx', /aria-label=\{label\}/, 'social links need distinct accessible names');
-has('SubsurfaceHero.jsx', /aria-label="Simulation year"/, 'hero timeline slider needs an accessible name');
-has('SubsurfaceHero.jsx', /new Worker\(['"]\.\/hero-simulation-worker\.js/, 'hero precomputation must run off the main thread');
-assert.ok(fs.existsSync(path.join(root, 'hero-simulation-worker.js')), 'hero worker must exist');
-
 lacks('CVPage.jsx', /Saeed-Telvari-CV\.pdf/, 'CV page must not request a missing PDF asset');
 has('CVPage.jsx', /window\.print\(\)/, 'CV page print action must invoke browser print');
 has('CVPage.jsx', /Print or save as PDF/, 'CV page must offer browser print and PDF export');

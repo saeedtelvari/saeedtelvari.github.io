@@ -428,7 +428,7 @@ test('descent camera: it starts where orbit ends, zooms, shrinks into the inset,
 test('the files: StoryEarth.jsx fills orbit and descent after StoryChapters.jsx, with one local file, no library and no CDN', () => {
   const build = read('build.js');
   assert.ok(build.indexOf("'StoryChapters.jsx'") > 0 && build.indexOf("'StoryEarth.jsx'") > build.indexOf("'StoryChapters.jsx'"), 'the order in build.js');
-  assert.ok(build.indexOf("'StoryEarth.jsx'") < build.indexOf("'HomeSections.jsx'"), 'the story files come before the sections (the descent is not in the build)');
+  assert.ok(build.indexOf("'StoryEarth.jsx'") < build.indexOf("'HomeSections.jsx'"), 'the story files come before the sections (the old descent is deleted)');
   const source = read('StoryEarth.jsx');
   assert.match(source, /STORY_RENDERERS\.orbit\s*=/);
   assert.match(source, /STORY_RENDERERS\.descent\s*=/);

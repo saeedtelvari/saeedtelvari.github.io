@@ -58,8 +58,6 @@ const sheet = read('colors_and_type.css');
 const blocks = cssBlocks(sheet);
 const allRules = blocks.flatMap(block => block.rules);
 
-// The old hero and the old descent are not in the page since the story homepage. A later cleanup deletes their rules.
-const isLegacy = rule => /^(HERO|GEOLOGICAL DESCENT)/.test(rule.block);
 const isStory = rule => /^(STORY|Story block)/.test(rule.block);
 
 // Rules that the simulator also uses. They must keep their text. The site has its own rules next to them.
@@ -75,19 +73,20 @@ const SHARED_GROUPS = [
   ['header (workbench and shared)', rule => /^HEADER/.test(rule.block) && !/app-header--site/.test(rule.selector)],
 ];
 // Hashes of the shared rules as they were before style C. To update one on purpose, change the rule and the hash together.
+// The reduced-motion hash changed once, on purpose: the cleanup removed the hero rules of that block. The simulator does not use them.
 const SHARED_HASHES = {
   'tokens': '60f96e2f4687',
   'base elements': 'fad404039db3',
   'primitives': 'd4b3abbd0a71',
   'cv print': '0b7f52531d24',
   'focus rings': 'b87604d3554b',
-  'reduced motion': 'eb506ebab4ae',
+  'reduced motion': 'a2b3c528f520',
   'print': 'a3415cef1122',
   'header (workbench and shared)': '160833376739',
   'workbench': '8f72bddd381f',
 };
 const isShared = rule => SHARED_GROUPS.some(([, test]) => test(rule));
-const siteRules = allRules.filter(rule => !isShared(rule) && !isLegacy(rule));
+const siteRules = allRules.filter(rule => !isShared(rule));
 
 test('the rules that the simulator shares are unchanged, and the workbench header and .ve-standalone rules too', () => {
   for (const [name, test] of SHARED_GROUPS) {
@@ -157,7 +156,7 @@ test('the data colours stay data: no link, button, header or footer rule uses CO
   const chrome = /(^|[\s,>+~(])(a|button)(?![\w-])|\.(btn|app-header|app-nav|app-drawer|site-footer|skip-link|text-link|story-btn|story-skip)\b|:where\(a\b/;
   const data = /#3b6cf0|#c8463d|--story-co2|--story-ch4|--sim-c-|--sim-glow-/i;
   let checked = 0;
-  for (const rule of allRules.filter(rule => !isLegacy(rule))) {
+  for (const rule of allRules) {
     if (!chrome.test(rule.selector)) continue;
     checked += 1;
     assert.doesNotMatch(rule.body, data, `${ruleKey(rule)} uses a data colour`);
@@ -198,7 +197,10 @@ test('the strata strip is four beds in the rock colours, once for each section a
   assert.equal((read('CVPage.jsx').match(/<Strata \/>/g) || []).length, 1, 'CVSection draws one strip for each CV heading');
   assert.doesNotMatch(read('App.jsx'), /GeologicalDescent/, 'the old descent is not in the page');
   assert.doesNotMatch(read('build.js'), /GeologicalDescent/, 'and not in the build');
-  assert.ok(fs.existsSync(path.join(root, 'GeologicalDescent.jsx')), 'the file stays until the cleanup');
+  for (const gone of ['GeologicalDescent.jsx', 'SubsurfaceHero.jsx', 'hero-geology.js', 'hero-simulation-worker.js']) {
+    assert.ok(!fs.existsSync(path.join(root, gone)), gone + ' is deleted; the tag homepage-archive-2026-10 keeps it');
+  }
+  assert.doesNotMatch(sheet, /\.hero-|\.geological-descent|\.descent-/, 'the stylesheet has no rule of the old hero or descent');
 });
 
 test('the CV keeps its print rules and its sheet is for the screen only', () => {
