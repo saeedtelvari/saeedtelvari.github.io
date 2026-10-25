@@ -112,6 +112,7 @@ The cutaway is generic but correct for the central North Sea. It uses no formati
 - **Rendering.** Chapters 0–4 draw on one 2D canvas, with HTML captions on top. The grid in chapters 3–4 has about 600 cells, so WebGL is not necessary. Chapter 5 uses `ve2d-model.js` in a worker on the coarse grid (40 × 24).
 - **Coastlines.** Natural Earth land at 1:110 m, as a small static file in `assets/`. No CDN request at run time.
 - **Build.** New components go into `bundle.js` through `build.js`, as now. The current `SubsurfaceHero.jsx` and `GeologicalDescent.jsx` are removed when the story ships.
+- **Archive.** The tag `homepage-archive-2026-10` (commit `c9cc5f5`) keeps the old homepage exactly as it was on main on 2026-10-17. To see it, check out the tag and serve the folder. To bring it back, restore its files from the tag.
 
 ## Accessibility and motion
 
