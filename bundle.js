@@ -666,6 +666,2480 @@ Object.assign(window, {
   Footer
 });
 
+// File: ve2d-model.js
+// ve2d-model.js — sharp-interface vertical-equilibrium (VE) model of CO2 storage in a
+// confined saline aquifer. SI units internally; scenarios use display units
+// (Mt, mD, m, km, degrees, years). Shared by the page, the worker and Node tests.
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  root.VE2D = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  const YEAR = 365.25 * 86400;
+  const MT = 1e9;
+  const MD = 9.869233e-16;
+  const BAR = 1e5;
+  const KM = 1000;
+  const GRAVITY = 9.81;
+  const LX = 20 * KM;
+  const LY = 12 * KM;
+  const GRIDS = {
+    coarse: [40, 24],
+    standard: [80, 48],
+    fine: [120, 72]
+  };
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+  // [min, max, step] in display units. The UI and the normaliser share these bounds.
+  const LIMITS = Object.freeze({
+    years: [100, 2000, 50],
+    seed: [1, 999999, 1],
+    rateMt: [0.1, 5, 0.1],
+    injYears: [1, 100, 1],
+    wellX: [0.5, 19.5, 0.1],
+    wellY: [0.5, 11.5, 0.1],
+    permMd: [10, 5000, 1],
+    porosity: [0.05, 0.35, 0.01],
+    thickness: [10, 200, 1],
+    thicknessVar: [0, 60, 1],
+    ct: [0.2, 5, 0.1],
+    rhoCo2: [400, 900, 10],
+    rhoBrine: [1000, 1200, 5],
+    muCo2: [0.02, 0.1, 0.005],
+    muBrine: [0.3, 1.5, 0.05],
+    swr: [0.05, 0.4, 0.01],
+    sgr: [0, 0.4, 0.01],
+    krg: [0.1, 1, 0.05],
+    disRate: [0, 2, 0.05],
+    disCap: [0, 80, 1],
+    depth: [800, 3000, 50],
+    dipDeg: [0, 3, 0.1],
+    dipAz: [0, 359, 1],
+    domes: [0, 4, 1],
+    domeRelief: [0, 150, 5],
+    roughness: [0, 40, 1]
+  });
+  const FAULT_LIMITS = Object.freeze({
+    x: [0, 20, 0.1],
+    y: [0, 12, 0.1],
+    strike: [0, 359, 1],
+    length: [0.5, 30, 0.5],
+    throw: [0, 150, 1],
+    trans: [0, 1, 0.05],
+    sealCap: [0, 200, 1],
+    kf: [0, 1000, 1]
+  });
+  // Optional inputs. They are not in LIMITS or DEFAULTS, so the simulator UI does not list,
+  // encode or show them. dome replaces the main dome (x, y, along, across in km, angle in
+  // degrees). gasContactDepth is the depth, in metres, of a flat gas-water contact at the
+  // start. The gas above the contact is methane.
+  const DOME_LIMITS = Object.freeze({
+    x: [0, 20],
+    y: [0, 12],
+    along: [0.3, 10],
+    across: [0.3, 10],
+    angle: [0, 359]
+  });
+  const GAS_CONTACT_LIMITS = Object.freeze([0, 6000]);
+  const INTEGER_KEYS = new Set(['years', 'seed', 'injYears', 'domes', 'dipAz']);
+  const MAX_FAULTS = 3;
+  const DEFAULT_FAULT = Object.freeze({
+    x: 9.5,
+    y: 6,
+    strike: 12,
+    length: 8,
+    throw: 12,
+    trans: 0.4,
+    sealCap: 26,
+    kf: 20
+  });
+  const DEFAULTS = Object.freeze({
+    preset: 'dome-fault',
+    grid: 'standard',
+    boundary: 'open',
+    years: 1000,
+    seed: 1443,
+    rateMt: 1,
+    injYears: 30,
+    wellX: 14,
+    wellY: 6,
+    permMd: 500,
+    porosity: 0.2,
+    thickness: 50,
+    thicknessVar: 20,
+    ct: 1,
+    rhoCo2: 700,
+    rhoBrine: 1050,
+    muCo2: 0.055,
+    muBrine: 0.6,
+    swr: 0.27,
+    sgr: 0.2,
+    krg: 0.5,
+    disRate: 0.2,
+    disCap: 53,
+    depth: 1500,
+    dipDeg: 0.6,
+    dipAz: 90,
+    domes: 1,
+    domeRelief: 60,
+    roughness: 4,
+    faults: Object.freeze([DEFAULT_FAULT])
+  });
+  const PRESETS = Object.freeze({
+    'dome-fault': {
+      label: 'Dome & leaky fault',
+      description: 'CO₂ migrates up-dip past a partly sealing fault into a dome. Shows every trapping mechanism.',
+      patch: {}
+    },
+    dipping: {
+      label: 'Dipping aquifer',
+      description: 'A plain 1° slope: the plume migrates up-dip, leaving a residual trail, and dissolves.',
+      patch: {
+        dipDeg: 1,
+        domes: 0,
+        roughness: 2,
+        faults: []
+      }
+    },
+    anticline: {
+      label: 'Anticline trap',
+      description: 'A large dome up-dip of the injector fills to its spill point and then spills.',
+      patch: {
+        dipDeg: 0.4,
+        domes: 1,
+        domeRelief: 40,
+        roughness: 2,
+        faults: []
+      }
+    },
+    'sealed-block': {
+      label: 'Sealed fault block',
+      description: 'Two sealing faults and closed boundaries: CO₂ is contained, pressure builds up.',
+      patch: {
+        boundary: 'closed',
+        dipDeg: 0.4,
+        domes: 0,
+        roughness: 3,
+        injYears: 20,
+        faults: [{
+          x: 8,
+          y: 6,
+          strike: 5,
+          length: 14,
+          throw: 40,
+          trans: 0,
+          sealCap: 200,
+          kf: 0
+        }, {
+          x: 16.5,
+          y: 6,
+          strike: 170,
+          length: 14,
+          throw: 30,
+          trans: 0,
+          sealCap: 200,
+          kf: 0
+        }]
+      }
+    },
+    rough: {
+      label: 'Rough top surface',
+      description: 'Small undulations in the caprock create many small structural traps.',
+      patch: {
+        dipDeg: 0.5,
+        domes: 0,
+        roughness: 10,
+        faults: []
+      }
+    }
+  });
+  const normalizeFault = raw => {
+    const fault = {};
+    for (const [key, [min, max]] of Object.entries(FAULT_LIMITS)) {
+      const value = Number(raw?.[key]);
+      fault[key] = Number.isFinite(value) ? clamp(value, min, max) : DEFAULT_FAULT[key];
+    }
+    return fault;
+  };
+
+  // A dome needs all five numbers. Any other input gives no dome, so the seed places it.
+  const normalizeDome = raw => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const dome = {};
+    for (const [key, [min, max]] of Object.entries(DOME_LIMITS)) {
+      const value = Number(raw[key]);
+      if (!Number.isFinite(value) || raw[key] === '' || raw[key] === null) return null;
+      dome[key] = clamp(value, min, max);
+    }
+    return dome;
+  };
+  const normalizeScenario = (raw = {}) => {
+    const scenario = {
+      preset: typeof raw.preset === 'string' ? raw.preset : DEFAULTS.preset,
+      grid: Object.prototype.hasOwnProperty.call(GRIDS, raw.grid) ? raw.grid : DEFAULTS.grid,
+      boundary: raw.boundary === 'closed' || raw.boundary === 'open' ? raw.boundary : DEFAULTS.boundary
+    };
+    for (const [key, [min, max]] of Object.entries(LIMITS)) {
+      const value = Number(raw[key]);
+      const bounded = Number.isFinite(value) && raw[key] !== '' && raw[key] !== null ? clamp(value, min, max) : DEFAULTS[key];
+      // The simulated period snaps to its step so every run ends on a snapshot year.
+      scenario[key] = key === 'years' ? Math.round(bounded / 50) * 50 : INTEGER_KEYS.has(key) ? Math.round(bounded) : bounded;
+    }
+    const faults = Array.isArray(raw.faults) ? raw.faults : DEFAULTS.faults;
+    scenario.faults = faults.slice(0, MAX_FAULTS).map(normalizeFault);
+    const dome = normalizeDome(raw.dome);
+    if (dome) scenario.dome = dome;
+    const contact = Number(raw.gasContactDepth);
+    scenario.gasContactDepth = Number.isFinite(contact) && raw.gasContactDepth !== '' && raw.gasContactDepth !== null ? clamp(contact, GAS_CONTACT_LIMITS[0], GAS_CONTACT_LIMITS[1]) : null;
+    return scenario;
+  };
+
+  // ------------------------------------------------------------------ geometry
+
+  const hashNoise = (x, y, seed) => {
+    const value = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453;
+    return value - Math.floor(value);
+  };
+
+  // Map angle (from +x, anticlockwise) of the regional strike, at right angles to the dip
+  // direction. Domes and caprock undulations are elongated along it.
+  const strikeAngle = scenario => Math.PI - scenario.dipAz * Math.PI / 180;
+
+  // Gaussian domes elongated along strike (±15°). The first is the main closure; any others
+  // are smaller satellites. An explicit scenario.dome (km and degrees) replaces the main one.
+  const domeCentres = scenario => Array.from({
+    length: scenario.domes
+  }, (_, index) => {
+    if (index === 0 && scenario.dome) {
+      const {
+        x,
+        y,
+        along,
+        across,
+        angle
+      } = scenario.dome;
+      return {
+        x: x * KM,
+        y: y * KM,
+        angle: angle * Math.PI / 180,
+        along: along * KM,
+        across: across * KM,
+        relief: 1
+      };
+    }
+    const hash = (a, b, salt) => hashNoise(index * a, b, scenario.seed + salt);
+    const main = index === 0;
+    return {
+      x: (0.12 + 0.76 * hash(2.1, 0.4, 503)) * LX,
+      y: (0.15 + 0.7 * hash(2.9, 0.8, 547)) * LY,
+      angle: strikeAngle(scenario) + (hash(3.7, 1.2, 571) - 0.5) * Math.PI / 6,
+      along: 2400 * (main ? 0.85 + 0.45 * hash(4.3, 1.6, 593) : 0.55 + 0.35 * hash(4.3, 1.6, 593)),
+      across: 1600 * (main ? 0.7 + 0.3 * hash(5.1, 2.0, 613) : 0.45 + 0.2 * hash(5.1, 2.0, 613)),
+      relief: main ? 1 : 0.35 + 0.45 * hash(5.9, 2.4, 631)
+    };
+  });
+
+  // Smooth Gaussian random fields with a self-affine spectrum, stretched along strike: a
+  // sum of random Fourier modes, one per equal step in log wavenumber (amplitude k^-H),
+  // scaled to unit variance.
+  const spectralModes = (seed, spec, angle) => {
+    const rng = mulberry32(seed);
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const modes = new Float64Array(4 * spec.modes);
+    let variance = 0;
+    for (let m = 0; m < spec.modes; m++) {
+      const k = 2 * Math.PI / (spec.longest * (spec.shortest / spec.longest) ** ((m + rng()) / spec.modes));
+      const direction = 2 * Math.PI * rng();
+      const along = k * Math.cos(direction) / spec.stretch;
+      const across = k * Math.sin(direction);
+      modes.set([along * cos - across * sin, along * sin + across * cos, 2 * Math.PI * rng(), k ** -spec.hurst], 4 * m);
+      variance += k ** (-2 * spec.hurst) / 2;
+    }
+    for (let m = 3; m < modes.length; m += 4) modes[m] /= Math.sqrt(variance);
+    return modes;
+  };
+
+  // Caprock roughness (Hurst exponent 0.8, wavelengths 8 km to 500 m, stretched 2.5 times
+  // along strike); the roughness input is its RMS height in metres.
+  const ROUGH = Object.freeze({
+    modes: 48,
+    longest: 8000,
+    shortest: 500,
+    hurst: 0.8,
+    stretch: 2.5
+  });
+  const roughModes = scenario => spectralModes(scenario.seed + 7919, ROUGH, strikeAngle(scenario));
+
+  // Aquifer thickness: the mean times a log-normal factor exp(sG - s^2/2) of a smoother
+  // field (Hurst 0.9, wavelengths 12 km to 1.5 km, sand belts stretched twice along
+  // strike), so the mean is kept, thickness stays positive and s is about its spread.
+  const THICK = Object.freeze({
+    modes: 32,
+    longest: 12000,
+    shortest: 1500,
+    hurst: 0.9,
+    stretch: 2
+  });
+  const thickModes = scenario => spectralModes(scenario.seed + 104729, THICK, strikeAngle(scenario));
+  const roughnessAt = (modes, x, y) => {
+    let value = 0;
+    for (let m = 0; m < modes.length; m += 4) value += modes[m + 3] * Math.cos(modes[m] * x + modes[m + 1] * y + modes[m + 2]);
+    return value;
+  };
+  const faultFrame = fault => {
+    const strike = fault.strike * Math.PI / 180;
+    const along = [Math.sin(strike), Math.cos(strike)];
+    return {
+      cx: fault.x * KM,
+      cy: fault.y * KM,
+      half: fault.length * KM / 2,
+      along,
+      normal: [along[1], -along[0]]
+    };
+  };
+
+  // Normal-fault displacement. The throw is parabolic along strike (zero at the tips). The
+  // hanging wall, to the right of the strike direction (right-hand rule), drops by 70 % of
+  // it and the footwall rises by 30 %; both decay away from the fault over a fifth of its
+  // length, so each footwall crest is a closure against its fault.
+  const FOOTWALL_SHARE = 0.3;
+  const faultThrowAt = (fault, frame, x, y) => {
+    const dx = x - frame.cx;
+    const dy = y - frame.cy;
+    const t = (dx * frame.along[0] + dy * frame.along[1]) / frame.half;
+    if (Math.abs(t) >= 1) return 0;
+    return fault.throw * (1 - t * t);
+  };
+  const faultOffset = (fault, frame, x, y) => {
+    const side = (x - frame.cx) * frame.normal[0] + (y - frame.cy) * frame.normal[1];
+    const offset = faultThrowAt(fault, frame, x, y) * Math.exp(-Math.abs(side) / (0.4 * frame.half));
+    return side > 0 ? (1 - FOOTWALL_SHARE) * offset : -FOOTWALL_SHARE * offset;
+  };
+  const topDepth = (x, y, scenario, cache) => {
+    const azimuth = scenario.dipAz * Math.PI / 180;
+    const slope = Math.tan(scenario.dipDeg * Math.PI / 180);
+    let depth = scenario.depth + slope * ((x - LX / 2) * Math.sin(azimuth) + (y - LY / 2) * Math.cos(azimuth));
+    const domes = cache?.domes || domeCentres(scenario);
+    for (const dome of domes) {
+      const dx = x - dome.x;
+      const dy = y - dome.y;
+      const along = dx * Math.cos(dome.angle) + dy * Math.sin(dome.angle);
+      const across = -dx * Math.sin(dome.angle) + dy * Math.cos(dome.angle);
+      depth -= scenario.domeRelief * dome.relief * Math.exp(-0.5 * ((along / dome.along) ** 2 + (across / dome.across) ** 2));
+    }
+    if (scenario.roughness > 0) depth += scenario.roughness * roughnessAt(cache?.rough || roughModes(scenario), x, y);
+    const frames = cache?.frames || scenario.faults.map(faultFrame);
+    scenario.faults.forEach((fault, index) => {
+      depth += faultOffset(fault, frames[index], x, y);
+    });
+    return depth;
+  };
+  const thicknessAt = (x, y, scenario, cache) => {
+    const spread = scenario.thicknessVar / 100;
+    if (!(spread > 0)) return scenario.thickness;
+    return scenario.thickness * Math.exp(spread * roughnessAt(cache?.thick || thickModes(scenario), x, y) - spread * spread / 2);
+  };
+  const depthCache = scenario => ({
+    domes: domeCentres(scenario),
+    frames: scenario.faults.map(faultFrame),
+    rough: roughModes(scenario),
+    thick: thickModes(scenario)
+  });
+
+  // The top-surface depth of one (normalised) scenario as a function of x and y in metres,
+  // with its domes, fault frames and roughness modes computed once.
+  const depthField = scenario => {
+    const cache = depthCache(scenario);
+    return (x, y) => topDepth(x, y, scenario, cache);
+  };
+
+  // The aquifer thickness of one (normalised) scenario as a function of x and y in metres.
+  const thicknessField = scenario => {
+    const cache = depthCache(scenario);
+    return (x, y) => thicknessAt(x, y, scenario, cache);
+  };
+
+  // Segment p–q against the fault trace; returns the along-strike parameter t in [-1, 1] or null.
+  const traceCrossing = (frame, px, py, qx, qy) => {
+    const ax = frame.cx - frame.along[0] * frame.half;
+    const ay = frame.cy - frame.along[1] * frame.half;
+    const bx = frame.cx + frame.along[0] * frame.half;
+    const by = frame.cy + frame.along[1] * frame.half;
+    const rx = qx - px;
+    const ry = qy - py;
+    const sx = bx - ax;
+    const sy = by - ay;
+    const denominator = rx * sy - ry * sx;
+    if (Math.abs(denominator) < 1e-12) return null;
+    const u = ((ax - px) * sy - (ay - py) * sx) / denominator;
+    const v = ((ax - px) * ry - (ay - py) * rx) / denominator;
+    if (u < 0 || u > 1 || v < 0 || v > 1) return null;
+    return 2 * v - 1;
+  };
+  const buildModel = rawScenario => {
+    const scenario = normalizeScenario(rawScenario);
+    const [nx, ny] = GRIDS[scenario.grid];
+    const n = nx * ny;
+    const dx = LX / nx;
+    const dy = LY / ny;
+    const H = scenario.thickness;
+    const p = {
+      k: scenario.permMd * MD,
+      phi: scenario.porosity,
+      H,
+      rhoG: scenario.rhoCo2,
+      rhoW: scenario.rhoBrine,
+      dRho: scenario.rhoBrine - scenario.rhoCo2,
+      g: GRAVITY,
+      muG: scenario.muCo2 * 1e-3,
+      muW: scenario.muBrine * 1e-3,
+      swr: scenario.swr,
+      sgr: Math.min(scenario.sgr, 0.95 - scenario.swr),
+      krg: scenario.krg,
+      ct: scenario.ct * 1e-4 / BAR,
+      rate: scenario.rateMt * MT / YEAR,
+      injEnd: scenario.injYears * YEAR,
+      tEnd: scenario.years * YEAR,
+      disRate: scenario.disRate / YEAR,
+      disCap: scenario.disCap,
+      open: scenario.boundary === 'open'
+    };
+    const cache = depthCache(scenario);
+    const depthAt = (x, y) => topDepth(x, y, scenario, cache);
+    const xc = Float64Array.from({
+      length: nx
+    }, (_, i) => (i + 0.5) * dx);
+    const yc = Float64Array.from({
+      length: ny
+    }, (_, j) => (j + 0.5) * dy);
+    const zt = new Float64Array(n);
+    const Hc = new Float64Array(n);
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        zt[j * nx + i] = depthAt(xc[i], yc[j]);
+        Hc[j * nx + i] = thicknessAt(xc[i], yc[j], scenario, cache);
+      }
+    }
+
+    // Face multiplier: cross-fault transmissibility times the juxtaposed fraction of the
+    // aquifer thickness at the face.
+    const multiplier = (px, py, qx, qy) => {
+      let value = 1;
+      scenario.faults.forEach((fault, index) => {
+        const t = traceCrossing(cache.frames[index], px, py, qx, qy);
+        if (t === null) return;
+        const localThrow = fault.throw * (1 - t * t);
+        value = Math.min(value, fault.trans * Math.max(0, 1 - localThrow / thicknessAt((px + qx) / 2, (py + qy) / 2, scenario, cache)));
+      });
+      return value;
+    };
+    const tx = new Float64Array((nx + 1) * ny);
+    const mx = new Float64Array((nx + 1) * ny);
+    const ghostX = new Float64Array((nx + 1) * ny).fill(NaN);
+    for (let j = 0; j < ny; j++) {
+      for (let f = 0; f <= nx; f++) {
+        const index = j * (nx + 1) + f;
+        const boundary = f === 0 || f === nx;
+        tx[index] = p.k * dy / (boundary ? dx / 2 : dx);
+        mx[index] = boundary ? multiplier(f === 0 ? xc[0] : xc[nx - 1], yc[j], f * dx, yc[j]) : multiplier(xc[f - 1], yc[j], xc[f], yc[j]);
+        if (boundary) ghostX[index] = depthAt(f * dx, yc[j]);
+      }
+    }
+    const ty = new Float64Array(nx * (ny + 1));
+    const my = new Float64Array(nx * (ny + 1));
+    const ghostY = new Float64Array(nx * (ny + 1)).fill(NaN);
+    for (let f = 0; f <= ny; f++) {
+      for (let i = 0; i < nx; i++) {
+        const index = f * nx + i;
+        const boundary = f === 0 || f === ny;
+        ty[index] = p.k * dx / (boundary ? dy / 2 : dy);
+        my[index] = boundary ? multiplier(xc[i], f === 0 ? yc[0] : yc[ny - 1], xc[i], f * dy) : multiplier(xc[i], yc[f - 1], xc[i], yc[f]);
+        if (boundary) ghostY[index] = depthAt(xc[i], f * dy);
+      }
+    }
+
+    // Fault-zone leakage: trace length inside each cell, so the leak rate per metre of
+    // fault does not depend on the grid.
+    const leakCells = [];
+    const faultLines = [];
+    scenario.faults.forEach((fault, faultIndex) => {
+      const frame = cache.frames[faultIndex];
+      const x0 = frame.cx - frame.along[0] * frame.half;
+      const y0 = frame.cy - frame.along[1] * frame.half;
+      const x1 = frame.cx + frame.along[0] * frame.half;
+      const y1 = frame.cy + frame.along[1] * frame.half;
+      faultLines.push([x0, y0, x1, y1]);
+      if (!(fault.kf > 0)) return;
+      const samples = Math.max(1, Math.ceil(fault.length * KM / (Math.min(dx, dy) / 20)));
+      const ds = fault.length * KM / samples;
+      const lengths = new Map();
+      for (let s = 0; s < samples; s++) {
+        const w = (s + 0.5) / samples;
+        const x = x0 + (x1 - x0) * w;
+        const y = y0 + (y1 - y0) * w;
+        if (x < 0 || x >= LX || y < 0 || y >= LY) continue;
+        const cell = Math.floor(y / dy) * nx + Math.floor(x / dx);
+        lengths.set(cell, (lengths.get(cell) || 0) + ds);
+      }
+      for (const [cell, length] of lengths) leakCells.push({
+        cell,
+        length,
+        fault: faultIndex
+      });
+    });
+    const well = clamp(Math.floor(scenario.wellY * KM / dy), 0, ny - 1) * nx + clamp(Math.floor(scenario.wellX * KM / dx), 0, nx - 1);
+    const model = {
+      scenario,
+      nx,
+      ny,
+      n,
+      dx,
+      dy,
+      Lx: LX,
+      Ly: LY,
+      area: dx * dy,
+      H,
+      Hc,
+      p,
+      xc,
+      yc,
+      zt,
+      tx,
+      ty,
+      mx,
+      my,
+      ghostX,
+      ghostY,
+      leakCells,
+      faultLines,
+      well,
+      depthAt,
+      domes: cache.domes
+    };
+    model.traps = trapAnalysis(model);
+    return model;
+  };
+
+  // Binary min-heap of (key, cell) pairs for the priority flood.
+  const createHeap = capacity => {
+    let size = 0;
+    const keys = new Float64Array(capacity);
+    const cells = new Int32Array(capacity);
+    return {
+      get size() {
+        return size;
+      },
+      push(key, cell) {
+        let i = size++;
+        while (i > 0) {
+          const parent = i - 1 >> 1;
+          if (keys[parent] <= key) break;
+          keys[i] = keys[parent];
+          cells[i] = cells[parent];
+          i = parent;
+        }
+        keys[i] = key;
+        cells[i] = cell;
+      },
+      pop() {
+        const top = cells[0];
+        const key = keys[--size];
+        const cell = cells[size];
+        let i = 0;
+        for (;;) {
+          let child = 2 * i + 1;
+          if (child >= size) break;
+          if (child + 1 < size && keys[child + 1] < keys[child]) child++;
+          if (keys[child] >= key) break;
+          keys[i] = keys[child];
+          cells[i] = cells[child];
+          i = child;
+        }
+        keys[i] = key;
+        cells[i] = cell;
+        return top;
+      }
+    };
+  };
+
+  // Visit the four face neighbours of a cell that are connected through a passable face.
+  const forEachNeighbour = (model, cell, visit) => {
+    const {
+      nx,
+      ny,
+      mx,
+      my
+    } = model;
+    const i = cell % nx;
+    const j = (cell - i) / nx;
+    if (i > 0 && mx[j * (nx + 1) + i] > 0) visit(cell - 1);
+    if (i < nx - 1 && mx[j * (nx + 1) + i + 1] > 0) visit(cell + 1);
+    if (j > 0 && my[j * nx + i] > 0) visit(cell - nx);
+    if (j < ny - 1 && my[(j + 1) * nx + i] > 0) visit(cell + nx);
+  };
+  const TRAP_COLUMN = 1e-3;
+
+  // Spill-point analysis (priority flood, Barnes et al. 2014) on the caprock depth: CO2
+  // rises to shallower depth, so domes are "pits" of depth. As in co2lab, the model edge
+  // is always a spill path; compartments sealed off from the edge never spill.
+  const trapAnalysis = model => {
+    const {
+      nx,
+      ny,
+      n,
+      zt
+    } = model;
+    const zSpill = new Float64Array(n).fill(Infinity);
+    const from = new Int32Array(n).fill(-1);
+    const done = new Uint8Array(n);
+    const heap = createHeap(5 * n + 8);
+    for (let c = 0; c < n; c++) {
+      const i = c % nx;
+      const j = (c - i) / nx;
+      if (i === 0 || j === 0 || i === nx - 1 || j === ny - 1) {
+        zSpill[c] = zt[c];
+        heap.push(zt[c], c);
+      }
+    }
+    while (heap.size) {
+      const c = heap.pop();
+      if (done[c]) continue;
+      done[c] = 1;
+      forEachNeighbour(model, c, nb => {
+        if (done[nb]) return;
+        const level = Math.max(zt[nb], zSpill[c]);
+        if (level < zSpill[nb]) {
+          zSpill[nb] = level;
+          from[nb] = c;
+          heap.push(level, nb);
+        }
+      });
+    }
+    const trapId = new Int32Array(n).fill(-1);
+    const traps = [];
+    const capacityFactor = model.p.phi * (1 - model.p.swr) * model.area;
+    for (let seed = 0; seed < n; seed++) {
+      if (trapId[seed] !== -1 || !(zSpill[seed] - zt[seed] > TRAP_COLUMN)) continue;
+      const id = traps.length;
+      const cells = [];
+      trapId[seed] = id;
+      for (let q = [seed]; q.length;) {
+        const c = q.pop();
+        cells.push(c);
+        forEachNeighbour(model, c, nb => {
+          if (trapId[nb] === -1 && zSpill[nb] - zt[nb] > TRAP_COLUMN) {
+            trapId[nb] = id;
+            q.push(nb);
+          }
+        });
+      }
+      let crestCell = cells[0];
+      let spillCell = -1;
+      let capacity = 0;
+      for (const c of cells) {
+        if (zt[c] < zt[crestCell]) crestCell = c;
+        if (spillCell === -1 && from[c] !== -1 && trapId[from[c]] !== id) spillCell = from[c];
+        capacity += Math.min(model.Hc[c], zSpill[c] - zt[c]) * capacityFactor;
+      }
+      traps.push({
+        id,
+        cells: Int32Array.from(cells),
+        crestCell,
+        spillCell,
+        spillDepth: zSpill[crestCell],
+        capacity
+      });
+    }
+    return {
+      zSpill,
+      trapId,
+      traps
+    };
+  };
+
+  // Marching squares on cell-centre values. Segments are [x0, y0, x1, y1, ...] in
+  // cell-index coordinates (cell (i, j) centre at x = i, y = j).
+  const contourSegments = (values, nx, ny, level) => {
+    const out = [];
+    const t = (v0, v1) => (level - v0) / (v1 - v0);
+    for (let j = 0; j < ny - 1; j++) {
+      for (let i = 0; i < nx - 1; i++) {
+        const a = values[j * nx + i];
+        const b = values[j * nx + i + 1];
+        const c = values[(j + 1) * nx + i + 1];
+        const d = values[(j + 1) * nx + i];
+        if (!(Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && Number.isFinite(d))) continue;
+        const code = (a > level ? 1 : 0) | (b > level ? 2 : 0) | (c > level ? 4 : 0) | (d > level ? 8 : 0);
+        if (code === 0 || code === 15) continue;
+        const bottom = () => [i + t(a, b), j];
+        const right = () => [i + 1, j + t(b, c)];
+        const top = () => [i + t(d, c), j + 1];
+        const left = () => [i, j + t(a, d)];
+        const segment = (p, q) => out.push(p[0], p[1], q[0], q[1]);
+        const centreAbove = (a + b + c + d) / 4 > level;
+        switch (code) {
+          case 1:
+          case 14:
+            segment(left(), bottom());
+            break;
+          case 2:
+          case 13:
+            segment(bottom(), right());
+            break;
+          case 3:
+          case 12:
+            segment(left(), right());
+            break;
+          case 4:
+          case 11:
+            segment(right(), top());
+            break;
+          case 6:
+          case 9:
+            segment(bottom(), top());
+            break;
+          case 7:
+          case 8:
+            segment(left(), top());
+            break;
+          case 5:
+            if (centreAbove) {
+              segment(bottom(), right());
+              segment(left(), top());
+            } else {
+              segment(left(), bottom());
+              segment(right(), top());
+            }
+            break;
+          case 10:
+            if (centreAbove) {
+              segment(left(), bottom());
+              segment(right(), top());
+            } else {
+              segment(bottom(), right());
+              segment(left(), top());
+            }
+            break;
+        }
+      }
+    }
+    return Float64Array.from(out);
+  };
+
+  // ------------------------------------------------------------------ dynamics
+
+  const CFL = 0.4;
+  // Films thinner than a micrometre do not move: their mass stays where it is (so the
+  // balance is still exact) and they no longer throttle the time step everywhere.
+  const H_EPS = 1e-6;
+
+  // The start state is brine, plus a methane gas cap when the scenario sets gasContactDepth.
+  // A column above the contact holds gas from its top down to the contact, or down to the
+  // aquifer base. It has no residual gas. Methane is the same light phase as CO2, so it
+  // has the same stored volume s. The array ch4 holds the methane part of s.
+  const createState = model => {
+    const {
+      n,
+      nx,
+      ny,
+      p,
+      zt,
+      Hc
+    } = model;
+    const h = new Float64Array(n);
+    const hMax = new Float64Array(n);
+    const s = new Float64Array(n);
+    const ch4 = new Float64Array(n);
+    const contact = model.scenario.gasContactDepth;
+    let hasMethane = false;
+    if (contact !== null) {
+      const drain = p.phi * (1 - p.swr);
+      for (let c = 0; c < n; c++) {
+        if (!(zt[c] < contact)) continue;
+        h[c] = hMax[c] = Math.min(contact - zt[c], Hc[c]);
+        s[c] = ch4[c] = drain * h[c];
+        hasMethane = true;
+      }
+    }
+    return {
+      t: 0,
+      steps: 0,
+      h,
+      hMax,
+      s,
+      ch4,
+      md: new Float64Array(n),
+      p: new Float64Array(n),
+      ux: new Float64Array((nx + 1) * ny),
+      uy: new Float64Array(nx * (ny + 1)),
+      fx: new Float64Array((nx + 1) * ny),
+      fy: new Float64Array(nx * (ny + 1)),
+      net: new Float64Array(n),
+      rate: new Float64Array(n),
+      leaking: new Uint8Array(model.scenario.faults.length),
+      // The injected, exited, leaked and dissolved totals count CO2 only (kg). The methane
+      // totals are kept apart. The tracer runs only while hasMethane is true.
+      injected: 0,
+      exited: 0,
+      leaked: 0,
+      dissolved: 0,
+      methaneExited: 0,
+      methaneLeaked: 0,
+      methaneDissolved: 0,
+      hasMethane,
+      frac: new Float64Array(n),
+      dMethane: new Float64Array(n),
+      pressureActive: true
+    };
+  };
+
+  // The CO2 part of the gas in column c (1 where the column holds no methane).
+  const co2Share = (state, c) => state.ch4[c] > 0 && state.s[c] > 0 ? 1 - state.ch4[c] / state.s[c] : 1;
+
+  // CO2 volume per area s = phi[(1 - Swr) h + Sgr (hMax - h)] -> (h, hMax).
+  const invertColumn = (p, state, c) => {
+    const s = state.s[c];
+    const drain = p.phi * (1 - p.swr);
+    const residual = p.phi * p.sgr;
+    const hMax = state.hMax[c];
+    if (s >= drain * hMax) {
+      state.h[c] = state.hMax[c] = s / drain;
+    } else if (s >= residual * hMax) {
+      state.h[c] = (s - residual * hMax) / (drain - residual);
+    } else {
+      state.h[c] = 0;
+      state.hMax[c] = residual > 0 ? s / residual : 0;
+    }
+  };
+
+  // Gas volume flux across one face (positive from side A to side B) with hybrid
+  // upwinding: the viscous part follows the total flux, buoyancy follows the phase
+  // potentials (gas from the deeper interface, brine the other way).
+  const faceFlux = (k, T, U, zetaA, zetaB, hA, hB, HA, HB, scratch) => {
+    if (hA <= H_EPS && hB <= H_EPS) {
+      scratch.bound = 0;
+      return 0;
+    }
+    const a = k.a;
+    const b = k.b;
+    const dz = zetaA - zetaB;
+    let mob = 0;
+    let gravity = 0;
+    if (dz !== 0 && T > 0) {
+      const gas = dz > 0 ? a * Math.min(hA, HA) : a * Math.min(hB, HB);
+      const brine = dz > 0 ? b * Math.max(0, HB - hB) : b * Math.max(0, HA - hA);
+      mob = gas + brine > 0 ? gas * brine / (gas + brine) : 0;
+      gravity = T * k.tg * dz * mob;
+    }
+    let viscous = 0;
+    let slope = 0;
+    if (U !== 0) {
+      const Hu = U > 0 ? HA : HB;
+      const hu = Math.min(U > 0 ? hA : hB, Hu);
+      const gas = a * hu;
+      const brine = b * (Hu - hu);
+      const total = gas + brine;
+      if (total > 0) {
+        viscous = U * gas / total;
+        // df/dh at the upstream column: the local characteristic speed.
+        slope = a * b * Hu / (total * total);
+      }
+    }
+    scratch.bound = T * k.tg * (mob + Math.abs(dz) * (a + b)) + Math.abs(U) * slope;
+    return viscous + gravity;
+  };
+  const FAULT_ZONE_WIDTH = 5;
+  const CAPROCK_THICKNESS = 100;
+
+  // Operator-split sinks after each transport step: vertical leakage up leaky fault zones
+  // (only above the seal capacity, never draining a column below it) and convective
+  // dissolution into the brine column until it is saturated. Each sink removes methane and
+  // CO2 in proportion to the methane share of the column. The dissolved mass per area md
+  // counts both gases, because they share the brine capacity.
+  const applySinks = (model, state, dt) => {
+    const {
+      p,
+      area,
+      Hc
+    } = model;
+    const {
+      h,
+      s,
+      ch4,
+      md
+    } = state;
+    const tracer = state.hasMethane;
+    const imbibe = p.phi * Math.max(1e-3, 1 - p.swr - p.sgr);
+    state.leaking.fill(0);
+    for (const {
+      cell,
+      length,
+      fault
+    } of model.leakCells) {
+      const {
+        sealCap,
+        kf
+      } = model.scenario.faults[fault];
+      const excess = Math.min(h[cell], Hc[cell]) - sealCap;
+      if (!(excess > 0)) continue;
+      const rate = length * FAULT_ZONE_WIDTH * kf * MD * (p.krg / p.muG) * p.dRho * p.g * (excess / CAPROCK_THICKNESS + 1);
+      const volume = Math.min(rate * dt, excess * imbibe * area);
+      if (!(volume > 0)) continue;
+      const share = tracer ? 1 - co2Share(state, cell) : 0;
+      s[cell] -= volume / area;
+      state.leaked += volume * (1 - share) * p.rhoG;
+      if (share > 0) {
+        state.methaneLeaked += volume * share * p.rhoG;
+        ch4[cell] = clamp(ch4[cell] - volume * share / area, 0, s[cell]);
+      }
+      state.leaking[fault] = 1;
+      invertColumn(p, state, cell);
+    }
+    if (p.disRate > 0 && p.disCap > 0) {
+      for (let c = 0; c < model.n; c++) {
+        const capacity = p.disCap * p.phi * Hc[c];
+        if (s[c] <= 0 || md[c] >= capacity) continue;
+        const mass = Math.min(p.disRate * dt, capacity - md[c], p.rhoG * s[c]);
+        if (!(mass > 0)) continue;
+        const share = tracer ? 1 - co2Share(state, c) : 0;
+        md[c] += mass;
+        s[c] = Math.max(0, s[c] - mass / p.rhoG);
+        state.dissolved += mass * (1 - share) * area;
+        if (share > 0) {
+          state.methaneDissolved += mass * share * area;
+          ch4[c] = clamp(ch4[c] - mass * share / p.rhoG, 0, s[c]);
+        }
+        invertColumn(p, state, c);
+      }
+    }
+  };
+
+  // Methane share of the gas in each column, taken before a transport step.
+  const methaneFractions = state => {
+    const {
+      s,
+      ch4,
+      frac
+    } = state;
+    for (let c = 0; c < s.length; c++) frac[c] = s[c] > 0 ? Math.min(1, ch4[c] / s[c]) : 0;
+  };
+
+  // Move the methane tracer with the gas face fluxes of the step. A face carries the methane
+  // share of its upwind column (from methaneFractions), so the tracer does not change the
+  // flow. Injection adds CO2 only. Call this after s is updated: it keeps 0 <= ch4 <= s.
+  // It returns the methane volume rate that leaves through the open boundaries.
+  const moveMethane = (model, state, dt) => {
+    const {
+      nx,
+      ny,
+      n,
+      area
+    } = model;
+    const {
+      s,
+      ch4,
+      fx,
+      fy,
+      frac,
+      dMethane
+    } = state;
+    let outflow = 0;
+    dMethane.fill(0);
+    for (let j = 0; j < ny; j++) {
+      for (let f = 0; f <= nx; f++) {
+        const index = j * (nx + 1) + f;
+        const flux = fx[index];
+        if (flux === 0) continue;
+        if (f === 0 || f === nx) {
+          // Boundary faces let gas out only. The stored flux is negative at the west edge.
+          const c = j * nx + (f === 0 ? 0 : nx - 1);
+          const methane = (f === 0 ? -flux : flux) * frac[c];
+          dMethane[c] -= methane;
+          outflow += methane;
+          continue;
+        }
+        const L = j * nx + f - 1;
+        const methane = flux * (flux > 0 ? frac[L] : frac[L + 1]);
+        dMethane[L] -= methane;
+        dMethane[L + 1] += methane;
+      }
+    }
+    for (let f = 0; f <= ny; f++) {
+      for (let i = 0; i < nx; i++) {
+        const index = f * nx + i;
+        const flux = fy[index];
+        if (flux === 0) continue;
+        if (f === 0 || f === ny) {
+          const c = (f === 0 ? 0 : ny - 1) * nx + i;
+          const methane = (f === 0 ? -flux : flux) * frac[c];
+          dMethane[c] -= methane;
+          outflow += methane;
+          continue;
+        }
+        const S = (f - 1) * nx + i;
+        const methane = flux * (flux > 0 ? frac[S] : frac[S + nx]);
+        dMethane[S] -= methane;
+        dMethane[S + nx] += methane;
+      }
+    }
+    for (let c = 0; c < n; c++) {
+      if (dMethane[c] !== 0) ch4[c] += dt * dMethane[c] / area;
+      if (ch4[c] < 0) ch4[c] = 0;else if (ch4[c] > s[c]) ch4[c] = s[c];
+    }
+    return outflow;
+  };
+  const stepTransport = (model, state, dtMax) => {
+    const {
+      nx,
+      ny,
+      n,
+      p,
+      tx,
+      ty,
+      mx,
+      my,
+      zt,
+      ghostX,
+      ghostY,
+      area,
+      Hc
+    } = model;
+    const {
+      h,
+      s,
+      ux,
+      uy,
+      fx,
+      fy,
+      net,
+      rate
+    } = state;
+    const a = p.krg / p.muG;
+    const b = 1 / p.muW;
+    const k = {
+      a,
+      b,
+      tg: p.dRho * p.g
+    };
+    const scratch = {
+      bound: 0
+    };
+    net.fill(0);
+    rate.fill(0);
+    // Boundary faces use phase-potential upwinding: the hydrostatic ghost holds no gas,
+    // so CO2 leaves only where its own potential drops outward.
+    const boundaryFlux = (T, c, ghostDepth) => {
+      if (h[c] <= H_EPS) {
+        scratch.bound = 0;
+        return 0;
+      }
+      const hc = Math.min(h[c], Hc[c]);
+      const drop = state.p[c] + k.tg * (zt[c] + h[c] - ghostDepth);
+      scratch.bound = T * a * (Math.abs(drop) + k.tg * hc);
+      return drop > 0 ? T * a * hc * drop : 0;
+    };
+    for (let j = 0; j < ny; j++) {
+      for (let f = 0; f <= nx; f++) {
+        const index = j * (nx + 1) + f;
+        const T = tx[index] * mx[index];
+        if (f === 0 || f === nx) {
+          if (!p.open || T === 0) {
+            fx[index] = 0;
+            continue;
+          }
+          const c = j * nx + (f === 0 ? 0 : nx - 1);
+          const flux = boundaryFlux(T, c, ghostX[index]);
+          fx[index] = f === 0 ? -flux : flux;
+          net[c] -= flux;
+          rate[c] += scratch.bound;
+          continue;
+        }
+        const L = j * nx + f - 1;
+        const R = L + 1;
+        if (T === 0) {
+          fx[index] = 0;
+          continue;
+        }
+        const flux = faceFlux(k, T, ux[index], zt[L] + h[L], zt[R] + h[R], h[L], h[R], Hc[L], Hc[R], scratch);
+        fx[index] = flux;
+        net[L] -= flux;
+        net[R] += flux;
+        rate[L] += scratch.bound;
+        rate[R] += scratch.bound;
+      }
+    }
+    for (let f = 0; f <= ny; f++) {
+      for (let i = 0; i < nx; i++) {
+        const index = f * nx + i;
+        const T = ty[index] * my[index];
+        if (f === 0 || f === ny) {
+          if (!p.open || T === 0) {
+            fy[index] = 0;
+            continue;
+          }
+          const c = (f === 0 ? 0 : ny - 1) * nx + i;
+          const flux = boundaryFlux(T, c, ghostY[index]);
+          fy[index] = f === 0 ? -flux : flux;
+          net[c] -= flux;
+          rate[c] += scratch.bound;
+          continue;
+        }
+        const S = (f - 1) * nx + i;
+        const N = S + nx;
+        if (T === 0) {
+          fy[index] = 0;
+          continue;
+        }
+        const flux = faceFlux(k, T, uy[index], zt[S] + h[S], zt[N] + h[N], h[S], h[N], Hc[S], Hc[N], scratch);
+        fy[index] = flux;
+        net[S] -= flux;
+        net[N] += flux;
+        rate[S] += scratch.bound;
+        rate[N] += scratch.bound;
+      }
+    }
+    const injecting = state.t < p.injEnd && p.rate > 0;
+    const volumeRate = injecting ? p.rate / p.rhoG : 0;
+    net[model.well] += volumeRate;
+
+    // Explicit stability: the smallest storage coefficient (imbibition) bounds the step,
+    // and one step may fill at most a quarter of the injector cell's pore volume.
+    const storage = p.phi * Math.max(1e-3, 1 - p.swr - p.sgr) * area;
+    let dt = volumeRate > 0 ? Math.min(dtMax, 0.25 * p.phi * (1 - p.swr) * Hc[model.well] * area / volumeRate) : dtMax;
+    for (let c = 0; c < n; c++) if (rate[c] > 0) dt = Math.min(dt, CFL * storage / rate[c]);
+    // Never let a column go negative: shrink the step instead of clipping mass.
+    for (let c = 0; c < n; c++) {
+      if (net[c] < 0 && s[c] + dt * net[c] / area < 0) dt = Math.min(dt, 0.999 * s[c] * area / -net[c]);
+    }
+    const tracer = state.hasMethane;
+    if (tracer) methaneFractions(state);
+    for (let c = 0; c < n; c++) {
+      if (net[c] === 0) continue;
+      s[c] += dt * net[c] / area;
+      if (s[c] < 0) s[c] = 0;
+      invertColumn(p, state, c);
+    }
+    const methaneOut = tracer ? moveMethane(model, state, dt) : 0;
+    applySinks(model, state, dt);
+    let outflow = 0;
+    if (p.open) {
+      for (let j = 0; j < ny; j++) outflow += fx[j * (nx + 1) + nx] - fx[j * (nx + 1)];
+      for (let i = 0; i < nx; i++) outflow += fy[ny * nx + i] - fy[i];
+    }
+    state.exited += (outflow - methaneOut) * dt * p.rhoG;
+    state.methaneExited += methaneOut * dt * p.rhoG;
+    state.injected += volumeRate * dt * p.rhoG;
+    state.t += dt;
+    state.steps++;
+    return dt;
+  };
+
+  // ------------------------------------------------------------------ pressure
+
+  const PRESSURE_TOL = 1e-7;
+  const RELAXED_RATE = 0.05 * BAR / YEAR;
+  const MAX_RELAX_TIME = 50 * YEAR;
+
+  // Implicit (backward-Euler) brine-potential equation with total compressibility:
+  //   phi ct H_c A (p - p_old)/dt + sum T m LamT (p_c - p_nb) = Qv - sum T m LamG drho g (zeta_c - zeta_nb)
+  // solved matrix-free with Jacobi-preconditioned CG, then converted to total face fluxes.
+  const solvePressure = (model, state, dt, injecting) => {
+    const {
+      nx,
+      ny,
+      n,
+      p,
+      tx,
+      ty,
+      mx,
+      my,
+      zt,
+      ghostX,
+      ghostY,
+      area,
+      Hc
+    } = model;
+    const {
+      h
+    } = state;
+    const a = p.krg / p.muG;
+    const b = 1 / p.muW;
+    const tg = p.dRho * p.g;
+    const cg = state.cg || (state.cg = {
+      wx: new Float64Array((nx + 1) * ny),
+      wy: new Float64Array(nx * (ny + 1)),
+      gx: new Float64Array((nx + 1) * ny),
+      gy: new Float64Array(nx * (ny + 1)),
+      diag: new Float64Array(n),
+      rhs: new Float64Array(n),
+      r: new Float64Array(n),
+      z: new Float64Array(n),
+      d: new Float64Array(n),
+      q: new Float64Array(n),
+      old: new Float64Array(n),
+      wE: new Float64Array(n),
+      wN: new Float64Array(n),
+      prev: new Float64Array(n),
+      prevInterval: 0
+    });
+    const {
+      wx,
+      wy,
+      gx,
+      gy,
+      diag,
+      rhs,
+      r,
+      z,
+      d,
+      q,
+      old
+    } = cg;
+    const lamT = c => a * Math.min(h[c], Hc[c]) + b * Math.max(0, Hc[c] - h[c]);
+    const lamG = c => a * Math.min(h[c], Hc[c]);
+    const acc = p.phi * p.ct * area / dt;
+    old.set(state.p);
+    for (let c = 0; c < n; c++) {
+      diag[c] = acc * Hc[c];
+      rhs[c] = diag[c] * state.p[c];
+    }
+    if (injecting) rhs[model.well] += p.rate / p.rhoG;
+    for (let j = 0; j < ny; j++) {
+      for (let f = 0; f <= nx; f++) {
+        const index = j * (nx + 1) + f;
+        const T = tx[index] * mx[index];
+        wx[index] = 0;
+        gx[index] = 0;
+        if (T === 0) continue;
+        if (f === 0 || f === nx) {
+          if (!p.open) continue;
+          const c = j * nx + (f === 0 ? 0 : nx - 1);
+          // Outward-positive buoyancy flux into the hydrostatic ghost (h = 0, p = 0).
+          wx[index] = T * 0.5 * (lamT(c) + b * Hc[c]);
+          gx[index] = T * 0.5 * lamG(c) * tg * (zt[c] + h[c] - ghostX[index]);
+          diag[c] += wx[index];
+          rhs[c] -= gx[index];
+          continue;
+        }
+        const L = j * nx + f - 1;
+        const R = L + 1;
+        wx[index] = T * 0.5 * (lamT(L) + lamT(R));
+        gx[index] = T * 0.5 * (lamG(L) + lamG(R)) * tg * (zt[L] + h[L] - zt[R] - h[R]);
+        diag[L] += wx[index];
+        diag[R] += wx[index];
+        rhs[L] -= gx[index];
+        rhs[R] += gx[index];
+      }
+    }
+    for (let f = 0; f <= ny; f++) {
+      for (let i = 0; i < nx; i++) {
+        const index = f * nx + i;
+        const T = ty[index] * my[index];
+        wy[index] = 0;
+        gy[index] = 0;
+        if (T === 0) continue;
+        if (f === 0 || f === ny) {
+          if (!p.open) continue;
+          const c = (f === 0 ? 0 : ny - 1) * nx + i;
+          wy[index] = T * 0.5 * (lamT(c) + b * Hc[c]);
+          gy[index] = T * 0.5 * lamG(c) * tg * (zt[c] + h[c] - ghostY[index]);
+          diag[c] += wy[index];
+          rhs[c] -= gy[index];
+          continue;
+        }
+        const S = (f - 1) * nx + i;
+        const N = S + nx;
+        wy[index] = T * 0.5 * (lamT(S) + lamT(N));
+        gy[index] = T * 0.5 * (lamG(S) + lamG(N)) * tg * (zt[S] + h[S] - zt[N] - h[N]);
+        diag[S] += wy[index];
+        diag[N] += wy[index];
+        rhs[S] -= gy[index];
+        rhs[N] += gy[index];
+      }
+    }
+
+    // Five-point stencil per cell: east and north couplings (west/south are the
+    // neighbours' east/north) give a single pass over the grid.
+    const {
+      wE,
+      wN
+    } = cg;
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        const c = j * nx + i;
+        wE[c] = i < nx - 1 ? wx[j * (nx + 1) + i + 1] : 0;
+        wN[c] = j < ny - 1 ? wy[(j + 1) * nx + i] : 0;
+      }
+    }
+    const apply = (x, out) => {
+      for (let j = 0; j < ny; j++) {
+        const row = j * nx;
+        for (let i = 0; i < nx; i++) {
+          const c = row + i;
+          let v = diag[c] * x[c];
+          if (i > 0) v -= wE[c - 1] * x[c - 1];
+          if (i < nx - 1) v -= wE[c] * x[c + 1];
+          if (j > 0) v -= wN[c - nx] * x[c - nx];
+          if (j < ny - 1) v -= wN[c] * x[c + nx];
+          out[c] = v;
+        }
+      }
+    };
+
+    // Start CG from a linear extrapolation of the last two solutions.
+    const x = state.p;
+    const prev = cg.prev;
+    if (cg.prevInterval > 0) {
+      const ratio = Math.min(2, dt / cg.prevInterval);
+      for (let c = 0; c < n; c++) x[c] += ratio * (x[c] - prev[c]);
+    }
+    prev.set(old);
+    cg.prevInterval = dt;
+    apply(x, q);
+    let bNorm = 0;
+    let rz = 0;
+    for (let c = 0; c < n; c++) {
+      r[c] = rhs[c] - q[c];
+      z[c] = r[c] / diag[c];
+      d[c] = z[c];
+      rz += r[c] * z[c];
+      bNorm += rhs[c] * rhs[c];
+    }
+    bNorm = Math.sqrt(bNorm) || 1;
+    let iterations = 0;
+    for (; iterations < 3000; iterations++) {
+      let rNorm = 0;
+      for (let c = 0; c < n; c++) rNorm += r[c] * r[c];
+      if (Math.sqrt(rNorm) <= PRESSURE_TOL * bNorm) break;
+      apply(d, q);
+      let dq = 0;
+      for (let c = 0; c < n; c++) dq += d[c] * q[c];
+      if (!(dq > 0)) break;
+      const alpha = rz / dq;
+      let rzNew = 0;
+      for (let c = 0; c < n; c++) {
+        x[c] += alpha * d[c];
+        r[c] -= alpha * q[c];
+        z[c] = r[c] / diag[c];
+        rzNew += r[c] * z[c];
+      }
+      const beta = rzNew / rz;
+      rz = rzNew;
+      for (let c = 0; c < n; c++) d[c] = z[c] + beta * d[c];
+    }
+
+    // Total face fluxes: interior faces positive in +x/+y; boundary faces store +x/+y too.
+    for (let j = 0; j < ny; j++) {
+      for (let f = 0; f <= nx; f++) {
+        const index = j * (nx + 1) + f;
+        if (wx[index] === 0 && gx[index] === 0) {
+          state.ux[index] = 0;
+          continue;
+        }
+        if (f === 0) state.ux[index] = -(wx[index] * x[j * nx] + gx[index]);else if (f === nx) state.ux[index] = wx[index] * x[j * nx + nx - 1] + gx[index];else state.ux[index] = wx[index] * (x[j * nx + f - 1] - x[j * nx + f]) + gx[index];
+      }
+    }
+    for (let f = 0; f <= ny; f++) {
+      for (let i = 0; i < nx; i++) {
+        const index = f * nx + i;
+        if (wy[index] === 0 && gy[index] === 0) {
+          state.uy[index] = 0;
+          continue;
+        }
+        if (f === 0) state.uy[index] = -(wy[index] * x[i] + gy[index]);else if (f === ny) state.uy[index] = wy[index] * x[(ny - 1) * nx + i] + gy[index];else state.uy[index] = wy[index] * (x[(f - 1) * nx + i] - x[f * nx + i]) + gy[index];
+      }
+    }
+    let change = 0;
+    for (let c = 0; c < n; c++) change = Math.max(change, Math.abs(x[c] - old[c]));
+    state.cgIterations = iterations;
+    state.cgTotal = (state.cgTotal || 0) + iterations;
+    state.solves = (state.solves || 0) + 1;
+    return change;
+  };
+  const pressureInterval = (state, p) => {
+    if (state.t < p.injEnd) return clamp(0.25 * state.t, 2 * 86400, 0.5 * YEAR);
+    return 0.5 * YEAR;
+  };
+  const advance = (model, state, tTarget) => {
+    const p = model.p;
+    if (state.nextPressure === undefined) state.nextPressure = 0;
+    while (state.t < tTarget * (1 - 1e-12)) {
+      if (state.pressureActive && state.t >= state.nextPressure * (1 - 1e-12)) {
+        let interval = pressureInterval(state, p);
+        if (state.t < p.injEnd) interval = Math.min(interval, p.injEnd - state.t);
+        const injecting = state.t < p.injEnd && p.rate > 0;
+        const change = solvePressure(model, state, interval, injecting);
+        state.nextPressure = state.t + interval;
+        if (!injecting && state.t >= p.injEnd && (change / interval < RELAXED_RATE || state.t - p.injEnd > MAX_RELAX_TIME)) {
+          state.pressureActive = false;
+          state.ux.fill(0);
+          state.uy.fill(0);
+        }
+      }
+      let dtMax = tTarget - state.t;
+      if (state.t < p.injEnd && state.t + dtMax > p.injEnd) dtMax = p.injEnd - state.t;
+      if (state.pressureActive) dtMax = Math.min(dtMax, state.nextPressure - state.t);
+      stepTransport(model, state, dtMax);
+    }
+  };
+
+  // Key performance indicators at the current state (SI). Footprint, column and migration
+  // count the CO2 part of the gas only.
+  const kpis = (model, state) => {
+    const {
+      n,
+      nx,
+      p,
+      Hc,
+      area,
+      xc,
+      yc
+    } = model;
+    const a = p.krg / p.muG;
+    const b = 1 / p.muW;
+    let footprint = 0;
+    let maxColumn = 0;
+    let migration = 0;
+    let pMax = 0;
+    const wx = xc[model.well % nx];
+    const wy = yc[Math.floor(model.well / nx)];
+    for (let c = 0; c < n; c++) {
+      const column = state.h[c] * co2Share(state, c);
+      if (state.s[c] - state.ch4[c] > 1e-3) footprint += area;
+      if (column > maxColumn) maxColumn = column;
+      if (column > 0.1) migration = Math.max(migration, Math.hypot(xc[c % nx] - wx, yc[Math.floor(c / nx)] - wy));
+      if (state.p[c] > pMax) pMax = state.p[c];
+    }
+    let bhp = state.p[model.well];
+    if (state.t < p.injEnd && p.rate > 0) {
+      const Hw = Hc[model.well];
+      const hw = Math.min(state.h[model.well], Hw);
+      const lamT = a * hw + b * (Hw - hw);
+      bhp += p.rate / p.rhoG * Math.log(0.198 * model.dx / 0.1) / (2 * Math.PI * p.k * lamT);
+    }
+    return {
+      footprint,
+      maxColumn,
+      migration,
+      bhp,
+      pMax
+    };
+  };
+
+  // CO2 inventory in kg, classified as in co2lab: free plume, structurally trapped
+  // (mobile CO2 above the local spill depth), residually trapped, dissolved, left the
+  // model through an open boundary, and leaked up fault zones. Every class counts the CO2
+  // part of the gas only. The methane rows give the methane in place and its three sinks.
+  const inventory = (model, state) => {
+    const {
+      n,
+      p,
+      area,
+      zt,
+      traps
+    } = model;
+    const {
+      h,
+      hMax
+    } = state;
+    const mobileFactor = p.rhoG * p.phi * (1 - p.swr) * area;
+    const residualFactor = p.rhoG * p.phi * p.sgr * area;
+    let mobile = 0;
+    let structural = 0;
+    let residual = 0;
+    let methane = 0;
+    for (let c = 0; c < n; c++) {
+      if (state.s[c] <= 0) continue;
+      const co2 = co2Share(state, c);
+      mobile += h[c] * mobileFactor * co2;
+      residual += (hMax[c] - h[c]) * residualFactor * co2;
+      const closure = traps.zSpill[c] - zt[c];
+      if (closure > 0) structural += Math.min(h[c], closure) * mobileFactor * co2;
+      methane += state.ch4[c];
+    }
+    const result = {
+      injected: state.injected,
+      free: Math.max(0, mobile - structural),
+      structural,
+      residual: Math.max(0, residual),
+      dissolved: state.dissolved,
+      exited: state.exited,
+      leaked: state.leaked,
+      methane: methane * area * p.rhoG,
+      methaneExited: state.methaneExited,
+      methaneLeaked: state.methaneLeaked,
+      methaneDissolved: state.methaneDissolved
+    };
+    result.balance = result.injected - (result.free + result.structural + result.residual + result.dissolved + result.exited + result.leaked);
+    return result;
+  };
+  const MAX_STEPS = 400000;
+  const modelViewOf = model => ({
+    nx: model.nx,
+    ny: model.ny,
+    dx: model.dx,
+    dy: model.dy,
+    Lx: model.Lx,
+    Ly: model.Ly,
+    H: model.H,
+    Hc: Float32Array.from(model.Hc),
+    depth: model.scenario.depth,
+    years: model.scenario.years,
+    injYears: model.scenario.injYears,
+    open: model.p.open,
+    zt: Float32Array.from(model.zt),
+    zSpill: Float32Array.from(model.traps.zSpill),
+    trapId: Int32Array.from(model.traps.trapId),
+    traps: model.traps.traps.map(({
+      id,
+      crestCell,
+      spillCell,
+      spillDepth,
+      capacity,
+      cells
+    }) => ({
+      id,
+      crestCell,
+      spillCell,
+      spillDepth,
+      capacity,
+      size: cells.length
+    })),
+    faults: model.scenario.faults.map(fault => ({
+      ...fault
+    })),
+    faultLines: model.faultLines.map(line => line.slice()),
+    leakCells: model.leakCells.map(cell => ({
+      ...cell
+    })),
+    well: model.well,
+    wellX: model.xc[model.well % model.nx],
+    wellY: model.yc[Math.floor(model.well / model.nx)],
+    phi: model.p.phi,
+    swr: model.p.swr,
+    sgr: model.p.sgr,
+    rhoG: model.p.rhoG,
+    disCapacity: Float32Array.from(model.Hc, H => model.p.disCap * model.p.phi * H)
+  });
+
+  // Methane share of the gas in each column, 0 to 1 (0 where there is no gas).
+  const methaneShare = state => {
+    const share = new Float32Array(state.s.length);
+    for (let c = 0; c < share.length; c++) if (state.ch4[c] > 0 && state.s[c] > 0) share[c] = Math.min(1, state.ch4[c] / state.s[c]);
+    return share;
+  };
+  const snapshotOf = (model, state, year) => ({
+    year,
+    h: Float32Array.from(state.h),
+    hMax: Float32Array.from(state.hMax),
+    ch4: methaneShare(state),
+    md: Float32Array.from(state.md),
+    p: Float32Array.from(state.p),
+    fx: Float32Array.from(state.fx),
+    fy: Float32Array.from(state.fy),
+    leaking: Uint8Array.from(state.leaking),
+    inv: inventory(model, state),
+    kpi: kpis(model, state)
+  });
+
+  // Run a scenario from year 0 to scenario.years. History rows every year, field
+  // snapshots every `snapshotYears`. Ends early (truncated) if the step budget runs out.
+  const run = (rawScenario, options = {}) => {
+    const model = buildModel(rawScenario);
+    const state = createState(model);
+    const modelView = modelViewOf(model);
+    const snapshotYears = options.snapshotYears || 5;
+    const keepSnapshots = options.keepSnapshots !== false;
+    const maxSteps = options.maxSteps || MAX_STEPS;
+    options.onModel?.(modelView);
+    const history = [];
+    const snapshots = [];
+    let bhpPeak = 0;
+    let truncated = false;
+    const record = year => {
+      const inv = inventory(model, state);
+      const kpi = kpis(model, state);
+      bhpPeak = Math.max(bhpPeak, kpi.bhp);
+      history.push({
+        year,
+        ...inv,
+        footprint: kpi.footprint,
+        maxColumn: kpi.maxColumn,
+        migration: kpi.migration,
+        bhp: kpi.bhp,
+        bhpPeak
+      });
+      if (year % snapshotYears === 0) {
+        const snap = snapshotOf(model, state, year);
+        if (keepSnapshots) snapshots.push(snap);
+        options.onSnapshot?.(snap, history);
+      }
+    };
+    record(0);
+    for (let year = 1; year <= model.scenario.years; year++) {
+      advance(model, state, year * YEAR);
+      record(year);
+      if (state.steps > maxSteps) {
+        truncated = true;
+        break;
+      }
+    }
+    return {
+      modelView,
+      snapshots,
+      history,
+      truncated,
+      steps: state.steps,
+      scenario: model.scenario
+    };
+  };
+
+  // ------------------------------------------------------------------ random structures
+
+  // Fault rock from the shale gouge ratio (SGR) of the faulted interval: permeability (mD)
+  // and thickness (throw / 66) after Manzocchi et al. (1999), giving the cross-fault
+  // multiplier between two 250 m cells (the standard grid), and the CO2 column the fault
+  // rock holds from the Bretan et al. (2003) calibration for burial above 3 km.
+  const faultSeal = (throwM, sgr, permMd, dRho) => {
+    const kf = 10 ** (0.4 - 4 * sgr - 0.25 * Math.log10(Math.max(1, throwM)) * (1 - sgr) ** 5);
+    return {
+      trans: 1 / (1 + throwM / 66 / 250 * Math.max(0, permMd / kf - 1)),
+      sealCap: 10 ** (100 * sgr / 27 - 0.5) * BAR / (dRho * GRAVITY)
+    };
+  };
+  const RANDOM_STYLES = Object.freeze({
+    'random-fault-blocks': {
+      label: 'Tilted fault blocks',
+      description: 'Parallel normal faults tilt the aquifer into blocks. CO₂ rises to the crest of its block, against the fault up-dip.'
+    },
+    'random-dome': {
+      label: 'Faulted dome',
+      description: 'A closure elongated along strike, often cut by small crestal faults, with the injector on its down-dip flank.'
+    },
+    'random-homocline': {
+      label: 'Undulating homocline',
+      description: 'A dipping aquifer whose caprock undulates along strike. Rising CO₂ fills many small traps on its way up-dip.'
+    }
+  });
+
+  // A random structure from one geological setting, so that dip, folds, faults and fault
+  // rock agree: a fault set shares the regional strike, throw grows with length (D = γL),
+  // seals follow the shale gouge ratio and the injector sits down-dip of the main closure.
+  const randomStructure = (seed, base = DEFAULTS, style) => {
+    const rng = mulberry32(seed);
+    const between = (min, max) => min + (max - min) * rng();
+    const logBetween = (min, max) => Math.exp(between(Math.log(min), Math.log(max)));
+    const round = (value, digits = 1) => +value.toFixed(digits);
+    const unit = azimuth => [Math.sin(azimuth * Math.PI / 180), Math.cos(azimuth * Math.PI / 180)];
+    const styles = Object.keys(RANDOM_STYLES);
+    const drawn = styles[Math.floor(rng() * styles.length)];
+    const kind = RANDOM_STYLES[style] ? style : drawn;
+    const fault = (x, y, strike, length, gamma) => {
+      const throwM = Math.min(150, Math.round(gamma * length * KM));
+      const seal = faultSeal(throwM, between(0.12, 0.4), base.permMd, base.rhoBrine - base.rhoCo2);
+      return {
+        x: round(clamp(x, 0.5, 19.5)),
+        y: round(clamp(y, 0.5, 11.5)),
+        strike: (Math.round(strike) % 360 + 360) % 360,
+        length: round(length),
+        throw: throwM,
+        trans: round(seal.trans, 2),
+        sealCap: Math.min(200, Math.round(seal.sealCap)),
+        kf: rng() < 0.3 ? Math.round(logBetween(5, 60)) : 0
+      };
+    };
+    const well = (x, y) => ({
+      wellX: round(clamp(x, 1.5, 18.5)),
+      wellY: round(clamp(y, 1.5, 10.5))
+    });
+    if (kind === 'random-fault-blocks') {
+      // Domino blocks: the faults dip one way and the beds the other, so each block rises
+      // to a footwall crest against the next fault up-dip. The injector sits in the block
+      // down-dip of the fault nearest the centre.
+      const strike = between(0, 360);
+      const along = unit(strike);
+      const hanging = unit(strike + 90);
+      const spacing = between(5, 7.5);
+      const width = Math.abs(hanging[0]) * LX / KM + Math.abs(hanging[1]) * LY / KM;
+      const count = Math.min(3, 1 + Math.floor(0.75 * width / spacing));
+      const faults = Array.from({
+        length: count
+      }, (_, k) => {
+        const offset = (k - (count - 1) / 2) * spacing + between(-0.5, 0.5);
+        const shift = between(-2, 2);
+        return fault(10 + offset * hanging[0] + shift * along[0], 6 + offset * hanging[1] + shift * along[1], strike + between(-4, 4), between(8, 16), logBetween(0.007, 0.015));
+      });
+      const host = faults.reduce((best, f) => Math.hypot(f.x - 10, f.y - 6) < Math.hypot(best.x - 10, best.y - 6) ? f : best);
+      const distance = between(2.5, 3.5);
+      return {
+        preset: kind,
+        seed,
+        dipDeg: round(between(0.4, 1)),
+        dipAz: Math.round(strike + 270 + between(-3, 3)) % 360,
+        domes: 0,
+        roughness: Math.round(between(1, 4)),
+        thicknessVar: Math.round(between(15, 35)),
+        faults,
+        ...well(host.x - distance * hanging[0], host.y - distance * hanging[1])
+      };
+    }
+    const dipAz = Math.floor(rng() * 360);
+    const down = unit(dipAz);
+    if (kind === 'random-dome') {
+      // Crestal faults strike along the dome with their hanging walls facing the crest: one
+      // fault, or a pair bounding a crestal graben.
+      const domes = rng() < 0.35 ? 2 : 1;
+      const [main] = domeCentres({
+        seed,
+        domes: 1,
+        dipAz
+      });
+      const crestal = rng();
+      const faults = (crestal < 0.3 ? [] : crestal < 0.6 ? [rng() < 0.5 ? -1 : 1] : [-1, 1]).map(side => {
+        const offset = side * between(0.3, 1);
+        const shift = between(-1, 1);
+        return fault(main.x / KM + offset * down[0] + shift * down[1], main.y / KM + offset * down[1] - shift * down[0], dipAz + 90 * side + between(-8, 8), between(3, 7), logBetween(0.002, 0.006));
+      });
+      const distance = between(2.5, 3.5);
+      return {
+        preset: kind,
+        seed,
+        dipDeg: round(between(0.2, 0.8)),
+        dipAz,
+        domes,
+        domeRelief: 5 * Math.round(between(50, 140) / 5),
+        roughness: Math.round(between(1, 5)),
+        thicknessVar: Math.round(between(10, 30)),
+        faults,
+        ...well(main.x / KM + distance * down[0], main.y / KM + distance * down[1])
+      };
+    }
+
+    // Homocline: the injector sits down-dip of the centre so the plume crosses the
+    // undulations on its way up.
+    const faults = rng() < 0.5 ? [] : [fault(between(5, 15), between(3, 9), dipAz + (rng() < 0.5 ? -90 : 90) + between(-20, 20), between(3, 8), logBetween(0.002, 0.006))];
+    const along = between(-3, 3);
+    return {
+      preset: kind,
+      seed,
+      dipDeg: round(between(0.5, 1.5)),
+      dipAz,
+      domes: rng() < 0.3 ? 1 : 0,
+      domeRelief: 5 * Math.round(between(15, 40) / 5),
+      roughness: Math.round(between(8, 18)),
+      thicknessVar: Math.round(between(20, 45)),
+      faults,
+      ...well(10 + 5 * down[0] + along * down[1], 6 + 5 * down[1] - along * down[0])
+    };
+  };
+
+  // ------------------------------------------------------------------ uncertainty
+
+  // Inputs the uncertainty study may vary. `fault0.*` addresses the first fault.
+  const UQ_PARAMS = Object.freeze([{
+    key: 'permMd',
+    label: 'Permeability',
+    unit: 'mD',
+    log: true
+  }, {
+    key: 'porosity',
+    label: 'Porosity',
+    unit: '–'
+  }, {
+    key: 'thickness',
+    label: 'Aquifer thickness',
+    unit: 'm'
+  }, {
+    key: 'rateMt',
+    label: 'Injection rate',
+    unit: 'Mt/yr'
+  }, {
+    key: 'sgr',
+    label: 'Residual gas saturation',
+    unit: '–'
+  }, {
+    key: 'krg',
+    label: 'CO₂ relative permeability',
+    unit: '–'
+  }, {
+    key: 'disRate',
+    label: 'Dissolution rate',
+    unit: 'kg/m²/yr'
+  }, {
+    key: 'dipDeg',
+    label: 'Regional dip',
+    unit: '°'
+  }, {
+    key: 'domeRelief',
+    label: 'Dome relief',
+    unit: 'm'
+  }, {
+    key: 'roughness',
+    label: 'Top-surface roughness',
+    unit: 'm'
+  }, {
+    key: 'fault0.sealCap',
+    label: 'Fault seal capacity',
+    unit: 'm'
+  }, {
+    key: 'fault0.kf',
+    label: 'Fault-zone permeability',
+    unit: 'mD',
+    log: true
+  }, {
+    key: 'fault0.trans',
+    label: 'Cross-fault transmissibility',
+    unit: '–'
+  }]);
+  const mulberry32 = seed => {
+    let a = seed >>> 0;
+    return () => {
+      a = a + 0x6D2B79F5 >>> 0;
+      let t = a;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  };
+  const latinHypercube = (n, dimensions, rng) => {
+    const rows = Array.from({
+      length: n
+    }, () => new Array(dimensions));
+    for (let d = 0; d < dimensions; d++) {
+      const strata = Array.from({
+        length: n
+      }, (_, i) => i);
+      for (let i = n - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [strata[i], strata[j]] = [strata[j], strata[i]];
+      }
+      for (let i = 0; i < n; i++) rows[i][d] = (strata[i] + rng()) / n;
+    }
+    return rows;
+  };
+  const ranks = values => {
+    const order = values.map((value, index) => [value, index]).sort((a, b) => a[0] - b[0]);
+    const result = new Array(values.length);
+    for (let i = 0; i < order.length;) {
+      let j = i;
+      while (j + 1 < order.length && order[j + 1][0] === order[i][0]) j++;
+      for (let k = i; k <= j; k++) result[order[k][1]] = (i + j) / 2;
+      i = j + 1;
+    }
+    return result;
+  };
+  const spearman = (x, y) => {
+    const rx = ranks(x);
+    const ry = ranks(y);
+    const mean = values => values.reduce((sum, value) => sum + value, 0) / values.length;
+    const mx = mean(rx);
+    const my = mean(ry);
+    let num = 0;
+    let dx = 0;
+    let dy = 0;
+    for (let i = 0; i < rx.length; i++) {
+      num += (rx[i] - mx) * (ry[i] - my);
+      dx += (rx[i] - mx) ** 2;
+      dy += (ry[i] - my) ** 2;
+    }
+    return dx > 0 && dy > 0 ? num / Math.sqrt(dx * dy) : 0;
+  };
+  const setScenarioValue = (scenario, key, value) => {
+    if (key.startsWith('fault0.')) {
+      if (scenario.faults.length) scenario.faults[0] = {
+        ...scenario.faults[0],
+        [key.slice(7)]: value
+      };
+    } else {
+      scenario[key] = value;
+    }
+  };
+  const sampleBatch = (base, specs, n, seed) => {
+    const unit = latinHypercube(n, specs.length, mulberry32(seed));
+    return unit.map(row => {
+      const scenario = normalizeScenario(base);
+      specs.forEach((spec, d) => {
+        const value = spec.log ? Math.exp(Math.log(spec.min) + row[d] * (Math.log(spec.max) - Math.log(spec.min))) : spec.min + row[d] * (spec.max - spec.min);
+        setScenarioValue(scenario, spec.key, value);
+      });
+      return normalizeScenario(scenario);
+    });
+  };
+  const summarize = row => {
+    const pct = value => row.injected > 0 ? 100 * value / row.injected : 0;
+    return {
+      freePct: pct(row.free),
+      structuralPct: pct(row.structural),
+      residualPct: pct(row.residual),
+      dissolvedPct: pct(row.dissolved),
+      exitedPct: pct(row.exited),
+      leakedPct: pct(row.leaked),
+      footprintKm2: row.footprint / 1e6,
+      migrationKm: row.migration / KM,
+      bhpBar: row.bhpPeak / BAR
+    };
+  };
+  const runBatch = (scenarios, onProgress) => scenarios.map((scenario, index) => {
+    const result = run(scenario, {
+      keepSnapshots: false
+    });
+    onProgress?.(index + 1, scenarios.length);
+    return {
+      index,
+      scenario: result.scenario,
+      summary: summarize(result.history.at(-1)),
+      truncated: result.truncated
+    };
+  });
+  return {
+    YEAR,
+    MT,
+    MD,
+    BAR,
+    KM,
+    GRAVITY,
+    LX,
+    LY,
+    GRIDS,
+    LIMITS,
+    FAULT_LIMITS,
+    DOME_LIMITS,
+    GAS_CONTACT_LIMITS,
+    DEFAULTS,
+    PRESETS,
+    MAX_FAULTS,
+    normalizeScenario,
+    topDepth,
+    depthField,
+    thicknessField,
+    buildModel,
+    trapAnalysis,
+    contourSegments,
+    RANDOM_STYLES,
+    randomStructure,
+    faultSeal,
+    createState,
+    advance,
+    kpis,
+    inventory,
+    run,
+    UQ_PARAMS,
+    mulberry32,
+    latinHypercube,
+    spearman,
+    sampleBatch,
+    summarize,
+    runBatch
+  };
+});
+
+// File: story-geometry.js
+// story-geometry.js — the shared geometry of the story homepage (chapters 2 to 5).
+// It describes one depleted gas field: a sandstone dome with a methane gas cap at the crest,
+// a fault on the west flank and a CO2 injection well on the east flank. The section drawing,
+// the 3D grid and the live VE model all read this one scenario. The module draws nothing.
+// Units: map positions in km, depths in m (positive down), gas thickness in m or as a fraction.
+(function (root, factory) {
+  const VE2D = typeof module === 'object' && module.exports ? require('./ve2d-model.js') : root.VE2D;
+  const api = factory(VE2D);
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  root.StoryGeometry = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (VE2D) {
+  const KM = VE2D.KM;
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+  // Why these values:
+  // - The dome has no regional dip. A dip with a flat gas contact lets the gas cap flood the
+  //   up-dip side. The contact is 50 m below the crest, and 40 m above the spill depth.
+  // - The fault strikes north-south, along the dome. Its east side is the dome side and goes down.
+  //   The fault is 3.25 km from the crest, so the gas cap does not touch it.
+  // - The boundary is closed. The injection pressure then moves the gas cap by up to 220 m.
+  //   An open boundary moves it by 75 m for the same plume. An open boundary needs 1.5 Mt/yr
+  //   for the same push, and then the plume comes within 1 km of the gas cap.
+  // - The rate is 0.5 Mt/yr and the permeability is 25 mD. The closest cells of the two gases
+  //   stay 2 km apart. At 100 mD they are 1.5 km apart, and at 500 mD they touch.
+  // - The residual gas saturation is 0.35, so the inventory shows a clear residual part.
+  // - The run is 100 years, the shortest run that VE2D accepts. Injection stops at year 30.
+  const STORY_SCENARIO = Object.freeze({
+    preset: 'story',
+    grid: 'coarse',
+    boundary: 'closed',
+    years: 100,
+    injYears: 30,
+    rateMt: 0.5,
+    wellX: 16.25,
+    wellY: 5.25,
+    permMd: 25,
+    porosity: 0.2,
+    thickness: 100,
+    thicknessVar: 0,
+    ct: 2,
+    sgr: 0.35,
+    depth: 2091,
+    dipDeg: 0,
+    domes: 1,
+    domeRelief: 100,
+    roughness: 0,
+    dome: Object.freeze({
+      x: 9.75,
+      y: 6.25,
+      along: 2.2,
+      across: 1.5,
+      angle: 80
+    }),
+    gasContactDepth: 2050,
+    faults: Object.freeze([Object.freeze({
+      x: 6.5,
+      y: 6.25,
+      strike: 0,
+      length: 14,
+      throw: 40,
+      trans: 0.5,
+      sealCap: 30,
+      kf: 20
+    })])
+  });
+
+  // Map window of the 3D block, in km. Its edges are on cell faces of the coarse model grid.
+  const STORY_WINDOW = Object.freeze({
+    x0: 4.5,
+    x1: 19.5,
+    y0: 1.5,
+    y1: 10.5
+  });
+
+  // Years that the precomputed run stores.
+  const STORY_YEARS = Object.freeze([0, 1, 2, 5, 10, 15, 20, 25, 30, 40, 60, 100]);
+
+  // Overburden horizons above the reservoir. Each depth is the depth at the crest. A horizon
+  // follows the relief of the reservoir top by the drape fraction. The fault offsets the
+  // horizons from the base of the chalk down.
+  const OVERBURDEN = Object.freeze([{
+    id: 'sea-floor',
+    name: 'Sea floor',
+    depth: 100,
+    drape: 0,
+    faulted: false
+  }, {
+    id: 'sands-base',
+    name: 'Base of young sands and clays',
+    depth: 800,
+    drape: 0.05,
+    faulted: false
+  }, {
+    id: 'mudstone-base',
+    name: 'Base of mudstone',
+    depth: 1400,
+    drape: 0.25,
+    faulted: false
+  }, {
+    id: 'chalk-base',
+    name: 'Base of chalk',
+    depth: 1800,
+    drape: 0.6,
+    faulted: true
+  }]);
+  const LAYER_NAMES = Object.freeze(['Sea', 'Young sands and clays', 'Mudstone', 'Chalk', 'Shale caprock', 'Reservoir sandstone', 'Older rock']);
+  let cache = null;
+
+  // The normalised scenario and its VE2D model, built once. Do not change the returned objects.
+  // crest is the shallowest model cell (x, y in km, depth in m). spillDepth is the spill depth
+  // in m of the trap that holds the crest.
+  const storyModel = () => {
+    if (cache) return cache;
+    const model = VE2D.buildModel(STORY_SCENARIO);
+    let crestCell = 0;
+    for (let c = 1; c < model.n; c++) if (model.zt[c] < model.zt[crestCell]) crestCell = c;
+    const trap = model.traps.traps[model.traps.trapId[crestCell]];
+    const i = crestCell % model.nx;
+    const j = (crestCell - i) / model.nx;
+    cache = {
+      scenario: model.scenario,
+      model,
+      crest: {
+        cell: crestCell,
+        i,
+        j,
+        x: model.xc[i] / KM,
+        y: model.yc[j] / KM,
+        depth: model.zt[crestCell]
+      },
+      spillDepth: trap ? trap.spillDepth : null
+    };
+    return cache;
+  };
+
+  // The straight map line through the crest and the well, from one model edge to the other.
+  // The line starts on the fault side. The value s is the distance along the line in km.
+  const storySectionLine = () => {
+    const {
+      scenario,
+      model
+    } = storyModel();
+    const crest = scenario.dome;
+    const well = {
+      x: model.xc[model.well % model.nx] / KM,
+      y: model.yc[Math.floor(model.well / model.nx)] / KM
+    };
+    const length = Math.hypot(well.x - crest.x, well.y - crest.y);
+    const ux = (well.x - crest.x) / length;
+    const uy = (well.y - crest.y) / length;
+    // The line leaves the model at the first edge that it reaches in each direction.
+    const reach = (step, from, max) => step > 0 ? (max - from) / step : step < 0 ? from / -step : Infinity;
+    const forward = Math.min(reach(ux, crest.x, VE2D.LX / KM), reach(uy, crest.y, VE2D.LY / KM));
+    const backward = Math.min(reach(-ux, crest.x, VE2D.LX / KM), reach(-uy, crest.y, VE2D.LY / KM));
+    return {
+      x0: crest.x - ux * backward,
+      y0: crest.y - uy * backward,
+      x1: crest.x + ux * forward,
+      y1: crest.y + uy * forward,
+      ux,
+      uy,
+      length: backward + forward,
+      crestS: backward,
+      wellS: backward + length,
+      well
+    };
+  };
+
+  // Intersection of the section line with a fault trace [x0, y0, x1, y1] in metres.
+  // It returns the distance s along the line in metres and the strike parameter t (-1 to 1).
+  const traceCrossing = (line, trace) => {
+    const dx = trace[2] - trace[0];
+    const dy = trace[3] - trace[1];
+    const px = trace[0] - line.x0 * KM;
+    const py = trace[1] - line.y0 * KM;
+    const determinant = dx * line.uy - line.ux * dy;
+    if (Math.abs(determinant) < 1e-12) return null;
+    const s = (dx * py - px * dy) / determinant;
+    const v = (line.ux * py - line.uy * px) / determinant;
+    if (s < 0 || s > line.length * KM || v < 0 || v > 1) return null;
+    return {
+      s,
+      t: 2 * v - 1
+    };
+  };
+
+  // Depth of the reservoir top along the line, with and without the faults, as functions of
+  // the distance s in metres.
+  const topFunctions = line => {
+    const {
+      scenario
+    } = storyModel();
+    const topAt = VE2D.depthField(scenario);
+    const smoothAt = VE2D.depthField({
+      ...scenario,
+      faults: []
+    });
+    const place = s => [line.x0 * KM + s * line.ux, line.y0 * KM + s * line.uy];
+    return {
+      top: s => topAt(...place(s)),
+      smooth: s => smoothAt(...place(s))
+    };
+  };
+
+  // The gas cap along the line, as the interval around the crest where the top is above the
+  // contact. A bisection finds each end.
+  const capInterval = (top, crestS, length, contact) => {
+    if (contact === null || !(top(crestS) < contact)) return null;
+    const edge = direction => {
+      let inside = crestS;
+      let outside = crestS;
+      do {
+        inside = outside;
+        outside += direction * 20;
+      } while (outside > 0 && outside < length && top(outside) < contact);
+      outside = clamp(outside, 0, length);
+      for (let k = 0; k < 40; k++) {
+        const middle = (inside + outside) / 2;
+        if (top(middle) < contact) inside = middle;else outside = middle;
+      }
+      return inside / KM;
+    };
+    return {
+      start: edge(-1),
+      end: edge(1)
+    };
+  };
+
+  // The geological cross-section along the line, with `samples` points.
+  // - s, x, y: position of each sample in km.
+  // - top, base: reservoir top and base in m. Both include the fault offset.
+  // - horizons: the six surfaces from the sea floor to the reservoir base, each with depth in m.
+  // - layers: the seven layers. Each layer has the index of its top and base horizon, or -1
+  //   for the sea surface (top) and for the bottom of the drawing (base).
+  // - contact: depth of the flat gas-water contact in m.
+  // - cap: the s range of the gas cap in km.
+  // - faults: each crossing of the line with a fault. The top just before and after the
+  //   crossing gives the step. downSide names the side of the fault that goes down.
+  const storySection = (samples = 200) => {
+    const count = Math.max(2, Math.round(samples));
+    const {
+      scenario,
+      model,
+      spillDepth
+    } = storyModel();
+    const line = storySectionLine();
+    const {
+      top: topAt,
+      smooth: smoothAt
+    } = topFunctions(line);
+    const lengthM = line.length * KM;
+    const reference = smoothAt(line.crestS * KM);
+    const H = scenario.thickness;
+    const s = new Float64Array(count);
+    const x = new Float64Array(count);
+    const y = new Float64Array(count);
+    const horizons = [...OVERBURDEN.map(horizon => ({
+      id: horizon.id,
+      name: horizon.name,
+      depth: new Float64Array(count)
+    })), {
+      id: 'reservoir-top',
+      name: 'Reservoir top',
+      depth: new Float64Array(count)
+    }, {
+      id: 'reservoir-base',
+      name: 'Reservoir base',
+      depth: new Float64Array(count)
+    }];
+    const reservoirTop = horizons[OVERBURDEN.length].depth;
+    const reservoirBase = horizons[OVERBURDEN.length + 1].depth;
+    for (let k = 0; k < count; k++) {
+      const along = lengthM * k / (count - 1);
+      s[k] = along / KM;
+      x[k] = line.x0 + line.ux * s[k];
+      y[k] = line.y0 + line.uy * s[k];
+      const top = topAt(along);
+      const smooth = smoothAt(along);
+      OVERBURDEN.forEach((horizon, index) => {
+        horizons[index].depth[k] = horizon.depth + horizon.drape * (smooth - reference) + (horizon.faulted ? top - smooth : 0);
+      });
+      reservoirTop[k] = top;
+      reservoirBase[k] = top + H;
+    }
+    const faults = [];
+    model.faultLines.forEach((trace, index) => {
+      const crossing = traceCrossing(line, trace);
+      if (!crossing) return;
+      const before = topAt(crossing.s - 1);
+      const after = topAt(crossing.s + 1);
+      faults.push({
+        index,
+        s: crossing.s / KM,
+        x: line.x0 + line.ux * crossing.s / KM,
+        y: line.y0 + line.uy * crossing.s / KM,
+        t: crossing.t,
+        throw: scenario.faults[index].throw * (1 - crossing.t * crossing.t),
+        topBefore: before,
+        topAfter: after,
+        downSide: after > before ? 'end' : 'start'
+      });
+    });
+
+    // The crest is the shallowest point within 2 km of the dome centre.
+    let crest = {
+      s: line.crestS,
+      depth: Infinity
+    };
+    for (let offset = -2000; offset <= 2000; offset += 10) {
+      const along = line.crestS * KM + offset;
+      const depth = topAt(along);
+      if (depth < crest.depth) crest = {
+        s: along / KM,
+        depth
+      };
+    }
+    const contact = scenario.gasContactDepth;
+    const layers = LAYER_NAMES.map((name, index) => ({
+      name,
+      top: index - 1,
+      base: index < LAYER_NAMES.length - 1 ? index : -1
+    }));
+    return {
+      samples: count,
+      length: line.length,
+      s,
+      x,
+      y,
+      top: reservoirTop,
+      base: reservoirBase,
+      horizons,
+      layers,
+      contact,
+      spillDepth,
+      cap: capInterval(topAt, line.crestS * KM, lengthM, contact),
+      faults,
+      crest,
+      well: {
+        s: line.wellS,
+        x: line.well.x,
+        y: line.well.y,
+        topDepth: topAt(line.wellS * KM)
+      }
+    };
+  };
+
+  // Overlap of each grid column with the model cells. Column c covers the model cells
+  // cellIndex[cellStart[c] .. cellStart[c + 1] - 1]. The weights of a column sum to 1.
+  const mapColumns = (model, xs, ys) => {
+    const nx = xs.length - 1;
+    const ny = ys.length - 1;
+    const cellStart = new Int32Array(nx * ny + 1);
+    const centerCell = new Int32Array(nx * ny);
+    const cells = [];
+    const weights = [];
+    const eps = 1e-6;
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        const column = j * nx + i;
+        const xa = xs[i] * KM;
+        const xb = xs[i + 1] * KM;
+        const ya = ys[j] * KM;
+        const yb = ys[j + 1] * KM;
+        const first = cells.length;
+        let total = 0;
+        for (let cj = clamp(Math.floor(ya / model.dy + eps), 0, model.ny - 1); cj * model.dy < yb - eps && cj < model.ny; cj++) {
+          const overlapY = Math.min(yb, (cj + 1) * model.dy) - Math.max(ya, cj * model.dy);
+          for (let ci = clamp(Math.floor(xa / model.dx + eps), 0, model.nx - 1); ci * model.dx < xb - eps && ci < model.nx; ci++) {
+            const overlap = overlapY * (Math.min(xb, (ci + 1) * model.dx) - Math.max(xa, ci * model.dx));
+            if (!(overlap > eps)) continue;
+            cells.push(cj * model.nx + ci);
+            weights.push(overlap);
+            total += overlap;
+          }
+        }
+        for (let k = first; k < weights.length; k++) weights[k] /= total;
+        cellStart[column + 1] = cells.length;
+        centerCell[column] = clamp(Math.floor((ya + yb) / 2 / model.dy), 0, model.ny - 1) * model.nx + clamp(Math.floor((xa + xb) / 2 / model.dx), 0, model.nx - 1);
+      }
+    }
+    return {
+      cellStart,
+      cellIndex: Int32Array.from(cells),
+      cellWeight: Float32Array.from(weights),
+      centerCell
+    };
+  };
+
+  // A corner-point grid over STORY_WINDOW for the 3D block. Column c = j * nx + i, with i to the
+  // east and j to the north. The corners of a column are 0 south-west, 1 south-east,
+  // 2 north-east and 3 north-west. top and thickness hold 4 values for each column, in m.
+  // A column line lies on the fault, so each column takes the depth of its own side of the fault.
+  // The fault then shows as a step. The layer k of a corner has the depth
+  // top + thickness * k / nz (see storyNodeDepth).
+  const storyGrid = (nx = 30, ny = 18, nz = 5) => {
+    const countX = Math.max(2, Math.round(nx));
+    const countY = Math.max(1, Math.round(ny));
+    const layers = Math.max(1, Math.round(nz));
+    const {
+      scenario,
+      model
+    } = storyModel();
+    const {
+      x0,
+      x1,
+      y0,
+      y1
+    } = STORY_WINDOW;
+    const xs = new Float64Array(countX + 1);
+    const ys = new Float64Array(countY + 1);
+    const fault = scenario.faults[0];
+    const onLine = fault && fault.strike % 180 === 0 && fault.x > x0 && fault.x < x1;
+    const left = onLine ? clamp(Math.round(countX * (fault.x - x0) / (x1 - x0)), 1, countX - 1) : 0;
+    for (let i = 0; i <= countX; i++) {
+      if (!onLine) xs[i] = x0 + (x1 - x0) * i / countX;else if (i <= left) xs[i] = x0 + (fault.x - x0) * i / left;else xs[i] = fault.x + (x1 - fault.x) * (i - left) / (countX - left);
+    }
+    for (let j = 0; j <= countY; j++) ys[j] = y0 + (y1 - y0) * j / countY;
+    const topAt = VE2D.depthField(scenario);
+    const thicknessAt = VE2D.thicknessField(scenario);
+    const top = new Float32Array(4 * countX * countY);
+    const thickness = new Float32Array(4 * countX * countY);
+    const inset = 1;
+    for (let j = 0; j < countY; j++) {
+      for (let i = 0; i < countX; i++) {
+        const column = j * countX + i;
+        // Each corner is read 1 m inside its own column, so it is on its own side of the fault.
+        const xw = xs[i] * KM + inset;
+        const xe = xs[i + 1] * KM - inset;
+        const ys0 = ys[j] * KM + inset;
+        const ys1 = ys[j + 1] * KM - inset;
+        [[xw, ys0], [xe, ys0], [xe, ys1], [xw, ys1]].forEach(([px, py], corner) => {
+          top[4 * column + corner] = topAt(px, py);
+          thickness[4 * column + corner] = thicknessAt(px, py);
+        });
+      }
+    }
+    return {
+      nx: countX,
+      ny: countY,
+      nz: layers,
+      columns: countX * countY,
+      window: {
+        x0,
+        x1,
+        y0,
+        y1
+      },
+      xs,
+      ys,
+      faultLine: onLine ? {
+        index: left,
+        x: fault.x
+      } : null,
+      top,
+      thickness,
+      ...mapColumns(model, xs, ys)
+    };
+  };
+
+  // Depth in m of layer boundary `layer` (0 to nz) at one corner of one column.
+  const storyNodeDepth = (grid, column, corner, layer) => grid.top[4 * column + corner] + grid.thickness[4 * column + corner] * layer / grid.nz;
+
+  // The gas of a model snapshot on the columns of a grid. h is the gas thickness as a fraction
+  // of the column thickness (0 to 1). ch4 is the methane share of the gas (0 to 1), averaged
+  // with the gas thickness of the covered model cells as weight. The snapshot needs h in m, and
+  // ch4 as a fraction, on the model grid. A stored run from story-run.json works too.
+  const storyColumns = (snapshot, grid) => {
+    const {
+      model
+    } = storyModel();
+    const h = new Float32Array(grid.columns);
+    const ch4 = new Float32Array(grid.columns);
+    for (let column = 0; column < grid.columns; column++) {
+      let fraction = 0;
+      let gas = 0;
+      let methane = 0;
+      for (let k = grid.cellStart[column]; k < grid.cellStart[column + 1]; k++) {
+        const cell = grid.cellIndex[k];
+        const weight = grid.cellWeight[k];
+        const thickness = snapshot.h[cell];
+        fraction += weight * Math.min(1, thickness / model.Hc[cell]);
+        gas += weight * thickness;
+        methane += weight * thickness * snapshot.ch4[cell];
+      }
+      h[column] = fraction;
+      ch4[column] = gas > 0 ? methane / gas : 0;
+    }
+    return {
+      h,
+      ch4
+    };
+  };
+  return {
+    STORY_SCENARIO,
+    STORY_WINDOW,
+    STORY_YEARS,
+    storyModel,
+    storySectionLine,
+    storySection,
+    storyGrid,
+    storyNodeDepth,
+    storyColumns
+  };
+});
+
 // File: StoryStage.jsx
 // StoryStage.jsx — the story at the top of the homepage: one pinned stage, one canvas, HTML captions.
 //
