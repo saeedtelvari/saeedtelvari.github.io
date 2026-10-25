@@ -23,6 +23,7 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
       'StoryStage.jsx',
       'StoryChapters.jsx',
       'StoryRock.jsx',
+      'StoryBlock.jsx',
       'GeologicalDescent.jsx',
       'HomeSections.jsx',
       'CVPage.jsx',
