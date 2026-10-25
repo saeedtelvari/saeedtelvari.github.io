@@ -18,6 +18,8 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
       'site-content.js',
       'Header.jsx',
       'Footer.jsx',
+      've2d-model.js',
+      'story-geometry.js',
       'StoryStage.jsx',
       'StoryChapters.jsx',
       'GeologicalDescent.jsx',

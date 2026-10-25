@@ -58,7 +58,7 @@ The cutaway is generic but correct for the central North Sea. It uses no formati
 | Mudstone | 0.8–1.4 km | Thick, quiet layer |
 | Chalk | 1.4–1.8 km | Pale layer that follows the dome a little |
 | Shale caprock | 1.8–2.0 km | Dark layer that follows the dome |
-| Reservoir sandstone | 2.0–2.2 km at the crest | The dome, with two or three thin shale layers inside |
+| Reservoir sandstone | 2.0–2.1 km at the crest (100 m thick) | The dome, with two or three thin shale layers inside |
 | Older rock | below 2.2 km | Plain base |
 
 - **The dome** is an anticline. Its crest is above the well, a little off centre, so the CO₂ has a short path up-dip.
@@ -66,7 +66,7 @@ The cutaway is generic but correct for the central North Sea. It uses no formati
 - **The gas cap** fills the crest of the sandstone down to a flat gas–water contact at the start. It has its own colour (methane). Below the contact, the pore fluid is brine and the sandstone keeps its rock colour.
 - **The CO₂** has its own colour. The well is on the flank, below and away from the gas–water contact, so the plume and the gas cap stay apart during the run.
 
-**One geometry for all chapters.** One scenario object holds the dome, the fault and the initial gas–water contact. The chapter 2 drawing, the chapter 3 and 4 grid, and the chapter 5 model all read it. `ve2d-model.js` already supports domes and faults with throw (the `dome-fault` preset), so the scenario uses those inputs.
+**One geometry for all chapters.** `story-geometry.js` holds the one scenario (`STORY_SCENARIO`): the dome, the fault, the initial gas–water contact and the well. The chapter 2 section (`storySection`), the chapter 3 and 4 grid (`storyGrid`, `storyColumns`) and the chapter 5 model all read it. `assets/story-run.json` stores the run at fixed years, and a test keeps it equal to a fresh run. To keep the CO₂ plume and the gas cap apart while the cap still moves visibly, the scenario uses a closed boundary, 25 mD permeability, a 100 m reservoir and 0.5 Mt/yr for 30 years. The closest approach of the two gases is 2 km.
 
 **Methane in the two-phase model.** The physics stays gas–brine. Methane is the same light phase as CO₂, with the same equations, density and viscosity. Only its colour is different.
 - **Start state.** Each column under the crest starts with gas from the caprock down to the contact: `h = hMax = clamp(contact − top, 0, H)`. This needs a new scenario input in `ve2d-model.js`, for example `gasContactDepth`.
