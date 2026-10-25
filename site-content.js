@@ -210,7 +210,22 @@ const SITE_CV = {
 const SITE_STORY = {
   label: 'From orbit to a live vertical-equilibrium model',
   name: 'Sa’eed Telvari',
-  ppm: '280 ppm in 1850. More than 420 ppm today.',
+  // The CO₂ numbers of chapter 0. base and baseYear are the start of the count: the level before industry.
+  // value and year come from the NOAA Mauna Loa record: the annual mean of the latest complete year, in ppm.
+  // To update them, read the last row of the file at url, then write its year and its mean here (see the spec, Rules for the story).
+  // The first caption of chapter 0 says "more than 420 ppm". A test fails if value is not above 420.
+  co2: {
+    base: 280,
+    baseYear: 1850,
+    value: 427.35,
+    year: 2025,
+    source: 'NOAA Global Monitoring Laboratory, Mauna Loa annual mean CO₂',
+    url: 'https://gml.noaa.gov/webdata/ccgg/trends/co2/co2_annmean_mlo.txt',
+  },
+  // The ppm line, from co2: "280 ppm in 1850. 427 ppm in 2025." The value shows as a whole number.
+  get ppm() {
+    return `${this.co2.base} ppm in ${this.co2.baseYear}. ${Math.round(this.co2.value)} ppm in ${this.co2.year}.`;
+  },
   captions: {
     orbit: ['There is more than 420 ppm of CO₂ in the air. I model how rock under the North Sea can hold it for thousands of years.'],
     descent: ['Carbon capture and storage puts CO₂ back into rock, deep under the sea floor.'],

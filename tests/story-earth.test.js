@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
@@ -436,4 +437,110 @@ test('the files: StoryEarth.jsx fills orbit and descent after StoryChapters.jsx,
   assert.doesNotMatch(source, /https?:\/\/|\bd3\b|cdnjs|unpkg|jsdelivr/i, 'no CDN and no library');
   assert.ok(fs.existsSync(path.join(root, 'assets/land-110m.json')));
   assert.match(read('bundle.js'), /STORY_RENDERERS\.orbit\s*=/, 'the bundle has the new renderers');
+});
+
+// ---- the renderers, run with a recording context and a fetch that the test releases
+
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
+const loadEarth = ({ fail = false } = {}) => {
+  const stage = read('StoryStage.jsx');
+  const colors = new Function(`${between(stage, 'const STORY_COLORS', '// A number from lo to hi')}\nreturn STORY_COLORS;`)();
+  const calls = [];
+  const errors = [];
+  let release;
+  const pending = new Promise((resolve, reject) => {
+    release = () => (fail ? reject(new Error('offline')) : resolve({ ok: true, json: () => Promise.resolve(topology) }));
+  });
+  // window has no dispatchEvent: a renderer that sends a synthetic event would throw.
+  const context = {
+    STORY_COLORS: colors, STORY_RENDERERS: {}, window: {}, Path2D: class {}, console: { error: (...args) => errors.push(args) },
+    fetch: url => { calls.push(url); return pending; },
+  };
+  vm.createContext(context);
+  vm.runInContext(read('StoryEarth.jsx'), context);
+  return { renderers: context.STORY_RENDERERS, calls, errors, release: () => release() };
+};
+
+// A context that accepts every call and keeps the values of the line dash offset.
+const recordingContext = () => {
+  const log = { offsets: [], fillTexts: 0 };
+  const target = { measureText: text => ({ width: String(text).length * 6 }) };
+  const ctx = new Proxy(target, {
+    get: (object, key) => (key in object ? object[key] : (...args) => { if (key === 'fillText') log.fillTexts += 1; return args; }),
+    set: (object, key, value) => { object[key] = value; if (key === 'lineDashOffset') log.offsets.push(value); return true; },
+  });
+  return { ctx, log };
+};
+
+const earthFrame = (extra = {}) => ({ local: 0.5, p: 0.1, width: 1280, height: 800, dpr: 1, time: 0, reducedMotion: false, ...extra });
+
+test('the land arrives: each draw that ran before it asks its frame for one more draw, with no event', async () => {
+  const earth = loadEarth();
+  const counts = { orbit: 0, descent: 0, still: 0 };
+  const frames = {
+    orbit: earthFrame({ local: 0.05, requestDraw: () => { counts.orbit += 1; } }),
+    descent: earthFrame({ local: 0.3, requestDraw: () => { counts.descent += 1; } }),
+    still: earthFrame({ local: 1, reducedMotion: true, width: 1000, height: 562.5, requestDraw: () => { counts.still += 1; } }),
+  };
+  earth.renderers.orbit.draw(recordingContext().ctx, frames.orbit);
+  earth.renderers.orbit.draw(recordingContext().ctx, frames.orbit);
+  earth.renderers.descent.draw(recordingContext().ctx, frames.descent);
+  earth.renderers.orbit.draw(recordingContext().ctx, frames.still);
+  assert.deepEqual(earth.calls, ['assets/land-110m.json?v=1'], 'one request');
+  assert.deepEqual(counts, { orbit: 0, descent: 0, still: 0 }, 'nothing is asked before the land arrives');
+  assert.equal(earth.renderers.orbit.animated, false, 'orbit does not run on each frame to wait for the land');
+  assert.equal(earth.renderers.descent.animated, false);
+  earth.release();
+  await settle();
+  assert.deepEqual(counts, { orbit: 1, descent: 1, still: 1 }, 'each function is called once');
+  earth.renderers.orbit.draw(recordingContext().ctx, frames.orbit);
+  earth.renderers.descent.draw(recordingContext().ctx, frames.descent);
+  assert.deepEqual(counts, { orbit: 1, descent: 1, still: 1 }, 'a draw after the arrival asks for nothing');
+  assert.equal(earth.calls.length, 1);
+  assert.deepEqual(earth.errors, []);
+});
+
+test('a failed land request asks for nothing, reports once, and does not request again', async () => {
+  const earth = loadEarth({ fail: true });
+  let asks = 0;
+  const frame = earthFrame({ local: 0.05, requestDraw: () => { asks += 1; } });
+  earth.renderers.orbit.draw(recordingContext().ctx, frame);
+  earth.release();
+  await settle();
+  earth.renderers.orbit.draw(recordingContext().ctx, frame);
+  earth.renderers.descent.draw(recordingContext().ctx, earthFrame({ requestDraw: () => { asks += 1; } }));
+  assert.equal(asks, 0);
+  assert.equal(earth.calls.length, 1);
+  assert.equal(earth.errors.length, 1);
+});
+
+test('descent: animated is true in the hold after the draw, so the dashes move after a jump into the hold', () => {
+  const earth = loadEarth();
+  const descent = earth.renderers.descent;
+  const ask = () => {};
+  assert.equal(descent.animated, false, 'idle before the first draw');
+  descent.draw(recordingContext().ctx, earthFrame({ local: STORY_EARTH_ZOOM / 2, requestDraw: ask }));
+  assert.equal(descent.animated, false, 'not in the hold');
+  // A jump straight into the hold: the first draw there turns animated on, and the stage reads it after the draw.
+  const first = recordingContext();
+  descent.draw(first.ctx, earthFrame({ local: STORY_EARTH_HOLD, time: 0, requestDraw: ask }));
+  assert.equal(descent.animated, true, 'the hold needs a frame after each draw');
+  const second = recordingContext();
+  descent.draw(second.ctx, earthFrame({ local: STORY_EARTH_HOLD, time: 1000, requestDraw: ask }));
+  assert.equal(descent.animated, true);
+  assert.ok(first.log.offsets.length > 0 && second.log.offsets.length > 0, 'the dashes are drawn');
+  assert.notDeepEqual(second.log.offsets, first.log.offsets, 'the dashes move with the time');
+  assert.ok(second.log.offsets.some(value => value !== 0), 'and the offset is not zero after one second');
+  descent.draw(recordingContext().ctx, earthFrame({ local: 1, time: 2000, reducedMotion: true, width: 1000, height: 562.5, requestDraw: ask }));
+  assert.equal(descent.animated, false, 'a static frame never runs');
+  descent.draw(recordingContext().ctx, earthFrame({ local: 0.5, requestDraw: ask }));
+  assert.equal(descent.animated, false, 'the stage rests when the visitor scrolls out of the hold');
+  assert.equal(earth.renderers.orbit.animated, false);
+});
+
+test('StoryEarth.jsx keeps no canvas, no frame and no version flag, and sends no event', () => {
+  const source = read('StoryEarth.jsx');
+  assert.doesNotMatch(source, /dispatchEvent|new Event\(|storyPaint|storyEarthStills|storyEarthWatch|storyEarthWake|\.version/);
+  assert.match(source, /frame\.requestDraw/);
 });

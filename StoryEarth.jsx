@@ -411,47 +411,35 @@ const STORY_EARTH_COLORS = {
 const STORY_EARTH_FONT = 'Literata, Georgia, serif';
 
 // ---- the land data: one request, one decode, shared by orbit and descent
-const storyEarthLand = { state: 'idle', rings: [], version: 0 };
-const storyEarthStills = new Map();
+const storyEarthLand = { state: 'idle', rings: [] };
 
-// Wakes the pinned stage. A scroll event makes it plan one frame.
-const storyEarthWake = () => { if (typeof window !== 'undefined') window.dispatchEvent(new Event('scroll')); };
+// The draws that ran before the land arrived. Each entry is the frame.requestDraw of a stage or of a static frame.
+const storyEarthWaiting = new Set();
 
-// The data arrives. The static frames draw again. The pinned stage draws again, because animated is true for one frame.
+// The data arrives. Each draw that waited asks for one more draw.
 const storyEarthRefresh = () => {
-  storyEarthStills.forEach((entry, canvas) => {
-    if (!canvas.isConnected) storyEarthStills.delete(canvas);
-    else storyPaint(entry.ctx, entry.id, entry.frame);
-  });
-  storyEarthWake();
+  const calls = Array.from(storyEarthWaiting);
+  storyEarthWaiting.clear();
+  calls.forEach(call => call());
 };
 
-const storyEarthLoad = () => {
-  if (storyEarthLand.state !== 'idle') return;
-  storyEarthLand.state = 'loading';
-  fetch('assets/land-110m.json?v=1')
-    .then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); })
-    .then(topology => {
-      storyEarthLand.rings = storyEarthDecode(topology).filter(ring => ring.length > 3).map(ring => storyEarthBuildRing(ring));
-      storyEarthLand.state = 'ready';
-      storyEarthLand.version++;
-      storyEarthRefresh();
-    })
-    .catch(error => {
-      storyEarthLand.state = 'failed';
-      storyEarthLand.version++;
-      console.error('The land data of the story did not load.', error);
-    });
-};
-
-// A renderer is animated for one frame after the land data changes.
-const storyEarthWatch = () => {
-  let seen = -1;
-  return { stale: () => seen !== storyEarthLand.version, mark: () => { seen = storyEarthLand.version; } };
-};
-
-const storyEarthKeepStill = (ctx, id, frame) => {
-  if (frame.reducedMotion) storyEarthStills.set(ctx.canvas, { ctx, id, frame });
+const storyEarthLoad = frame => {
+  if (storyEarthLand.state === 'idle') {
+    storyEarthLand.state = 'loading';
+    fetch('assets/land-110m.json?v=1')
+      .then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); })
+      .then(topology => {
+        storyEarthLand.rings = storyEarthDecode(topology).filter(ring => ring.length > 3).map(ring => storyEarthBuildRing(ring));
+        storyEarthLand.state = 'ready';
+        storyEarthRefresh();
+      })
+      .catch(error => {
+        storyEarthLand.state = 'failed';
+        storyEarthWaiting.clear();
+        console.error('The land data of the story did not load.', error);
+      });
+  }
+  if (storyEarthLand.state === 'loading' && typeof frame.requestDraw === 'function') storyEarthWaiting.add(frame.requestDraw);
 };
 
 // ---- drawing
@@ -671,23 +659,18 @@ const storyEarthFill = (ctx, layout) => {
   ctx.fillRect(0, 0, layout.width, layout.height);
 };
 
-STORY_RENDERERS.orbit = (() => {
-  const watch = storyEarthWatch();
-  return {
-    get animated() { return watch.stale(); },
-    draw(ctx, frame) {
-      storyEarthLoad();
-      watch.mark();
-      storyEarthKeepStill(ctx, 'orbit', frame);
-      const layout = storyEarthLayout(frame.width, frame.height, frame.reducedMotion);
-      const camera = storyEarthOrbitCamera(frame.reducedMotion ? 0 : frame.local, layout);
-      storyEarthFill(ctx, layout);
-      if (camera.alpha > 0) storyEarthDrawGlobe(ctx, layout, camera);
-      if (camera.lens) storyEarthDrawLens(ctx, camera.lens, layout, 0, layout.k);
-      else storyEarthMarker(ctx, camera.marker.x, camera.marker.y, layout.k, 0);
-    },
-  };
-})();
+STORY_RENDERERS.orbit = {
+  animated: false,
+  draw(ctx, frame) {
+    storyEarthLoad(frame);
+    const layout = storyEarthLayout(frame.width, frame.height, frame.reducedMotion);
+    const camera = storyEarthOrbitCamera(frame.reducedMotion ? 0 : frame.local, layout);
+    storyEarthFill(ctx, layout);
+    if (camera.alpha > 0) storyEarthDrawGlobe(ctx, layout, camera);
+    if (camera.lens) storyEarthDrawLens(ctx, camera.lens, layout, 0, layout.k);
+    else storyEarthMarker(ctx, camera.marker.x, camera.marker.y, layout.k, 0);
+  },
+};
 
 // The side view. Units are the 800 by 450 units of the storyboard. The sea is at y = 232 to 310, the sea floor at 396.
 const storyEarthDrawScene = (ctx, layout, state, time) => {
@@ -819,16 +802,13 @@ const storyEarthDrawScene = (ctx, layout, state, time) => {
 };
 
 STORY_RENDERERS.descent = (() => {
-  const watch = storyEarthWatch();
+  // The CO2 dashes move in the hold. The stage reads animated after each draw, so the next frame runs.
   let running = false;
   return {
-    get animated() { return running || watch.stale(); },
+    get animated() { return running; },
     draw(ctx, frame) {
-      storyEarthLoad();
-      watch.mark();
-      storyEarthKeepStill(ctx, 'descent', frame);
-      const hold = !frame.reducedMotion && frame.local >= STORY_EARTH_HOLD;
-      if (hold && !running) { running = true; storyEarthWake(); } else if (!hold) running = false;
+      storyEarthLoad(frame);
+      running = !frame.reducedMotion && frame.local >= STORY_EARTH_HOLD;
       const layout = storyEarthLayout(frame.width, frame.height, frame.reducedMotion);
       const state = storyEarthDescentCamera(frame.local, layout);
       storyEarthFill(ctx, layout);

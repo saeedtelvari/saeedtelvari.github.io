@@ -11,8 +11,8 @@ const between = (text, from, to) => text.slice(text.indexOf(from), text.indexOf(
 const plain = value => JSON.parse(JSON.stringify(value));
 
 const helpers = new Function(between(read('StoryStage.jsx'), '// ---- story helpers', '// ---- end story helpers') +
-  '\nreturn { STORY_SCREENS, STORY_CHAPTERS, STORY_CAPTION_COUNT, STORY_COLORS, storyProgress, storyChapterAt, storyCaptionIndex, storyRail, storyInline };')();
-const { STORY_SCREENS, STORY_CHAPTERS, STORY_CAPTION_COUNT, STORY_COLORS, storyProgress, storyChapterAt, storyCaptionIndex, storyRail, storyInline } = helpers;
+  '\nreturn { STORY_SCREENS, STORY_CHAPTERS, STORY_CAPTION_COUNT, STORY_COLORS, STORY_COUNT_MS, storyProgress, storyChapterAt, storyCaptionIndex, storyRail, storyInline, storyCount };')();
+const { STORY_SCREENS, STORY_CHAPTERS, STORY_CAPTION_COUNT, STORY_COLORS, STORY_COUNT_MS, storyProgress, storyChapterAt, storyCaptionIndex, storyRail, storyInline, storyCount } = helpers;
 const IDS = ['orbit', 'descent', 'rock', 'grid', 've', 'live'];
 const sweep = (step = 0.001) => Array.from({ length: Math.round(1 / step) + 1 }, (_, i) => Math.min(1, i * step));
 
@@ -122,8 +122,58 @@ test('SITE_STORY has the captions of the spec, word for word', () => {
     if (IDS[i] === 'live') assert.deepEqual(quotes.slice(1), SITE_STORY.actions.map(action => action.label), 'the buttons match the spec');
   });
   const board = read('docs/superpowers/specs/2026-10-25-homepage-story-mockups/storyboard.html');
-  assert.equal(board.match(/<p class="ppm">([^<]+)<\/p>/)[1], SITE_STORY.ppm, 'the ppm line matches the storyboard');
+  // The storyboard is a mockup. It keeps the first sentence of the ppm line and a placeholder for the value.
+  // The page takes the value from SITE_STORY.co2, so only the first sentence must match word for word.
+  const boardPpm = board.match(/<p class="ppm">([^<]+)<\/p>/)[1];
+  const firstSentence = '280 ppm in 1850.';
+  assert.ok(boardPpm.startsWith(`${firstSentence} `), 'the storyboard has the first sentence of the ppm line');
+  assert.ok(SITE_STORY.ppm.startsWith(`${firstSentence} `), 'and the page has it too');
   assert.equal(board.match(/<p class="name">([^<]+)<\/p>/)[1], SITE_STORY.name.replace('’', "'"), 'the name matches the storyboard');
+  assert.ok(read(specFile).includes('`280 ppm in 1850. {value} ppm in {year}.`'), 'the spec gives the form of the ppm line');
+});
+
+test('the ppm value of chapter 0 is stored with its year and its NOAA source, and the line is made from it', () => {
+  const { co2 } = SITE_STORY;
+  assert.ok(Number.isFinite(co2.value), 'the value is a number');
+  assert.ok(co2.value > 400 && co2.value < 500, `the value is between 400 and 500 (${co2.value})`);
+  assert.ok(Number.isInteger(co2.year) && co2.year >= 2024, `the year is 2024 or later (${co2.year})`);
+  assert.ok(co2.year <= new Date().getFullYear() - 1, 'the year is a complete year');
+  assert.equal(Math.round(co2.value * 100) / 100, co2.value, 'the value has two decimals at most, as in the NOAA file');
+  assert.deepEqual([co2.base, co2.baseYear], [280, 1850]);
+  assert.match(co2.source, /NOAA/);
+  assert.match(co2.source, /Mauna Loa/);
+  assert.equal(co2.url, 'https://gml.noaa.gov/webdata/ccgg/trends/co2/co2_annmean_mlo.txt');
+  assert.equal(SITE_STORY.ppm, `280 ppm in 1850. ${Math.round(co2.value)} ppm in ${co2.year}.`, 'the line is "280 ppm in 1850. {value} ppm in {year}."');
+  assert.doesNotMatch(SITE_STORY.ppm, /\d\.\d/, 'the value on the line is a whole number');
+  // The first caption says "more than 420 ppm". The stored value must keep that sentence true.
+  const claim = SITE_STORY.captions.orbit[0].match(/more than (\d+) ppm/i);
+  assert.ok(claim, 'the first caption names a limit');
+  assert.ok(co2.value > Number(claim[1]), `${co2.value} ppm is more than ${claim[1]} ppm`);
+  const file = 'docs/superpowers/specs/2026-10-25-homepage-story-design.md';
+  if (fs.existsSync(path.join(root, file))) {
+    const spec = read(file);
+    assert.ok(spec.includes('SITE_STORY.co2') && spec.includes(co2.url), 'the spec tells how to update the value');
+  }
+});
+
+test('the ppm count goes from 280 to the value in 1.2 seconds with an ease-out curve', () => {
+  const end = Math.round(SITE_STORY.co2.value);
+  assert.equal(STORY_COUNT_MS, 1200);
+  assert.equal(storyCount(0, 280, end), 280, 'it starts at 280');
+  assert.equal(storyCount(-50, 280, end), 280, 'a time before the start gives 280');
+  assert.equal(storyCount(STORY_COUNT_MS, 280, end), end, 'it ends at the value');
+  assert.equal(storyCount(STORY_COUNT_MS * 5, 280, end), end, 'it stays at the value');
+  assert.equal(storyCount(NaN, 280, end), 280);
+  let last = 280;
+  for (let ms = 0; ms <= STORY_COUNT_MS; ms += 8) {
+    const value = storyCount(ms, 280, end);
+    assert.ok(Number.isInteger(value), 'a whole number');
+    assert.ok(value >= last && value <= end, `the number only goes up, to the value (${value} at ${ms} ms)`);
+    last = value;
+  }
+  const half = storyCount(STORY_COUNT_MS / 2, 280, end);
+  assert.ok(half - 280 > (end - 280) / 2, `ease-out: more than half of the way at half of the time (${half})`);
+  assert.ok(storyCount(STORY_COUNT_MS * 0.1, 280, end) > 280, 'the number moves at once');
 });
 
 test('STORY_COLORS match the --story tokens in the stylesheet and in the spec', () => {
@@ -184,7 +234,7 @@ const fakePage = ({ reduced = false } = {}) => {
   const bundle = read('bundle.js');
   const code = between(bundle, '// File: StoryStage.jsx', '// File: StoryChapters.jsx');
   assert.ok(code.includes('const StoryPinned'), 'build the current source before testing');
-  const page = { queue: [], listeners: {}, observers: [], effects: [], views: [], refs: [], errors: [] };
+  const page = { queue: [], listeners: {}, observers: [], effects: [], views: [], refs: [], errors: [], slots: [], slot: 0 };
   function Observer(callback) { this.callback = callback; this.disconnected = false; page.observers.push(this); }
   Observer.prototype.observe = function observe(target) { this.target = target; };
   Observer.prototype.disconnect = function disconnect() { this.disconnected = true; };
@@ -204,7 +254,12 @@ const fakePage = ({ reduced = false } = {}) => {
     cancelAnimationFrame: id => { page.queue[id - 1] = null; },
     React: { Fragment: 'Fragment', createElement: (type, props, ...children) => ({ type, props: props || {}, children }) },
     useRef: () => ({ current: page.refs.shift() }),
-    useState: init => [typeof init === 'function' ? init() : init, value => page.views.push(value)],
+    // A state slot keeps its value. page.render starts a new render of a component at slot 0.
+    useState: init => {
+      const slot = page.slot++;
+      if (!(slot in page.slots)) page.slots[slot] = typeof init === 'function' ? init() : init;
+      return [page.slots[slot], value => { page.slots[slot] = value; page.views.push(value); }];
+    },
     useEffect: fn => page.effects.push(fn),
     SITE_STORY,
     siteScrollTo: id => page.scrolled.push(id),
@@ -215,6 +270,7 @@ const fakePage = ({ reduced = false } = {}) => {
   page.renderers = page.get('STORY_RENDERERS');
   page.flush = (time = 0) => { page.queue.splice(0).forEach(fn => fn && fn(time)); };
   page.fire = (name) => page.listeners[name].fn();
+  page.render = (component, props) => { page.slot = 0; page.effects.length = 0; return component(props); };
   return page;
 };
 
@@ -222,6 +278,7 @@ const fakePage = ({ reduced = false } = {}) => {
 const startPinned = () => {
   const page = fakePage();
   const draws = [];
+  const frames = [];
   const rect = { top: 0, height: STORY_SCREENS * 800 };
   const ctx = { calls: [], restores: 0, setTransform(...args) { this.calls.push(args); }, clearRect() {}, save() {}, restore() { this.restores += 1; } };
   const canvas = { width: 0, height: 0, getContext: () => ctx };
@@ -229,11 +286,12 @@ const startPinned = () => {
   const fills = Array.from({ length: 6 }, () => ({ style: {} }));
   const section = { getBoundingClientRect: () => rect };
   page.refs.push({ clientWidth: 1200, clientHeight: 800 }, canvas, layer, { querySelectorAll: () => fills });
-  for (const id of IDS) page.renderers[id] = { draw: (c, frame) => draws.push({ id, frame: plain(frame) }) };
+  // draws keeps a plain copy of each frame. frames keeps the frame objects, with their requestDraw function.
+  for (const id of IDS) page.renderers[id] = { draw: (c, frame) => { draws.push({ id, frame: plain(frame) }); frames.push(frame); } };
   const element = page.get('StoryPinned')({ sectionRef: { current: section }, onNavigate: null });
   const cleanup = page.effects.shift()();
   const scrollTo = p => { rect.top = -p * (rect.height - 800); page.fire('window:scroll'); page.flush(); };
-  return { page, draws, ctx, canvas, layer, fills, element, cleanup, scrollTo, section, rect };
+  return { page, draws, frames, ctx, canvas, layer, fills, element, cleanup, scrollTo, section, rect };
 };
 
 test('the pinned stage draws once at the start, then only when the progress changes', () => {
@@ -295,6 +353,121 @@ test('an animated renderer draws on each frame only while the stage is on screen
   page.flush(144);
   page.flush(160);
   assert.equal(draws.length, 7, 'the loop starts again when the tab is visible');
+});
+
+test('requestDraw: one draw of the current chapter on the next animation frame, and calls in one frame make one draw', () => {
+  const { page, draws, frames, scrollTo } = startPinned();
+  page.flush(16);
+  assert.equal(draws.length, 1);
+  const { requestDraw } = frames[0];
+  assert.equal(typeof requestDraw, 'function', 'each frame has requestDraw');
+  assert.equal(page.queue.length, 0, 'no animation frame is waiting before the call');
+
+  requestDraw();
+  requestDraw();
+  requestDraw();
+  assert.equal(draws.length, 1, 'no draw at once');
+  assert.equal(page.queue.length, 1, 'one animation frame is waiting');
+  page.flush(32);
+  assert.equal(draws.length, 2, 'the three calls make one draw');
+  assert.deepEqual([draws[1].id, draws[1].frame.time, draws[1].frame.local], ['orbit', 32, 0]);
+  page.flush(48);
+  assert.equal(draws.length, 2, 'and the stage does not draw again');
+  assert.equal(page.queue.length, 0);
+
+  // It is one function for the whole stage, and it draws the chapter that is current.
+  scrollTo(0.3);
+  assert.equal(frames[frames.length - 1].requestDraw, requestDraw, 'the same function in each frame');
+  const before = draws.length;
+  requestDraw();
+  page.flush(64);
+  assert.equal(draws.length, before + 1);
+  assert.equal(draws[draws.length - 1].id, 'rock', 'the current chapter, not the chapter of the frame that gave the function');
+  assert.ok(Math.abs(draws[draws.length - 1].frame.p - 0.3) < 1e-9, 'with the progress of the page now');
+});
+
+test('requestDraw draws nothing while the stage is off screen or the tab is hidden, and the stage keeps the request', () => {
+  const { page, draws, frames, section } = startPinned();
+  page.flush(0);
+  const { requestDraw } = frames[0];
+  const watcher = page.observers.find(observer => observer.target === section);
+  watcher.callback([{ isIntersecting: false }]);
+  requestDraw();
+  assert.equal(page.queue.length, 0, 'off screen: no animation frame is waiting');
+  page.flush(16);
+  assert.equal(draws.length, 1, 'off screen: no draw');
+  watcher.callback([{ isIntersecting: true }]);
+  page.flush(32);
+  assert.equal(draws.length, 2, 'back on screen: one draw, for the request and for the return together');
+  page.flush(48);
+  assert.equal(draws.length, 2);
+
+  page.document.hidden = true;
+  requestDraw();
+  assert.equal(page.queue.length, 0, 'hidden tab: no animation frame is waiting');
+  page.flush(64);
+  assert.equal(draws.length, 2, 'hidden tab: no draw');
+  page.document.hidden = false;
+  page.fire('document:visibilitychange');
+  page.flush(80);
+  assert.equal(draws.length, 3, 'the request waited, so the tab draws once when it is visible again');
+  page.flush(96);
+  assert.equal(draws.length, 3);
+  assert.equal(page.queue.length, 0, 'and no loop starts');
+});
+
+test('requestDraw inside draw() gives one more draw on the following frame, and nothing after the stage unmounts', () => {
+  const { page, draws, cleanup } = startPinned();
+  let asks = 1;
+  let keep = null;
+  page.renderers.orbit = {
+    draw: (c, frame) => {
+      draws.push({ id: 'orbit', frame: plain(frame) });
+      keep = frame.requestDraw;
+      if (asks-- > 0) frame.requestDraw();
+    },
+  };
+  page.flush(0);
+  assert.equal(draws.length, 1);
+  assert.equal(page.queue.length, 1, 'the call inside draw() waits for the following frame');
+  page.flush(16);
+  assert.equal(draws.length, 2);
+  assert.equal(page.queue.length, 0, 'the chain stops when the renderer stops asking');
+  keep();
+  cleanup();
+  page.flush(32);
+  assert.equal(draws.length, 2, 'no draw after the stage unmounted');
+  keep();
+  assert.equal(page.queue.length, 0, 'and no animation frame for a late call');
+});
+
+test('animated is read after each draw: a renderer that turns it on in draw() runs on the next frame with no event', () => {
+  const { page, draws, scrollTo } = startPinned();
+  const entry = {
+    count: 0,
+    animated: false,
+    draw() { draws.push('draw'); this.animated = ++this.count < 3; },
+  };
+  page.renderers.orbit = entry;
+  page.flush(0);
+  assert.equal(page.queue.length, 1, 'the first draw turned animated on, so a frame is waiting');
+  page.flush(16);
+  assert.equal(page.queue.length, 1);
+  page.flush(32);
+  assert.equal(entry.animated, false);
+  assert.equal(page.queue.length, 0, 'the third draw turned it off: the loop ends');
+  assert.equal(draws.length, 3);
+  page.flush(48);
+  assert.equal(draws.length, 3);
+
+  // A getter works in the same way. It is true after the draw that sets the flag behind it.
+  let on = false;
+  const second = { get animated() { return on; }, draw() { draws.push('getter'); on = !on && draws.length < 8; } };
+  page.renderers.rock = second;
+  scrollTo(0.3);
+  assert.equal(page.queue.length, 1, 'the getter was true after the first draw');
+  page.flush(64);
+  assert.equal(page.queue.length, 0, 'and false after the second');
 });
 
 test('the layer of the live chapter mounts on arrival and unmounts on departure', () => {
@@ -364,7 +537,8 @@ test('the captions are real text in reading order, and the live links are real l
   const orbit = nodes(StoryWords({ chapter: chapters[0], on: true, caption: 0, onNavigate: null }));
   const name = orbit.find(node => node.type === 'h1');
   assert.equal(name.children[0], SITE_STORY.name, 'the name is the h1');
-  assert.ok(orbit.some(node => node.type === 'p' && /story-note/.test(node.props.className) && node.children[0] === SITE_STORY.ppm));
+  assert.ok(orbit.some(node => node.type === page.get('StoryPpm') && node.props.on === true), 'the ppm line is its own component');
+  assert.ok(!nodes(StoryWords({ chapter: chapters[1], on: true, caption: 0, onNavigate: null })).some(node => node.type === page.get('StoryPpm')), 'only the orbit has it');
 
   const links = (on) => nodes(StoryWords({ chapter: chapters[5], on, caption: 0, onNavigate: null })).filter(node => node.type === 'a');
   assert.deepEqual(links(true).map(link => [link.props.href, link.children[0]]),
@@ -428,4 +602,144 @@ test('the pinned story is 7 screens tall; reduced motion gives six static frames
   assert.equal(frame.props.role, 'group');
   assert.equal(frame.props['aria-label'], 'Into the rock');
   assert.ok(nodes(frame).some(node => node.type === 'canvas' && node.props['aria-hidden'] === 'true'), 'the canvas is hidden from assistive technology');
+});
+
+test('requestDraw in a static frame paints that canvas again on the next animation frame; calls in one frame make one paint', () => {
+  const page = fakePage({ reduced: true });
+  const StoryFrame = page.get('StoryFrame');
+  const chapter = plain(STORY_CHAPTERS[2]);
+  const painted = [];
+  const ctx = { setTransform() {}, clearRect() {}, save() {}, restore() {} };
+  const canvas = { width: 0, height: 0, getContext: () => ctx };
+  for (const id of IDS) page.renderers[id] = { draw: (c, frame) => painted.push({ id, frame }) };
+  page.refs.push({ clientWidth: 1000, clientHeight: 562.5 }, canvas);
+  StoryFrame({ chapter, onNavigate: null });
+  const cleanup = page.effects.pop()();
+  assert.equal(painted.length, 1, 'painted once at the start');
+  const { requestDraw } = painted[0].frame;
+  assert.equal(typeof requestDraw, 'function', 'a static frame has requestDraw');
+  assert.equal(page.queue.length, 0, 'no animation frame is waiting');
+
+  canvas.width = 5;
+  requestDraw();
+  requestDraw();
+  assert.equal(painted.length, 1, 'no paint at once');
+  assert.equal(page.queue.length, 1, 'one animation frame is waiting');
+  page.flush(16);
+  assert.equal(painted.length, 2, 'the two calls make one paint');
+  assert.equal(canvas.width, 2000, 'the canvas has its size again, so the old picture is gone');
+  assert.deepEqual(plain(painted[1].frame), { local: 1, p: 0.44, width: 1000, height: 562.5, dpr: 2, time: 0, reducedMotion: true });
+  assert.equal(painted[1].frame.requestDraw, requestDraw, 'the same function in each paint');
+  page.flush(32);
+  assert.equal(painted.length, 2, 'no more paints');
+
+  // A call that waits is cancelled when the frame leaves the page, and a late call does nothing.
+  requestDraw();
+  cleanup();
+  page.flush(48);
+  assert.equal(painted.length, 2, 'the queued paint was cancelled');
+  requestDraw();
+  assert.equal(page.queue.length, 0, 'and a new call after the cleanup asks for no frame');
+});
+
+test('no renderer uses a synthetic event, and the renderers and the stage use requestDraw', () => {
+  const bundle = read('bundle.js');
+  assert.ok(bundle.includes('requestDraw'), 'build the current source before testing');
+  for (const file of ['StoryStage.jsx', 'StoryEarth.jsx', 'StoryRock.jsx', 'StoryBlock.jsx']) {
+    assert.doesNotMatch(read(file), /dispatchEvent|new Event\(/, `${file} sends no synthetic event`);
+  }
+  for (const file of ['StoryEarth.jsx', 'StoryRock.jsx', 'StoryBlock.jsx']) {
+    assert.match(read(file), /requestDraw/, `${file} asks the stage for a draw`);
+  }
+  assert.match(read('StoryStage.jsx'), /requestDraw\(\) asks for one more draw/, 'the API comment describes it');
+});
+
+// ---- the ppm line
+
+// The text of a rendered node. skip says which elements a reader leaves out.
+const textOf = (node, skip) => {
+  if (Array.isArray(node)) return node.map(item => textOf(item, skip)).join('');
+  if (node === null || node === undefined || node === false) return '';
+  if (typeof node !== 'object') return String(node);
+  if (skip(node)) return '';
+  return textOf(node.children, skip);
+};
+const heard = node => textOf(node, item => item.props && item.props['aria-hidden'] === 'true');
+const seen = node => textOf(node, item => item.props && /visually-hidden/.test(item.props.className || ''));
+
+test('the ppm line counts from 280 to the value once; a screen reader gets the final line', () => {
+  const page = fakePage();
+  const StoryPpm = page.get('StoryPpm');
+  const end = Math.round(SITE_STORY.co2.value);
+  const first = page.render(StoryPpm, { on: true });
+  assert.equal(first.type, 'p');
+  assert.match(first.props.className, /story-note/);
+  assert.equal(first.props['data-on'], true);
+  assert.equal(seen(first), `280 ppm in 1850. 280 ppm in ${SITE_STORY.co2.year}.`, 'the page loads with 280 on the line');
+  assert.equal(heard(first), SITE_STORY.ppm, 'a screen reader gets the final line, not the counting number');
+  const counter = nodes(first).find(node => node.type === 'span' && node.props['aria-hidden'] === 'true');
+  assert.ok(counter && /story-count/.test(counter.props.className), 'the counting number is aria-hidden');
+  assert.equal(page.render(StoryPpm, { on: false }).props['data-on'], false);
+
+  page.render(StoryPpm, { on: true });
+  assert.equal(page.effects.length, 2, 'the reduced-motion query and the count');
+  assert.equal(page.queue.length, 0);
+  page.effects[1]();
+  assert.equal(page.queue.length, 1, 'the count starts with an animation frame');
+  const values = [];
+  for (let ms = 0; ms < STORY_COUNT_MS; ms += 100) {
+    page.flush(5000 + ms);
+    assert.equal(page.queue.length, 1, `still counting at ${ms} ms`);
+    values.push(page.slots[1]);
+  }
+  assert.deepEqual(values, [...values].sort((a, b) => a - b), 'the number only goes up');
+  assert.ok(values.every(value => Number.isInteger(value) && value >= 280 && value <= end));
+  assert.ok(values[values.length - 1] > 280, 'and it moves');
+  const middle = page.render(StoryPpm, { on: true });
+  assert.equal(seen(middle), `280 ppm in 1850. ${page.slots[1]} ppm in ${SITE_STORY.co2.year}.`, 'the counting number is on the line');
+  assert.equal(heard(middle), SITE_STORY.ppm);
+  page.flush(5000 + STORY_COUNT_MS + 16);
+  assert.equal(page.queue.length, 0, 'the count ends after 1.2 s and asks for no more frames');
+  assert.equal(page.slots[1], end);
+  assert.equal(page.get('storyPpmPlayed').done, true);
+
+  const rest = page.render(StoryPpm, { on: true });
+  assert.deepEqual(rest.children, [SITE_STORY.ppm], 'at rest the line is plain text: "280 ppm in 1850. 427 ppm in 2025."');
+
+  // A new mount, for example after the layout changes, shows the final line and does not count again.
+  page.slots.length = 0;
+  const again = page.render(StoryPpm, { on: true });
+  assert.deepEqual(again.children, [SITE_STORY.ppm]);
+  assert.equal(page.effects[1](), undefined);
+  assert.equal(page.queue.length, 0);
+});
+
+test('the ppm count stops when the line leaves the page, and it starts again at the next mount', () => {
+  const page = fakePage();
+  const StoryPpm = page.get('StoryPpm');
+  page.render(StoryPpm, { on: true });
+  const stop = page.effects[1]();
+  assert.equal(page.queue.length, 1);
+  stop();
+  page.flush(1000);
+  assert.equal(page.views.length, 0, 'the count did not move after the cleanup');
+  assert.equal(page.get('storyPpmPlayed').done, false, 'and it is not marked as played');
+  page.slots.length = 0;
+  const line = page.render(StoryPpm, { on: true });
+  assert.equal(seen(line), `280 ppm in 1850. 280 ppm in ${SITE_STORY.co2.year}.`, 'the next mount counts from 280');
+});
+
+test('under reduced motion the ppm line shows the final value at once and nothing counts', () => {
+  const page = fakePage({ reduced: true });
+  const line = page.render(page.get('StoryPpm'), { on: true });
+  assert.deepEqual(line.children, [SITE_STORY.ppm]);
+  assert.equal(page.effects[1](), undefined, 'the count effect does nothing');
+  assert.equal(page.queue.length, 0, 'no animation frame');
+  assert.equal(page.get('storyPpmPlayed').done, false);
+});
+
+test('the count-up needs one CSS rule, at the end of the file, with digits of equal width', () => {
+  const css = read('colors_and_type.css');
+  assert.match(css.slice(css.lastIndexOf('Story block controls')), /\.story-count \{ font-variant-numeric: tabular-nums; \}/);
+  assert.match(css, /\.visually-hidden \{[^}]*clip: rect\(0 0 0 0\)/, 'the hidden copy uses the site class');
 });

@@ -367,8 +367,8 @@ const storyBlockState = {
   builds: 0,
   palette: null,
   scene: {},
-  replays: [],
-  waiting: [],
+  // The frame.requestDraw of each draw that ran while the stored run loaded. The arrival of the run calls them.
+  waiting: new Set(),
 };
 
 // The model frames. stored comes from assets/story-run.json (years in STORY_YEARS).
@@ -566,7 +566,7 @@ const storyBlockPickBracket = block => {
   return best;
 };
 
-// Load the stored run once. A pinned renderer that waits for it runs on each frame. A static frame draws again.
+// Load the stored run once. Each draw that runs before it arrives asks for one more draw when it arrives.
 const storyBlockLoad = () => {
   const stored = storyBlockData.stored;
   if (stored.status !== 'idle') return;
@@ -593,22 +593,11 @@ const storyBlockLoad = () => {
     });
 };
 
-const storyBlockWake = entry => {
-  entry.animated = true;
-  if (typeof window !== 'undefined' && window.dispatchEvent && typeof Event === 'function') window.dispatchEvent(new Event('scroll'));
-};
-
+// The run has arrived, or it has failed. Each draw that waited asks for one more draw.
 const storyBlockNotify = () => {
-  storyBlockState.replays.splice(0).forEach(({ entry, id, ctx, frame }) => {
-    storyGuard(`${id}.replay`, () => {
-      ctx.save();
-      ctx.setTransform(frame.dpr, 0, 0, frame.dpr, 0, 0);
-      ctx.clearRect(0, 0, frame.width, frame.height);
-      entry.draw(ctx, frame);
-      ctx.restore();
-    });
-  });
-  storyBlockState.waiting.splice(0).forEach(storyBlockWake);
+  const calls = Array.from(storyBlockState.waiting);
+  storyBlockState.waiting.clear();
+  calls.forEach(call => call());
 };
 
 // The columns of the model at a year, blended from the two nearest frames. It returns false when no frame exists.
@@ -920,16 +909,9 @@ const storyBlockDraw = (entry, id, ctx, frame) => {
   const block = storyBlockGet(frame);
   const stored = storyBlockData.stored;
   if (stored.status === 'idle') storyBlockLoad();
-  const loading = stored.status === 'loading';
-  if (loading) {
-    if (frame.reducedMotion) {
-      if (!storyBlockState.replays.some(item => item.ctx === ctx)) storyBlockState.replays.push({ entry, id, ctx, frame });
-      else storyBlockState.replays.find(item => item.ctx === ctx).frame = frame;
-    } else if (!entry.animated) {
-      storyBlockState.waiting.push(entry);
-      storyBlockWake(entry);
-    }
-  }
+  // This draw shows the rock with no gas. The arrival of the run asks the stage or the static frame for one more draw.
+  if (stored.status === 'loading' && typeof frame.requestDraw === 'function') storyBlockState.waiting.add(frame.requestDraw);
+  if (id === 'live' && !frame.reducedMotion) storyLive.redraw = frame.requestDraw;
   const pal = storyBlockState.palette || (storyBlockState.palette = storyBlockPalette(STORY_COLORS));
   const s = storyBlockState.scene;
   if (id === 'grid') storyBlockGrid(frame.local, s);
@@ -940,8 +922,8 @@ const storyBlockDraw = (entry, id, ctx, frame) => {
   if (s.bracket > 0.01 && block.bracket < 0) block.bracket = storyBlockPickBracket(block);
   storyBlockPaint(ctx, block, pal, s);
   storyBlockAnnotate(ctx, block, s, id);
-  if (id === 'live') entry.animated = storyBlockLiveBusy(frame) || (loading && !frame.reducedMotion);
-  else if (!loading) entry.animated = false;
+  // The stage reads animated after this draw. Only the live player needs the next frame without a request.
+  entry.animated = id === 'live' && storyBlockLiveBusy(frame);
 };
 
 // ---- chapter live: the player, the controls and the worker
@@ -960,7 +942,13 @@ const storyLive = {
   shown: -1,
   shownState: '',
   onVisibility: null,
+  // The frame.requestDraw of the pinned stage. The live draw keeps it for the controls and the worker.
+  redraw: null,
 };
+
+// The controls, the worker and the tab events run outside draw(). They ask the stage for one more draw here.
+// The draw then sets animated again, so a player that runs keeps its frames.
+const storyBlockRedraw = () => { if (storyLive.redraw) storyLive.redraw(); };
 
 const storyBlockReducedNow = () => !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
@@ -1023,7 +1011,7 @@ const storyBlockVisibility = live => {
     live.playing = true;
     live.last = null;
     storyBlockSyncControls();
-    storyBlockWake(live.entry);
+    storyBlockRedraw();
   }
 };
 
@@ -1067,7 +1055,7 @@ const storyBlockControls = (layer, live) => {
     }
     live.resume = false;
     storyBlockSyncControls();
-    storyBlockWake(live.entry);
+    storyBlockRedraw();
   });
   range.addEventListener('input', () => {
     live.year = Number(range.value);
@@ -1075,11 +1063,11 @@ const storyBlockControls = (layer, live) => {
     live.resume = false;
     live.last = null;
     storyBlockSyncControls();
-    storyBlockWake(live.entry);
+    storyBlockRedraw();
   });
   toggle.addEventListener('change', () => {
     live.target = toggle.checked ? 1 : 0;
-    storyBlockWake(live.entry);
+    storyBlockRedraw();
   });
   return { root, play, year, range, toggle };
 };
@@ -1113,7 +1101,7 @@ const storyBlockStartWorker = () => {
         live.status = live.complete ? 'done' : 'failed';
         live.worker = null;
         worker.terminate();
-        if (storyLive.mounted) storyBlockWake(storyLive.entry);
+        if (storyLive.mounted) storyBlockRedraw();
       } else if (data.type === 'error') {
         console.error('The story worker failed.', data.message);
         fail();
@@ -1155,7 +1143,8 @@ STORY_RENDERERS.live = {
     document.addEventListener('visibilitychange', live.onVisibility);
     storyBlockSyncControls();
     storyBlockStartWorker();
-    if (live.playing) storyBlockWake(this);
+    // The first draw of the chapter follows in the same tick. It keeps animated true while the player runs.
+    this.animated = live.playing;
   },
   unmount() {
     const live = storyLive;
@@ -1166,6 +1155,7 @@ STORY_RENDERERS.live = {
     const root = live.nodes && live.nodes.root;
     if (root && root.parentNode) root.parentNode.removeChild(root);
     live.nodes = null;
+    live.redraw = null;
     this.animated = false;
   },
 };

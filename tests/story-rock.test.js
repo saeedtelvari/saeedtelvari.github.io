@@ -372,10 +372,10 @@ const recorder = () => {
   return { ctx, log };
 };
 
-const loadRenderer = () => {
+const loadRenderer = (extra = {}) => {
   const stage = read('StoryStage.jsx');
   const colors = new Function(`${between(stage, 'const STORY_COLORS', '// A number from lo to hi')}\nreturn STORY_COLORS;`)();
-  const context = { STORY_COLORS: colors, STORY_RENDERERS: {}, StoryGeometry: Story, SITE_STORY, storyPaint: () => {}, console };
+  const context = { STORY_COLORS: colors, STORY_RENDERERS: {}, StoryGeometry: Story, SITE_STORY, console, ...extra };
   vm.createContext(context);
   vm.runInContext(source, context);
   return { context, colors };
@@ -421,4 +421,64 @@ test('the renderer does not draw the plume before the stored run has loaded', ()
   context.STORY_RENDERERS.rock.draw(ctx, { local: 1, p: 0.44, width: 1280, height: 800, dpr: 1, time: 0, reducedMotion: false });
   assert.ok(log.fills.has(colors.ch4), 'the gas cap does not need the run');
   assert.ok(!log.fills.has(colors.co2), 'no plume without the run');
+});
+
+// A fetch that the test can release. It gives the stored run, or an error.
+const slowFetch = ({ fail = false } = {}) => {
+  const calls = [];
+  let release;
+  const pending = new Promise((resolve, reject) => {
+    release = () => (fail ? reject(new Error('offline')) : resolve({ ok: true, json: () => Promise.resolve(JSON.parse(JSON.stringify(run))) }));
+  });
+  return { calls, release: () => release(), fetch: url => { calls.push(url); return pending; } };
+};
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+const frameOf = (extra = {}) => ({ local: 1, p: 0.44, width: 1280, height: 800, dpr: 1, time: 0, reducedMotion: false, ...extra });
+
+test('when the stored run arrives, each draw that ran before asks its frame for one more draw (stage and static frame)', async () => {
+  const net = slowFetch();
+  const { context, colors } = loadRenderer({ fetch: net.fetch });
+  const renderer = context.STORY_RENDERERS.rock;
+  let stage = 0;
+  let still = 0;
+  const stageFrame = frameOf({ requestDraw: () => { stage += 1; } });
+  const stillFrame = frameOf({ reducedMotion: true, width: 1120, height: 630, requestDraw: () => { still += 1; } });
+  const before = recorder();
+  renderer.draw(before.ctx, stageFrame);
+  renderer.draw(recorder().ctx, stageFrame);
+  renderer.draw(recorder().ctx, stillFrame);
+  assert.deepEqual(net.calls, ['./assets/story-run.json'], 'one request');
+  assert.ok(!before.log.fills.has(colors.co2), 'no plume yet');
+  assert.deepEqual([stage, still], [0, 0], 'nothing is asked before the run arrives');
+  net.release();
+  await settle();
+  assert.deepEqual([stage, still], [1, 1], 'each function is called once, although the stage drew twice');
+  for (const frame of [stageFrame, stillFrame]) {
+    const after = recorder();
+    renderer.draw(after.ctx, frame);
+    assert.deepEqual(after.log.bad, []);
+    assert.ok(after.log.fills.has(colors.co2), `the plume is there after the new draw (${frame.reducedMotion ? 'static' : 'pinned'})`);
+  }
+  assert.deepEqual([stage, still], [1, 1], 'a draw after the arrival asks for nothing');
+  assert.equal(net.calls.length, 1);
+});
+
+test('a failed load of the stored run asks for nothing and leaves the picture without the plume', async () => {
+  const net = slowFetch({ fail: true });
+  const { context, colors } = loadRenderer({ fetch: net.fetch });
+  let asks = 0;
+  const frame = frameOf({ requestDraw: () => { asks += 1; } });
+  context.STORY_RENDERERS.rock.draw(recorder().ctx, frame);
+  net.release();
+  await settle();
+  assert.equal(asks, 0);
+  const { ctx, log } = recorder();
+  context.STORY_RENDERERS.rock.draw(ctx, frame);
+  assert.ok(!log.fills.has(colors.co2));
+  assert.equal(net.calls.length, 1, 'no second request');
+});
+
+test('the rock renderer keeps no canvas and no frame, and sends no event', () => {
+  assert.doesNotMatch(source, /dispatchEvent|new Event\(|storyPaint|rockState\.last/, 'the stage owns the repaint');
+  assert.match(source, /frame\.requestDraw/, 'the renderer uses the hook of the frame');
 });

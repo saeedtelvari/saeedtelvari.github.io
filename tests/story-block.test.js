@@ -388,6 +388,7 @@ const walk = (node, found = []) => { found.push(node); node.children.forEach(chi
 
 // The source of StoryBlock.jsx, run in a function with the page globals that the bundle gives it.
 const loadBlock = ({ reduced = false, withWorker = true, fetchFails = false } = {}) => {
+  asked.count = 0;
   const page = {
     registry: {}, events: [], fetches: 0, workers: [], errors: [],
     document: { hidden: false, listeners: {}, createElement: makeElement },
@@ -415,7 +416,11 @@ const loadBlock = ({ reduced = false, withWorker = true, fetchFails = false } = 
   return page;
 };
 
-const frame = (local, width = 1280, height = 800, extra = {}) => ({ local, p: 0.5, width, height, dpr: 2, time: 0, reducedMotion: false, ...extra });
+// The requestDraw of the pinned stage: one function for all frames. It counts the calls.
+// page.events collects the events that the code sends to the window. The code must send none.
+const asked = { count: 0 };
+const redraw = () => { asked.count += 1; };
+const frame = (local, width = 1280, height = 800, extra = {}) => ({ local, p: 0.5, width, height, dpr: 2, time: 0, reducedMotion: false, requestDraw: redraw, ...extra });
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
 test('StoryBlock.jsx registers grid, ve and live, and leaves the other chapters alone', () => {
@@ -431,32 +436,40 @@ test('StoryBlock.jsx registers grid, ve and live, and leaves the other chapters 
   assert.equal(page.fetches, 0, 'nothing loads before the first draw');
 });
 
-test('the first draw loads the stored run, draws the rock, and an animated renderer draws on until the run arrives', async () => {
+test('the first draw loads the stored run and draws the rock; the arrival of the run asks the stage for one more draw', async () => {
   const page = loadBlock();
   const grid = page.registry.grid;
   const ctx = makeCtx();
   grid.draw(ctx, frame(0.8));
   assert.equal(page.fetches, 1);
   assert.equal(page.fetchUrl, './assets/story-run.json');
-  assert.equal(grid.animated, true, 'the stage keeps drawing while the run loads');
-  assert.deepEqual(page.events, ['scroll'], 'a scroll event wakes the stage loop');
+  assert.equal(grid.animated, false, 'the stage does not draw on each frame while the run loads');
+  assert.deepEqual(page.events, [], 'no synthetic event');
+  assert.equal(asked.count, 0, 'no request before the run arrives');
   assert.equal(ctx.bad, 0, 'all coordinates are finite');
   assert.ok(ctx.counts.fill > 300, 'the rock is drawn');
   assert.equal(page.storyBlockData.stored.status, 'loading');
+  assert.equal(page.storyBlockState.waiting.size, 1, 'the draw waits with the requestDraw of its frame');
   grid.draw(ctx, frame(0.8));
+  page.registry.ve.draw(makeCtx(), frame(0.3));
   assert.equal(page.fetches, 1, 'one load only');
-  assert.deepEqual(page.events, ['scroll'], 'no new wake while it is awake');
+  assert.equal(page.storyBlockState.waiting.size, 1, 'the same function of the stage is kept once');
+  assert.equal(asked.count, 0);
   await settle();
   assert.equal(page.storyBlockData.stored.status, 'ready');
   assert.equal(page.storyBlockData.stored.entries.length, 12);
-  assert.deepEqual(page.events, ['scroll', 'scroll'], 'the arrival wakes the stage again');
-  assert.equal(grid.animated, true, 'the next draw puts the stage to rest');
+  assert.equal(asked.count, 1, 'the arrival asks for one more draw, once');
+  assert.equal(page.storyBlockState.waiting.size, 0);
+  assert.deepEqual(page.events, [], 'still no synthetic event');
+  assert.equal(grid.animated, false, 'the stage rests: it draws once because it was asked');
   const after = makeCtx();
   grid.draw(after, frame(0.8));
   assert.equal(grid.animated, false);
   assert.equal(after.bad, 0);
   assert.ok(after.fills.some(color => color === STORY_COLORS.co2 || /^#[0-9a-f]{6}$/.test(color)));
   assert.equal(page.fetches, 1);
+  assert.equal(asked.count, 1, 'a draw after the arrival asks for nothing');
+  assert.equal(page.storyBlockState.waiting.size, 0);
 });
 
 test('chapter grid at the end shows the run clock, the labels and the gas on the block', async () => {
@@ -587,37 +600,46 @@ test('at every stage size the block and the labels stay on the stage and clear o
   }
 });
 
-test('a static frame (reduced motion) draws once with local 1 and draws again when the run has loaded', async () => {
+test('a static frame (reduced motion) draws once with local 1 and asks to paint again when the run has loaded', async () => {
   const page = loadBlock({ reduced: true });
+  // Each static frame has its own requestDraw. The test counts the calls of each one.
+  const asks = { ve: 0, grid: 0, live: 0 };
+  const staticFrame = id => frame(1, 1000, 562.5, { reducedMotion: true, time: 0, requestDraw: () => { asks[id] += 1; } });
+  const frames = { ve: staticFrame('ve'), grid: staticFrame('grid'), live: staticFrame('live') };
   const ctx = makeCtx();
-  const staticFrame = frame(1, 1000, 562.5, { reducedMotion: true, time: 0 });
-  page.registry.ve.draw(ctx, staticFrame);
+  page.registry.ve.draw(ctx, frames.ve);
   assert.equal(page.registry.ve.animated, false, 'a static frame never asks for more frames');
-  assert.deepEqual(page.events, [], 'and never wakes the stage');
-  assert.equal(page.storyBlockState.replays.length, 1);
-  const before = ctx.counts.clearRect || 0;
-  await settle();
-  assert.equal(page.storyBlockState.replays.length, 0);
-  assert.equal(ctx.counts.setTransform, 1, 'the context is scaled for the replay');
-  assert.deepEqual(ctx.transforms[0], [2, 0, 0, 2, 0, 0]);
-  assert.equal(ctx.counts.clearRect, before + 1);
-  assert.ok(ctx.texts.includes('540 columns'), 'the replay shows the VE columns with the real counts');
-  assert.ok(ctx.fills.some(color => page.storyBlockState.palette.band.includes(color)), 'and the bands');
-
-  const gridCtx = makeCtx();
-  page.registry.grid.draw(gridCtx, frame(1, 1000, 562.5, { reducedMotion: true }));
-  const liveCtx = makeCtx();
-  page.registry.live.draw(liveCtx, frame(1, 1000, 562.5, { reducedMotion: true }));
+  assert.deepEqual(page.events, [], 'and sends no event');
+  assert.equal(page.storyBlockState.waiting.size, 1, 'it waits with its own requestDraw');
+  assert.ok(!ctx.fills.some(color => page.storyBlockState.palette.band.includes(color)), 'before the run there are no gas bands');
+  page.registry.grid.draw(makeCtx(), frames.grid);
+  page.registry.live.draw(makeCtx(), frames.live);
+  assert.equal(page.storyBlockState.waiting.size, 3, 'one entry for each static frame');
   assert.equal(page.fetches, 1, 'one load for all frames');
   assert.equal(page.workers.length, 0, 'no worker in a static frame');
+  assert.deepEqual(asks, { ve: 0, grid: 0, live: 0 });
+  assert.equal(asked.count, 0, 'the pinned stage was not asked');
+
+  await settle();
+  assert.deepEqual(asks, { ve: 1, grid: 1, live: 1 }, 'each static frame is asked once, to paint itself again');
+  assert.equal(page.storyBlockState.waiting.size, 0);
+  assert.equal(asked.count, 0);
+
+  // The repaint: the static frame calls draw again with the same frame.
+  const repaint = makeCtx();
+  page.registry.ve.draw(repaint, frames.ve);
+  assert.ok(repaint.texts.includes('540 columns'), 'the repaint shows the VE columns with the real counts');
+  assert.ok(repaint.fills.some(color => page.storyBlockState.palette.band.includes(color)), 'and the bands');
   const liveAfter = makeCtx();
-  page.registry.live.draw(liveAfter, frame(1, 1000, 562.5, { reducedMotion: true }));
+  page.registry.live.draw(liveAfter, frames.live);
   assert.ok(liveAfter.texts.includes('Gas cap (methane)'));
   assert.equal(page.registry.live.animated, false);
   const gridAfter = makeCtx();
-  page.registry.grid.draw(gridAfter, frame(1, 1000, 562.5, { reducedMotion: true }));
+  page.registry.grid.draw(gridAfter, frames.grid);
   assert.ok(gridAfter.fills.some(color => page.storyBlockState.palette.fill.includes(color) && !page.storyBlockState.palette.rock.includes(color)), 'grid at year 30 with the cells');
   assert.ok(gridAfter.counts.stroke > 300, 'the grid lines are all there');
+  assert.deepEqual(asks, { ve: 1, grid: 1, live: 1 }, 'the repaints ask for nothing more');
+  assert.equal(page.storyLive.redraw, null, 'a static frame is not the player');
 });
 
 test('a failed load leaves the rock, reports once and puts the stage to rest', async () => {
@@ -625,6 +647,7 @@ test('a failed load leaves the rock, reports once and puts the stage to rest', a
   page.registry.grid.draw(makeCtx(), frame(0.8));
   await settle();
   assert.equal(page.storyBlockData.stored.status, 'failed');
+  assert.equal(asked.count, 1, 'the failure also asks for one draw, so that the stage shows the final state');
   assert.equal(page.errors.filter(([key]) => key === 'console').length, 1);
   const ctx = makeCtx();
   page.registry.grid.draw(ctx, frame(0.8));
@@ -656,7 +679,9 @@ test('live: mount builds real controls, the player runs from year 30 and the wor
   assert.ok(!/Open the simulator|Read my research/.test(text), 'the links belong to StoryStage');
   assert.equal(layer.children[0].attrs.role, 'group');
   assert.equal(layer.children[0].attrs['aria-label'], 'Story block controls');
-  assert.ok(page.events.includes('scroll'), 'the stage loop is awake');
+  assert.deepEqual(page.events, [], 'no synthetic event');
+  assert.equal(live.animated, true, 'the first draw follows at once, and the player runs');
+  assert.equal(page.storyLive.redraw, null, 'the requestDraw of the stage comes with the first draw');
   assert.equal(page.workers.length, 1);
   assert.equal(page.workers[0].url, './story-worker.js?v=1');
   assert.deepEqual(page.workers[0].messages, [{ type: 'run', id: 1 }]);
@@ -667,6 +692,7 @@ test('live: mount builds real controls, the player runs from year 30 and the wor
   // Draws advance the player in real time: 4 years each second.
   const times = [0, 16, 1016, 2016];
   live.draw(makeCtx(), frame(0.5, 1280, 800, { time: 0 }));
+  assert.equal(page.storyLive.redraw, redraw, 'the live draw keeps the requestDraw of the stage for the controls');
   await settle();
   times.slice(1).forEach(time => live.draw(makeCtx(), frame(0.5, 1280, 800, { time })));
   near(page.storyLive.year, 30 + 4 * (0.016 + 0.25 + 0.25), 1e-9);
@@ -674,8 +700,10 @@ test('live: mount builds real controls, the player runs from year 30 and the wor
   assert.equal(range.value, String(Math.round(page.storyLive.year)));
   assert.equal(range.attrs['aria-valuetext'], `Year ${Math.round(page.storyLive.year)}`);
 
-  // The play button pauses. A paused player asks for no more frames.
+  // The play button pauses. A paused player asks for no more frames. Each click asks for one draw.
+  const clicks = asked.count;
   play.fire('click');
+  assert.equal(asked.count, clicks + 1, 'a click asks the stage for one draw');
   assert.equal(page.storyLive.playing, false);
   assert.equal(play.attrs['aria-label'], 'Play');
   assert.equal(play.attrs['data-state'], 'paused');
@@ -684,8 +712,11 @@ test('live: mount builds real controls, the player runs from year 30 and the wor
   assert.equal(live.animated, false);
   assert.equal(page.storyLive.year, year);
   play.fire('click');
+  assert.equal(asked.count, clicks + 2);
   assert.equal(page.storyLive.playing, true);
   assert.equal(play.attrs['aria-label'], 'Pause');
+  live.draw(makeCtx(), frame(0.5, 1280, 800, { time: 3016 }));
+  assert.equal(live.animated, true, 'the draw after the click keeps the player on its frames');
 
   // The scrubber sets the year and pauses.
   range.value = '12';
@@ -694,19 +725,21 @@ test('live: mount builds real controls, the player runs from year 30 and the wor
   assert.equal(page.storyLive.playing, false);
   live.draw(makeCtx(), frame(0.5, 1280, 800, { time: 4000 }));
   assert.equal(page.storyLive.year, 12);
-  const wakes = page.events.length;
+  const scrubs = asked.count;
   range.value = '13';
   range.fire('input');
-  assert.equal(page.events.length, wakes + 1, 'a scrub wakes the stage for one redraw');
-  assert.equal(live.animated, true);
+  assert.equal(asked.count, scrubs + 1, 'a scrub asks the stage for one redraw');
+  assert.equal(live.animated, false, 'and asks for no run of frames');
   live.draw(makeCtx(), frame(0.5, 1280, 800, { time: 4100 }));
-  assert.equal(live.animated, false, 'and the stage rests again');
+  assert.equal(page.storyLive.year, 13);
+  assert.equal(live.animated, false, 'the stage rests again');
 
   // The 3D cells switch fades the layer lines in over about a third of a second.
   toggle.checked = true;
+  const switches = asked.count;
   toggle.fire('change');
   assert.equal(page.storyLive.target, 1);
-  assert.equal(live.animated, true, 'the switch wakes the stage');
+  assert.equal(asked.count, switches + 1, 'the switch asks for a draw');
   live.draw(makeCtx(), frame(0.5, 1280, 800, { time: 4200 }));
   const cellsCtx = makeCtx();
   live.draw(cellsCtx, frame(0.5, 1280, 800, { time: 4216 }));
@@ -720,7 +753,9 @@ test('live: mount builds real controls, the player runs from year 30 and the wor
   assert.equal(layer.children.length, 0, 'the controls are gone');
   assert.equal(page.document.listeners.visibilitychange, undefined);
   assert.equal(page.storyLive.playing, false);
+  assert.equal(page.storyLive.redraw, null, 'the player forgets the requestDraw of the stage');
   assert.equal(live.animated, false);
+  assert.deepEqual(page.events, [], 'no synthetic event during the whole run');
 });
 
 test('live: the player pauses in a hidden tab, stops at the last year and starts again from year 0', () => {
@@ -730,13 +765,16 @@ test('live: the player pauses in a hidden tab, stops at the last year and starts
   live.mount(layer);
   const nodes = walk(layer.children[0]);
   const play = nodes.find(node => node.tag === 'button');
+  live.draw(makeCtx(), frame(0.5, 1280, 800, { time: 0 }));
   page.document.hidden = true;
   page.document.listeners.visibilitychange();
   assert.equal(page.storyLive.playing, false);
   assert.equal(play.attrs['aria-label'], 'Play');
+  const asks = asked.count;
   page.document.hidden = false;
   page.document.listeners.visibilitychange();
   assert.equal(page.storyLive.playing, true, 'it plays again when the tab returns');
+  assert.equal(asked.count, asks + 1, 'and it asks the stage for a draw, so that the frames run again');
 
   page.storyLive.year = 99.9;
   live.draw(makeCtx(), frame(0.5, 1280, 800, { time: 10 }));
@@ -764,7 +802,9 @@ test('live: under reduced motion the player does not start by itself', () => {
   page.registry.live.mount(layer);
   assert.equal(page.storyLive.playing, false);
   assert.equal(walk(layer.children[0]).find(node => node.tag === 'button').attrs['aria-label'], 'Play');
-  assert.ok(!page.events.includes('scroll'), 'no wake without a reason');
+  assert.deepEqual(page.events, [], 'no event without a reason');
+  assert.equal(page.registry.live.animated, false, 'and no run of frames');
+  assert.equal(asked.count, 0, 'and no request');
   page.registry.live.unmount();
 });
 
@@ -788,12 +828,13 @@ test('live: frames from the worker replace the stored frames when the run is com
   assert.equal(page.storyBlockData.live.entries.length, 101);
   worker.onmessage({ data: { type: 'frame', id: 99, year: 5, h: new Float32Array(960), ch4: new Float32Array(960) } });
   assert.equal(page.storyBlockData.live.entries[5].h.some(value => value > 0), true, 'a message of another run is ignored');
-  const wakes = page.events.length;
+  const asks = asked.count;
   worker.onmessage({ data: { type: 'done', id: 1, years: 101 } });
   assert.equal(page.storyBlockData.live.complete, true);
   assert.equal(page.storyBlockData.live.status, 'done');
   assert.equal(worker.terminated, true, 'the worker ends with the run');
-  assert.equal(page.events.length, wakes + 1, 'the redraw');
+  assert.equal(asked.count, asks + 1, 'the redraw is one request to the stage');
+  assert.deepEqual(page.events, []);
 
   page.storyLive.year = 30;
   page.storyLive.playing = false;

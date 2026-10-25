@@ -387,7 +387,22 @@ const SITE_CV = {
 const SITE_STORY = {
   label: 'From orbit to a live vertical-equilibrium model',
   name: 'Sa’eed Telvari',
-  ppm: '280 ppm in 1850. More than 420 ppm today.',
+  // The CO₂ numbers of chapter 0. base and baseYear are the start of the count: the level before industry.
+  // value and year come from the NOAA Mauna Loa record: the annual mean of the latest complete year, in ppm.
+  // To update them, read the last row of the file at url, then write its year and its mean here (see the spec, Rules for the story).
+  // The first caption of chapter 0 says "more than 420 ppm". A test fails if value is not above 420.
+  co2: {
+    base: 280,
+    baseYear: 1850,
+    value: 427.35,
+    year: 2025,
+    source: 'NOAA Global Monitoring Laboratory, Mauna Loa annual mean CO₂',
+    url: 'https://gml.noaa.gov/webdata/ccgg/trends/co2/co2_annmean_mlo.txt'
+  },
+  // The ppm line, from co2: "280 ppm in 1850. 427 ppm in 2025." The value shows as a whole number.
+  get ppm() {
+    return `${this.co2.base} ppm in ${this.co2.baseYear}. ${Math.round(this.co2.value)} ppm in ${this.co2.year}.`;
+  },
   captions: {
     orbit: ['There is more than 420 ppm of CO₂ in the air. I model how rock under the North Sea can hold it for thousands of years.'],
     descent: ['Carbon capture and storage puts CO₂ back into rock, deep under the sea floor.'],
@@ -3150,16 +3165,30 @@ Object.assign(window, {
 //   draw(ctx, frame)  Draw the chapter. The canvas is cleared before each call.
 //                     ctx is a 2D context, already scaled by dpr. Draw in CSS pixels, from (0, 0) to (width, height).
 //                     ctx.save() and ctx.restore() surround the call.
-//   frame             { local, p, width, height, dpr, time, reducedMotion }
+//   frame             { local, p, width, height, dpr, time, reducedMotion, requestDraw }
 //     local           Progress in this chapter, from 0 to 1.
 //     p               Progress in the whole story, from 0 to 1.
 //     width, height   Size of the stage in CSS pixels.
 //     dpr             Pixel ratio of the canvas: the device pixel ratio, with a maximum of 2.
 //     time            Milliseconds from the requestAnimationFrame timestamp. It is 0 in a static frame.
 //     reducedMotion   true in the six static frames of the reduced-motion layout. local is 1 in these frames.
+//     requestDraw     requestDraw() asks for one more draw. Call it when late data arrives (a fetch or a worker)
+//                     or when a control changes the picture. Do not dispatch a scroll event for this.
+//                     In the pinned stage: it draws the current chapter once, on the next animation frame.
+//                     Calls that come before that frame make one draw. The stage draws only while it is on screen
+//                     and the tab is visible. A call in any other state draws nothing at once. The stage keeps
+//                     the call and draws once when the stage returns to the screen or the tab is visible again.
+//                     In a static frame: it paints the canvas of that frame again on the next animation frame.
+//                     Calls that come before that frame make one paint. A static frame paints also off screen,
+//                     because it paints only once otherwise.
+//                     A call inside draw() gives a draw on the following animation frame, not on this one.
+//                     requestDraw is the same function in every frame of one stage or one static frame.
+//                     A renderer can keep it and call it later, for example from an event handler.
 //   animated          Set it to true if draw() reads frame.time. Then draw() runs on each animation frame while this
 //                     chapter is current, the stage is on screen and the tab is visible.
-//                     If it is not true, draw() runs only when p or the stage size changes.
+//                     If it is not true, draw() runs only when p or the stage size changes, or after requestDraw.
+//                     The stage reads animated before each draw and again after it. A renderer can set it to true
+//                     inside draw() or in a getter: the next frame then runs with no other event.
 //   mount(layer)      Only the chapter live uses it. layer is an empty div that fills the stage.
 //   unmount()         The layer takes pointer events while live is current. mount runs when live becomes current.
 //                     unmount runs when the visitor scrolls out of live. Neither runs in a static frame.
@@ -3279,6 +3308,15 @@ const storyInline = text => text.split('*').map((part, i) => ({
   text: part,
   em: i % 2 === 1
 })).filter(part => part.text);
+
+// The count-up of the ppm number in chapter 0 takes this long.
+const STORY_COUNT_MS = 1200;
+
+// The whole number on the ppm line, ms milliseconds after the count starts. It goes from from to to with an ease-out curve.
+const storyCount = (ms, from, to) => {
+  const left = 1 - storyClamp(ms / STORY_COUNT_MS);
+  return Math.round(from + (to - from) * (1 - left * left * left));
+};
 // ---- end story helpers
 
 const STORY_MAX_DPR = 2;
@@ -3341,6 +3379,54 @@ const StoryText = ({
   key: i
 }, part.text)));
 
+// The ppm line of chapter 0: "280 ppm in 1850. {value} ppm in {year}." (SITE_STORY.co2 holds the numbers).
+// The value counts up from 280 once, when the page loads. A visitor with reduced motion sees the final value at once.
+// While the number counts, a hidden copy of the final number is in the text, and the counting number is aria-hidden.
+// A screen reader reads the final line. When the count ends, the line is plain text again.
+const storyPpmPlayed = {
+  done: false
+};
+const StoryPpm = ({
+  on
+}) => {
+  const {
+    base,
+    baseYear,
+    year,
+    value
+  } = SITE_STORY.co2;
+  const end = Math.round(value);
+  const reduced = useStoryReducedMotion();
+  const [count, setCount] = useState(storyPpmPlayed.done ? end : base);
+  const shown = reduced ? end : count;
+  useEffect(() => {
+    if (reduced || storyPpmPlayed.done) return undefined;
+    let id = 0;
+    let start = 0;
+    let last = base;
+    const step = now => {
+      if (!start) start = now;
+      const next = storyCount(now - start, base, end);
+      if (next !== last) {
+        last = next;
+        setCount(next);
+      }
+      if (now - start < STORY_COUNT_MS) id = requestAnimationFrame(step);else storyPpmPlayed.done = true;
+    };
+    id = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(id);
+  }, [reduced]);
+  return /*#__PURE__*/React.createElement("p", {
+    className: "story-note story-fade",
+    "data-on": on
+  }, shown === end ? SITE_STORY.ppm : /*#__PURE__*/React.createElement(React.Fragment, null, `${base} ppm in ${baseYear}. `, /*#__PURE__*/React.createElement("span", {
+    className: "story-count",
+    "aria-hidden": "true"
+  }, shown), /*#__PURE__*/React.createElement("span", {
+    className: "visually-hidden"
+  }, end), ` ppm in ${year}.`));
+};
+
 // The words of one chapter. In the pinned story, on and caption say which parts the visitor sees now.
 // A caption of null means that all captions are on.
 const StoryWords = ({
@@ -3362,10 +3448,9 @@ const StoryWords = ({
     "data-on": on && (caption === null || k === caption)
   }, /*#__PURE__*/React.createElement(StoryText, {
     text: text
-  })))), chapter.id === 'orbit' && /*#__PURE__*/React.createElement("p", {
-    className: "story-note story-fade",
-    "data-on": on
-  }, SITE_STORY.ppm), actions.length > 0 && /*#__PURE__*/React.createElement("div", {
+  })))), chapter.id === 'orbit' && /*#__PURE__*/React.createElement(StoryPpm, {
+    on: on
+  }), actions.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "story-actions story-fade",
     "data-on": on
   }, actions.map((action, i) => /*#__PURE__*/React.createElement("a", {
@@ -3404,6 +3489,7 @@ const StoryPinned = ({
     let frame = 0;
     let visible = true;
     let dirty = true;
+    let wanted = false;
     let width = 0;
     let height = 0;
     let dpr = 1;
@@ -3454,8 +3540,11 @@ const StoryPinned = ({
       }
       syncLayer(current.id);
       const entry = STORY_RENDERERS[current.id];
-      const running = !!(entry && entry.animated) && visible && !document.hidden;
-      if (width && height && (dirty || p !== drawn || running)) {
+      // A chapter that is animated runs on each frame, but only while the stage is on screen and the tab is visible.
+      // The stage reads animated here and again after the draw, because draw() can turn it on.
+      const running = () => !!(entry && entry.animated) && awake();
+      if (width && height && (dirty || p !== drawn || wanted && awake() || running())) {
+        wanted = false;
         storyPaint(ctx, current.id, {
           local: current.local,
           p,
@@ -3463,7 +3552,8 @@ const StoryPinned = ({
           height,
           dpr,
           time: now,
-          reducedMotion: false
+          reducedMotion: false,
+          requestDraw
         });
         const fractions = storyRail(p);
         fills.forEach((fill, i) => {
@@ -3472,10 +3562,19 @@ const StoryPinned = ({
         drawn = p;
         dirty = false;
       }
-      if (running) schedule();
+      if (running()) schedule();
     };
     const schedule = () => {
       if (alive && !frame) frame = requestAnimationFrame(tick);
+    };
+    const awake = () => visible && !document.hidden;
+
+    // The renderers call this one function, in each frame, to ask for one more draw of the current chapter.
+    // Calls before the next animation frame make one draw. Off screen or in a hidden tab, the stage keeps the
+    // call and draws when it is on screen again.
+    const requestDraw = () => {
+      wanted = true;
+      if (awake()) schedule();
     };
     const onVisibility = () => {
       if (!document.hidden) schedule();
@@ -3559,6 +3658,16 @@ const StoryFrame = ({
     if (!box || !canvas) return undefined;
     const ctx = canvas.getContext('2d');
     let alive = true;
+    let queued = 0;
+    // The renderer calls this in the frame to paint the canvas again, for example when late data arrives.
+    // Calls before the next animation frame make one paint. The frame paints also while it is off screen.
+    const requestDraw = () => {
+      if (!alive || queued) return;
+      queued = requestAnimationFrame(() => {
+        queued = 0;
+        paint();
+      });
+    };
     const paint = () => {
       const width = box.clientWidth;
       const height = box.clientHeight;
@@ -3573,7 +3682,8 @@ const StoryFrame = ({
         height,
         dpr,
         time: 0,
-        reducedMotion: true
+        reducedMotion: true,
+        requestDraw
       });
     };
     const sizes = new ResizeObserver(paint);
@@ -3582,6 +3692,7 @@ const StoryFrame = ({
     paint();
     return () => {
       alive = false;
+      if (queued) cancelAnimationFrame(queued);
       sizes.disconnect();
     };
   }, [chapter]);
@@ -4237,57 +4348,35 @@ const STORY_EARTH_FONT = 'Literata, Georgia, serif';
 // ---- the land data: one request, one decode, shared by orbit and descent
 const storyEarthLand = {
   state: 'idle',
-  rings: [],
-  version: 0
-};
-const storyEarthStills = new Map();
-
-// Wakes the pinned stage. A scroll event makes it plan one frame.
-const storyEarthWake = () => {
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event('scroll'));
+  rings: []
 };
 
-// The data arrives. The static frames draw again. The pinned stage draws again, because animated is true for one frame.
+// The draws that ran before the land arrived. Each entry is the frame.requestDraw of a stage or of a static frame.
+const storyEarthWaiting = new Set();
+
+// The data arrives. Each draw that waited asks for one more draw.
 const storyEarthRefresh = () => {
-  storyEarthStills.forEach((entry, canvas) => {
-    if (!canvas.isConnected) storyEarthStills.delete(canvas);else storyPaint(entry.ctx, entry.id, entry.frame);
-  });
-  storyEarthWake();
+  const calls = Array.from(storyEarthWaiting);
+  storyEarthWaiting.clear();
+  calls.forEach(call => call());
 };
-const storyEarthLoad = () => {
-  if (storyEarthLand.state !== 'idle') return;
-  storyEarthLand.state = 'loading';
-  fetch('assets/land-110m.json?v=1').then(response => {
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
-  }).then(topology => {
-    storyEarthLand.rings = storyEarthDecode(topology).filter(ring => ring.length > 3).map(ring => storyEarthBuildRing(ring));
-    storyEarthLand.state = 'ready';
-    storyEarthLand.version++;
-    storyEarthRefresh();
-  }).catch(error => {
-    storyEarthLand.state = 'failed';
-    storyEarthLand.version++;
-    console.error('The land data of the story did not load.', error);
-  });
-};
-
-// A renderer is animated for one frame after the land data changes.
-const storyEarthWatch = () => {
-  let seen = -1;
-  return {
-    stale: () => seen !== storyEarthLand.version,
-    mark: () => {
-      seen = storyEarthLand.version;
-    }
-  };
-};
-const storyEarthKeepStill = (ctx, id, frame) => {
-  if (frame.reducedMotion) storyEarthStills.set(ctx.canvas, {
-    ctx,
-    id,
-    frame
-  });
+const storyEarthLoad = frame => {
+  if (storyEarthLand.state === 'idle') {
+    storyEarthLand.state = 'loading';
+    fetch('assets/land-110m.json?v=1').then(response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }).then(topology => {
+      storyEarthLand.rings = storyEarthDecode(topology).filter(ring => ring.length > 3).map(ring => storyEarthBuildRing(ring));
+      storyEarthLand.state = 'ready';
+      storyEarthRefresh();
+    }).catch(error => {
+      storyEarthLand.state = 'failed';
+      storyEarthWaiting.clear();
+      console.error('The land data of the story did not load.', error);
+    });
+  }
+  if (storyEarthLand.state === 'loading' && typeof frame.requestDraw === 'function') storyEarthWaiting.add(frame.requestDraw);
 };
 
 // ---- drawing
@@ -4519,24 +4608,17 @@ const storyEarthFill = (ctx, layout) => {
   ctx.fillStyle = STORY_COLORS.sky;
   ctx.fillRect(0, 0, layout.width, layout.height);
 };
-STORY_RENDERERS.orbit = (() => {
-  const watch = storyEarthWatch();
-  return {
-    get animated() {
-      return watch.stale();
-    },
-    draw(ctx, frame) {
-      storyEarthLoad();
-      watch.mark();
-      storyEarthKeepStill(ctx, 'orbit', frame);
-      const layout = storyEarthLayout(frame.width, frame.height, frame.reducedMotion);
-      const camera = storyEarthOrbitCamera(frame.reducedMotion ? 0 : frame.local, layout);
-      storyEarthFill(ctx, layout);
-      if (camera.alpha > 0) storyEarthDrawGlobe(ctx, layout, camera);
-      if (camera.lens) storyEarthDrawLens(ctx, camera.lens, layout, 0, layout.k);else storyEarthMarker(ctx, camera.marker.x, camera.marker.y, layout.k, 0);
-    }
-  };
-})();
+STORY_RENDERERS.orbit = {
+  animated: false,
+  draw(ctx, frame) {
+    storyEarthLoad(frame);
+    const layout = storyEarthLayout(frame.width, frame.height, frame.reducedMotion);
+    const camera = storyEarthOrbitCamera(frame.reducedMotion ? 0 : frame.local, layout);
+    storyEarthFill(ctx, layout);
+    if (camera.alpha > 0) storyEarthDrawGlobe(ctx, layout, camera);
+    if (camera.lens) storyEarthDrawLens(ctx, camera.lens, layout, 0, layout.k);else storyEarthMarker(ctx, camera.marker.x, camera.marker.y, layout.k, 0);
+  }
+};
 
 // The side view. Units are the 800 by 450 units of the storyboard. The sea is at y = 232 to 310, the sea floor at 396.
 const storyEarthDrawScene = (ctx, layout, state, time) => {
@@ -4680,21 +4762,15 @@ const storyEarthDrawScene = (ctx, layout, state, time) => {
   ctx.restore();
 };
 STORY_RENDERERS.descent = (() => {
-  const watch = storyEarthWatch();
+  // The CO2 dashes move in the hold. The stage reads animated after each draw, so the next frame runs.
   let running = false;
   return {
     get animated() {
-      return running || watch.stale();
+      return running;
     },
     draw(ctx, frame) {
-      storyEarthLoad();
-      watch.mark();
-      storyEarthKeepStill(ctx, 'descent', frame);
-      const hold = !frame.reducedMotion && frame.local >= STORY_EARTH_HOLD;
-      if (hold && !running) {
-        running = true;
-        storyEarthWake();
-      } else if (!hold) running = false;
+      storyEarthLoad(frame);
+      running = !frame.reducedMotion && frame.local >= STORY_EARTH_HOLD;
       const layout = storyEarthLayout(frame.width, frame.height, frame.reducedMotion);
       const state = storyEarthDescentCamera(frame.local, layout);
       storyEarthFill(ctx, layout);
@@ -5175,12 +5251,14 @@ const ROCK_SURFACE = '#3d6c7b';
 const ROCK_WAVE = '#5d8a98';
 const ROCK_TUBING = '#8fb0ff';
 const ROCK_FONT = 'Literata, Georgia, serif';
+
+// waiting holds the frame.requestDraw of each draw that ran before the stored run arrived.
 const rockState = {
   section: null,
   prep: null,
   plume: null,
   load: 'idle',
-  last: null
+  waiting: new Set()
 };
 const rockSection = () => {
   if (!rockState.section) rockState.section = StoryGeometry.storySection(ROCK_SAMPLES);
@@ -5188,20 +5266,25 @@ const rockSection = () => {
 };
 
 // The stored run is small. It loads once, when the chapter draws for the first time.
-const rockLoad = () => {
-  if (rockState.load !== 'idle' || typeof fetch !== 'function') return;
-  rockState.load = 'loading';
-  fetch('./assets/story-run.json').then(response => response.ok ? response.json() : Promise.reject(new Error(String(response.status)))).then(run => {
-    const stored = run.frames.find(item => item.year === ROCK_PLUME_YEAR);
-    if (!stored) throw new Error('The stored run has no frame for the plume.');
-    const section = rockSection();
-    rockState.plume = rockPlume(section, rockGasAlong(section, stored, run.grid));
-    rockState.load = 'ready';
-    const last = rockState.last;
-    if (last && last.frame.reducedMotion) storyPaint(last.ctx, 'rock', last.frame);
-  }).catch(() => {
-    rockState.load = 'failed';
-  });
+// A draw that runs while the run loads keeps its frame.requestDraw. When the run arrives, each one asks for one more draw.
+const rockLoad = frame => {
+  if (rockState.load === 'idle' && typeof fetch === 'function') {
+    rockState.load = 'loading';
+    fetch('./assets/story-run.json').then(response => response.ok ? response.json() : Promise.reject(new Error(String(response.status)))).then(run => {
+      const stored = run.frames.find(item => item.year === ROCK_PLUME_YEAR);
+      if (!stored) throw new Error('The stored run has no frame for the plume.');
+      const section = rockSection();
+      rockState.plume = rockPlume(section, rockGasAlong(section, stored, run.grid));
+      rockState.load = 'ready';
+      const calls = Array.from(rockState.waiting);
+      rockState.waiting.clear();
+      calls.forEach(call => call());
+    }).catch(() => {
+      rockState.load = 'failed';
+      rockState.waiting.clear();
+    });
+  }
+  if (rockState.load === 'loading' && typeof frame.requestDraw === 'function') rockState.waiting.add(frame.requestDraw);
 };
 
 // Everything that depends on the size of the stage but not on the camera.
@@ -5637,7 +5720,7 @@ const rockScaleTag = (ctx, layout) => {
   ctx.fillText(layout.scaleLabel, x + 9, y + height / 2 + 0.5);
 };
 const rockDraw = (ctx, frame) => {
-  rockLoad();
+  rockLoad(frame);
   const prep = rockPrepare(frame);
   const {
     layout,
@@ -5645,10 +5728,6 @@ const rockDraw = (ctx, frame) => {
   } = prep;
   const win = layout.win;
   const view = rockView(layout, rockCamera(frame.local, spec));
-  rockState.last = {
-    ctx,
-    frame
-  };
   ctx.save();
   rockRound(ctx, win.x0 - 2, win.y0, win.x1, win.y1, 10);
   ctx.clip();
@@ -6162,8 +6241,8 @@ const storyBlockState = {
   builds: 0,
   palette: null,
   scene: {},
-  replays: [],
-  waiting: []
+  // The frame.requestDraw of each draw that ran while the stored run loaded. The arrival of the run calls them.
+  waiting: new Set()
 };
 
 // The model frames. stored comes from assets/story-run.json (years in STORY_YEARS).
@@ -6451,7 +6530,7 @@ const storyBlockPickBracket = block => {
   return best;
 };
 
-// Load the stored run once. A pinned renderer that waits for it runs on each frame. A static frame draws again.
+// Load the stored run once. Each draw that runs before it arrives asks for one more draw when it arrives.
 const storyBlockLoad = () => {
   const stored = storyBlockData.stored;
   if (stored.status !== 'idle') return;
@@ -6483,26 +6562,12 @@ const storyBlockLoad = () => {
     finish(false);
   });
 };
-const storyBlockWake = entry => {
-  entry.animated = true;
-  if (typeof window !== 'undefined' && window.dispatchEvent && typeof Event === 'function') window.dispatchEvent(new Event('scroll'));
-};
+
+// The run has arrived, or it has failed. Each draw that waited asks for one more draw.
 const storyBlockNotify = () => {
-  storyBlockState.replays.splice(0).forEach(({
-    entry,
-    id,
-    ctx,
-    frame
-  }) => {
-    storyGuard(`${id}.replay`, () => {
-      ctx.save();
-      ctx.setTransform(frame.dpr, 0, 0, frame.dpr, 0, 0);
-      ctx.clearRect(0, 0, frame.width, frame.height);
-      entry.draw(ctx, frame);
-      ctx.restore();
-    });
-  });
-  storyBlockState.waiting.splice(0).forEach(storyBlockWake);
+  const calls = Array.from(storyBlockState.waiting);
+  storyBlockState.waiting.clear();
+  calls.forEach(call => call());
 };
 
 // The columns of the model at a year, blended from the two nearest frames. It returns false when no frame exists.
@@ -6817,20 +6882,9 @@ const storyBlockDraw = (entry, id, ctx, frame) => {
   const block = storyBlockGet(frame);
   const stored = storyBlockData.stored;
   if (stored.status === 'idle') storyBlockLoad();
-  const loading = stored.status === 'loading';
-  if (loading) {
-    if (frame.reducedMotion) {
-      if (!storyBlockState.replays.some(item => item.ctx === ctx)) storyBlockState.replays.push({
-        entry,
-        id,
-        ctx,
-        frame
-      });else storyBlockState.replays.find(item => item.ctx === ctx).frame = frame;
-    } else if (!entry.animated) {
-      storyBlockState.waiting.push(entry);
-      storyBlockWake(entry);
-    }
-  }
+  // This draw shows the rock with no gas. The arrival of the run asks the stage or the static frame for one more draw.
+  if (stored.status === 'loading' && typeof frame.requestDraw === 'function') storyBlockState.waiting.add(frame.requestDraw);
+  if (id === 'live' && !frame.reducedMotion) storyLive.redraw = frame.requestDraw;
   const pal = storyBlockState.palette || (storyBlockState.palette = storyBlockPalette(STORY_COLORS));
   const s = storyBlockState.scene;
   if (id === 'grid') storyBlockGrid(frame.local, s);else if (id === 've') storyBlockVe(frame.local, s);else storyBlockLiveScene(entry, frame, s);
@@ -6839,7 +6893,8 @@ const storyBlockDraw = (entry, id, ctx, frame) => {
   if (s.bracket > 0.01 && block.bracket < 0) block.bracket = storyBlockPickBracket(block);
   storyBlockPaint(ctx, block, pal, s);
   storyBlockAnnotate(ctx, block, s, id);
-  if (id === 'live') entry.animated = storyBlockLiveBusy(frame) || loading && !frame.reducedMotion;else if (!loading) entry.animated = false;
+  // The stage reads animated after this draw. Only the live player needs the next frame without a request.
+  entry.animated = id === 'live' && storyBlockLiveBusy(frame);
 };
 
 // ---- chapter live: the player, the controls and the worker
@@ -6857,7 +6912,15 @@ const storyLive = {
   target: 0,
   shown: -1,
   shownState: '',
-  onVisibility: null
+  onVisibility: null,
+  // The frame.requestDraw of the pinned stage. The live draw keeps it for the controls and the worker.
+  redraw: null
+};
+
+// The controls, the worker and the tab events run outside draw(). They ask the stage for one more draw here.
+// The draw then sets animated again, so a player that runs keeps its frames.
+const storyBlockRedraw = () => {
+  if (storyLive.redraw) storyLive.redraw();
 };
 const storyBlockReducedNow = () => !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
@@ -6919,7 +6982,7 @@ const storyBlockVisibility = live => {
     live.playing = true;
     live.last = null;
     storyBlockSyncControls();
-    storyBlockWake(live.entry);
+    storyBlockRedraw();
   }
 };
 
@@ -6985,7 +7048,7 @@ const storyBlockControls = (layer, live) => {
     }
     live.resume = false;
     storyBlockSyncControls();
-    storyBlockWake(live.entry);
+    storyBlockRedraw();
   });
   range.addEventListener('input', () => {
     live.year = Number(range.value);
@@ -6993,11 +7056,11 @@ const storyBlockControls = (layer, live) => {
     live.resume = false;
     live.last = null;
     storyBlockSyncControls();
-    storyBlockWake(live.entry);
+    storyBlockRedraw();
   });
   toggle.addEventListener('change', () => {
     live.target = toggle.checked ? 1 : 0;
-    storyBlockWake(live.entry);
+    storyBlockRedraw();
   });
   return {
     root,
@@ -7048,7 +7111,7 @@ const storyBlockStartWorker = () => {
         live.status = live.complete ? 'done' : 'failed';
         live.worker = null;
         worker.terminate();
-        if (storyLive.mounted) storyBlockWake(storyLive.entry);
+        if (storyLive.mounted) storyBlockRedraw();
       } else if (data.type === 'error') {
         console.error('The story worker failed.', data.message);
         fail();
@@ -7091,7 +7154,8 @@ STORY_RENDERERS.live = {
     document.addEventListener('visibilitychange', live.onVisibility);
     storyBlockSyncControls();
     storyBlockStartWorker();
-    if (live.playing) storyBlockWake(this);
+    // The first draw of the chapter follows in the same tick. It keeps animated true while the player runs.
+    this.animated = live.playing;
   },
   unmount() {
     const live = storyLive;
@@ -7102,6 +7166,7 @@ STORY_RENDERERS.live = {
     const root = live.nodes && live.nodes.root;
     if (root && root.parentNode) root.parentNode.removeChild(root);
     live.nodes = null;
+    live.redraw = null;
     this.animated = false;
   }
 };

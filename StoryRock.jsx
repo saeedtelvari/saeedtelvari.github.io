@@ -323,7 +323,8 @@ const ROCK_WAVE = '#5d8a98';
 const ROCK_TUBING = '#8fb0ff';
 const ROCK_FONT = 'Literata, Georgia, serif';
 
-const rockState = { section: null, prep: null, plume: null, load: 'idle', last: null };
+// waiting holds the frame.requestDraw of each draw that ran before the stored run arrived.
+const rockState = { section: null, prep: null, plume: null, load: 'idle', waiting: new Set() };
 
 const rockSection = () => {
   if (!rockState.section) rockState.section = StoryGeometry.storySection(ROCK_SAMPLES);
@@ -331,21 +332,25 @@ const rockSection = () => {
 };
 
 // The stored run is small. It loads once, when the chapter draws for the first time.
-const rockLoad = () => {
-  if (rockState.load !== 'idle' || typeof fetch !== 'function') return;
-  rockState.load = 'loading';
-  fetch('./assets/story-run.json')
-    .then(response => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
-    .then(run => {
-      const stored = run.frames.find(item => item.year === ROCK_PLUME_YEAR);
-      if (!stored) throw new Error('The stored run has no frame for the plume.');
-      const section = rockSection();
-      rockState.plume = rockPlume(section, rockGasAlong(section, stored, run.grid));
-      rockState.load = 'ready';
-      const last = rockState.last;
-      if (last && last.frame.reducedMotion) storyPaint(last.ctx, 'rock', last.frame);
-    })
-    .catch(() => { rockState.load = 'failed'; });
+// A draw that runs while the run loads keeps its frame.requestDraw. When the run arrives, each one asks for one more draw.
+const rockLoad = frame => {
+  if (rockState.load === 'idle' && typeof fetch === 'function') {
+    rockState.load = 'loading';
+    fetch('./assets/story-run.json')
+      .then(response => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
+      .then(run => {
+        const stored = run.frames.find(item => item.year === ROCK_PLUME_YEAR);
+        if (!stored) throw new Error('The stored run has no frame for the plume.');
+        const section = rockSection();
+        rockState.plume = rockPlume(section, rockGasAlong(section, stored, run.grid));
+        rockState.load = 'ready';
+        const calls = Array.from(rockState.waiting);
+        rockState.waiting.clear();
+        calls.forEach(call => call());
+      })
+      .catch(() => { rockState.load = 'failed'; rockState.waiting.clear(); });
+  }
+  if (rockState.load === 'loading' && typeof frame.requestDraw === 'function') rockState.waiting.add(frame.requestDraw);
 };
 
 // Everything that depends on the size of the stage but not on the camera.
@@ -751,12 +756,11 @@ const rockScaleTag = (ctx, layout) => {
 };
 
 const rockDraw = (ctx, frame) => {
-  rockLoad();
+  rockLoad(frame);
   const prep = rockPrepare(frame);
   const { layout, spec } = prep;
   const win = layout.win;
   const view = rockView(layout, rockCamera(frame.local, spec));
-  rockState.last = { ctx, frame };
 
   ctx.save();
   rockRound(ctx, win.x0 - 2, win.y0, win.x1, win.y1, 10);

@@ -43,6 +43,7 @@ The story removes detail in steps: the real Earth, then the real rock, then a 3D
 - Each chapter has one message. A caption has a maximum of two sentences.
 - A "Skip to research" control is always on screen during the story.
 - Numbers are real. The ppm value comes from the NOAA Mauna Loa record and is updated at build time. "Up to 100×" comes from the preprint. Run times in chapter 3 are labelled as typical values.
+- **How to update the ppm value.** Do this before each release. Open the NOAA file `co2_annmean_mlo.txt` (`https://gml.noaa.gov/webdata/ccgg/trends/co2/co2_annmean_mlo.txt`). Take the last row of a complete year. Write its year and its mean in `SITE_STORY.co2` in `site-content.js`, as `year` and `value`. Run `node build.js` and `node --test tests/*.test.js`. The ppm line is then `280 ppm in 1850. {value} ppm in {year}.` with the value as a whole number. The number counts up from 280 once when the page loads, and a visitor with reduced motion sees the final number at once. The first caption says "more than 420 ppm". A test fails if the value is not above 420: then change that caption. On 2026-10-25 the last complete year is 2025, with 427.35 ppm.
 - The chapter 4 grid is illustrative, but the step is correct: the 3D cells and the single VE cell of each column come from the same plume thickness. The block never changes its height.
 - The cell and column counts in chapter 4 are the real counts of the grid on screen.
 - Chapter 5 is the real model, not an animation.
