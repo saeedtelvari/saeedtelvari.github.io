@@ -36,7 +36,7 @@ The story removes detail in steps: the real Earth, then the real rock, then a 3D
 | # | Chapter | Play time | What the visitor sees | Copy (draft) |
 |---|---|---|---|---|
 | 0 | Orbit | 5 s | The Earth from orbit, with the North Sea near the top of the disc. A ppm counter goes from 280 to the current value. | Name. "There is more than 420 ppm of CO₂ in the air. I model how rock under the North Sea can hold it for thousands of years." |
-| new | North Sea map | 8 s | The card grows into a large map of the southern and central North Sea. Grey points show gas fields that no longer produce. Then the project outlines, a marker for each project and the project names appear. The projects and sources are in [the research file](2026-10-28-north-sea-ccs-map-research.md). | "Hundreds of gas fields under the North Sea no longer produce. Projects in the UK, the Netherlands and Denmark plan to store CO₂ in some of them." |
+| 0b | North Sea map | 8 s | The card grows into a large map of the southern and central North Sea. Grey points show gas fields that no longer produce. Then the project outlines, a marker for each project and the project names appear. The projects and sources are in [the research file](2026-10-28-north-sea-ccs-map-research.md). | "Hundreds of gas fields under the North Sea no longer produce. Projects in the UK, the Netherlands and Denmark plan to store CO₂ in some of them." |
 | 1 | Descent | 7 s | The camera zooms to the North Sea. It goes down to one offshore platform. | "Carbon capture and storage puts CO₂ back into rock, deep under the sea floor." |
 | 2 | Into the rock | 8 s | The camera follows the well down a detailed cutaway (see [Geology](#geology)). At the bottom it stops on the reservoir: a sandstone dome with a methane gas cap at the crest, brine below, and a fault on one flank. The well is on the flank, away from the gas cap. | (a) "The well goes about 2 km down, through clay, chalk and a shale caprock." (b) "The sandstone is a dome that held natural gas for millions of years. Most of the gas is produced, so the dome can now store CO₂." |
 | 3 | Rock to grid | 9 s | The camera moves to the dome, and the rest of the cutaway fades. A grid draws onto the reservoir: vertical pillars first, then layers that follow the curved top and base. The fault offsets the grid. The model rock is uniform, so the cells show no property colours. Then the 3D run starts: the CO₂ plume grows near the well and rises toward the crest, and the gas cap moves a little as the pressure rises. A run clock counts hours and days. | (a) "A 3D model splits the reservoir into cells that follow the layers and the fault. Field models have millions of cells, and one run can take days." (b) "Faults cut the reservoir and can leak. In the MuPSI project, which studies fault integrity, I apply these models to depleted gas fields." |
@@ -113,7 +113,7 @@ The cutaway is generic but correct for the central North Sea. It uses no formati
 ## Architecture
 
 - **Stage.** One `position: sticky` stage inside a tall scroll container. CSS scroll snap holds the page on one of seven stages, and the scroll position only chooses the stage. When the scroll settles, the stage plays its own `local` value from 0 to 1 in the time in `STORY_DURATIONS`. The scroll listener starts a timer, and the `scrollend` event can end the wait at once. No new library is necessary.
-- **Pure chapter functions.** Each chapter is a pure function from `progress` to a state object, for example `orbitState(p)` and `collapseState(p)`. Node tests check these functions, in the same way as the current hero helpers.
+- **Pure chapter functions.** Each chapter is a pure function from its `local` value to a state object, for example `orbitState(p)` and `collapseState(p)`. Node tests check these functions, in the same way as the current hero helpers.
 - **Rendering.** Chapters 0–4 draw on one 2D canvas, with HTML captions on top. The grid in chapters 3–4 has about 600 cells, so WebGL is not necessary. Chapter 5 uses `ve2d-model.js` in a worker on the coarse grid (40 × 24).
 - **Coastlines.** Natural Earth land at 1:110 m, as a small static file in `assets/`. No CDN request at run time.
 - **Build.** New components go into `bundle.js` through `build.js`, as now. The current `SubsurfaceHero.jsx` and `GeologicalDescent.jsx` are removed when the story ships.
@@ -121,10 +121,10 @@ The cutaway is generic but correct for the central North Sea. It uses no formati
 
 ## Accessibility and motion
 
-- With `prefers-reduced-motion`, the story becomes six static frames, each with its caption. The camera does not move.
+- With `prefers-reduced-motion`, the story becomes seven static frames, each with its caption. The camera does not move.
 - The captions are real text in reading order. The canvas is `aria-hidden`.
 - The skip control and the chapter 5 controls work with the keyboard and show a visible focus ring.
-- On a phone the story uses a simpler camera path and fewer cells. The six messages stay the same.
+- On a phone the story uses a simpler camera path and fewer cells. The seven messages stay the same.
 
 ## Sections, header, footer and CV
 
@@ -199,7 +199,7 @@ The mobile drawer has the ground colour, an ink hairline on its left edge and an
 
 1. **Choose the art direction.** Done: C.
 2. **Storyboard frames.** Make one static mockup per chapter in the chosen style, then get approval.
-3. **Scroll engine.** Pinned stage, `progress`, chapter mapping, skip control, reduced-motion frames and tests.
+3. **Scroll engine.** Pinned stage, stage snapping and auto-play, chapter mapping, skip control, reduced-motion frames and tests.
 4. **Geometry and chapters 4 and 5.** The shared scenario (dome, fault, gas–water contact), the gas-cap start state and the methane tracer with their tests, the merge of the vertical cells and the live VE block. These chapters are the core message, so they come first.
 5. **Chapters 0 to 3.** Orbit, descent, the geological cutaway and the rock-to-grid step.
 6. **Sections and CV.** Apply the new tokens to the content below the story.
