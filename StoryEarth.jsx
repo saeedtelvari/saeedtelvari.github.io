@@ -7,6 +7,9 @@
 //
 // The land comes from assets/land-110m.json (Natural Earth, TopoJSON). Until the file arrives, the art has no land.
 // storyEarthPlatform and storyEarthLayout are global. The chapter rock can use them to start where descent ends.
+// The first frame of the chapter rock is the last frame of descent (local 1). It draws the same side view with the same
+// numbers (see rockApproachDraw in StoryRock.jsx). A test in tests/story-rock.test.js compares the two frames.
+// If you change the last frame of descent, change the approach of the chapter rock in the same way.
 
 // ---- story earth helpers (pure; tests/story-earth.test.js evaluates this block)
 const STORY_EARTH_RAD = Math.PI / 180;
