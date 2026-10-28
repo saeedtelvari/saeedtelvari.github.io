@@ -87,8 +87,17 @@ test('local follows the play time of the stage; live has no time and is always a
   near(storyP(3, 7), 4 / 6, 'local is clamped');
 });
 
+test('rock shows no caption until the cutaway clears the caption area, and switches at the bottom of the well', () => {
+  assert.equal(storyCaptionIndex('rock', 0), -1);
+  assert.equal(storyCaptionIndex('rock', 0.09), -1);
+  assert.equal(storyCaptionIndex('rock', 0.1), 0);
+  assert.equal(storyCaptionIndex('rock', 0.64), 0);
+  assert.equal(storyCaptionIndex('rock', 0.65), 1);
+  assert.equal(storyCaptionIndex('rock', 1), 1);
+});
+
 test('chapters with two captions switch at half of the playback; the others keep caption 0', () => {
-  for (const id of ['rock', 'grid', 've']) {
+  for (const id of ['grid', 've']) {
     assert.equal(storyCaptionIndex(id, 0), 0, id);
     assert.equal(storyCaptionIndex(id, 0.49), 0, id);
     assert.equal(storyCaptionIndex(id, 0.5), 1, id);

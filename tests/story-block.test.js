@@ -1269,12 +1269,17 @@ test('boundary ve to live: the first frame of chapter live is the last frame of 
       assert.ok(texts.includes('One cell per column; brine below h') && texts.includes('h') && texts.some(text => /^\d+ columns$/.test(text)), `${label}: the notes of chapter ve are still there`);
     }
   }
-  // Then chapter live fades the notes in its first 10 percent.
+  // The stage gives live local 1 at once. The player fades the notes on its own clock, in 600 ms after it mounts.
+  page.registry.live.unmount();
+  page.registry.live.mount(makeElement('div'));
+  const start = makeCtx();
+  page.registry.live.draw(start, frame(1, 1280, 800, { time: 1000 }));
+  assert.ok(start.texts.includes('One cell per column; brine below h'), 'the note is still on when the player mounts');
   const fading = makeCtx();
-  page.registry.live.draw(fading, frame(0.05));
-  assert.ok(fading.texts.includes('One cell per column; brine below h'), 'the note is still on at 5 percent');
+  page.registry.live.draw(fading, frame(1, 1280, 800, { time: 1030 }));
+  assert.ok(fading.texts.includes('One cell per column; brine below h'), 'the note is still on after 30 ms');
   const gone = makeCtx();
-  page.registry.live.draw(gone, frame(0.2));
-  assert.ok(!gone.texts.includes('One cell per column; brine below h') && !gone.texts.some(text => /^\d+ columns$/.test(text)), 'and gone at 20 percent');
+  page.registry.live.draw(gone, frame(1, 1280, 800, { time: 1700 }));
+  assert.ok(!gone.texts.includes('One cell per column; brine below h') && !gone.texts.some(text => /^\d+ columns$/.test(text)), 'and gone after 700 ms');
   page.registry.live.unmount();
 });

@@ -1166,8 +1166,18 @@ const storyBlockLiveScene = (entry, frame, s) => {
     }
     storyBlockSyncControls();
   }
-  return storyBlockLive(frame.local, running ? live.cells : 0, running ? live.year : STORY_BLOCK_GRID_YEARS, s);
+  // The stage gives live local 1 at once. While the player is mounted, the notes of chapter ve fade on the
+  // player's own clock, so they do not vanish in one frame.
+  let local = frame.local;
+  if (running && Number.isFinite(frame.time)) {
+    if (live.mountedAt == null) live.mountedAt = frame.time;
+    local = Math.min(local, 0.1 * (frame.time - live.mountedAt) / STORY_BLOCK_NOTE_FADE_MS);
+  }
+  return storyBlockLive(local, running ? live.cells : 0, running ? live.year : STORY_BLOCK_GRID_YEARS, s);
 };
+
+// The time in ms that the notes of chapter ve take to fade out after the player mounts.
+const STORY_BLOCK_NOTE_FADE_MS = 600;
 
 // The renderer needs frames while the player runs and while the cells change.
 const storyBlockLiveBusy = frame => storyLive.mounted && !frame.reducedMotion && (storyLive.playing || storyLive.cells !== storyLive.target);
@@ -1309,6 +1319,7 @@ STORY_RENDERERS.live = {
     live.resume = false;
     live.shown = -1;
     live.shownState = '';
+    live.mountedAt = null;
     live.playing = !storyBlockReducedNow();
     live.nodes = storyBlockControls(layer, live);
     live.mounted = true;

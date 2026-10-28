@@ -120,8 +120,19 @@ const storyLocal = (id, ms) => {
 // Progress in the whole story at a stage and a local value.
 const storyP = (index, local) => (index + storyClamp(local)) / STORY_CHAPTERS.length;
 
+// Caption times that follow the art of a chapter: [show, switch] in local. Before show, the chapter shows no caption.
+// rock starts on the platform scene, so its first caption waits until the cutaway window clears the caption area.
+// Its second caption waits until the camera reaches the bottom of the well.
+const STORY_CAPTION_TIMES = { rock: [0.1, 0.65] };
+
+// The caption that a chapter shows at a local value: -1 (none yet), 0 or 1.
 const storyCaptionIndex = (id, local) => {
   const count = STORY_CAPTION_COUNT[id] || 1;
+  const times = STORY_CAPTION_TIMES[id];
+  if (times) {
+    if (storyClamp(local) < times[0]) return -1;
+    return count > 1 && storyClamp(local) >= times[1] ? 1 : 0;
+  }
   return Math.min(count - 1, Math.floor(storyClamp(local) * count));
 };
 
