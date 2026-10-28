@@ -544,3 +544,37 @@ test('StoryEarth.jsx keeps no canvas, no frame and no version flag, and sends no
   assert.doesNotMatch(source, /dispatchEvent|new Event\(|storyPaint|storyEarthStills|storyEarthWatch|storyEarthWake|\.version/);
   assert.match(source, /frame\.requestDraw/);
 });
+
+// A context that writes every call and every set, in order. Two draws with the same list are the same picture.
+const logContext = () => {
+  const calls = [];
+  const base = { measureText: text => ({ width: String(text).length * 6 }) };
+  const ctx = new Proxy(base, {
+    get: (object, key) => (key in object ? object[key] : (...args) => { calls.push([String(key), ...args]); }),
+    set: (object, key, value) => { calls.push(['set', String(key), value]); object[key] = value; return true; },
+  });
+  return { ctx, calls };
+};
+
+test('boundary orbit to descent: the first frame of descent is the last frame of orbit, before and after the land arrives', async () => {
+  const earth = loadEarth();
+  const sizes = [[1280, 800], [1920, 1080], [1024, 768], [768, 1024], [390, 844]];
+  const compare = label => {
+    for (const [width, height] of sizes) {
+      const last = logContext();
+      earth.renderers.orbit.draw(last.ctx, earthFrame({ local: 1, width, height }));
+      const first = logContext();
+      earth.renderers.descent.draw(first.ctx, earthFrame({ local: 0, width, height }));
+      assert.ok(last.calls.length > 10, 'the map card is drawn');
+      assert.deepEqual(first.calls, last.calls, `${label}, ${width}x${height}: the same picture`);
+    }
+  };
+  compare('no land yet');
+  earth.release();
+  await settle();
+  compare('with the land');
+  const texts = logContext();
+  earth.renderers.descent.draw(texts.ctx, earthFrame({ local: 0 }));
+  assert.ok(texts.calls.some(call => call[0] === 'fillText' && call[1] === 'North Sea'), 'the marker with its label');
+  assert.deepEqual(earth.errors, []);
+});
