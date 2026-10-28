@@ -930,10 +930,40 @@ a:focus:not(:focus-visible) {
   font-family: var(--story-font);
 }
 
-/* The story is 7 screens tall (the number comes from STORY_SCREENS). The stage stays for 6 of them. */
+/* The story is 6 screens tall (the number comes from STORY_SCREENS): one screen for each stage.
+   The stage stays pinned for 5 of them. When the visitor leaves the last stage, the stage rides up. */
 .story--pinned {
-  height: calc(var(--story-screens, 7) * 100vh);
-  height: calc(var(--story-screens, 7) * 100svh);
+  height: calc(var(--story-screens, 6) * 100vh);
+  height: calc(var(--story-screens, 6) * 100svh);
+}
+
+/* The scroll steps: one box of one screen for each stage. Each box is a snap point of the page scroll.
+   The snap is mandatory. One wheel notch, one flick or one key press moves exactly one stage and stops there
+   (scroll-snap-stop: always). With proximity, a small scroll snaps back to the same stage and a key press does not snap.
+   Mandatory snap traps the visitor on the last stage if no snap point lies below it. So the last step is a snap
+   area as tall as the rest of the page. A snap area that is taller than the screen is free to scroll in:
+   each position in which it covers the screen is valid. Nothing below the last stage snaps, and the hash links still land.
+   The wrapper clips the tall box, so the page does not grow. Only the root scroller snaps, and only when a pinned
+   story is on the page. A browser without these features does not snap. The stages still play when the scroll settles. */
+.story-steps {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.story-step {
+  display: block;
+  height: 100vh;
+  height: 100svh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+@supports (overflow: clip) and selector(:has(*)) {
+  .story-steps { overflow: clip; }
+  .story-step:last-child {
+    height: calc(100vh + 40000px);
+    height: calc(100svh + 40000px);
+  }
+  html:has(.story--pinned) { scroll-snap-type: y mandatory; }
 }
 
 .story :focus-visible {
