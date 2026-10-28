@@ -16,6 +16,7 @@ const stage = new Function(between(read('StoryStage.jsx'), '// ---- story helper
 const { STORY_COLORS, storyClamp } = stage;
 
 const blockSource = read('StoryBlock.jsx');
+const rockSource = read('StoryRock.jsx');
 const helperText = between(blockSource, '// ---- story block helpers', '// ---- end story block helpers');
 const NAMES = ['STORY_BLOCK_GRID_YEARS', 'STORY_BLOCK_RUN_MINUTES', 'STORY_BLOCK_RATE', 'STORY_BLOCK_KINDS', 'STORY_BLOCK_STEPS',
   'STORY_BLOCK_BANDS', 'STORY_BLOCK_TOPS', 'STORY_BLOCK_TONES', 'STORY_BLOCK_EAST', 'STORY_BLOCK_NORTH', 'STORY_BLOCK_FACE_EAST', 'STORY_BLOCK_FACE_NORTH',
@@ -23,7 +24,8 @@ const NAMES = ['STORY_BLOCK_GRID_YEARS', 'STORY_BLOCK_RUN_MINUTES', 'STORY_BLOCK
   'storyBlockClear', 'storyBlockAxes', 'storyBlockExaggeration', 'storyBlockFit', 'storyBlockPlace', 'storyBlockLocate', 'storyBlockNearest',
   'storyBlockCut', 'storyBlockOrder', 'storyBlockFaces', 'storyBlockTone', 'storyBlockCellFill', 'storyBlockBand', 'storyBlockKind', 'storyBlockClock',
   'storyBlockGrid', 'storyBlockVe', 'storyBlockLive', 'storyBlockCounter', 'storyBlockFramePair', 'storyBlockBlend', 'storyBlockStep',
-  'storyBlockAdvance', 'storyBlockPalette'];
+  'storyBlockAdvance', 'storyBlockPalette', 'STORY_BLOCK_MORPH_END', 'storyBlockPhase', 'storyBlockMorphAt', 'storyBlockPivot',
+  'storyBlockStartView', 'storyBlockViewAt', 'storyBlockProject'];
 const H = new Function('STORY_COLORS', 'storyClamp', `${helperText}\nreturn { ${NAMES.join(', ')} };`)(STORY_COLORS, storyClamp);
 
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -370,6 +372,10 @@ const makeCtx = () => {
   ctx.lineTo = (...args) => { count('lineTo'); numbers(args); };
   ctx.arc = (...args) => { count('arc'); numbers(args); };
   ctx.fillText = (text, x, y) => { count('fillText'); numbers([x, y]); ctx.texts.push(text); };
+  for (const name of ['clip', 'arcTo', 'bezierCurveTo', 'quadraticCurveTo', 'rect', 'fillRect', 'strokeRect', 'translate', 'scale', 'setLineDash', 'strokeText']) {
+    ctx[name] = (...args) => { count(name); numbers(args.flat()); };
+  }
+  ctx.measureText = text => ({ width: String(text).length * 6 });
   return ctx;
 };
 
@@ -387,7 +393,9 @@ const makeElement = tag => {
 const walk = (node, found = []) => { found.push(node); node.children.forEach(child => walk(child, found)); return found; };
 
 // The source of StoryBlock.jsx, run in a function with the page globals that the bundle gives it.
-const loadBlock = ({ reduced = false, withWorker = true, fetchFails = false } = {}) => {
+// rock: true adds the renderer of chapter rock to the same registry, as the bundle does. Chapter grid starts from it.
+// Its own load of the stored run never ends here, and its requests are counted apart (page.rockFetches).
+const loadBlock = ({ reduced = false, withWorker = true, fetchFails = false, rock = false } = {}) => {
   asked.count = 0;
   const page = {
     registry: {}, events: [], fetches: 0, workers: [], errors: [],
@@ -413,12 +421,19 @@ const loadBlock = ({ reduced = false, withWorker = true, fetchFails = false } = 
     STORY_COLORS, storyClamp, page.registry, guard, StoryGeometry, SITE_STORY, page.document, page.window, fetchRun, withWorker ? Worker : undefined, Event,
     { error: (...args) => page.errors.push(['console', args]) });
   Object.assign(page, api);
+  page.rockFetches = 0;
+  if (rock) {
+    new Function('STORY_COLORS', 'STORY_RENDERERS', 'StoryGeometry', 'SITE_STORY', 'fetch', 'Path2D', rockSource)(
+      STORY_COLORS, page.registry, StoryGeometry, SITE_STORY, () => { page.rockFetches += 1; return new Promise(() => {}); }, class {});
+  }
   return page;
 };
 
 // The requestDraw of the pinned stage: one function for all frames. It counts the calls.
 // page.events collects the events that the code sends to the window. The code must send none.
 const asked = { count: 0 };
+// The local of chapter grid for a local after the morph (0 to 1). The grid draw-in and the 3D run use the rest of local.
+const gridAt = after => H.STORY_BLOCK_MORPH_END + after * (1 - H.STORY_BLOCK_MORPH_END);
 const redraw = () => { asked.count += 1; };
 const frame = (local, width = 1280, height = 800, extra = {}) => ({ local, p: 0.5, width, height, dpr: 2, time: 0, reducedMotion: false, requestDraw: redraw, ...extra });
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -497,16 +512,16 @@ test('chapter grid at the end shows the run clock, the labels and the gas on the
 
 test('chapter grid draws the grid onto plain rock before the run: no gas colours and no labels', async () => {
   const page = loadBlock();
-  page.registry.grid.draw(makeCtx(), frame(0.2));
+  page.registry.grid.draw(makeCtx(), frame(gridAt(0.2)));
   await settle();
   const ctx = makeCtx();
-  page.registry.grid.draw(ctx, frame(0.2));
+  page.registry.grid.draw(ctx, frame(gridAt(0.2)));
   const pal = page.storyBlockState.palette;
   assert.ok(ctx.fills.every(color => pal.rock.includes(color)), 'only rock tones');
   assert.deepEqual(ctx.texts.filter(text => /Gas cap|Injection|Fault|CO₂/.test(text)), [], 'no label before the grid is complete');
   assert.ok(ctx.counts.stroke > 100, 'the grid lines');
   const start = makeCtx();
-  page.registry.grid.draw(start, frame(0));
+  page.registry.grid.draw(start, frame(gridAt(0)));
   assert.ok(start.counts.stroke < ctx.counts.stroke, 'the pillars have not drawn yet');
   assert.ok(start.fills.every(color => pal.rock.includes(color)));
   assert.deepEqual(start.texts.filter(text => /\d+ (h|min)/.test(text)), [], 'no run clock before the run');
@@ -970,4 +985,301 @@ test('the story worker file has the protocol in its header and pins the model ve
   assert.match(source, /Protocol in:\s+\{ type: 'run', id \}/);
   assert.match(source, /snapshotYears: 1/);
   assert.match(source, /StoryGeometry\.STORY_SCENARIO/);
+});
+
+// ---- the boundaries: rock to grid, grid to ve, ve to live
+
+// A context that records every call and every set, in order. Two draws with the same list are the same picture.
+const logCtx = () => {
+  const calls = [];
+  const base = { measureText: text => ({ width: String(text).length * 6 }) };
+  const ctx = new Proxy(base, {
+    get: (object, key) => (key in object ? object[key] : (...args) => { calls.push([String(key), ...args]); }),
+    set: (object, key, value) => { calls.push(['set', String(key), value]); object[key] = value; return true; },
+  });
+  return { ctx, calls };
+};
+const MORPH_SIZES = [[1280, 800], [1920, 1080], [1024, 768], [1440, 900], [768, 1024], [390, 844], [360, 640], [412, 915]];
+
+test('local of chapter grid splits into the morph and the rest, and the morph takes 20 to 30 percent', () => {
+  const end = H.STORY_BLOCK_MORPH_END;
+  assert.ok(end >= 0.2 && end <= 0.3, 'about a quarter of local');
+  assert.deepEqual(H.storyBlockPhase(0), { u: 0, after: 0 });
+  assert.deepEqual(H.storyBlockPhase(end), { u: 1, after: 0 });
+  assert.deepEqual(H.storyBlockPhase(1), { u: 1, after: 1 });
+  near(H.storyBlockPhase(end / 2).u, 0.5);
+  near(H.storyBlockPhase(end + (1 - end) / 4).after, 0.25);
+  assert.deepEqual(H.storyBlockPhase(NaN), { u: 0, after: 0 });
+  assert.deepEqual(H.storyBlockPhase(-3), { u: 0, after: 0 });
+  assert.deepEqual(H.storyBlockPhase(9), { u: 1, after: 1 });
+});
+
+test('the steps of the morph: the cutaway fades first, the sandstone shows the block, then the view turns and the note comes', () => {
+  const first = H.storyBlockMorphAt(0);
+  assert.deepEqual(first, { leave: 0, sand: 1, move: 0, note: 0 }, 'the first state is the whole cutaway');
+  const last = H.storyBlockMorphAt(1);
+  assert.deepEqual(last, { leave: 1, sand: 0, move: 1, note: 1 }, 'the last state is the block');
+  let before = first;
+  for (let i = 1; i <= 200; i++) {
+    const now = H.storyBlockMorphAt(i / 200);
+    assert.ok(now.leave >= before.leave && now.move >= before.move && now.note >= before.note && now.sand <= before.sand, 'each step goes one way');
+    before = now;
+  }
+  const hold = H.storyBlockMorphAt(0.39);
+  assert.equal(hold.move, 0, 'the block stays in the side view while the sandstone gives way');
+  assert.ok(H.storyBlockMorphAt(0.2).sand > 0 && H.storyBlockMorphAt(0.2).sand < 1, 'the cross-fade runs in the first half');
+  assert.equal(H.storyBlockMorphAt(0.4).sand, 0, 'the sandstone of the cutaway is gone when the block starts to move');
+  assert.ok(H.storyBlockMorphAt(0.5).note === 0 || H.storyBlockMorphAt(0.5).note < 0.05, 'the note waits for the turn');
+  assert.deepEqual(H.storyBlockMorphAt(NaN), first);
+});
+
+test('the start view of the block is the section picture of the cutaway', () => {
+  const line = StoryGeometry.storySectionLine();
+  const win = StoryGeometry.STORY_WINDOW;
+  const fit = { sx: 37.4, vz: 220.4, ox: 448, oy: 188, s0: 0 };
+  const minTop = 1990;
+  const view = H.storyBlockStartView(fit, line, { x: win.x0, y: win.y0 }, minTop);
+  assert.equal(view.phi, 0, 'no elevation');
+  near(view.S, fit.sx);
+  near(view.e * view.S, fit.vz, 1e-9, 'the depth has the scale of the cutaway');
+  // Points of the map: the east and the north in km from the corner of the window, and a depth in m.
+  for (const [x, y, depth] of [[10, 5.5, 2090], [16.25, 5.25, 2092], [5, 9, 2150], [19, 2, 2060]]) {
+    const world = { east: x - win.x0, north: y - win.y0, dTop: (depth - minTop) / 1000 };
+    const s = (x - line.x0) * line.ux + (y - line.y0) * line.uy;
+    const [px, py] = H.storyBlockPivot(view, world);
+    near(px, fit.ox + fit.sx * (s - fit.s0), 1e-6, `x of the point (${x}, ${y}) is the x of its distance along the section`);
+    near(py, fit.oy + fit.vz * depth / 1000, 1e-6, `y of the point (${x}, ${y}) is its depth`);
+  }
+  const phone = H.storyBlockStartView({ ...fit, s0: 4.4 }, line, { x: win.x0, y: win.y0 }, minTop);
+  near(phone.X0 - view.X0, -37.4 * 4.4, 1e-9, 'the phone cutaway starts at s = 4.4 km');
+});
+
+test('the view moves from the start view to the view of the block, and the pivot goes in a straight line', () => {
+  const p0 = { theta: 0.15, phi: 0, e: 5.9, S: 37, X0: 300, Y0: 20 };
+  const p1 = { theta: 0.49, phi: 0.72, e: 12, S: 59, X0: 410, Y0: 90 };
+  const pivot = { east: 11, north: 4, dTop: 0.12 };
+  const a = H.storyBlockViewAt(p0, p1, 0, pivot);
+  const b = H.storyBlockViewAt(p0, p1, 1, pivot);
+  for (const key of Object.keys(p0)) {
+    near(a[key], p0[key], 1e-9, `start ${key}`);
+    near(b[key], p1[key], 1e-9, `end ${key}`);
+  }
+  const from = H.storyBlockPivot(p0, pivot);
+  const to = H.storyBlockPivot(p1, pivot);
+  let lastS = p0.S;
+  for (let i = 0; i <= 20; i++) {
+    const move = i / 20;
+    const q = H.storyBlockViewAt(p0, p1, move, pivot);
+    const at = H.storyBlockPivot(q, pivot);
+    near(at[0], from[0] + (to[0] - from[0]) * move, 1e-9, 'the pivot x');
+    near(at[1], from[1] + (to[1] - from[1]) * move, 1e-9, 'the pivot y');
+    assert.ok(q.S >= lastS - 1e-12, 'a zoom in');
+    near(Math.log(q.S / p0.S) / Math.log(p1.S / p0.S), move, 1e-9, 'the scale changes like a zoom');
+    lastS = q.S;
+  }
+  assert.deepEqual(H.storyBlockViewAt(p0, p1, 7, pivot), H.storyBlockViewAt(p0, p1, 1, pivot));
+  assert.deepEqual(H.storyBlockViewAt(p0, p1, NaN, pivot), H.storyBlockViewAt(p0, p1, 0, pivot));
+});
+
+test('the view of the block puts the corners where the build put them, and the start view puts the cut face on the section', async () => {
+  const page = loadBlock({ rock: true });
+  for (const [width, height] of MORPH_SIZES) {
+    page.registry.grid.draw(makeCtx(), frame(0.05, width, height));
+    const block = page.storyBlockState.block;
+    const label = `${width}x${height}`;
+    const count = block.X.length;
+    const X = new Float32Array(count);
+    const YT = new Float32Array(count);
+    const YB = new Float32Array(count);
+    H.storyBlockProject(block.view, block.world, block.order, X, YT, YB);
+    let worst = 0;
+    for (const column of block.order) {
+      for (let o = 4 * column; o < 4 * column + 4; o++) worst = Math.max(worst, Math.abs(X[o] - block.X[o]), Math.abs(YT[o] - block.YT[o]), Math.abs(YB[o] - block.YB[o]));
+    }
+    assert.ok(worst < 0.05, `${label}: the end view is the view of the build (${worst} px)`);
+    // The cut face (the north faces of the row before the cut) is the section picture at the start.
+    const { grid, cut } = block;
+    const morph = block.morph;
+    const line = StoryGeometry.storySectionLine();
+    const fit = morph.fit;
+    H.storyBlockProject(morph.start, block.world, block.order, X, YT, YB);
+    for (let i = cut.icut; i < grid.nx; i++) {
+      const o = 4 * ((cut.jcut - 1) * grid.nx + i) + 2;
+      const x = grid.xs[i + 1];
+      const y = grid.ys[cut.jcut];
+      const s = (x - line.x0) * line.ux + (y - line.y0) * line.uy;
+      near(X[o], fit.ox + fit.sx * (s - fit.s0), 0.05, `${label}: the cut face stands at its distance along the section`);
+    }
+    const o = 4 * ((cut.jcut - 1) * grid.nx + cut.icut) + 2;
+    const depthOf = (px, ys) => (ys[o] - fit.oy) / fit.vz;
+    near(depthOf(X, YT) * 1000, grid.top[o], 1, `${label}: the top of the cut face is at its depth in the cutaway`);
+    near(depthOf(X, YB) * 1000, grid.top[o] + grid.thickness[o], 1, `${label}: the base of the cut face`);
+  }
+});
+
+test('boundary rock to grid: the first frame of chapter grid is the last frame of chapter rock', () => {
+  const page = loadBlock({ rock: true });
+  for (const [width, height] of MORPH_SIZES) {
+    const last = logCtx();
+    page.registry.rock.draw(last.ctx, frame(1, width, height));
+    const first = logCtx();
+    page.registry.grid.draw(first.ctx, frame(0, width, height));
+    assert.ok(last.calls.length > 400, 'the cutaway is drawn');
+    assert.deepEqual(first.calls, last.calls, `${width}x${height}: the same picture`);
+    const texts = first.calls.filter(call => call[0] === 'fillText').map(call => call[1]);
+    for (const text of ['Sandstone', 'Fault', 'Gas cap (methane)']) if (width >= 1024) assert.ok(texts.includes(text), `${width}x${height}: the label "${text}" is there at the start`);
+    assert.ok(texts.some(text => /^Vertical scale × \d+$/.test(text)), 'the scale tag of the cutaway is there');
+  }
+  assert.equal(page.rockFetches, 1, 'the cutaway loads its run once');
+});
+
+test('the morph ends where the grid starts: the last morph frame has the corners of the block in its place', async () => {
+  const page = loadBlock({ rock: true });
+  for (const [width, height] of MORPH_SIZES) {
+    page.registry.grid.draw(makeCtx(), frame(H.STORY_BLOCK_MORPH_END - 1e-7, width, height));
+    const block = page.storyBlockState.block;
+    const morph = block.morph;
+    let worst = 0;
+    for (const column of block.order) {
+      for (let o = 4 * column; o < 4 * column + 4; o++) worst = Math.max(worst, Math.abs(morph.X[o] - block.X[o]), Math.abs(morph.YT[o] - block.YT[o]), Math.abs(morph.YB[o] - block.YB[o]));
+    }
+    assert.ok(worst < 0.05, `${width}x${height}: the last morph frame is the block (${worst} px)`);
+    near(morph.edge.bottom, block.edge.bottom, 0.05, `${width}x${height}: the note stands under the block`);
+    const after = makeCtx();
+    page.registry.grid.draw(after, frame(H.STORY_BLOCK_MORPH_END, width, height));
+    assert.ok(after.texts.some(text => /^Depth exaggerated ×\d+$/.test(text)), 'the note about the depth stays');
+  }
+});
+
+test('during the morph the block stays on the stage and out of the caption areas', async () => {
+  const page = loadBlock({ rock: true });
+  for (const [width, height] of MORPH_SIZES) {
+    page.registry.grid.draw(makeCtx(), frame(0.05, width, height));
+    const block = page.storyBlockState.block;
+    const { layout } = block;
+    const count = block.X.length;
+    const X = new Float32Array(count);
+    const YT = new Float32Array(count);
+    const YB = new Float32Array(count);
+    for (let i = 0; i <= 100; i++) {
+      const u = i / 100;
+      const m = H.storyBlockMorphAt(u);
+      if (m.sand > 0.999) continue;
+      const view = H.storyBlockViewAt(block.morph.start, block.view, m.move, block.pivot);
+      H.storyBlockProject(view, block.world, block.order, X, YT, YB);
+      for (const column of block.order) {
+        for (let o = 4 * column; o < 4 * column + 4; o++) {
+          for (const y of [YT[o], YB[o]]) {
+            const label = `${width}x${height} at u = ${u}`;
+            // A corner can touch the edge of the stage (4 px). It is never under the header.
+            assert.ok(X[o] > -4 && X[o] < width + 4 && y > 64 && y < height + 4, `${label}: a corner is off the stage or under the header (${X[o].toFixed(0)}, ${y.toFixed(0)})`);
+            // A keep rectangle has a margin of 12 px around the caption. The block of the morph can stand in the margin.
+            // It can stand 4 px more, because the caption box is wider than its lines. It cannot stand on the words.
+            assert.ok(!layout.keeps.some(rect => X[o] > rect.x0 && X[o] < rect.x1 - 16 && y > rect.y0 + 16 && y < rect.y1), `${label}: a corner is in a caption area (${X[o].toFixed(0)}, ${y.toFixed(0)})`);
+          }
+        }
+      }
+    }
+  }
+});
+
+test('chapter grid draws every frame of the morph without a bad number, with flat colour, and the note counts up to the factor of the block', async () => {
+  const page = loadBlock({ rock: true });
+  for (const [width, height] of MORPH_SIZES) {
+    let lastFactor = 0;
+    let noteFrames = 0;
+    for (const local of [0, 0.01, 0.03, 0.05, 0.07, 0.09, 0.11, 0.13, 0.15, 0.18, 0.21, 0.24, 0.26, 0.27, 0.2799]) {
+      const ctx = makeCtx();
+      page.registry.grid.draw(ctx, frame(local, width, height));
+      const label = `${width}x${height} at local ${local}`;
+      assert.equal(ctx.bad, 0, `${label}: all numbers are finite`);
+      assert.ok(ctx.counts.fill > 10, `${label}: it draws`);
+      assert.ok(ctx.fills.every(color => /^#[0-9a-f]{6}$/.test(color)), `${label}: flat hex colours`);
+      assert.deepEqual(ctx.transforms, [], `${label}: no change of the transform of the stage`);
+      const note = ctx.texts.filter(text => /^Depth exaggerated ×\d+$/.test(text));
+      assert.ok(note.length <= 1);
+      if (note.length) {
+        noteFrames += 1;
+        const factor = Number(note[0].replace(/\D+/g, ''));
+        assert.ok(factor >= lastFactor, `${label}: the factor only grows`);
+        lastFactor = factor;
+      }
+      assert.ok(!ctx.texts.some(text => /Gas cap|Injection|CO₂ from|Brine/.test(text) && local > 0.15), `${label}: the labels of the cutaway are gone`);
+    }
+    assert.ok(noteFrames >= 3, `${width}x${height}: the note shows in the second half`);
+    const finalFactor = page.storyBlockState.block.depthNote.replace(/\D+/g, '');
+    assert.ok(lastFactor <= Number(finalFactor) && lastFactor >= Number(finalFactor) - 1, `${width}x${height}: the note ends at the factor of the block (${lastFactor} of ${finalFactor})`);
+  }
+});
+
+test('the morph draws a plain block under the cutaway: no gas colours, no grid lines, and the cutaway is drawn over it with alpha', async () => {
+  const page = loadBlock({ rock: true });
+  page.registry.grid.draw(makeCtx(), frame(0.06));
+  await settle();
+  const pal = page.storyBlockState.palette;
+  const ctx = makeCtx();
+  page.registry.grid.draw(ctx, frame(0.07));
+  const blockColours = ctx.fills.filter(color => pal.rock.includes(color));
+  assert.ok(blockColours.length > 100, 'the block is drawn');
+  assert.ok(!ctx.fills.some(color => pal.gas.includes(color) || pal.band.includes(color)), 'no gas of the block');
+  assert.ok(ctx.alphas.size > 1 && [...ctx.alphas].some(alpha => alpha > 0 && alpha < 1), 'the cutaway fades with its alpha');
+  const late = makeCtx();
+  page.registry.grid.draw(late, frame(0.2));
+  assert.ok(late.fills.every(color => pal.rock.includes(color)), 'at the end only the block is drawn, in rock tones');
+  assert.ok([...late.alphas].every(alpha => alpha === 1), 'with no alpha');
+});
+
+test('without chapter rock the grid still starts with the plain block', async () => {
+  const page = loadBlock();
+  const ctx = makeCtx();
+  page.registry.grid.draw(ctx, frame(0));
+  assert.equal(ctx.bad, 0);
+  assert.ok(ctx.fills.every(color => page.storyBlockState.palette.rock.includes(color)), 'only rock tones');
+  assert.equal(page.rockFetches, 0);
+});
+
+test('boundary grid to ve: the first frame of chapter ve is the last frame of chapter grid', async () => {
+  const page = loadBlock();
+  page.registry.grid.draw(makeCtx(), frame(1));
+  await settle();
+  for (const [width, height] of MORPH_SIZES) {
+    const last = logCtx();
+    page.registry.grid.draw(last.ctx, frame(1, width, height));
+    const first = logCtx();
+    page.registry.ve.draw(first.ctx, frame(0, width, height));
+    assert.ok(last.calls.length > 2000, 'the block with its gas is drawn');
+    assert.deepEqual(first.calls, last.calls, `${width}x${height}: the same picture`);
+  }
+});
+
+test('boundary ve to live: the first frame of chapter live is the last frame of chapter ve, with the note about the columns', async () => {
+  const page = loadBlock();
+  page.registry.ve.draw(makeCtx(), frame(1));
+  await settle();
+  for (const mounted of [false, true]) {
+    if (mounted) page.registry.live.mount(makeElement('div'));
+    for (const [width, height] of MORPH_SIZES) {
+      const last = logCtx();
+      page.registry.ve.draw(last.ctx, frame(1, width, height));
+      const first = logCtx();
+      page.registry.live.draw(first.ctx, frame(0, width, height));
+      const label = `${width}x${height}${mounted ? ' with the player' : ''}`;
+      assert.deepEqual(first.calls, last.calls, `${label}: the same picture`);
+      const texts = first.calls.filter(call => call[0] === 'fillText').map(call => call[1]);
+      assert.ok(texts.includes('One cell per column; brine below h') && texts.includes('h') && texts.some(text => /^\d+ columns$/.test(text)), `${label}: the notes of chapter ve are still there`);
+    }
+  }
+  // The stage gives live local 1 at once. The player fades the notes on its own clock, in 600 ms after it mounts.
+  page.registry.live.unmount();
+  page.registry.live.mount(makeElement('div'));
+  const start = makeCtx();
+  page.registry.live.draw(start, frame(1, 1280, 800, { time: 1000 }));
+  assert.ok(start.texts.includes('One cell per column; brine below h'), 'the note is still on when the player mounts');
+  const fading = makeCtx();
+  page.registry.live.draw(fading, frame(1, 1280, 800, { time: 1030 }));
+  assert.ok(fading.texts.includes('One cell per column; brine below h'), 'the note is still on after 30 ms');
+  const gone = makeCtx();
+  page.registry.live.draw(gone, frame(1, 1280, 800, { time: 1700 }));
+  assert.ok(!gone.texts.includes('One cell per column; brine below h') && !gone.texts.some(text => /^\d+ columns$/.test(text)), 'and gone after 700 ms');
+  page.registry.live.unmount();
 });

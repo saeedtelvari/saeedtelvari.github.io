@@ -228,6 +228,7 @@ const SITE_STORY = {
   },
   captions: {
     orbit: ['There is more than 420 ppm of CO₂ in the air. I model how rock under the North Sea can hold it for thousands of years.'],
+    fields: ['Hundreds of gas fields under the North Sea no longer produce. Projects in the UK, the Netherlands and Denmark plan to store CO₂ in some of them.'],
     descent: ['Carbon capture and storage puts CO₂ back into rock, deep under the sea floor.'],
     rock: [
       'The well goes about 2 km down, through clay, chalk and a shale caprock.',

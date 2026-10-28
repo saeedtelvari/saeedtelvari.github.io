@@ -4,6 +4,7 @@
 //   ve    The horizontal cell boundaries fade. Each column is one tall cell with a sharp interface at h.
 //   live  The same block runs live in story-worker.js. The mount function builds the controls.
 // The block is built when the stage size changes. A draw only reads the polygons and changes colours.
+// Chapter grid starts with a morph: the cutaway of chapter rock turns into the block (see storyBlockMorphDraw).
 // The renderer API is at the top of StoryStage.jsx.
 
 // ---- story block helpers (pure; tests/story-block.test.js evaluates this block)
@@ -22,6 +23,9 @@ const STORY_BLOCK_EAST = STORY_BLOCK_TOPS;
 const STORY_BLOCK_NORTH = STORY_BLOCK_TOPS + 1;
 const STORY_BLOCK_FACE_EAST = 1;
 const STORY_BLOCK_FACE_NORTH = 2;
+// The morph is the first part of local in chapter grid. The cutaway of chapter rock turns into the block.
+// The grid draw-in and the 3D run take the rest of local.
+const STORY_BLOCK_MORPH_END = 0.28;
 
 const storyBlockEase = t => {
   const x = storyClamp(t);
@@ -233,7 +237,80 @@ const storyBlockClock = fraction => {
   return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`;
 };
 
-// Chapter grid. Local 0 to 0.3 draws the grid: pillars first, then layers. Local 0.3 to 1 plays the years 0 to 30.
+// The two parts of local in chapter grid. u is the progress of the morph (0 to 1). after is the local of the grid draw-in.
+const storyBlockPhase = local => ({
+  u: storyClamp(local / STORY_BLOCK_MORPH_END),
+  after: storyClamp((local - STORY_BLOCK_MORPH_END) / (1 - STORY_BLOCK_MORPH_END)),
+});
+
+// The steps of the morph at u. The cutaway fades from the top down (leave). The sandstone of the cutaway is last, and the block
+// shows through under it (sand is its alpha). The block stays in the side view until u = 0.4. Then it turns and goes to its
+// place (move goes from 0 to 1). The note about the depth comes in while the block turns.
+const storyBlockMorphAt = u => ({
+  leave: storyClamp(u / 0.45),
+  sand: 1 - storyBlockEase((u - 0.15) / 0.25),
+  move: storyBlockEase((u - 0.4) / 0.6),
+  note: storyBlockEase((u - 0.55) / 0.4),
+});
+
+// A view of the block is { theta, phi, e, S, X0, Y0 }. theta is the angle of the east axis. phi is the elevation.
+// e is the depth factor. S is the pixels for one km. X0 and Y0 are the offset. The views of storyBlockAxes and storyBlockBuild are the same.
+// The screen place of a world point { east, north, dTop } (km, km and depth in km below the shallowest top).
+const storyBlockPivot = (p, w) => [
+  p.X0 + p.S * (w.east * Math.cos(p.theta) - w.north * Math.sin(p.theta)),
+  p.Y0 + p.S * ((w.east * Math.sin(p.theta) + w.north * Math.cos(p.theta)) * Math.sin(p.phi) + w.dTop * p.e * Math.cos(p.phi)),
+];
+
+// The view at the start of the morph. It looks along the section line of the cutaway, with no elevation, at the scale of the
+// cutaway. Then the north face of the cut-away block is the section picture of the cutaway.
+//   fit   the layout of the cutaway: sx and vz (px for one km along and down), ox and oy (px of s0 and of depth 0), s0.
+//   line  the section line: x0, y0 and the unit vector ux, uy (km).
+//   win   the corner of the window of the block in km. minTop is the smallest top depth of the grid in m.
+const storyBlockStartView = (fit, line, win, minTop) => ({
+  theta: Math.atan2(-line.uy, line.ux),
+  phi: 0,
+  e: fit.vz / fit.sx,
+  S: fit.sx,
+  X0: fit.ox + fit.sx * ((win.x - line.x0) * line.ux + (win.y - line.y0) * line.uy - fit.s0),
+  Y0: fit.oy + fit.vz * minTop / 1000,
+});
+
+// The view at step move (0 to 1) between two views. The angle, the elevation and the depth factor change in a straight line.
+// The scale changes like a zoom. The pivot moves in a straight line on the screen: it is the point that the camera keeps.
+const storyBlockViewAt = (p0, p1, move, pivot) => {
+  const t = storyClamp(move);
+  const mix = (a, b) => a + (b - a) * t;
+  const a = storyBlockPivot(p0, pivot);
+  const b = storyBlockPivot(p1, pivot);
+  const q = { theta: mix(p0.theta, p1.theta), phi: mix(p0.phi, p1.phi), e: mix(p0.e, p1.e), S: p0.S * Math.pow(p1.S / p0.S, t), X0: 0, Y0: 0 };
+  const w = storyBlockPivot(q, pivot);
+  q.X0 = mix(a[0], b[0]) - w[0];
+  q.Y0 = mix(a[1], b[1]) - w[1];
+  return q;
+};
+
+// The corners of the block in a view. east, north and the two depths (top and base) are in km. They are arrays with 4 values
+// for each column. The result goes to X (x) and to YT and YB (y of the top face and of the base).
+// Only the columns in order are written.
+const storyBlockProject = (p, world, order, X, YT, YB) => {
+  const ex = Math.cos(p.theta);
+  const nx = -Math.sin(p.theta);
+  const ey = Math.sin(p.theta) * Math.sin(p.phi);
+  const ny = Math.cos(p.theta) * Math.sin(p.phi);
+  const k = p.e * Math.cos(p.phi);
+  const { east, north, top, base } = world;
+  for (let n = 0; n < order.length; n++) {
+    for (let o = 4 * order[n], end = o + 4; o < end; o++) {
+      const flat = east[o] * ey + north[o] * ny;
+      X[o] = p.X0 + p.S * (east[o] * ex + north[o] * nx);
+      YT[o] = p.Y0 + p.S * (flat + top[o] * k);
+      YB[o] = p.Y0 + p.S * (flat + base[o] * k);
+    }
+  }
+};
+
+// Chapter grid after the morph (storyBlockPhase gives this local). Local 0 to 0.3 draws the grid: pillars first, then layers.
+// Local 0.3 to 1 plays the years 0 to 30.
 const storyBlockGrid = (local, s = {}) => {
   const l = storyClamp(local);
   s.pillars = storyBlockEase(l / 0.15);
@@ -445,6 +522,8 @@ const storyBlockBuild = (width, height, reduced, captions) => {
   const VT = new Float64Array(4 * count);
   const VB = new Float64Array(4 * count);
   const tone = new Uint8Array(count);
+  // The corners in km (east, north, depth of the top and of the base below the shallowest top). The morph projects them again.
+  const world = { east: new Float32Array(4 * count), north: new Float32Array(4 * count), top: new Float32Array(4 * count), base: new Float32Array(4 * count) };
   const bounds = { u0: Infinity, u1: -Infinity, v0: Infinity, v1: -Infinity };
   const pu = [];
   const pv = [];
@@ -462,6 +541,10 @@ const storyBlockBuild = (width, height, reduced, captions) => {
         const flat = east * axes.ey + north * axes.ny;
         const dTop = (grid.top[o] - minTop) / 1000 * exaggeration * axes.zy;
         const dBase = (grid.top[o] + grid.thickness[o] - minTop) / 1000 * exaggeration * axes.zy;
+        world.east[o] = east;
+        world.north[o] = north;
+        world.top[o] = (grid.top[o] - minTop) / 1000;
+        world.base[o] = (grid.top[o] + grid.thickness[o] - minTop) / 1000;
         U[o] = east * axes.ex + north * axes.nx;
         VT[o] = flat + dTop;
         VB[o] = flat + dBase;
@@ -493,7 +576,10 @@ const storyBlockBuild = (width, height, reduced, captions) => {
   const block = {
     id: storyBlockState.builds,
     key: `${width}x${height}${reduced ? 'r' : ''}`,
-    layout, grid, nz, cut, flags, tone, X, YT, YB,
+    layout, grid, nz, cut, flags, tone, X, YT, YB, world, minTop,
+    // The view of the block in its place (storyBlockViewAt), and the buffers of the morph (made at the first morph draw).
+    view: { theta: layout.view.theta, phi: layout.view.elevation, e: exaggeration, S: fit.scale, X0: fit.ox, Y0: fit.oy },
+    morph: null,
     order: storyBlockOrder(nx, ny, cut),
     exaggeration,
     edge: { left: fit.ox + bounds.u0 * fit.scale, right: fit.ox + bounds.u1 * fit.scale, top: fit.oy + bounds.v0 * fit.scale, bottom: fit.oy + bounds.v1 * fit.scale },
@@ -537,6 +623,22 @@ const storyBlockBuild = (width, height, reduced, captions) => {
   const wellEnd = storyBlockPoint(block, wc, wt, 1, 0.72);
   block.well = { x: wellTop[0], y0: wellTop[1], y1: wellEnd[1], up: span * (tall ? STORY_BLOCK_WELL_UP.tall : STORY_BLOCK_WELL_UP.wide) };
   block.labels.push({ id: 'well', text: layout.narrow ? 'Well' : 'Injection well', x: wellTop[0], y: wellTop[1] - block.well.up, dx: 0, dy: 0, align: 'center', anchor: false });
+  // The point that the camera keeps in the morph. On a wide stage it is the left corner of the block.
+  // That corner goes in a straight line, so the block does not swing into the captions at the bottom left.
+  // On a phone it is the top of the well on the cut face.
+  const between = (values, o) => values[o + 2] * wt + values[o + 3] * (1 - wt);
+  block.pivot = { east: between(world.east, 4 * wc), north: between(world.north, 4 * wc), dTop: between(world.top, 4 * wc) };
+  if (layout.keeps.length) {
+    let left = Infinity;
+    for (let n = 0; n < block.order.length; n++) {
+      for (let o = 4 * block.order[n], end = o + 4; o < end; o++) {
+        if (X[o] < left) {
+          left = X[o];
+          block.pivot = { east: world.east[o], north: world.north[o], dTop: world.top[o] };
+        }
+      }
+    }
+  }
   return block;
 };
 
@@ -895,7 +997,7 @@ const storyBlockAnnotate = (ctx, block, s, id) => {
   const note = block.layout.fit.x1;
   const below = block.edge.bottom + block.layout.fonts.label * 0.6;
   ctx.fillText(block.depthNote, note, below);
-  if (id === 've' && s.bracket > 0.01) {
+  if ((id === 've' || id === 'live') && s.bracket > 0.01) {
     ctx.globalAlpha = s.bracket;
     ctx.fillText('One cell per column; brine below h', note, below + block.layout.fonts.small * 1.35);
     ctx.globalAlpha = 1;
@@ -903,6 +1005,69 @@ const storyBlockAnnotate = (ctx, block, s, id) => {
 };
 
 const STORY_BLOCK_CLOCK_NOTE = ['3D run time so far, for a typical', 'field model (for illustration)'];
+
+// ---- chapter grid: the cutaway of chapter rock turns into the block (first part of local)
+// At local 0 the frame is the last frame of chapter rock. The overburden, the labels and the details of the cutaway fade.
+// The sandstone stays. The block stands under it. The view is from the side, along the section line, at the scale of the cutaway.
+// The north face of the block is then the section picture. The sandstone fades and shows the block.
+// Then the camera moves to the block. The view turns and rises (storyBlockViewAt). The block grows out of the front face to its place.
+
+// The buffers of the morph and the first view. They depend on the layout of the cutaway (fit) for this stage size.
+const storyBlockMorphPrepare = (block, fit) => {
+  if (block.morph && block.morph.fit === fit) return block.morph;
+  const line = StoryGeometry.storySectionLine();
+  const win = block.grid.window;
+  const count = block.X.length;
+  block.morph = {
+    fit,
+    start: storyBlockStartView(fit, line, { x: win.x0, y: win.y0 }, block.minTop),
+    X: new Float32Array(count),
+    YT: new Float32Array(count),
+    YB: new Float32Array(count),
+    edge: { left: 0, right: 0, top: 0, bottom: 0 },
+  };
+  return block.morph;
+};
+
+// Draws the frame of chapter grid at the step u of the morph (0 to 1). rock is the renderer of chapter rock.
+const storyBlockMorphDraw = (ctx, block, pal, frame, rock, u) => {
+  const morph = storyBlockMorphPrepare(block, rock.fit(frame));
+  const m = storyBlockMorphAt(u);
+  if (m.sand < 0.999) {
+    const view = storyBlockViewAt(morph.start, block.view, m.move, block.pivot);
+    storyBlockProject(view, block.world, block.order, morph.X, morph.YT, morph.YB);
+    let bottom = -Infinity;
+    for (let n = 0; n < block.order.length; n++) {
+      for (let o = 4 * block.order[n], end = o + 4; o < end; o++) bottom = Math.max(bottom, morph.YB[o]);
+    }
+    morph.edge.bottom = bottom;
+    const saved = { X: block.X, YT: block.YT, YB: block.YB, edge: block.edge };
+    block.X = morph.X;
+    block.YT = morph.YT;
+    block.YB = morph.YB;
+    block.edge = morph.edge;
+    try {
+      storyBlockPaint(ctx, block, pal, storyBlockGrid(0, storyBlockState.scene));
+    } finally {
+      block.X = saved.X;
+      block.YT = saved.YT;
+      block.YB = saved.YB;
+      block.edge = saved.edge;
+    }
+    // The note about the depth counts up from the factor of the cutaway to the factor of the block.
+    if (m.note > 0.003) {
+      ctx.globalAlpha = m.note;
+      ctx.fillStyle = STORY_COLORS.muted;
+      ctx.font = block.fonts.small;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`Depth exaggerated ×${Math.round(view.e)}`, block.layout.fit.x1, bottom + block.layout.fonts.label * 0.6);
+      ctx.globalAlpha = 1;
+    }
+  }
+  // The cutaway is drawn over the block. Its alpha shows the block under it.
+  if (m.leave < 1 || m.sand > 0.003) rock.leave(ctx, frame, m.leave, m.sand);
+};
 
 // Draw one frame of the chapter id. entry is the renderer object.
 const storyBlockDraw = (entry, id, ctx, frame) => {
@@ -914,7 +1079,15 @@ const storyBlockDraw = (entry, id, ctx, frame) => {
   if (id === 'live' && !frame.reducedMotion) storyLive.redraw = frame.requestDraw;
   const pal = storyBlockState.palette || (storyBlockState.palette = storyBlockPalette(STORY_COLORS));
   const s = storyBlockState.scene;
-  if (id === 'grid') storyBlockGrid(frame.local, s);
+  // The first part of chapter grid is the morph from the cutaway of chapter rock. Without that chapter it is the plain block.
+  const phase = id === 'grid' ? storyBlockPhase(frame.local) : null;
+  const rock = typeof STORY_RENDERERS === 'object' && STORY_RENDERERS.rock && STORY_RENDERERS.rock.leave ? STORY_RENDERERS.rock : null;
+  if (phase && phase.u < 1 && rock) {
+    storyBlockMorphDraw(ctx, block, pal, frame, rock, phase.u);
+    entry.animated = false;
+    return;
+  }
+  if (id === 'grid') storyBlockGrid(phase.after, s);
   else if (id === 've') storyBlockVe(frame.local, s);
   else storyBlockLiveScene(entry, frame, s);
   if (frame.reducedMotion && id === 'grid') s.clockAlpha = 1;
@@ -993,8 +1166,18 @@ const storyBlockLiveScene = (entry, frame, s) => {
     }
     storyBlockSyncControls();
   }
-  return storyBlockLive(frame.local, running ? live.cells : 0, running ? live.year : STORY_BLOCK_GRID_YEARS, s);
+  // The stage gives live local 1 at once. While the player is mounted, the notes of chapter ve fade on the
+  // player's own clock, so they do not vanish in one frame.
+  let local = frame.local;
+  if (running && Number.isFinite(frame.time)) {
+    if (live.mountedAt == null) live.mountedAt = frame.time;
+    local = Math.min(local, 0.1 * (frame.time - live.mountedAt) / STORY_BLOCK_NOTE_FADE_MS);
+  }
+  return storyBlockLive(local, running ? live.cells : 0, running ? live.year : STORY_BLOCK_GRID_YEARS, s);
 };
+
+// The time in ms that the notes of chapter ve take to fade out after the player mounts.
+const STORY_BLOCK_NOTE_FADE_MS = 600;
 
 // The renderer needs frames while the player runs and while the cells change.
 const storyBlockLiveBusy = frame => storyLive.mounted && !frame.reducedMotion && (storyLive.playing || storyLive.cells !== storyLive.target);
@@ -1136,6 +1319,7 @@ STORY_RENDERERS.live = {
     live.resume = false;
     live.shown = -1;
     live.shownState = '';
+    live.mountedAt = null;
     live.playing = !storyBlockReducedNow();
     live.nodes = storyBlockControls(layer, live);
     live.mounted = true;

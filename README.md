@@ -9,9 +9,9 @@ React 18 (UMD) components. Babel precompiles them into two bundles. The homepage
 ## Pages
 
 1. **Homepage (`index.html`)**
-   - **The story.** The page opens with a scroll story. The stage stays pinned for six screens. One value, `progress`, from 0 to 1, sets the camera, the time and the captions. The visitor can scroll back to replay a step. The story removes detail in steps, and it keeps one dome, one fault and one gas cap from start to end. It names no field and no company.
-   - **Skip and rail.** A "Skip to research" link is always on screen while the story is pinned. A six-part rail shows the progress. When the stage starts to leave, the rail fades out and the link leaves with the stage.
-   - **Reduced motion.** The story becomes six static frames, each with its caption. The camera does not move.
+   - **The story.** The page opens with a scroll story. The stage stays pinned for seven screens. One value, `progress`, from 0 to 1, sets the camera, the time and the captions. The visitor can scroll back to replay a step. The story removes detail in steps, and it keeps one dome, one fault and one gas cap from start to end. It names no company. The map of the North Sea names projects only.
+   - **Skip and rail.** A "Skip to research" link is always on screen while the story is pinned. A seven-part rail shows the progress. When the stage starts to leave, the rail fades out and the link leaves with the stage.
+   - **Reduced motion.** The story becomes seven static frames, each with its caption. The camera does not move.
    - **Sections (`HomeSections.jsx`).** Research with recent activity, projects, publications (DOIs and BibTeX) and contact. They sit on the story sky. Each heading has a strip of four flat rock beds.
 2. **CV (`cv.html`, `CVPage.jsx`).** One document. On screen it is a light sheet on the sky colour. It prints black on white. Every fact comes from `site-content.js`, which the homepage shares.
 3. **CO₂ storage simulator (`simulator.html`, `SimulatorPage.jsx`, `SimViews.jsx`, `SimCharts.jsx`, `GuidePage.jsx`)**
@@ -22,16 +22,17 @@ React 18 (UMD) components. Babel precompiles them into two bundles. The homepage
    - **Sharing and display.** Share links, CSV exports, night and day themes, and five palettes.
    - **Method guide.** `simulator.html#method` opens the Method guide directly.
 
-## The six chapters of the story
+## The seven chapters of the story
 
 | # | Chapter | What the visitor sees |
 | --- | --- | --- |
 | 0 | Orbit | The Earth from orbit, with the North Sea near the top of the disc. A ppm counter goes from 280 to the current value. |
-| 1 | Descent | The camera zooms to the North Sea and goes down to one offshore platform. |
-| 2 | Into the rock | A cutaway of the rock under the platform. It ends on a depleted gas field: a sandstone dome with a methane gas cap, brine below, and a fault on one flank. |
-| 3 | Rock to grid | A 3D grid draws onto the dome. Then a 3D run starts: the CO₂ plume grows near the well and the gas cap moves a little. |
-| 4 | 3D to VE | The horizontal cell boundaries fade out. The rock keeps its full thickness. Each column becomes one cell with a sharp gas interface at depth *h*. |
-| 5 | Live VE | The same dome and fault run live in the browser with `ve2d-model.js`. The visitor can play, pause and scrub the years. |
+| 1 | North Sea map | The map card grows into a large map of the southern and central North Sea. Grey points are the gas fields that no longer produce. Then come the outlines of the project fields, the markers and the names of the CO₂ storage projects. A key and the attribution are on the map. A list ("Map data and sources") gives each project with its status and its source. |
+| 2 | Descent | The layers of the map fade out. The map zooms to the example site of the story, and the camera goes down to one offshore platform. |
+| 3 | Into the rock | A cutaway of the rock under the platform. It ends on a depleted gas field: a sandstone dome with a methane gas cap, brine below, and a fault on one flank. |
+| 4 | Rock to grid | A 3D grid draws onto the dome. Then a 3D run starts: the CO₂ plume grows near the well and the gas cap moves a little. |
+| 5 | 3D to VE | The horizontal cell boundaries fade out. The rock keeps its full thickness. Each column becomes one cell with a sharp gas interface at depth *h*. |
+| 6 | Live VE | The same dome and fault run live in the browser with `ve2d-model.js`. The visitor can play, pause and scrub the years. |
 
 The spec is `docs/superpowers/specs/2026-10-25-homepage-story-design.md`.
 
@@ -47,14 +48,16 @@ The spec is `docs/superpowers/specs/2026-10-25-homepage-story-design.md`.
 | `Header.jsx`, `Footer.jsx` | Shared navigation. The site variant is clear over the pinned story and a solid bar after it. The workbench variant is the simulator's bar. |
 | `StoryStage.jsx` | The pinned stage. It has the `progress` value, the chapter map, the captions, the skip link, the rail and the reduced-motion frames. The renderer API is in the first lines of the file. |
 | `StoryChapters.jsx` | Placeholder art for each chapter. The art files below replace the placeholders. |
-| `StoryEarth.jsx` | The art of chapters 0 and 1: the globe, the map window and the platform. |
-| `StoryRock.jsx` | The art of chapter 2: the cutaway. |
-| `StoryBlock.jsx` | The art of chapters 3 to 5: the 3D grid, the VE columns and the live block with its controls. |
+| `StoryEarth.jsx` | The art of chapters 0 and 2, and the camera of chapter 1: the globe, the map card, the large map and the platform. |
+| `StoryFields.jsx` | The layers of chapter 1: the grey points, the outlines, the markers, the names, the key and the attribution. It places the names so that they do not overlap. It also has the list "Map data and sources". |
+| `StoryRock.jsx` | The art of chapter 3: the cutaway. |
+| `StoryBlock.jsx` | The art of chapters 4 to 6: the 3D grid, the VE columns and the live block with its controls. |
 | `story-geometry.js` | The one scenario of the story (dome, fault, gas cap, well) and the section, grid and columns that come from it. The page, the worker, the precompute tool and the tests all read it. |
-| `story-worker.js` | Runs the scenario once in a Web Worker for chapter 5. |
-| `assets/story-run.json` | The stored run for chapters 2 to 4, at fixed years. A test keeps it equal to a fresh run. |
+| `story-worker.js` | Runs the scenario once in a Web Worker for chapter 6. |
+| `assets/story-run.json` | The stored run for chapters 3 to 5, at fixed years. A test keeps it equal to a fresh run. |
 | `tools/story-precompute.js` | Writes `assets/story-run.json`. |
-| `assets/land-110m.json` | The coastlines of chapters 0 and 1, as TopoJSON. They come from Natural Earth (public domain) at 1:110 m, through the `world-atlas@2.0.2` package. The page loads the file from this repository. It uses no CDN at run time. |
+| `assets/land-110m.json` | The coastlines of chapters 0 to 2, as TopoJSON. They come from Natural Earth (public domain) at 1:110 m, through the `world-atlas@2.0.2` package. The page loads the file from this repository. It uses no CDN at run time. |
+| `assets/north-sea-ccs.json` | The data of chapter 1: the gas fields that no longer produce, the outlines of the project fields and the projects (name, status, year, place, source). It has no company name. `tools/north-sea-map.js` makes it from the public map services of NSTA (UK) and NLOG (NL) and from `tools/north-sea-projects.json`. See the end of `docs/superpowers/specs/2026-10-28-north-sea-ccs-map-research.md`. |
 | `ve2d-model.js` | The VE model. The simulator, the live chapter and the tests share it. |
 | `HomeSections.jsx`, `CVPage.jsx`, `App.jsx` | The homepage sections, the CV and the page entries. |
 | `sim-block3d.js`, `SimulatorPage.jsx`, `SimViews.jsx`, `SimCharts.jsx`, `GuidePage.jsx`, `simulation-worker.js` | The simulator. |
