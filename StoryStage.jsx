@@ -2,7 +2,7 @@
 //
 // THE STAGES
 //
-// The story has six stages, one for each chapter: orbit, descent, rock, grid, ve, live.
+// The story has seven stages, one for each chapter: orbit, fields, descent, rock, grid, ve, live.
 // Each stage owns one screen of scroll in #story. CSS scroll snap holds the page on the screen of one stage.
 // One wheel notch, one flick or one key press moves the page by one stage. The scroll position does not draw the art.
 // When the scroll settles on a stage, the stage plays by itself. Settle means the scrollend event, or a timer
@@ -18,7 +18,7 @@
 //
 // RENDERER API (the art of each chapter plugs in here)
 //
-// STORY_RENDERERS is a global object. Its keys are the chapter ids: orbit, descent, rock, grid, ve, live.
+// STORY_RENDERERS is a global object. Its keys are the chapter ids: orbit, fields, descent, rock, grid, ve, live.
 // Each value is a renderer: { draw(ctx, frame), animated?, mount?(layer), unmount?() }.
 //   draw(ctx, frame)  Draw the chapter. The canvas is cleared before each call.
 //                     ctx is a 2D context, already scaled by dpr. Draw in CSS pixels, from (0, 0) to (width, height).
@@ -28,11 +28,11 @@
 //                     It is 0 when the visitor arrives, 1 at the end of the playback, and 1 when the visitor comes back.
 //                     In live it is always 1. During a fast scroll, a stage that the visitor passes is drawn at
 //                     local 0 (forward) or at local 1 (back).
-//     p               Progress in the whole story, from 0 to 1: (stage index + local) / 6.
+//     p               Progress in the whole story, from 0 to 1: (stage index + local) / 7.
 //     width, height   Size of the stage in CSS pixels.
 //     dpr             Pixel ratio of the canvas: the device pixel ratio, with a maximum of 2.
 //     time            Milliseconds from the requestAnimationFrame timestamp. It is 0 in a static frame.
-//     reducedMotion   true in the six static frames of the reduced-motion layout. local is 1 in these frames.
+//     reducedMotion   true in the seven static frames of the reduced-motion layout. local is 1 in these frames.
 //     requestDraw     requestDraw() asks for one more draw. Call it when late data arrives (a fetch or a worker)
 //                     or when a control changes the picture. Do not dispatch a scroll event for this.
 //                     In the pinned stage: it draws the current chapter once, on the next animation frame.
@@ -69,6 +69,7 @@ const { useEffect, useRef, useState } = React;
 // ---- story helpers (pure; tests/story-stage.test.js evaluates this block)
 const STORY_CHAPTERS = [
   { id: 'orbit', title: 'Orbit' },
+  { id: 'fields', title: 'North Sea map' },
   { id: 'descent', title: 'Descent' },
   { id: 'rock', title: 'Into the rock' },
   { id: 'grid', title: 'Rock to grid' },
@@ -81,10 +82,10 @@ const STORY_SCREENS = STORY_CHAPTERS.length;
 
 // The play time of each stage, in seconds. Change a number here to change the speed of a stage.
 // The stage live has no time (0): it is interactive, so its local value is 1 as soon as the visitor arrives.
-const STORY_DURATIONS = { orbit: 5, descent: 7, rock: 8, grid: 9, ve: 7, live: 0 };
+const STORY_DURATIONS = { orbit: 5, fields: 8, descent: 7, rock: 8, grid: 9, ve: 7, live: 0 };
 
 // How many captions each chapter has. A chapter with two captions switches at the middle of the playback.
-const STORY_CAPTION_COUNT = { orbit: 1, descent: 1, rock: 2, grid: 2, ve: 2, live: 1 };
+const STORY_CAPTION_COUNT = { orbit: 1, fields: 1, descent: 1, rock: 2, grid: 2, ve: 2, live: 1 };
 
 // The same values as the --story-* tokens in colors_and_type.css.
 const STORY_COLORS = {
@@ -95,7 +96,7 @@ const STORY_COLORS = {
 // A number from lo to hi. NaN gives lo.
 const storyClamp = (value, lo = 0, hi = 1) => (value > lo ? Math.min(value, hi) : lo);
 
-// Where the scroll stands, in screens from the top of the story: 0 is the first stage and 5 is the last.
+// Where the scroll stands, in screens from the top of the story: 0 is the first stage and 6 is the last.
 // top is the bounding-rect top of the story. viewport is the height of one screen.
 const storyPosition = ({ top, viewport }) => {
   const position = (0 - top) / viewport;
@@ -214,7 +215,7 @@ const STORY_EXIT_SPAN = 0.2;
 // How far the stage has left: 0 while it is pinned, 1 when the fade ends. bottom is the bounding-rect bottom of the story.
 const storyExit = ({ bottom, viewport }) => (viewport > 0 ? storyClamp((viewport - bottom) / (viewport * STORY_EXIT_SPAN)) : 0);
 
-// Six fill fractions for the progress rail. The stages before the current stage are full.
+// Seven fill fractions for the progress rail. The stages before the current stage are full.
 // The current stage fills with its playback. The stages after it are empty.
 const storyRail = (index, local) => STORY_CHAPTERS.map((chapter, i) => (i < index ? 1 : i === index ? storyClamp(local) : 0));
 
@@ -362,6 +363,7 @@ const StoryWords = ({ chapter, on, caption, onNavigate }) => {
         ))}
       </div>
       {chapter.id === 'orbit' && <StoryPpm on={on} />}
+      {chapter.id === 'fields' && typeof StoryFieldsList === 'function' && <StoryFieldsList on={on} />}
       {actions.length > 0 && (
         <div className="story-actions story-fade" data-on={on}>
           {actions.map((action, i) => (
@@ -453,6 +455,8 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
     let wheel = { from: -1, direction: 0 };
     const onWheel = event => {
       if (!visible || event.ctrlKey || event.shiftKey || !event.deltaY) return;
+      // A wheel over the list of the map data scrolls the list, not the story.
+      if (event.target && event.target.closest && event.target.closest('.story-data__panel')) return;
       wheel = { from: wheel.direction === 0 ? rested : wheel.from, direction: event.deltaY > 0 ? 1 : -1 };
     };
     const helpWheel = position => {

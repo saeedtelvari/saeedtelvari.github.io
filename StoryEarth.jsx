@@ -1,12 +1,17 @@
-// StoryEarth.jsx — the art of the chapters orbit and descent (art direction C, flat colour).
+// StoryEarth.jsx — the art of the chapters orbit, fields and descent (art direction C, flat colour).
 //
 // orbit    The Earth from orbit, with the North Sea near the top of the disc. Over local 0 to 1 the globe turns and
 //          grows. A round window opens at the North Sea marker and grows into a map card at the right.
-// descent  The map in the card zooms in. Then the card shrinks into the inset at the top right. The side view comes up
-//          behind it: sky, sea, platform, pipeline and well. At the end, CO2 moves in the pipeline and down the well.
+// fields   The card grows into a large map of the southern and central North Sea. The layers of the map come in the
+//          order: ceased gas fields, outlines of the project fields, markers, names. The layers are in StoryFields.jsx.
+// descent  The layers fade out, and the large map shrinks to the card and zooms in to the example site (the blue marker).
+//          Then the card shrinks into the inset at the top right. The side view comes up behind it: sky, sea, platform,
+//          pipeline and well. At the end, CO2 moves in the pipeline and down the well.
 //
 // The land comes from assets/land-110m.json (Natural Earth, TopoJSON). Until the file arrives, the art has no land.
 // storyEarthPlatform and storyEarthLayout are global. The chapter rock can use them to start where descent ends.
+// The first frame of fields is the last frame of orbit (local 1). The first frame of descent is the last frame of fields.
+// A test in tests/story-fields.test.js compares the frames. If you change one end, change the other end in the same way.
 // The first frame of the chapter rock is the last frame of descent (local 1). It draws the same side view with the same
 // numbers (see rockApproachDraw in StoryRock.jsx). A test in tests/story-rock.test.js compares the two frames.
 // If you change the last frame of descent, change the approach of the chapter rock in the same way.
@@ -21,6 +26,9 @@ const STORY_EARTH_EDGE = 2;                        // The longest edge of a land
 const STORY_EARTH_OPEN = 0.3;                      // The map window starts to open at this local value of orbit.
 const STORY_EARTH_HOLD = 0.7;                      // From this local value of descent the picture stays.
 const STORY_EARTH_ZOOM = 0.4;                      // Descent: the map zooms until here. Then the card shrinks.
+const STORY_EARTH_FIELDS_BOX = [[-4.5, 50.7], [9, 61.3]]; // The area that the large map of the stage fields shows.
+const STORY_EARTH_GROW = 0.28;                     // Fields: the card grows into the large map until here. Then the layers come in.
+const STORY_EARTH_FADE = 0.1;                      // Descent: the layers of the large map fade out until here. Then the zoom starts.
 
 const storyEarthClamp = (v, lo = 0, hi = 1) => (v > lo ? Math.min(v, hi) : lo);
 const storyEarthMix = (a, b, t) => (t >= 1 ? b : t <= 0 ? a : a + (b - a) * t);
@@ -290,9 +298,11 @@ const storyEarthFit = (box, w, h) => {
 //   globe  The globe at local 0 of orbit: centre and radius.
 //   keep   The corner of the caption. The globe stays away from it while it grows.
 //   card   The map card at the end of orbit.
+//   fields The large map at the end of fields. It holds the card. It stays clear of the caption.
 //   inset  The map at the end of descent.
 //   scene  The map from the side view to the screen: x = ox + s * x, y = oy + s * y. The side view has 800 by 450 units.
-//   maps   The scale of the map at the start of the zoom (a), at the end of the zoom (b) and in the inset (i).
+//   maps   The scale of the map in the card (a), at the end of the zoom (b), in the inset (i) and in the large map (f).
+//   fieldsMarker  The place of the example site (the blue marker) in the large map.
 const storyEarthLayout = (width, height, still = false) => {
   const W = width;
   const H = height;
@@ -301,6 +311,7 @@ const storyEarthLayout = (width, height, still = false) => {
   let globe;
   let keep;
   let card;
+  let fields;
   let inset;
   let scene;
   let sun;
@@ -314,6 +325,10 @@ const storyEarthLayout = (width, height, still = false) => {
     keep = { x: 0.5 * W, y: bottom };
     const y = Math.max(0.42 * H, 352);
     card = { x: 16, y, w: W - 32, h: H - 24 - y };
+    // The caption of fields has 4 or 5 lines (143 characters, 1400 px at the most), and the button "Map data and sources" is under it.
+    // Above 640 px the caption stands at the left, so the map starts lower.
+    const top = W <= 640 ? 128 + 25.5 * Math.ceil(1400 / room) + 12 + 44 + 14 : 360;
+    fields = { x: 16, y: top, w: W - 32, h: H - 16 - top };
     const s = storyEarthClamp(W / 260, 1.2, 2);
     scene = { s, ox: 0.52 * W - 548 * s, oy: 0.52 * H - 232 * s };
     const iw = storyEarthClamp(0.29 * W, 112, 200);
@@ -332,6 +347,7 @@ const storyEarthLayout = (width, height, still = false) => {
     const x = 0.46 * W;
     const y = Math.max(skip, 0.16 * H);
     card = { x, y, w: W - Math.max(16, 0.03 * W) - x, h: H - 28 - y };
+    fields = { x: 0.41 * W, y, w: W - 16 - 0.41 * W, h: card.h };
     const s = Math.min(W / 800, H / 450);
     scene = { s, ox: (W - 800 * s) / 2, oy: 0.516 * H - 232 * s };
     const si = Math.min(s, 1.7);
@@ -339,18 +355,34 @@ const storyEarthLayout = (width, height, still = false) => {
     sun = { x: scene.ox + 410 * s, y: scene.oy + 118 * s, r: 24 * s };
     clouds = [[120, 196, 120], [330, 168, 96], [470, 206, 140]];
   }
+  // A static frame has no caption on the canvas, so the large map takes the whole frame.
+  if (still) fields = { x: 16, y: 16, w: W - 32, h: H - 32 };
   const k = storyEarthClamp(globe.R / 330, 0.9, 1.6);
+  // The size of the blue marker on the large map. It is smaller than in the card, so it does not hide the projects.
+  const kMap = Math.min(k, Math.max(0.9, k * 0.7));
   card.cx = card.x + card.w / 2;
   card.cy = card.y + card.h / 2;
   card.r = 10 * k;
+  fields.cx = fields.x + fields.w / 2;
+  fields.cy = fields.y + fields.h / 2;
+  fields.r = card.r;
+  // The attribution stands in a strip at the bottom of the large map (StoryFields.jsx). The strip has 2 lines on a wide map and
+  // up to 4 lines on a narrow map. The map above the strip shows the whole box.
+  fields.foot = fields.w >= 680 ? 40 : 66;
   inset.r = compact ? 6 : 6 * Math.min(scene.s, 1.7);
   const fit = storyEarthFit(STORY_EARTH_BOX, inset.w, inset.h);
   const Sa = Math.min(card.w / 0.37, card.h / 0.36);
   const target = storyEarthMapPoint({ S: fit.S, lon: fit.lon, y: fit.y, mx: inset.x + inset.w / 2, my: inset.y + inset.h / 2 }, STORY_EARTH_TARGET[0], STORY_EARTH_TARGET[1]);
+  // The large map shows the whole box. The zoom of descent must go in from it, also on a phone.
+  const fitted = storyEarthFit(STORY_EARTH_FIELDS_BOX, fields.w, fields.h - fields.foot);
+  // The map zooms in while the card grows. On a very short screen the box is a little larger than the map, by 4 percent.
+  const wide = { ...fitted, S: Math.max(fitted.S, Sa) };
+  const place = storyEarthMapPoint({ S: wide.S, lon: wide.lon, y: wide.y, mx: fields.cx, my: fields.y + (fields.h - fields.foot) / 2 }, STORY_EARTH_TARGET[0], STORY_EARTH_TARGET[1]);
   return {
-    width: W, height: H, compact, still, skip, globe, keep, card, inset, scene, sun, clouds, k,
-    maps: { a: Sa, b: Sa * 1.45, i: fit.S },
+    width: W, height: H, compact, still, skip, globe, keep, card, fields, inset, scene, sun, clouds, k, kMap,
+    maps: { a: Sa, b: Math.max(Sa * 1.45, wide.S * 1.3), i: fit.S, f: wide.S },
     insetMarker: target,
+    fieldsMarker: place,
     fall: 1.05 * H,
   };
 };
@@ -386,23 +418,64 @@ const storyEarthOrbitCamera = (local, layout) => {
   return { lon, lat, R, cx, cy, marker: { x: at.x, y: at.y }, alpha: 1 - storyEarthSmooth((u - 0.5) / 0.45), lens };
 };
 
-// Descent. The map zooms in until local 0.4. Then the card shrinks into the inset, and the side view comes up
+// A part of local that goes from 0 to 1 between the values from and to, with a gentle ease.
+const storyEarthStep = (u, from, to) => storyEarthSmooth((u - from) / (to - from));
+
+// Fields. The card grows into the large map until local 0.28. The label of the marker changes from "North Sea" to
+// "Example site", because the map now shows real projects and the blue marker is only the example of the story.
+// Then the layers come in, one after the other. reveal says how far each layer has come, from 0 to 1.
+// words are the label texts of the blue marker with their opacity.
+const storyEarthFieldsCamera = (local, layout) => {
+  const u = storyEarthClamp(local);
+  const grow = storyEarthInOut(u / STORY_EARTH_GROW);
+  const { card, fields, maps } = layout;
+  const lens = {
+    x: storyEarthMix(card.x, fields.x, grow), y: storyEarthMix(card.y, fields.y, grow),
+    w: storyEarthMix(card.w, fields.w, grow), h: storyEarthMix(card.h, fields.h, grow),
+    r: storyEarthMix(card.r, fields.r, grow),
+    S: storyEarthGeo(maps.a, maps.f, grow),
+    mx: storyEarthMix(card.cx, layout.fieldsMarker.x, grow), my: storyEarthMix(card.cy, layout.fieldsMarker.y, grow),
+  };
+  const reveal = {
+    ceased: storyEarthStep(u, 0.28, 0.46), key: storyEarthStep(u, 0.3, 0.46), outlines: storyEarthStep(u, 0.44, 0.6),
+    markers: storyEarthStep(u, 0.58, 0.8), names: storyEarthStep(u, 0.68, 0.92),
+  };
+  const words = [['North Sea', 1 - storyEarthStep(u, 0, 0.2)], ['Example site', storyEarthStep(u, 0.58, 0.74)]];
+  return { lens, reveal, words, size: storyEarthMix(layout.k, layout.kMap, grow) };
+};
+
+// Descent. The layers of the large map fade out until local 0.1. The map then shrinks to the card and zooms in to
+// the example site until local 0.4. Then the card shrinks into the inset, and the side view comes up
 // (fall goes from its full value to 0). From local 0.7 nothing moves, except the CO2 in the pipe.
 const storyEarthDescentCamera = (local, layout) => {
   const u = storyEarthClamp(local);
-  const zoom = storyEarthInOut(u / STORY_EARTH_ZOOM);
+  const away = storyEarthStep(u, 0, STORY_EARTH_FADE);
+  const zoom = storyEarthInOut((u - STORY_EARTH_FADE) / (STORY_EARTH_ZOOM - STORY_EARTH_FADE));
   const shrink = storyEarthInOut((u - STORY_EARTH_ZOOM) / (STORY_EARTH_HOLD - STORY_EARTH_ZOOM));
-  const { card, inset, maps } = layout;
-  const mx = storyEarthMix(card.cx, layout.insetMarker.x, shrink);
-  const my = storyEarthMix(card.cy, layout.insetMarker.y, shrink);
-  const lens = {
-    x: storyEarthMix(card.x, inset.x, shrink), y: storyEarthMix(card.y, inset.y, shrink),
-    w: storyEarthMix(card.w, inset.w, shrink), h: storyEarthMix(card.h, inset.h, shrink),
-    r: storyEarthMix(card.r, inset.r, shrink),
-    S: u < STORY_EARTH_ZOOM ? storyEarthGeo(maps.a, maps.b, zoom) : storyEarthGeo(maps.b, maps.i, shrink),
-    mx, my,
+  const { card, fields, inset, maps } = layout;
+  const place = layout.fieldsMarker;
+  // The map before the shrink: from the large map to the card, with the zoom.
+  const base = {
+    x: storyEarthMix(fields.x, card.x, zoom), y: storyEarthMix(fields.y, card.y, zoom),
+    w: storyEarthMix(fields.w, card.w, zoom), h: storyEarthMix(fields.h, card.h, zoom),
+    r: storyEarthMix(fields.r, card.r, zoom), S: storyEarthGeo(maps.f, maps.b, zoom),
+    mx: storyEarthMix(place.x, card.cx, zoom), my: storyEarthMix(place.y, card.cy, zoom),
   };
-  return { lens, shrink, fall: layout.fall * (1 - shrink) };
+  const lens = {
+    x: storyEarthMix(base.x, inset.x, shrink), y: storyEarthMix(base.y, inset.y, shrink),
+    w: storyEarthMix(base.w, inset.w, shrink), h: storyEarthMix(base.h, inset.h, shrink),
+    r: storyEarthMix(base.r, inset.r, shrink),
+    S: u < STORY_EARTH_ZOOM ? base.S : storyEarthGeo(maps.b, maps.i, shrink),
+    mx: storyEarthMix(base.mx, layout.insetMarker.x, shrink), my: storyEarthMix(base.my, layout.insetMarker.y, shrink),
+  };
+  // The names go first, then the rest of the layers.
+  const reveal = { ceased: 1 - away, key: 1 - away, outlines: 1 - away, markers: 1 - away, names: 1 - storyEarthStep(u, 0, STORY_EARTH_FADE * 0.6) };
+  const words = [['Example site', 1 - away], ['North Sea', away]];
+  // The size of the blue marker: it grows from its size on the large map to its size in the card while the map zooms,
+  // and then it shrinks with the card (as before the stage fields existed).
+  const small = 0.8 * (layout.compact ? 1 : Math.min(layout.scene.s, 1.7));
+  const size = storyEarthMix(storyEarthMix(layout.kMap, layout.k, zoom), small, shrink);
+  return { lens, shrink, fall: layout.fall * (1 - shrink), reveal, words, size };
 };
 // ---- end story earth helpers
 
@@ -510,7 +583,9 @@ const storyEarthPlatform = (ctx, x, y, s = 1, legDepth = 0) => {
   ctx.restore();
 };
 
-const storyEarthMarker = (ctx, x, y, size, label) => {
+// The blue marker with its label. words are pairs of a text and an opacity. A text with opacity 0 is not drawn.
+// An opacity of 1 sets nothing, so the calls are the same as before the stage fields existed.
+const storyEarthMarker = (ctx, x, y, size, label, words = [['North Sea', 1]]) => {
   ctx.beginPath();
   ctx.arc(x, y, 7 * size, 0, 2 * Math.PI);
   ctx.fillStyle = STORY_COLORS.co2;
@@ -523,9 +598,14 @@ const storyEarthMarker = (ctx, x, y, size, label) => {
   ctx.fillStyle = STORY_EARTH_COLORS.white;
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
-  const width = ctx.measureText('North Sea').width;
-  // The label goes down first and then to the middle, so it does not cross the marker.
-  ctx.fillText('North Sea', x + storyEarthMix(14 * size, -width / 2, storyEarthSmooth(label * 2 - 1)) + 8 * size * label, y + storyEarthMix(-10 * size, 23 * size, storyEarthSmooth(label * 2)));
+  words.forEach(([text, alpha]) => {
+    if (!(alpha > 0)) return;
+    const width = ctx.measureText(text).width;
+    // The label goes down first and then to the middle, so it does not cross the marker.
+    if (alpha < 1) ctx.globalAlpha = alpha;
+    ctx.fillText(text, x + storyEarthMix(14 * size, -width / 2, storyEarthSmooth(label * 2 - 1)) + 8 * size * label, y + storyEarthMix(-10 * size, 23 * size, storyEarthSmooth(label * 2)));
+    if (alpha < 1) ctx.globalAlpha = 1;
+  });
 };
 
 // The land on the Mercator map, inside the current clip.
@@ -569,8 +649,9 @@ const storyEarthMapLand = (ctx, lens) => {
   ctx.fill('evenodd');
 };
 
-// The map card: sea, land, outline and the North Sea marker.
-const storyEarthDrawLens = (ctx, lens, layout, label, size) => {
+// The map card: sea, land, outline and the blue marker. layers (optional) is a function that draws the layers of the
+// stage fields on the land, inside the clip of the card. The blue marker stays on top of them.
+const storyEarthDrawLens = (ctx, lens, layout, label, size, layers = null, words = undefined) => {
   if (lens.w < 1 || lens.h < 1) return;
   ctx.save();
   ctx.beginPath();
@@ -579,13 +660,22 @@ const storyEarthDrawLens = (ctx, lens, layout, label, size) => {
   ctx.fillStyle = STORY_COLORS.sea;
   ctx.fillRect(lens.x, lens.y, lens.w, lens.h);
   storyEarthMapLand(ctx, lens);
+  if (layers) layers(ctx);
   ctx.restore();
   ctx.beginPath();
   storyEarthRoundRect(ctx, lens.x, lens.y, lens.w, lens.h, lens.r);
   ctx.lineWidth = 1.2 * layout.k;
   ctx.strokeStyle = STORY_COLORS.ink;
   ctx.stroke();
-  storyEarthMarker(ctx, lens.mx, lens.my, size, label);
+  storyEarthMarker(ctx, lens.mx, lens.my, size, label, words);
+};
+
+// The layers of the stage fields (StoryFields.jsx). The function is global. Before the file has loaded, there are no layers.
+// It draws only when the data has arrived, and it asks the frame for one more draw when the data arrives later.
+const storyEarthLayers = (lens, layout, reveal, frame) => {
+  const any = reveal.ceased > 0 || reveal.outlines > 0 || reveal.markers > 0 || reveal.names > 0 || reveal.key > 0;
+  if (!any || typeof storyFieldsLayers !== 'function') return null;
+  return ctx => storyFieldsLayers(ctx, lens, layout, reveal, frame);
 };
 
 // The molecules of CO2 in the air. The numbers come from a fixed generator, so the picture is the same each time.
@@ -816,8 +906,7 @@ STORY_RENDERERS.descent = (() => {
       const state = storyEarthDescentCamera(frame.local, layout);
       storyEarthFill(ctx, layout);
       if (state.shrink > 0) storyEarthDrawScene(ctx, layout, state, frame.time);
-      const size = storyEarthMix(layout.k, 0.8 * (layout.compact ? 1 : Math.min(layout.scene.s, 1.7)), state.shrink);
-      storyEarthDrawLens(ctx, state.lens, layout, state.shrink, size);
+      storyEarthDrawLens(ctx, state.lens, layout, state.shrink, state.size, storyEarthLayers(state.lens, layout, state.reveal, frame), state.words);
     },
   };
 })();

@@ -71,3 +71,24 @@ Do not link Acorn and Goldeneye on the map.
 
 - Dates that differ between sources: Endurance first injection (2027 or 2028), Aramis start (2028–2030), Poseidon FID (2026 or 2027).
 - The Danish and Norwegian data terms are not confirmed. Only marker positions from public pages are used for them.
+
+## How the map is built and how to update it
+
+The stage `fields` of the story draws `assets/north-sea-ccs.json`. A script makes the file from two public map services and one table.
+
+- **The table.** `tools/north-sea-projects.json` holds the projects: name, country, group, status, year, points and source link. It holds no company name. Change a status or a year here.
+- **The script.** `tools/north-sea-map.js` asks NSTA (UK) and NLOG (NL), and no other service. It asks for field names, field codes, status and shape. It never asks for an operator column. It does not ask for Norway or Denmark: these markers come from the table.
+- **Run it again.** Run `node tools/north-sea-map.js` in the repository folder. It needs Node 18 or newer and a network connection. It writes `assets/north-sea-ccs.json` and stops with an error if the file is larger than 40 KB.
+- **After a run.** Run `node --test tests/*.test.js`. The test `tests/story-fields.test.js` checks the file. Then change `?v=1` in `STORY_FIELDS_FILE` (StoryFields.jsx) and the `bundle.js?v=` number on the three pages, so that the browser loads the new file.
+- **The marker of a project** is the mean of its points in the table. For a project with several fields, the outlines of the fields show where the gas fields are.
+- **UK grey points.** Gas and condensate fields with the NSTA status codes 899, 900 and 1000 (126 fields on 28 Oct 2026). The fields of the projects are not grey points: they have outlines.
+- **NL grey points.** Gas fields in the sea with the NLOG status "Production ceased" (U) or "Abandoned" (A): 109 fields on 28 Oct 2026. The three P18 fields are not grey points.
+- **Outlines.** NSTA gives simplified shapes (`maxAllowableOffset=0.005`). The script simplifies the NLOG shapes with the same tolerance. L10-ALBE (Aramis) is not a field in the NLOG layer, so it has no outline.
+
+### Choices that the research file did not fix
+
+- The Leman injection test (group 2) is at the same place as Poseidon (group 1). The map shows one marker, for Poseidon. The status of Poseidon names the test.
+- Acorn and Goldeneye (Peterhead) are about 1 km apart. The heads of the two markers move apart on the screen. Their stems still end at the true places. The map does not link the two.
+- The sources of Sleipner, Smeaheia and Northern Lights are pages of the Norwegian Offshore Directorate, so that no link has the name of a company. The sources of Viking, Poseidon, Orion, Camelot and Acorn are the NSTA public register of carbon storage licences. The source of Peterhead is the NSTA page on carbon capture and storage.
+- Open points of the first part stay as the research file states them: Endurance (first injection 2027 to 2028), Aramis (start 2028 to 2030), Poseidon (final investment decision 2026 or 2027). The map shows the range for Endurance and Aramis, and no decision date for Poseidon.
+- Colours: the blue (CO2) and the red (methane) of the story are not used for projects. A depleted gas project is a circle in the sandstone colour. A pilot or study is a cream diamond. A saline project is a small square with a chalk border. Grey points are ceased gas fields. The blue marker on the map is the example site of the story, and the map does not call it a project.

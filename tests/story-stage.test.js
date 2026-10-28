@@ -13,25 +13,27 @@ const plain = value => JSON.parse(JSON.stringify(value));
 const helpers = new Function(between(read('StoryStage.jsx'), '// ---- story helpers', '// ---- end story helpers') +
   '\nreturn { STORY_SCREENS, STORY_CHAPTERS, STORY_DURATIONS, STORY_CAPTION_COUNT, STORY_COLORS, STORY_COUNT_MS, STORY_EXIT_SPAN, STORY_SETTLE_MS, STORY_SETTLE_SAFETY_MS, STORY_MAX_STEP_MS, STORY_REST_TOLERANCE, storyRestAt, storyWheelTarget, storyPosition, storyStageAt, storyDuration, storyEase, storyLocal, storyP, storyCaptionIndex, storyPlay, storyEnd, storyMove, storySettle, storyAdvance, storyRail, storyInline, storyCount, storyExit };')();
 const { STORY_SCREENS, STORY_CHAPTERS, STORY_DURATIONS, STORY_CAPTION_COUNT, STORY_COLORS, STORY_COUNT_MS, STORY_EXIT_SPAN, STORY_SETTLE_MS, STORY_SETTLE_SAFETY_MS, STORY_MAX_STEP_MS, STORY_REST_TOLERANCE, storyRestAt, storyWheelTarget, storyPosition, storyStageAt, storyDuration, storyEase, storyLocal, storyP, storyCaptionIndex, storyPlay, storyEnd, storyMove, storySettle, storyAdvance, storyRail, storyInline, storyCount, storyExit } = helpers;
-const IDS = ['orbit', 'descent', 'rock', 'grid', 've', 'live'];
+const IDS = ['orbit', 'fields', 'descent', 'rock', 'grid', 've', 'live'];
+// The first story spec has six chapters. The stage fields is in the North Sea map research file.
+const SPEC_IDS = IDS.filter(id => id !== 'fields');
 const near = (a, b, message) => assert.ok(Math.abs(a - b) < 1e-9, `${message || 'close'}: ${a} and ${b}`);
 
-test('the six stages follow the six chapters, and each stage owns one screen of scroll', () => {
-  assert.equal(STORY_SCREENS, 6);
+test('the seven stages follow the seven chapters, and each stage owns one screen of scroll', () => {
+  assert.equal(STORY_SCREENS, 7);
   assert.deepEqual(STORY_CHAPTERS.map(chapter => chapter.id), IDS);
   STORY_CHAPTERS.forEach((chapter, i) => {
     assert.ok(chapter.title, `${chapter.id} has a title`);
-    near(chapter.from, i / 6, `${chapter.id} starts at its sixth`);
-    near(chapter.to, (i + 1) / 6, `${chapter.id} ends at its sixth`);
+    near(chapter.from, i / 7, `${chapter.id} starts at its seventh`);
+    near(chapter.to, (i + 1) / 7, `${chapter.id} ends at its seventh`);
   });
-  assert.equal(STORY_CHAPTERS[5].to, 1);
+  assert.equal(STORY_CHAPTERS[6].to, 1);
   assert.deepEqual(Object.keys(STORY_CAPTION_COUNT), IDS);
 });
 
 test('the duration table: one number of seconds for each stage, and none for live', () => {
-  assert.deepEqual(plain(STORY_DURATIONS), { orbit: 5, descent: 7, rock: 8, grid: 9, ve: 7, live: 0 });
+  assert.deepEqual(plain(STORY_DURATIONS), { orbit: 5, fields: 8, descent: 7, rock: 8, grid: 9, ve: 7, live: 0 });
   assert.deepEqual(Object.keys(STORY_DURATIONS), IDS, 'the table has the order of the stages');
-  assert.deepEqual(IDS.map(storyDuration), [5000, 7000, 8000, 9000, 7000, 0], 'the play time in milliseconds');
+  assert.deepEqual(IDS.map(storyDuration), [5000, 8000, 7000, 8000, 9000, 7000, 0], 'the play time in milliseconds');
   assert.equal(storyDuration('nobody'), 0, 'an unknown stage does not play');
   const page = fakePage();
   assert.equal(page.get('window').STORY_DURATIONS, page.get('STORY_DURATIONS'), 'the table is exported on window, so it is easy to tune');
@@ -43,8 +45,8 @@ test('the scroll position in screens gives the stage that is nearest to it', () 
   assert.equal(storyPosition({ top: 300, viewport: 800 }), -0.375, 'before the story');
   assert.equal(storyPosition({ top: -100, viewport: 0 }), 0, 'no screen, no position');
   assert.equal(storyPosition({ top: NaN, viewport: 800 }), 0);
-  assert.deepEqual([-2, 0, 0.49, 0.5, 1.2, 2.5, 4.49, 5, 5.9, 12, NaN].map(storyStageAt), [0, 0, 0, 1, 1, 3, 4, 5, 5, 5, 0]);
-  for (let stage = 0; stage < 6; stage += 1) {
+  assert.deepEqual([-2, 0, 0.49, 0.5, 1.2, 2.5, 4.49, 5, 5.9, 12, NaN].map(storyStageAt), [0, 0, 0, 1, 1, 3, 4, 5, 6, 6, 0]);
+  for (let stage = 0; stage < 7; stage += 1) {
     assert.equal(storyStageAt(stage), stage, 'a snap point is its own stage');
     assert.equal(storyStageAt(stage + 0.49), stage, 'the stage owns the screen around its snap point');
     assert.equal(storyStageAt(stage - 0.49), stage);
@@ -71,7 +73,7 @@ test('the ease is gentle: slow at both ends, the same at the middle, and it neve
 });
 
 test('local follows the play time of the stage; live has no time and is always at its end', () => {
-  for (const id of ['orbit', 'descent', 'rock', 'grid', 've']) {
+  for (const id of ['orbit', 'fields', 'descent', 'rock', 'grid', 've']) {
     const total = STORY_DURATIONS[id] * 1000;
     assert.equal(storyLocal(id, 0), 0, `${id} starts at 0`);
     near(storyLocal(id, total / 2), 0.5, `${id} is at the middle at half of its time`);
@@ -82,9 +84,9 @@ test('local follows the play time of the stage; live has no time and is always a
   assert.equal(storyLocal('live', 0), 1);
   assert.equal(storyLocal('live', 5000), 1);
   near(storyP(0, 0), 0, 'p at the start of the story');
-  near(storyP(2, 0.5), 2.5 / 6, 'p is (stage + local) / 6');
-  near(storyP(5, 1), 1, 'p at the end of the story');
-  near(storyP(3, 7), 4 / 6, 'local is clamped');
+  near(storyP(2, 0.5), 2.5 / 7, 'p is (stage + local) / 7');
+  near(storyP(6, 1), 1, 'p at the end of the story');
+  near(storyP(3, 7), 4 / 7, 'local is clamped');
 });
 
 test('rock shows no caption until the cutaway clears the caption area, and switches at the bottom of the well', () => {
@@ -106,22 +108,22 @@ test('chapters with two captions switch at half of the playback; the others keep
     assert.equal(storyCaptionIndex(id, storyLocal(id, total * 0.49)), 0, `${id}: before half of the time`);
     assert.equal(storyCaptionIndex(id, storyLocal(id, total * 0.51)), 1, `${id}: after half of the time`);
   }
-  for (const id of ['orbit', 'descent', 'live']) {
+  for (const id of ['orbit', 'fields', 'descent', 'live']) {
     for (const local of [0, 0.5, 0.99, 1]) assert.equal(storyCaptionIndex(id, local), 0, `${id} at ${local}`);
   }
 });
 
 test('the progress rail: stages before the current stage are full, the current stage fills with its local, the rest are empty', () => {
-  assert.deepEqual(storyRail(0, 0), [0, 0, 0, 0, 0, 0]);
-  assert.deepEqual(storyRail(0, 1), [1, 0, 0, 0, 0, 0]);
-  assert.deepEqual(storyRail(3, 0.25), [1, 1, 1, 0.25, 0, 0]);
-  assert.deepEqual(storyRail(5, 1), [1, 1, 1, 1, 1, 1]);
-  assert.deepEqual(storyRail(2, 7), [1, 1, 1, 0, 0, 0], 'local is clamped');
-  assert.deepEqual(storyRail(2, NaN), [1, 1, 0, 0, 0, 0]);
-  for (let index = 0; index < 6; index += 1) {
+  assert.deepEqual(storyRail(0, 0), [0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(storyRail(0, 1), [1, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(storyRail(3, 0.25), [1, 1, 1, 0.25, 0, 0, 0]);
+  assert.deepEqual(storyRail(6, 1), [1, 1, 1, 1, 1, 1, 1]);
+  assert.deepEqual(storyRail(2, 7), [1, 1, 1, 0, 0, 0, 0], 'local is clamped');
+  assert.deepEqual(storyRail(2, NaN), [1, 1, 0, 0, 0, 0, 0]);
+  for (let index = 0; index < 7; index += 1) {
     for (const local of [0, 0.3, 1]) {
       const rail = storyRail(index, local);
-      assert.equal(rail.length, 6);
+      assert.equal(rail.length, 7);
       rail.forEach((fill, i) => {
         assert.ok(fill >= 0 && fill <= 1, 'a fill is a fraction');
         if (i < index) assert.equal(fill, 1);
@@ -150,8 +152,8 @@ test('director: the stage that the scroll settles on plays from 0 to 1 and then 
 });
 
 test('director: live has no time, so it rests at local 1 as soon as it is current', () => {
-  assert.deepEqual(plain(storyPlay(5)), { index: 5, local: 1, ms: 0, mode: 'rest', parked: null });
-  assert.equal(storyAdvance(storyPlay(5), 1000).local, 1);
+  assert.deepEqual(plain(storyPlay(6)), { index: 6, local: 1, ms: 0, mode: 'rest', parked: null });
+  assert.equal(storyAdvance(storyPlay(6), 1000).local, 1);
 });
 
 test('director: a fast scroll through several stages plays only the stage where it settles', () => {
@@ -229,8 +231,8 @@ test('the exit is 0 while the stage is pinned, grows as the story leaves and end
   // The pinned scroll range never reaches the fade: the last stage is at the last pinned pixel.
   const height = STORY_SCREENS * viewport;
   const top = viewport - height;
-  assert.equal(storyStageAt(storyPosition({ top, viewport })), 5, 'the bottom of the story meets the viewport at the last stage');
-  assert.equal(storyPosition({ top, viewport }), STORY_SCREENS - 1, 'the last stage is at 5 screens');
+  assert.equal(storyStageAt(storyPosition({ top, viewport })), 6, 'the bottom of the story meets the viewport at the last stage');
+  assert.equal(storyPosition({ top, viewport }), STORY_SCREENS - 1, 'the last stage is at 6 screens');
   assert.equal(storyExit({ bottom: top + height, viewport }), 0, 'and the exit has not started');
 });
 
@@ -253,9 +255,9 @@ test('SITE_STORY has the captions of the spec, word for word', () => {
   rows.forEach((row, i) => {
     const cells = row.split('|');
     const quotes = [...cells[cells.length - 2].matchAll(/"([^"]+)"/g)].map(match => match[1]);
-    const captions = SITE_STORY.captions[IDS[i]];
-    assert.deepEqual(quotes.slice(0, captions.length), captions, `${IDS[i]} captions match the spec`);
-    if (IDS[i] === 'live') assert.deepEqual(quotes.slice(1), SITE_STORY.actions.map(action => action.label), 'the buttons match the spec');
+    const captions = SITE_STORY.captions[SPEC_IDS[i]];
+    assert.deepEqual(quotes.slice(0, captions.length), captions, `${SPEC_IDS[i]} captions match the spec`);
+    if (SPEC_IDS[i] === 'live') assert.deepEqual(quotes.slice(1), SITE_STORY.actions.map(action => action.label), 'the buttons match the spec');
   });
   const board = read('docs/superpowers/specs/2026-10-25-homepage-story-mockups/storyboard.html');
   // The storyboard is a mockup. It keeps the first sentence of the ppm line and a placeholder for the value.
@@ -444,7 +446,7 @@ const startPinned = ({ stage = 0, scrollend = true } = {}) => {
   const ctx = { calls: [], restores: 0, setTransform(...args) { this.calls.push(args); }, clearRect() {}, save() {}, restore() { this.restores += 1; } };
   const canvas = { width: 0, height: 0, getContext: () => ctx };
   const layer = {};
-  const fills = Array.from({ length: 6 }, () => ({ style: {} }));
+  const fills = Array.from({ length: 7 }, () => ({ style: {} }));
   const section = { getBoundingClientRect: () => rect };
   const rail = { style: { opacity: '', visibility: '' }, querySelectorAll: () => fills };
   const skip = { style: { opacity: '', visibility: '' } };
@@ -483,14 +485,14 @@ test('the pinned stage plays the first stage by itself, draws on each frame, and
   draws.forEach(({ id, frame }) => {
     assert.equal(id, 'orbit');
     near(frame.local, storyLocal('orbit', frame.time - 16), 'local follows the time of the stage');
-    near(frame.p, frame.local / 6, 'p is (stage + local) / 6');
+    near(frame.p, frame.local / 7, 'p is (stage + local) / 7');
   });
   assert.equal(draws[draws.length - 1].frame.local, 1, 'the stage ends at local 1');
   assert.equal(draws.length, 314, 'one draw for each frame of 5 s: the first frame and 313 more');
   assert.equal(page.queue.length, 0, 'the loop ends with the stage');
   page.run(3000);
   assert.equal(draws.length, 314, 'a stage at its end draws nothing more');
-  assert.deepEqual(filled(), [1, 0, 0, 0, 0, 0]);
+  assert.deepEqual(filled(), [1, 0, 0, 0, 0, 0, 0]);
   assert.deepEqual(page.views, [], 'React state does not change inside one stage and caption');
 });
 
@@ -500,7 +502,7 @@ test('a settle starts the playback of the new stage; a move without a settle doe
   const count = draws.length;
   scrollTo(1);
   const arrival = draws[draws.length - 1];
-  assert.deepEqual([draws.length, arrival.id, arrival.frame.local, arrival.frame.p], [count + 1, 'descent', 0, 1 / 6], 'the new stage shows its start at once');
+  assert.deepEqual([draws.length, arrival.id, arrival.frame.local, arrival.frame.p], [count + 1, 'fields', 0, 1 / 7], 'the new stage shows its start at once');
   page.run(500);
   assert.equal(draws.length, count + 1, 'the scroll has not settled, so the stage does not play');
   assert.equal(page.queue.length, 0, 'and no frame is waiting');
@@ -508,12 +510,12 @@ test('a settle starts the playback of the new stage; a move without a settle doe
   settle();
   const start = page.t;
   assert.equal(page.queue.length, 1, 'the settle starts the playback');
-  page.run(3500);
-  const half = draws[draws.length - 1];
-  assert.equal(half.id, 'descent');
-  near(half.frame.local, storyLocal('descent', half.frame.time - start), 'local follows the time since the settle');
-  assert.ok(half.frame.local > 0.45 && half.frame.local < 0.55, `about half of the 7 s (${half.frame.local})`);
   page.run(4000);
+  const half = draws[draws.length - 1];
+  assert.equal(half.id, 'fields');
+  near(half.frame.local, storyLocal('fields', half.frame.time - start), 'local follows the time since the settle');
+  assert.ok(half.frame.local > 0.45 && half.frame.local < 0.55, `about half of the 8 s (${half.frame.local})`);
+  page.run(4500);
   assert.equal(draws[draws.length - 1].frame.local, 1, 'the stage plays to its end by itself');
   assert.equal(page.queue.length, 0);
   assert.deepEqual(plain(page.views.map(view => view.index)), [1], 'the chapter changed once');
@@ -552,11 +554,12 @@ test('a fast scroll through several stages plays only the stage where the scroll
   scrollTo(3);
   scrollTo(4);
   scrollTo(5);
+  scrollTo(6);
+  scrollTo(5);
   scrollTo(4);
-  scrollTo(3);
   page.run(500);
   const transit = draws.slice(start);
-  assert.deepEqual(transit.map(draw => draw.id), ['descent', 'rock', 'grid', 've', 'live', 've', 'grid'], 'each stage on the way shows once');
+  assert.deepEqual(transit.map(draw => draw.id), ['fields', 'descent', 'rock', 'grid', 've', 'live', 've', 'grid'], 'each stage on the way shows once');
   assert.ok(transit.every(draw => draw.frame.local === 0), 'and at its start: none of them plays');
   assert.equal(page.queue.length, 0, 'no frame is waiting, so no time runs for any stage');
   assert.equal(mounted.length, 0, 'live is not mounted when the visitor only passes it');
@@ -567,22 +570,22 @@ test('a fast scroll through several stages plays only the stage where the scroll
   assert.ok(played.length > 100 && played.every(draw => draw.id === 'grid'), 'only the stage of the settle plays');
   const last = played[played.length - 1].frame.local;
   assert.ok(last > 0.45 && last < 0.55, `grid is at about half of its 9 s (${last})`);
-  assert.equal(draws.filter(draw => ['descent', 'rock', 've', 'live'].includes(draw.id) && draw.frame.local !== 0).length, 0, 'no other stage ever played');
-  assert.deepEqual(filled(), [1, 1, 1, last, 0, 0]);
+  assert.equal(draws.filter(draw => ['fields', 'descent', 'rock', 've', 'live'].includes(draw.id) && draw.frame.local !== 0).length, 0, 'no other stage ever played');
+  assert.deepEqual(filled(), [1, 1, 1, 1, last, 0, 0]);
   assert.equal(mounted.length, 0, 'live never mounted: the visitor stopped on grid');
 });
 
 test('going back shows the stage behind at its end state: no replay, the last caption, a full rail', () => {
-  const { page, draws, filled, scrollTo, settle } = startPinned({ stage: 3 });
+  const { page, draws, filled, scrollTo, settle } = startPinned({ stage: 4 });
   page.run(2000);
   assert.equal(draws[draws.length - 1].id, 'grid');
   assert.ok(draws[draws.length - 1].frame.local < 0.5 && draws[draws.length - 1].frame.local > 0);
-  scrollTo(2);
+  scrollTo(3);
   const back = draws[draws.length - 1];
   assert.deepEqual([back.id, back.frame.local], ['rock', 1], 'rock shows its end at once');
-  near(back.frame.p, 0.5);
-  assert.deepEqual(plain(page.views[page.views.length - 1]), { index: 2, caption: 1 }, 'with its last caption');
-  assert.deepEqual(filled(), [1, 1, 1, 0, 0, 0]);
+  near(back.frame.p, 4 / 7);
+  assert.deepEqual(plain(page.views[page.views.length - 1]), { index: 3, caption: 1 }, 'with its last caption');
+  assert.deepEqual(filled(), [1, 1, 1, 1, 0, 0, 0]);
   const count = draws.length;
   settle();
   page.run(10000);
@@ -590,32 +593,32 @@ test('going back shows the stage behind at its end state: no replay, the last ca
   assert.equal(page.queue.length, 0);
 
   // Far back: from live to the first stage, in one move.
-  scrollTo(5);
+  scrollTo(6);
   settle();
   page.run(100);
   scrollTo(0);
   settle();
   const first = draws[draws.length - 1];
   assert.deepEqual([first.id, first.frame.local], ['orbit', 1]);
-  assert.deepEqual(filled(), [1, 0, 0, 0, 0, 0]);
+  assert.deepEqual(filled(), [1, 0, 0, 0, 0, 0, 0]);
   const total = draws.length;
   page.run(6000);
   assert.equal(draws.length, total, 'the first stage does not play when the visitor comes back to it');
 });
 
 test('leaving a stage stops its playback; a visitor who comes back without a settle finds it as it was', () => {
-  const { page, draws, scrollTo, settle } = startPinned({ stage: 1 });
+  const { page, draws, scrollTo, settle } = startPinned({ stage: 2 });
   page.run(2000);
   const stopped = draws[draws.length - 1].frame.local;
   assert.ok(stopped > 0 && stopped < 0.3, `descent is in play (${stopped})`);
 
-  scrollTo(2);
+  scrollTo(3);
   const count = draws.length;
   page.run(700);
   assert.equal(draws.length, count, 'no frame for any stage: descent stopped and rock waits for the settle');
   assert.equal(page.queue.length, 0);
 
-  scrollTo(1);
+  scrollTo(2);
   const frozen = draws[draws.length - 1];
   assert.deepEqual([frozen.id, frozen.frame.local], ['descent', stopped], 'descent shows the local where it stopped');
   settle();
@@ -624,7 +627,7 @@ test('leaving a stage stops its playback; a visitor who comes back without a set
   assert.ok(resumed > stopped && resumed < stopped + 0.25,`descent goes on from where it stopped (${stopped} to ${resumed})`);
 
   // The visitor leaves for good: descent never draws again.
-  scrollTo(2);
+  scrollTo(3);
   settle();
   const before = draws.length;
   page.run(9000);
@@ -675,11 +678,11 @@ test('a hidden tab or an off-screen story pauses the playback, and the playback 
 
 test('the wheel help: a stage at rest, the direction of the wheel, and where the page rests now', () => {
   assert.equal(STORY_REST_TOLERANCE, 0.02);
-  assert.deepEqual([0, 1.01, 0.5, 4.999, 5, 5.03, 5.5, -0.01, 6, NaN].map(storyRestAt), [0, 1, -1, 5, 5, -1, -1, 0, -1, -1], 'only a position at a snap point of a stage is at rest');
+  assert.deepEqual([0, 1.01, 0.5, 4.999, 5, 5.03, 5.5, -0.01, 7, NaN].map(storyRestAt), [0, 1, -1, 5, 5, -1, -1, 0, -1, -1], 'only a position at a snap point of a stage is at rest');
   assert.equal(storyWheelTarget(0, 1, 0), 1, 'a wheel down that snapped back to stage 0 moves to stage 1');
   assert.equal(storyWheelTarget(3, -1, 3), 2, 'a wheel up that snapped back to stage 3 moves to stage 2');
   assert.equal(storyWheelTarget(0, -1, 0), -1, 'no stage above the first stage');
-  assert.equal(storyWheelTarget(5, 1, 5), -1, 'no stage below the last stage: the page scrolls on');
+  assert.equal(storyWheelTarget(6, 1, 6), -1, 'no stage below the last stage: the page scrolls on');
   assert.equal(storyWheelTarget(2, 1, 3), -1, 'the wheel moved the page already: no help');
   assert.equal(storyWheelTarget(2, 1, 2.3), -1, 'the page is not at rest yet');
   assert.equal(storyWheelTarget(2, 1, 5.6), -1, 'in the tail');
@@ -748,20 +751,20 @@ test('the wheel help does nothing when the wheel moved the page, at the ends of 
   top.page.fire('window:wheel', { deltaY: -100 });
   top.scrollTo(0);
   top.settle();
-  const last = startPinned({ stage: 5 });
+  const last = startPinned({ stage: 6 });
   last.page.fire('window:wheel', { deltaY: 100 });
-  last.scrollTo(5);
+  last.scrollTo(6);
   last.settle();
-  last.scrollTo(5.125);
+  last.scrollTo(6.125);
   last.settle();
   assert.deepEqual([top.page.scrolls, last.page.scrolls], [[], []]);
 
   // A wheel that began in the tail below the last stage, and a wheel that does not scroll the page.
-  const tail = startPinned({ stage: 5 });
-  tail.scrollTo(5.5);
+  const tail = startPinned({ stage: 6 });
+  tail.scrollTo(6.5);
   tail.settle();
   tail.page.fire('window:wheel', { deltaY: -100 });
-  tail.scrollTo(5);
+  tail.scrollTo(6);
   tail.settle();
   const keys = startPinned({ stage: 2 });
   keys.page.fire('window:wheel', { deltaY: 100, ctrlKey: true });
@@ -770,6 +773,18 @@ test('the wheel help does nothing when the wheel moved the page, at the ends of 
   keys.scrollTo(2);
   keys.settle();
   assert.deepEqual([tail.page.scrolls, keys.page.scrolls], [[], []]);
+
+  // A wheel over the list of the map data scrolls that list: it is not a wheel of the story.
+  const list = startPinned({ stage: 1 });
+  list.page.fire('window:wheel', { deltaY: 100, target: { closest: selector => (selector === '.story-data__panel' ? {} : null) } });
+  list.scrollTo(1);
+  list.settle();
+  assert.deepEqual(list.page.scrolls, []);
+  const outside = startPinned({ stage: 1 });
+  outside.page.fire('window:wheel', { deltaY: 100, target: { closest: () => null } });
+  outside.scrollTo(1);
+  outside.settle();
+  assert.deepEqual(outside.page.scrolls, [{ top: 800, behavior: 'smooth' }], 'a wheel on the art is a wheel of the story');
 
   // An off-screen story is not a wheel target.
   const away = startPinned({ stage: 2 });
@@ -782,52 +797,52 @@ test('the wheel help does nothing when the wheel moved the page, at the ends of 
 
 test('the rail fills the segment of the current stage with its playback, and the earlier segments are full', () => {
   const { page, draws, filled, scrollTo, settle } = startPinned();
-  assert.deepEqual(filled(), [0, 0, 0, 0, 0, 0], 'empty before the first frame');
+  assert.deepEqual(filled(), [0, 0, 0, 0, 0, 0, 0], 'empty before the first frame');
   page.run(16);
-  assert.deepEqual(filled(), [0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(filled(), [0, 0, 0, 0, 0, 0, 0]);
   for (const ms of [800, 1600, 2400]) {
     page.run(800);
     const local = draws[draws.length - 1].frame.local;
-    assert.deepEqual(filled(), [local, 0, 0, 0, 0, 0], `orbit at ${ms} ms`);
+    assert.deepEqual(filled(), [local, 0, 0, 0, 0, 0, 0], `orbit at ${ms} ms`);
   }
   page.run(3000);
-  assert.deepEqual(filled(), [1, 0, 0, 0, 0, 0], 'full at the end');
+  assert.deepEqual(filled(), [1, 0, 0, 0, 0, 0, 0], 'full at the end');
 
-  scrollTo(2);
-  assert.deepEqual(filled(), [1, 1, 0, 0, 0, 0], 'a forward move: the new stage starts empty');
+  scrollTo(3);
+  assert.deepEqual(filled(), [1, 1, 1, 0, 0, 0, 0], 'a forward move: the new stage starts empty');
   settle();
   page.run(4000);
   const local = draws[draws.length - 1].frame.local;
   assert.ok(local > 0.4 && local < 0.6);
-  assert.deepEqual(filled(), [1, 1, local, 0, 0, 0], 'the current segment fills, the earlier ones are full');
+  assert.deepEqual(filled(), [1, 1, 1, local, 0, 0, 0], 'the current segment fills, the earlier ones are full');
   page.run(5000);
-  assert.deepEqual(filled(), [1, 1, 1, 0, 0, 0]);
+  assert.deepEqual(filled(), [1, 1, 1, 1, 0, 0, 0]);
 
-  scrollTo(1);
-  assert.deepEqual(filled(), [1, 1, 0, 0, 0, 0], 'a move back: the stage behind is full, the stage that was left is empty');
+  scrollTo(2);
+  assert.deepEqual(filled(), [1, 1, 1, 0, 0, 0, 0], 'a move back: the stage behind is full, the stage that was left is empty');
   settle();
-  scrollTo(5);
+  scrollTo(6);
   settle();
-  assert.deepEqual(filled(), [1, 1, 1, 1, 1, 1], 'live has no time: its segment is full on arrival');
+  assert.deepEqual(filled(), [1, 1, 1, 1, 1, 1, 1], 'live has no time: its segment is full on arrival');
   assert.equal(page.queue.length, 0);
 });
 
 test('the pinned stage draws once and rests on live; the scroll alone changes nothing on a stage at rest', () => {
-  const { page, draws, scrollTo } = startPinned({ stage: 5 });
+  const { page, draws, scrollTo } = startPinned({ stage: 6 });
   page.run(16);
   assert.equal(draws.length, 1);
   assert.deepEqual([draws[0].id, draws[0].frame.local, draws[0].frame.p], ['live', 1, 1], 'live has no time: local is 1');
   assert.equal(page.queue.length, 0, 'and it needs no frame');
-  scrollTo(5);
+  scrollTo(6);
   assert.equal(draws.length, 1, 'a scroll event that does not move the story draws nothing');
-  scrollTo(5.3);
+  scrollTo(6.3);
   assert.equal(draws.length, 1, 'a scroll inside the stage draws nothing');
   assert.equal(page.views.length, 1, 'React state changed once, from the first stage to the stage under the viewport');
-  assert.deepEqual(plain(page.views[0]), { index: 5, caption: 0 });
+  assert.deepEqual(plain(page.views[0]), { index: 6, caption: 0 });
 });
 
 test('an animated renderer draws on each frame only while the stage is on screen and the tab is visible', () => {
-  const { page, draws, section } = startPinned({ stage: 5 });
+  const { page, draws, section } = startPinned({ stage: 6 });
   page.renderers.live.animated = true;
   page.flush(0);
   page.flush(16);
@@ -856,7 +871,7 @@ test('an animated renderer draws on each frame only while the stage is on screen
 });
 
 test('requestDraw: one draw of the current chapter on the next animation frame, and calls in one frame make one draw', () => {
-  const { page, draws, frames, scrollTo, settle } = startPinned({ stage: 5 });
+  const { page, draws, frames, scrollTo, settle } = startPinned({ stage: 6 });
   page.flush(16);
   assert.equal(draws.length, 1);
   const { requestDraw } = frames[0];
@@ -876,7 +891,7 @@ test('requestDraw: one draw of the current chapter on the next animation frame, 
   assert.equal(page.queue.length, 0);
 
   // It is one function for the whole stage, and it draws the chapter that is current.
-  scrollTo(2);
+  scrollTo(3);
   settle();
   assert.equal(frames[frames.length - 1].requestDraw, requestDraw, 'the same function in each frame');
   const before = draws.length;
@@ -884,11 +899,11 @@ test('requestDraw: one draw of the current chapter on the next animation frame, 
   page.run(16);
   assert.equal(draws.length, before + 1);
   assert.equal(draws[draws.length - 1].id, 'rock', 'the current chapter, not the chapter of the frame that gave the function');
-  near(draws[draws.length - 1].frame.p, 0.5, 'with the progress of the page now');
+  near(draws[draws.length - 1].frame.p, 4 / 7, 'with the progress of the page now');
 });
 
 test('requestDraw draws nothing while the stage is off screen or the tab is hidden, and the stage keeps the request', () => {
-  const { page, draws, frames, section } = startPinned({ stage: 5 });
+  const { page, draws, frames, section } = startPinned({ stage: 6 });
   page.flush(0);
   const { requestDraw } = frames[0];
   const watcher = page.observers.find(observer => observer.target === section);
@@ -918,7 +933,7 @@ test('requestDraw draws nothing while the stage is off screen or the tab is hidd
 });
 
 test('requestDraw inside draw() gives one more draw on the following frame, and nothing after the stage unmounts', () => {
-  const { page, draws, cleanup } = startPinned({ stage: 5 });
+  const { page, draws, cleanup } = startPinned({ stage: 6 });
   let asks = 1;
   let keep = null;
   page.renderers.live = {
@@ -943,7 +958,7 @@ test('requestDraw inside draw() gives one more draw on the following frame, and 
 });
 
 test('animated is read after each draw: a renderer that turns it on in draw() runs on the next frame with no event', () => {
-  const { page, draws, scrollTo, settle } = startPinned({ stage: 5 });
+  const { page, draws, scrollTo, settle } = startPinned({ stage: 6 });
   const entry = {
     count: 0,
     animated: false,
@@ -965,7 +980,7 @@ test('animated is read after each draw: a renderer that turns it on in draw() ru
   let on = false;
   const second = { get animated() { return on; }, draw() { draws.push('getter'); on = !on && draws.length < 8; } };
   page.renderers.rock = second;
-  scrollTo(2);
+  scrollTo(3);
   assert.equal(page.queue.length, 1, 'the getter was true after the first draw');
   page.flush(64);
   assert.equal(page.queue.length, 0, 'and false after the second');
@@ -980,18 +995,18 @@ test('the layer of the live chapter mounts when the scroll settles on it and unm
   scrollTo(2);
   settle();
   assert.equal(mounted.length, 0, 'no mount before the chapter');
-  scrollTo(5);
+  scrollTo(6);
   assert.equal(mounted.length, 0, 'no mount while the scroll moves');
   settle();
   assert.deepEqual([mounted.length, unmounted.length], [1, 0], 'one mount when the scroll settles');
   assert.equal(mounted[0], layer, 'the layer is the element of the stage');
-  scrollTo(5.4);
+  scrollTo(6.4);
   settle();
   assert.deepEqual([mounted.length, unmounted.length], [1, 0], 'a scroll in the tail below the last stage keeps the layer');
   scrollTo(2);
   assert.deepEqual([mounted.length, unmounted.length], [1, 1], 'one unmount on the way out');
   settle();
-  scrollTo(5);
+  scrollTo(6);
   settle();
   cleanup();
   assert.deepEqual([mounted.length, unmounted.length], [2, 2], 'the unmount also runs when the story leaves the page');
@@ -1000,13 +1015,13 @@ test('the layer of the live chapter mounts when the scroll settles on it and unm
 test('a renderer that throws is reported once and the story goes on', () => {
   const { page, draws, ctx, scrollTo, settle } = startPinned();
   page.renderers.rock.draw = () => { throw new Error('broken art'); };
-  scrollTo(2);
+  scrollTo(3);
   settle();
   page.run(500);
   assert.equal(page.errors.length, 1, 'one report in the console');
   assert.ok(ctx.restores > 10, 'the stage drew on many frames');
   assert.equal(ctx.restores, ctx.calls.length, 'the context state is restored after each draw');
-  scrollTo(3);
+  scrollTo(4);
   assert.equal(draws[draws.length - 1].id, 'grid', 'the next chapter draws');
 });
 
@@ -1043,7 +1058,7 @@ test('the rail fades out and the skip link hides when the stage starts to leave,
     });
   }
   // The whole pinned range, from the first to the last pixel: nothing is written.
-  for (const position of [0.3, 1, 2.5, 3.9, 4.8, 5]) {
+  for (const position of [0.3, 1, 2.5, 3.9, 4.8, 6]) {
     scrollTo(position);
     assert.deepEqual([clear(skip), clear(rail)], [['', ''], ['', '']], `pinned at ${position}`);
   }
@@ -1069,7 +1084,7 @@ test('the rail fades out and the skip link hides when the stage starts to leave,
   // The visitor scrolls back up: both come back.
   leave(80);
   assert.deepEqual([clear(skip), clear(rail)], [['', ''], ['0.5', '']]);
-  scrollTo(5);
+  scrollTo(6);
   assert.deepEqual([clear(skip), clear(rail)], [['', ''], ['', '']], 'back in the pinned range');
   leave(100);
   cleanup();
@@ -1139,7 +1154,7 @@ test('the captions are real text in reading order, and the live links are real l
   assert.ok(orbit.some(node => node.type === page.get('StoryPpm') && node.props.on === true), 'the ppm line is its own component');
   assert.ok(!nodes(StoryWords({ chapter: chapters[1], on: true, caption: 0, onNavigate: null })).some(node => node.type === page.get('StoryPpm')), 'only the orbit has it');
 
-  const links = (on) => nodes(StoryWords({ chapter: chapters[5], on, caption: 0, onNavigate: null })).filter(node => node.type === 'a');
+  const links = (on) => nodes(StoryWords({ chapter: chapters[6], on, caption: 0, onNavigate: null })).filter(node => node.type === 'a');
   assert.deepEqual(links(true).map(link => [link.props.href, link.children[0]]),
     [['./simulator.html', 'Open the simulator'], ['./index.html#research', 'Read my research']]);
   assert.ok(links(true).every(link => link.props.tabIndex === undefined), 'the links are in the tab order while the chapter is on');
@@ -1169,7 +1184,7 @@ test('the skip control is a real link to #research and a plain click uses the pa
   }
 });
 
-test('the pinned story is 6 screens tall, one for each stage; reduced motion gives six static frames drawn once with local = 1', () => {
+test('the pinned story is 7 screens tall, one for each stage; reduced motion gives seven static frames drawn once with local = 1', () => {
   const pinned = fakePage();
   pinned.refs.push({});
   const pinnedSection = pinned.get('StoryStage')({});
@@ -1194,10 +1209,10 @@ test('the pinned story is 6 screens tall, one for each stage; reduced motion giv
   const canvas = { width: 0, height: 0, getContext: () => ctx };
   for (const id of IDS) page.renderers[id] = { draw: (c, frame) => draws.push({ id, frame: plain(frame) }) };
   page.refs.push({ clientWidth: 1000, clientHeight: 562.5 }, canvas);
-  const frame = StoryFrame({ chapter: frames[2].props.chapter, onNavigate: null });
+  const frame = StoryFrame({ chapter: frames[3].props.chapter, onNavigate: null });
   page.effects.pop()();
   assert.equal(draws.length, 1, 'drawn once');
-  assert.deepEqual(draws[0], { id: 'rock', frame: { local: 1, p: 0.5, width: 1000, height: 562.5, dpr: 2, time: 0, reducedMotion: true } });
+  assert.deepEqual(draws[0], { id: 'rock', frame: { local: 1, p: 4 / 7, width: 1000, height: 562.5, dpr: 2, time: 0, reducedMotion: true } });
   assert.equal(frame.props.role, 'group');
   assert.equal(frame.props['aria-label'], 'Into the rock');
   assert.ok(nodes(frame).some(node => node.type === 'canvas' && node.props['aria-hidden'] === 'true'), 'the canvas is hidden from assistive technology');
@@ -1211,7 +1226,7 @@ test('the pinned story is 6 screens tall, one for each stage; reduced motion giv
 const snapRanges = (areas, viewport) => areas.map(({ top, height }) => [top, height > viewport ? top + height - viewport : top]);
 const isSnapOffset = (ranges, offset) => ranges.some(([from, to]) => offset >= from && offset <= to);
 
-test('the scroll steps are the snap points: six boxes of one screen, and the last box is as tall as the rest of the page', () => {
+test('the scroll steps are the snap points: seven boxes of one screen, and the last box is as tall as the rest of the page', () => {
   const css = read('colors_and_type.css').replace(/\r\n/g, '\n');
   const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const block = (text, open) => {
@@ -1245,7 +1260,7 @@ test('the scroll steps are the snap points: six boxes of one screen, and the las
   assert.match(step, /scroll-snap-align: start;/);
   assert.match(step, /scroll-snap-stop: always;/, 'a fast fling stops at each stage');
   assert.match(block(code, '.story-steps {'), /position: absolute;[\s\S]*inset: 0;[\s\S]*pointer-events: none;/);
-  assert.match(block(code, '.story--pinned {'), /var\(--story-screens, 6\) \* 100svh/, 'the story is 6 screens tall');
+  assert.match(block(code, '.story--pinned {'), /var\(--story-screens, 7\) \* 100svh/, 'the story is 7 screens tall');
 
   // The snap is mandatory and it is on the page scroll only when a pinned story is in the page.
   const guard = '@supports (overflow: clip) and selector(:has(*)) {';
@@ -1262,22 +1277,22 @@ test('the scroll steps are the snap points: six boxes of one screen, and the las
 
   // The model: nothing after the last stage snaps, and the stages in the story do.
   const viewport = 800;
-  const areas = IDS.map((id, i) => ({ top: i * viewport, height: i === 5 ? viewport + tall : viewport }));
+  const areas = IDS.map((id, i) => ({ top: i * viewport, height: i === 6 ? viewport + tall : viewport }));
   const ranges = snapRanges(areas, viewport);
-  for (let stage = 0; stage < 6; stage += 1) assert.ok(isSnapOffset(ranges, stage * viewport), `stage ${stage} is a snap offset`);
+  for (let stage = 0; stage < 7; stage += 1) assert.ok(isSnapOffset(ranges, stage * viewport), `stage ${stage} is a snap offset`);
   for (const offset of [1, 100, 399, 400, 799, 801, 1300, 2399, 3100, 3999]) assert.ok(!isSnapOffset(ranges, offset), `${offset}: between two stages the page does not rest`);
   for (const pageHeight of [9300, 20000, 32000]) {
-    for (let offset = 5 * viewport; offset <= pageHeight - viewport; offset += 37) {
+    for (let offset = 6 * viewport; offset <= pageHeight - viewport; offset += 37) {
       assert.ok(isSnapOffset(ranges, offset), `offset ${offset} of a page of ${pageHeight} px is free: no snap after the last stage`);
     }
   }
-  assert.ok(isSnapOffset(ranges, 5 * viewport + 130), 'a hash target in the first section below the story is a valid offset, so the skip link and the header links land');
+  assert.ok(isSnapOffset(ranges, 6 * viewport + 130), 'a hash target in the first section below the story is a valid offset, so the skip link and the header links land');
 });
 
 test('requestDraw in a static frame paints that canvas again on the next animation frame; calls in one frame make one paint', () => {
   const page = fakePage({ reduced: true });
   const StoryFrame = page.get('StoryFrame');
-  const chapter = plain(STORY_CHAPTERS[2]);
+  const chapter = plain(STORY_CHAPTERS[3]);
   const painted = [];
   const ctx = { setTransform() {}, clearRect() {}, save() {}, restore() {} };
   const canvas = { width: 0, height: 0, getContext: () => ctx };
@@ -1298,7 +1313,7 @@ test('requestDraw in a static frame paints that canvas again on the next animati
   page.flush(16);
   assert.equal(painted.length, 2, 'the two calls make one paint');
   assert.equal(canvas.width, 2000, 'the canvas has its size again, so the old picture is gone');
-  assert.deepEqual(plain(painted[1].frame), { local: 1, p: 0.5, width: 1000, height: 562.5, dpr: 2, time: 0, reducedMotion: true });
+  assert.deepEqual(plain(painted[1].frame), { local: 1, p: 4 / 7, width: 1000, height: 562.5, dpr: 2, time: 0, reducedMotion: true });
   assert.equal(painted[1].frame.requestDraw, requestDraw, 'the same function in each paint');
   page.flush(32);
   assert.equal(painted.length, 2, 'no more paints');
@@ -1315,10 +1330,10 @@ test('requestDraw in a static frame paints that canvas again on the next animati
 test('no renderer uses a synthetic event, and the renderers and the stage use requestDraw', () => {
   const bundle = read('bundle.js');
   assert.ok(bundle.includes('requestDraw'), 'build the current source before testing');
-  for (const file of ['StoryStage.jsx', 'StoryEarth.jsx', 'StoryRock.jsx', 'StoryBlock.jsx']) {
+  for (const file of ['StoryStage.jsx', 'StoryEarth.jsx', 'StoryFields.jsx', 'StoryRock.jsx', 'StoryBlock.jsx']) {
     assert.doesNotMatch(read(file), /dispatchEvent|new Event\(/, `${file} sends no synthetic event`);
   }
-  for (const file of ['StoryEarth.jsx', 'StoryRock.jsx', 'StoryBlock.jsx']) {
+  for (const file of ['StoryEarth.jsx', 'StoryFields.jsx', 'StoryRock.jsx', 'StoryBlock.jsx']) {
     assert.match(read(file), /requestDraw/, `${file} asks the stage for a draw`);
   }
   assert.match(read('StoryStage.jsx'), /requestDraw\(\) asks for one more draw/, 'the API comment describes it');

@@ -9,13 +9,13 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const between = (text, from, to) => text.slice(text.indexOf(from), text.indexOf(to));
 
 const api = new Function(between(read('StoryEarth.jsx'), '// ---- story earth helpers', '// ---- end story earth helpers') + `
-return { STORY_EARTH_TARGET, STORY_EARTH_VIEW0, STORY_EARTH_VIEW1, STORY_EARTH_BOX, STORY_EARTH_HOLD, STORY_EARTH_ZOOM,
+return { STORY_EARTH_TARGET, STORY_EARTH_VIEW0, STORY_EARTH_VIEW1, STORY_EARTH_BOX, STORY_EARTH_HOLD, STORY_EARTH_ZOOM, STORY_EARTH_FADE,
   storyEarthDecode, storyEarthBuildRing, storyEarthView, storyEarthProject, storyEarthVisible, storyEarthClipRing,
-  storyEarthMercY, storyEarthFit, storyEarthMapPoint, storyEarthLayout, storyEarthOrbitCamera, storyEarthDescentCamera, storyEarthTint };`)();
+  storyEarthMercY, storyEarthFit, storyEarthMapPoint, storyEarthLayout, storyEarthOrbitCamera, storyEarthFieldsCamera, storyEarthDescentCamera, storyEarthTint };`)();
 const {
-  STORY_EARTH_TARGET, STORY_EARTH_VIEW0, STORY_EARTH_VIEW1, STORY_EARTH_BOX, STORY_EARTH_HOLD, STORY_EARTH_ZOOM,
+  STORY_EARTH_TARGET, STORY_EARTH_VIEW0, STORY_EARTH_VIEW1, STORY_EARTH_BOX, STORY_EARTH_HOLD, STORY_EARTH_ZOOM, STORY_EARTH_FADE,
   storyEarthDecode, storyEarthBuildRing, storyEarthView, storyEarthProject, storyEarthVisible, storyEarthClipRing,
-  storyEarthMercY, storyEarthFit, storyEarthMapPoint, storyEarthLayout, storyEarthOrbitCamera, storyEarthDescentCamera, storyEarthTint,
+  storyEarthMercY, storyEarthFit, storyEarthMapPoint, storyEarthLayout, storyEarthOrbitCamera, storyEarthFieldsCamera, storyEarthDescentCamera, storyEarthTint,
 } = api;
 
 const RAD = Math.PI / 180;
@@ -395,12 +395,12 @@ test('orbit camera: local 0 is the first frame, local 1 is the card, the globe n
   }
 });
 
-test('descent camera: it starts where orbit ends, zooms, shrinks into the inset, and then holds', () => {
+test('descent camera: it starts where fields ends, zooms, shrinks into the inset, and then holds', () => {
   for (const [width, height] of SIZES) {
     const layout = storyEarthLayout(width, height);
     const label = `${width} by ${height}`;
     const { card, inset, maps } = layout;
-    assert.deepEqual(plain(storyEarthDescentCamera(0, layout).lens), plain(storyEarthOrbitCamera(1, layout).lens), `${label}: no jump between the chapters`);
+    assert.deepEqual(plain(storyEarthDescentCamera(0, layout).lens), plain(storyEarthFieldsCamera(1, layout).lens), `${label}: no jump between the chapters`);
     const zoomed = storyEarthDescentCamera(STORY_EARTH_ZOOM, layout);
     assert.deepEqual(plain(zoomed.lens), { x: card.x, y: card.y, w: card.w, h: card.h, r: card.r, S: maps.b, mx: card.cx, my: card.cy }, `${label}: the card is zoomed in`);
     assert.equal(zoomed.shrink, 0);
@@ -556,25 +556,28 @@ const logContext = () => {
   return { ctx, calls };
 };
 
-test('boundary orbit to descent: the first frame of descent is the last frame of orbit, before and after the land arrives', async () => {
+// The chain orbit, fields, descent is tested in tests/story-fields.test.js, where the fields renderer is loaded.
+// Here: the label of the blue marker. It is "North Sea" in orbit, "Example site" at the start of descent (the large map
+// of the stage fields shows real projects), and "North Sea" again when the layers are gone.
+test('the blue marker: "North Sea" in orbit, "Example site" at the start of descent, "North Sea" again after the layers fade', async () => {
   const earth = loadEarth();
-  const sizes = [[1280, 800], [1920, 1080], [1024, 768], [768, 1024], [390, 844]];
-  const compare = label => {
-    for (const [width, height] of sizes) {
-      const last = logContext();
-      earth.renderers.orbit.draw(last.ctx, earthFrame({ local: 1, width, height }));
-      const first = logContext();
-      earth.renderers.descent.draw(first.ctx, earthFrame({ local: 0, width, height }));
-      assert.ok(last.calls.length > 10, 'the map card is drawn');
-      assert.deepEqual(first.calls, last.calls, `${label}, ${width}x${height}: the same picture`);
+  const words = (name, local, width = 1280, height = 800) => {
+    const log = logContext();
+    earth.renderers[name].draw(log.ctx, earthFrame({ local, width, height }));
+    return log.calls.filter(call => call[0] === 'fillText').map(call => call[1]);
+  };
+  const check = label => {
+    for (const [width, height] of [[1280, 800], [390, 844]]) {
+      assert.deepEqual(words('orbit', 1, width, height), ['North Sea'], `${label}: orbit`);
+      assert.deepEqual(words('descent', 0, width, height), ['Example site'], `${label}: the start of descent`);
+      assert.deepEqual(words('descent', STORY_EARTH_FADE / 2, width, height), ['Example site', 'North Sea'], `${label}: halfway through the fade the two labels cross`);
+      assert.deepEqual(words('descent', STORY_EARTH_FADE, width, height), ['North Sea'], `${label}: the end of the fade`);
+      assert.ok(words('descent', 0.5, width, height).includes('North Sea') && !words('descent', 0.5, width, height).includes('Example site'));
     }
   };
-  compare('no land yet');
+  check('no land yet');
   earth.release();
   await settle();
-  compare('with the land');
-  const texts = logContext();
-  earth.renderers.descent.draw(texts.ctx, earthFrame({ local: 0 }));
-  assert.ok(texts.calls.some(call => call[0] === 'fillText' && call[1] === 'North Sea'), 'the marker with its label');
+  check('with the land');
   assert.deepEqual(earth.errors, []);
 });

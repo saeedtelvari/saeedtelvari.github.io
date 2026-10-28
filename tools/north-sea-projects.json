@@ -1,0 +1,166 @@
+{
+  "_note": [
+    "Input table for tools/north-sea-map.js. Edit a status here, then run: node tools/north-sea-map.js",
+    "Show project names only. Never write the name of a company in this file, not even in a URL.",
+    "group 1: project in a depleted gas field. group 2: pilot or study. group 3: project in a saline aquifer.",
+    "points: [lat, lon] pairs from the research file. The marker stands at the mean of the points.",
+    "outlines.nsta: exact FIELDNAME values of the NSTA layer. outlines.nlog: FIELD_CODE values of the NLOG layer.",
+    "year: the main year of the status (the target start, the start of operation, or the year of the last milestone). null if none."
+  ],
+  "statusDate": "28 Oct 2026",
+  "groups": [
+    { "id": 1, "name": "Project in a depleted gas field", "list": "Projects in depleted gas fields", "short": "Depleted gas field" },
+    { "id": 2, "name": "Pilot or study", "list": "Pilots and studies", "short": "Pilot or study" },
+    { "id": 3, "name": "Project in a saline aquifer", "list": "Projects in saline aquifers", "short": "Saline aquifer" },
+    { "id": 4, "name": "Gas field that no longer produces", "list": "Gas fields that no longer produce", "short": "Ceased gas field" }
+  ],
+  "projects": [
+    {
+      "id": "hynet", "name": "HyNet / Liverpool Bay CCS", "short": "HyNet", "country": "UK", "group": 1,
+      "status": "Storage permits granted on 22 Apr 2025. In construction. First injection from mid-2028.", "year": 2028,
+      "points": [[53.5674, -3.4524], [53.6451, -3.4736], [53.6314, -3.1723]],
+      "outlines": { "nsta": ["HAMILTON", "HAMILTON NORTH", "LENNOX (gas)"] },
+      "source": "https://nstauthority.co.uk/news-publications/2bn-hynet-carbon-storage-project-will-provide-massive-jobs-and-net-zero-boost"
+    },
+    {
+      "id": "morecambe", "name": "Morecambe Net Zero", "short": "Morecambe", "country": "UK", "group": 1,
+      "status": "Storage licence CS010 (2023). Assess phase from 9 Jun 2026. Storage around 2030. The gas fields still produce.", "year": 2030,
+      "points": [[53.9612, -3.6746], [53.8691, -3.5967]],
+      "outlines": { "nsta": ["NORTH MORECAMBE", "SOUTH MORECAMBE"] },
+      "source": "https://www.nstauthority.co.uk/the-move-to-net-zero/projects/Barrow-in-Furness/"
+    },
+    {
+      "id": "viking", "name": "Viking CCS", "short": "Viking", "country": "UK", "group": 1,
+      "status": "Storage licence CS005 (2021). Government development funding in Jul 2026. No final investment decision.", "year": 2026,
+      "points": [[53.3987, 2.2781]],
+      "outlines": { "nsta": ["VIKING A", "VIKING B", "VIKING C", "VIKING D", "VIKING E", "VICTOR"] },
+      "source": "https://www.nstauthority.co.uk/regulatory-information/carbon-storage/carbon-storage-public-register/"
+    },
+    {
+      "id": "poseidon", "name": "Poseidon", "short": "Poseidon", "country": "UK", "group": 1,
+      "status": "Storage licence CS009 (2023). Injection test at the Leman field in 2025. Target start 2029.", "year": 2029,
+      "points": [[53.0635, 2.1927]],
+      "outlines": { "nsta": ["LEMAN"] },
+      "source": "https://www.nstauthority.co.uk/regulatory-information/carbon-storage/carbon-storage-public-register/"
+    },
+    {
+      "id": "orion", "name": "Orion", "short": "Orion", "country": "UK", "group": 1,
+      "status": "Storage licences CS017 and CS018 (2023). Target start 2031.", "year": 2031,
+      "points": [[53.5996, 0.7943], [53.6547, 0.6061], [53.7215, 1.1132]],
+      "outlines": { "nsta": ["AMETHYST EAST", "AMETHYST WEST", "WEST SOLE"] },
+      "source": "https://www.nstauthority.co.uk/regulatory-information/carbon-storage/carbon-storage-public-register/"
+    },
+    {
+      "id": "bacton", "name": "Bacton CCS", "short": "Bacton", "country": "UK", "group": 1,
+      "status": "Storage licence CS008 (2023). Appraisal well in 2025. Injection by 2030.", "year": 2030,
+      "points": [[53.0219, 1.7720]],
+      "outlines": { "nsta": ["HEWETT"] },
+      "source": "https://www.nstauthority.co.uk/the-move-to-net-zero/projects/bacton/"
+    },
+    {
+      "id": "camelot", "name": "Camelot CCS", "short": "Camelot", "tag": "withdrawing (2026)", "country": "UK", "group": 1,
+      "status": "Withdrawing (2026). The licence holder plans to give up storage licence CS019 (2023) in Jun 2026.", "year": 2026,
+      "points": [[52.9586, 2.1403], [52.9669, 2.2310], [52.9398, 2.1559]],
+      "outlines": { "nsta": ["CAMELOT NORTH", "CAMELOT NORTH EAST", "CAMELOT CENTRAL SOUTH"] },
+      "source": "https://www.nstauthority.co.uk/regulatory-information/carbon-storage/carbon-storage-public-register/"
+    },
+    {
+      "id": "porthos", "name": "Porthos", "short": "Porthos", "country": "NL", "group": 1,
+      "status": "Storage licences in force. Final investment decision in 2023. In construction. Start in the second half of 2027.", "year": 2027,
+      "points": [[52.1275, 3.9444], [52.1396, 3.8989], [52.1668, 3.9423]],
+      "outlines": { "nlog": ["P18-2", "P18-4", "P18-6"] },
+      "source": "https://www.porthosco2.nl/en/"
+    },
+    {
+      "id": "aramis", "name": "Aramis", "short": "Aramis", "country": "NL", "group": 1,
+      "status": "Permits granted in 2025. An appeal is pending. No final investment decision (Sep 2026). Start 2028 to 2030.", "year": 2028,
+      "points": [[53.2811, 3.6298], [53.7289, 4.0888], [53.4396, 4.2225]],
+      "outlines": { "nlog": ["K14-FA", "L04-A"] },
+      "source": "https://aramis-ccs.com/news"
+    },
+    {
+      "id": "q16fa", "name": "Q16-FA", "short": "Q16-FA", "country": "NL", "group": 1,
+      "status": "A storage licence is applied for. The project has no name yet.", "year": null,
+      "points": [[52.0440, 4.0440]],
+      "outlines": { "nlog": ["Q16-FA"] },
+      "source": "https://www.nlog.nl/"
+    },
+    {
+      "id": "l09ff", "name": "L09-FF", "short": "L09-FF", "country": "NL", "group": 1,
+      "status": "A storage licence is applied for. The project has no name yet.", "year": null,
+      "points": [[53.6090, 4.9552]],
+      "outlines": { "nlog": ["L09-FF"] },
+      "source": "https://www.nlog.nl/"
+    },
+    {
+      "id": "bifrost", "name": "Bifrost", "short": "Bifrost", "country": "DK", "group": 1,
+      "status": "Exploration licence granted in 2023. No storage permit yet. Target start 2030.", "year": 2030,
+      "points": [[56.3441, 4.2719]],
+      "outlines": {},
+      "source": "https://offshore.dtu.dk/research/co2-storage/bifrost-an-innovative-co2-storage-project"
+    },
+    {
+      "id": "k12b", "name": "K12-B", "short": "K12-B", "country": "NL", "group": 2,
+      "status": "CO₂ injection pilot from 2004.", "year": 2004,
+      "points": [[53.3424, 3.8856]],
+      "outlines": { "nlog": ["K12-B"] },
+      "source": "https://repository.tudelft.nl/record/uuid:ea9253d0-9797-4976-beb1-31e81d7af5a5"
+    },
+    {
+      "id": "peterhead", "name": "Peterhead / Goldeneye", "short": "Peterhead", "country": "UK", "group": 2,
+      "status": "Study. Cancelled in 2015.", "year": 2015,
+      "points": [[58.0028, -0.3681]],
+      "outlines": { "nsta": ["GOLDENEYE"] },
+      "source": "https://www.nstauthority.co.uk/the-move-to-net-zero/carbon-capture-and-storage/"
+    },
+    {
+      "id": "frigg", "name": "Frigg", "short": "Frigg", "country": "NO", "group": 2,
+      "status": "Published studies only.", "year": null,
+      "points": [[59.918, 2.124]],
+      "outlines": {},
+      "source": "https://www.sodir.no/en/whats-new/publications/co2-atlases/co2-atlas-for-the-norwegian-continental-shelf/1-introduction/"
+    },
+    {
+      "id": "heimdal", "name": "Heimdal", "short": "Heimdal", "country": "NO", "group": 2,
+      "status": "Published studies only.", "year": null,
+      "points": [[59.585, 2.223]],
+      "outlines": {},
+      "source": "https://www.sodir.no/en/whats-new/publications/co2-atlases/co2-atlas-for-the-norwegian-continental-shelf/1-introduction/"
+    },
+    {
+      "id": "endurance", "name": "Endurance", "short": "Endurance", "country": "UK", "group": 3,
+      "status": "Storage permit granted in Dec 2024. In construction. First injection 2027 to 2028.", "year": 2027,
+      "points": [[54.2048, 1.0413]],
+      "outlines": {},
+      "source": "https://www.nstauthority.co.uk/news-publications/nsta-awards-endurance-first-ever-uk-carbon-storage-permit"
+    },
+    {
+      "id": "acorn", "name": "Acorn", "short": "Acorn", "country": "UK", "group": 3,
+      "status": "Storage licence CS003 (2018). Development funding in 2025. No final investment decision.", "year": 2025,
+      "points": [[57.9919, -0.3845]],
+      "outlines": {},
+      "source": "https://www.nstauthority.co.uk/regulatory-information/carbon-storage/carbon-storage-public-register/"
+    },
+    {
+      "id": "northern-lights", "name": "Northern Lights", "short": "Northern Lights", "country": "NO", "group": 3,
+      "status": "Injecting since 2025.", "year": 2025,
+      "points": [[60.458, 3.640]],
+      "outlines": {},
+      "source": "https://www.sodir.no/en/whats-new/publications/reports/the-shelf/the-shelf-in-2025/new-industries-on-the-shelf/"
+    },
+    {
+      "id": "sleipner", "name": "Sleipner", "short": "Sleipner", "country": "NO", "group": 3,
+      "status": "Injecting since 1996.", "year": 1996,
+      "points": [[58.388, 1.939]],
+      "outlines": {},
+      "source": "https://www.sodir.no/en/whats-new/publications/co2-atlases/co2-atlas-for-the-norwegian-continental-shelf/1-introduction/"
+    },
+    {
+      "id": "smeaheia", "name": "Smeaheia", "short": "Smeaheia", "country": "NO", "group": 3,
+      "status": "Exploration licence granted in 2022. Start about 2028.", "year": 2028,
+      "points": [[60.625, 4.248]],
+      "outlines": {},
+      "source": "https://www.sodir.no/en/whats-new/news/general-news/2022/awards-three-companies-offered-acreage-to-store-co2/"
+    }
+  ]
+}
