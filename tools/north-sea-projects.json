@@ -17,129 +17,129 @@
   "projects": [
     {
       "id": "hynet", "name": "HyNet / Liverpool Bay CCS", "short": "HyNet", "country": "UK", "group": 1,
-      "status": "Storage permits granted on 22 Apr 2025. In construction. First injection from mid-2028.", "year": 2028,
+      "status": "Storage permits granted in Apr 2025. First injection as soon as mid-2028.", "year": 2028,
       "points": [[53.5674, -3.4524], [53.6451, -3.4736], [53.6314, -3.1723]],
       "outlines": { "nsta": ["HAMILTON", "HAMILTON NORTH", "LENNOX (gas)"] },
       "source": "https://nstauthority.co.uk/news-publications/2bn-hynet-carbon-storage-project-will-provide-massive-jobs-and-net-zero-boost"
     },
     {
       "id": "morecambe", "name": "Morecambe Net Zero", "short": "Morecambe", "country": "UK", "group": 1,
-      "status": "Storage licence CS010 (2023). Assess phase from 9 Jun 2026. Storage around 2030. The gas fields still produce.", "year": 2030,
+      "status": "The gas fields still produce. Storage can start in 2030, after a final investment decision and approvals.", "year": 2030,
       "points": [[53.9612, -3.6746], [53.8691, -3.5967]],
       "outlines": { "nsta": ["NORTH MORECAMBE", "SOUTH MORECAMBE"] },
       "source": "https://www.nstauthority.co.uk/the-move-to-net-zero/projects/Barrow-in-Furness/"
     },
     {
       "id": "viking", "name": "Viking CCS", "short": "Viking", "country": "UK", "group": 1,
-      "status": "Storage licence CS005 (2021). Government development funding in Jul 2026. No final investment decision.", "year": 2026,
+      "status": "Government development funding approved in Jul 2026. No final investment decision yet.", "year": 2026,
       "points": [[53.3987, 2.2781]],
       "outlines": { "nsta": ["VIKING A", "VIKING B", "VIKING C", "VIKING D", "VIKING E", "VICTOR"] },
-      "source": "https://www.nstauthority.co.uk/regulatory-information/carbon-storage/carbon-storage-public-register/"
+      "source": "https://www.energy-pedia.com/news/united-kingdom/viking-ccs-development-funding-approved-204638"
     },
     {
       "id": "poseidon", "name": "Poseidon", "short": "Poseidon", "country": "UK", "group": 1,
-      "status": "Storage licence CS009 (2023). Injection test at the Leman field in 2025. Target start 2029.", "year": 2029,
+      "status": "Storage licence CS009 (2023). Injection test at the Leman field in 2025. Target start 2030.", "year": 2030,
       "points": [[53.0635, 2.1927]],
       "outlines": { "nsta": ["LEMAN"] },
-      "source": "https://www.nstauthority.co.uk/regulatory-information/carbon-storage/carbon-storage-public-register/"
+      "source": "https://gccc.beg.utexas.edu/files/gccc/research/goi/2026/4.3%20Poseidon_Injection%20Test_IEAGHG%20Workshop_20%2004%202026_FINAL.pdf"
     },
     {
       "id": "orion", "name": "Orion", "short": "Orion", "country": "UK", "group": 1,
       "status": "Storage licences CS017 and CS018 (2023). Target start 2031.", "year": 2031,
       "points": [[53.5996, 0.7943], [53.6547, 0.6061], [53.7215, 1.1132]],
       "outlines": { "nsta": ["AMETHYST EAST", "AMETHYST WEST", "WEST SOLE"] },
-      "source": "https://www.nstauthority.co.uk/regulatory-information/carbon-storage/carbon-storage-public-register/"
+      "source": "https://gccc.beg.utexas.edu/files/gccc/research/goi/2026/4.3%20Poseidon_Injection%20Test_IEAGHG%20Workshop_20%2004%202026_FINAL.pdf"
     },
     {
       "id": "bacton", "name": "Bacton CCS", "short": "Bacton", "country": "UK", "group": 1,
-      "status": "Storage licence CS008 (2023). Appraisal well in 2025. Injection by 2030.", "year": 2030,
+      "status": "Storage licence awarded in 2023. Appraisal well drilled in 2025. Target: first injection by 2030.", "year": 2030,
       "points": [[53.0219, 1.7720]],
       "outlines": { "nsta": ["HEWETT"] },
       "source": "https://www.nstauthority.co.uk/the-move-to-net-zero/projects/bacton/"
     },
     {
       "id": "camelot", "name": "Camelot CCS", "short": "Camelot", "tag": "withdrawing (2026)", "country": "UK", "group": 1,
-      "status": "Withdrawing (2026). The licence holder plans to give up storage licence CS019 (2023) in Jun 2026.", "year": 2026,
+      "status": "Withdrawing (2026). In Jun 2026 a licence holder said it will apply to give up storage licence CS019.", "year": 2026,
       "points": [[52.9586, 2.1403], [52.9669, 2.2310], [52.9398, 2.1559]],
       "outlines": { "nsta": ["CAMELOT NORTH", "CAMELOT NORTH EAST", "CAMELOT CENTRAL SOUTH"] },
-      "source": "https://www.nstauthority.co.uk/regulatory-information/carbon-storage/carbon-storage-public-register/"
+      "source": "https://shareprices.com/rns/camelot-ccs-and-cambay-psc-update-1k0gfxtclm85qle/"
     },
     {
       "id": "porthos", "name": "Porthos", "short": "Porthos", "country": "NL", "group": 1,
-      "status": "Storage licences in force. Final investment decision in 2023. In construction. Start in the second half of 2027.", "year": 2027,
+      "status": "Storage permits final since Sep 2022. Final investment decision in Oct 2023. In construction. Start not before the second half of 2027.", "year": 2027,
       "points": [[52.1275, 3.9444], [52.1396, 3.8989], [52.1668, 3.9423]],
       "outlines": { "nlog": ["P18-2", "P18-4", "P18-6"] },
-      "source": "https://www.porthosco2.nl/en/"
+      "source": "https://www.porthosco2.nl/en/project/"
     },
     {
       "id": "aramis", "name": "Aramis", "short": "Aramis", "country": "NL", "group": 1,
-      "status": "Permits granted in 2025. An appeal is pending. No final investment decision (Sep 2026). Start 2028 to 2030.", "year": 2028,
+      "status": "Permits granted. An appeal against the permits is pending. Final investment decision planned for 2027. Operation planned for 2030.", "year": 2030,
       "points": [[53.2811, 3.6298], [53.7289, 4.0888], [53.4396, 4.2225]],
       "outlines": { "nlog": ["K14-FA", "L04-A"] },
-      "source": "https://aramis-ccs.com/news"
+      "source": "https://www.aramis-ccs.com/news/aramis-advances-towards-final-investment-decision-prepares-leadership-for-execution-phase/"
     },
     {
       "id": "q16fa", "name": "Q16-FA", "short": "Q16-FA", "country": "NL", "group": 1,
-      "status": "A storage licence is applied for. The project has no name yet.", "year": null,
+      "status": "A storage permit application was received (official notice of 14 Oct 2025).", "year": 2025,
       "points": [[52.0440, 4.0440]],
       "outlines": { "nlog": ["Q16-FA"] },
-      "source": "https://www.nlog.nl/"
+      "source": "https://zoek.officielebekendmakingen.nl/stcrt-2025-35278.html"
     },
     {
       "id": "l09ff", "name": "L09-FF", "short": "L09-FF", "country": "NL", "group": 1,
-      "status": "A storage licence is applied for. The project has no name yet.", "year": null,
+      "status": "A storage permit application was received (official notice of 23 Sep 2025).", "year": 2025,
       "points": [[53.6090, 4.9552]],
       "outlines": { "nlog": ["L09-FF"] },
-      "source": "https://www.nlog.nl/"
+      "source": "https://zoek.officielebekendmakingen.nl/stcrt-2025-32645.html"
     },
     {
       "id": "bifrost", "name": "Bifrost", "short": "Bifrost", "country": "DK", "group": 1,
-      "status": "Exploration licence granted in 2023. No storage permit yet. Target start 2030.", "year": 2030,
+      "status": "Exploration licence approved in Feb 2023. Possible capacity: more than 5 million tonnes of CO₂ a year by 2030.", "year": 2030,
       "points": [[56.3441, 4.2719]],
       "outlines": {},
-      "source": "https://offshore.dtu.dk/research/co2-storage/bifrost-an-innovative-co2-storage-project"
+      "source": "https://www.enerdata.net/publications/daily-energy-news/denmark-approves-3-co2-storage-licences-north-sea.html"
     },
     {
       "id": "k12b", "name": "K12-B", "short": "K12-B", "country": "NL", "group": 2,
-      "status": "CO₂ injection pilot from 2004.", "year": 2004,
+      "status": "CO₂ injection pilot from 2004. More than 100,000 tonnes injected. The operation is complete.", "year": 2004,
       "points": [[53.3424, 3.8856]],
       "outlines": { "nlog": ["K12-B"] },
-      "source": "https://repository.tudelft.nl/record/uuid:ea9253d0-9797-4976-beb1-31e81d7af5a5"
+      "source": "https://repository.tno.nl/SingleDoc?docId=49542"
     },
     {
       "id": "peterhead", "name": "Peterhead / Goldeneye", "short": "Peterhead", "country": "UK", "group": 2,
-      "status": "Study. Cancelled in 2015.", "year": 2015,
+      "status": "Plan to store CO₂ in a depleted gas field. Called off in 2015, after the government cancelled its CCS competition.", "year": 2015,
       "points": [[58.0028, -0.3681]],
       "outlines": { "nsta": ["GOLDENEYE"] },
-      "source": "https://www.nstauthority.co.uk/the-move-to-net-zero/carbon-capture-and-storage/"
+      "source": "https://commonslibrary.parliament.uk/research-briefings/cdp-2017-0023/"
     },
     {
       "id": "frigg", "name": "Frigg", "short": "Frigg", "country": "NO", "group": 2,
-      "status": "Published studies only.", "year": null,
+      "status": "Gas production ended in 2004. A 2010 state study modelled CO₂ injection into the field.", "year": 2010,
       "points": [[59.918, 2.124]],
       "outlines": {},
-      "source": "https://www.sodir.no/en/whats-new/publications/co2-atlases/co2-atlas-for-the-norwegian-continental-shelf/1-introduction/"
+      "source": "https://www.sodir.no/en/whats-new/publications/co2-atlases/co2-atlas-for-the-norwegian-continental-shelf/4-the-norwegian-north-sea/4.2-storage-options-in-the-north-sea/4.2.2-abandoned-hydrocarbon-fields"
     },
     {
       "id": "heimdal", "name": "Heimdal", "short": "Heimdal", "country": "NO", "group": 2,
-      "status": "Published studies only.", "year": null,
+      "status": "A 2016 study found storage here possible but less attractive than at Smeaheia.", "year": 2016,
       "points": [[59.585, 2.223]],
       "outlines": {},
-      "source": "https://www.sodir.no/en/whats-new/publications/co2-atlases/co2-atlas-for-the-norwegian-continental-shelf/1-introduction/"
+      "source": "https://www.earthdoc.org/content/papers/10.3997/2214-4609.201702142"
     },
     {
       "id": "endurance", "name": "Endurance", "short": "Endurance", "country": "UK", "group": 3,
-      "status": "Storage permit granted in Dec 2024. In construction. First injection 2027 to 2028.", "year": 2027,
+      "status": "Storage permit granted in Dec 2024. In construction. Start-up expected in 2028.", "year": 2028,
       "points": [[54.2048, 1.0413]],
       "outlines": {},
-      "source": "https://www.nstauthority.co.uk/news-publications/nsta-awards-endurance-first-ever-uk-carbon-storage-permit"
+      "source": "https://www.energy-pedia.com/news/united-kingdom/northern-endurance-partnership-and-the-crown-estate-sign-lease-for-uk%E2%80%99s-first-ccs-project-ahead-of-offshore-construction-202595"
     },
     {
       "id": "acorn", "name": "Acorn", "short": "Acorn", "country": "UK", "group": 3,
-      "status": "Storage licence CS003 (2018). Development funding in 2025. No final investment decision.", "year": 2025,
+      "status": "Government agreed about £200 million for development in Jun 2025, subject to a business case. The money is for work before a final investment decision.", "year": 2025,
       "points": [[57.9919, -0.3845]],
       "outlines": {},
-      "source": "https://www.nstauthority.co.uk/regulatory-information/carbon-storage/carbon-storage-public-register/"
+      "source": "https://www.gov.uk/government/news/funding-secured-for-britains-industrial-future"
     },
     {
       "id": "northern-lights", "name": "Northern Lights", "short": "Northern Lights", "country": "NO", "group": 3,
@@ -153,14 +153,14 @@
       "status": "Injecting since 1996.", "year": 1996,
       "points": [[58.388, 1.939]],
       "outlines": {},
-      "source": "https://www.sodir.no/en/whats-new/publications/co2-atlases/co2-atlas-for-the-norwegian-continental-shelf/1-introduction/"
+      "source": "https://www.norskpetroleum.no/en/environment-and-technology/carbon-capture-and-storage/"
     },
     {
       "id": "smeaheia", "name": "Smeaheia", "short": "Smeaheia", "country": "NO", "group": 3,
-      "status": "Exploration licence granted in 2022. Start about 2028.", "year": 2028,
+      "status": "Exploration licence awarded in 2022. Two wells in 2025 showed that the reservoir suits CO₂ storage.", "year": 2025,
       "points": [[60.625, 4.248]],
       "outlines": {},
-      "source": "https://www.sodir.no/en/whats-new/news/general-news/2022/awards-three-companies-offered-acreage-to-store-co2/"
+      "source": "https://www.sodir.no/en/whats-new/news/exploration-drilling-results/2025/the-wells-327-1-and-324-4-proved-suitable-properties-for-injection-and-storage-of-co2"
     }
   ]
 }
