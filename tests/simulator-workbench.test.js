@@ -184,7 +184,8 @@ test('motion is restrained and switched off for reduced-motion users', () => {
 
 test('the page uses plain names and one shared engine', () => {
   const page = read('SimulatorPage.jsx');
-  assert.match(page, /CO₂ Storage Simulator/);
+  assert.match(page, /<h1>VE simulator<\/h1>/);
+  assert.doesNotMatch(page, /CO₂ Storage Simulator/, 'the app title uses the name VE simulator');
   for (const label of ["label: 'Simulator'", "label: 'Uncertainty'", "label: 'Method'", "label: 'Map'", "label: '3D'", "label: 'Section'"]) assert.ok(page.includes(label), label);
   assert.match(page, /role="tablist"/);
   assert.match(page, /new Worker\('\.\/simulation-worker\.js/);
