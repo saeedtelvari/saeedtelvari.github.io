@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const Story = require('../story-geometry.js');
-const { SITE_STORY } = require('../site-content.js');
+const { SITE_STORY } = require('../story-content.js');
 
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');

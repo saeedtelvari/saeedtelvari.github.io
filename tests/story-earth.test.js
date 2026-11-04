@@ -428,7 +428,7 @@ test('descent camera: it starts where fields ends, zooms, shrinks into the inset
 test('the files: StoryEarth.jsx fills orbit and descent after StoryChapters.jsx, with one local file, no library and no CDN', () => {
   const build = read('build.js');
   assert.ok(build.indexOf("'StoryChapters.jsx'") > 0 && build.indexOf("'StoryEarth.jsx'") > build.indexOf("'StoryChapters.jsx'"), 'the order in build.js');
-  assert.ok(build.indexOf("'StoryEarth.jsx'") < build.indexOf("'HomeSections.jsx'"), 'the story files come before the sections (the old descent is deleted)');
+  assert.ok(build.indexOf("'StoryEarth.jsx'") < build.indexOf("'StoryPage.jsx'"), 'the story files come before the sections (the old descent is deleted)');
   const source = read('StoryEarth.jsx');
   assert.match(source, /STORY_RENDERERS\.orbit\s*=/);
   assert.match(source, /STORY_RENDERERS\.descent\s*=/);
@@ -436,7 +436,7 @@ test('the files: StoryEarth.jsx fills orbit and descent after StoryChapters.jsx,
   assert.equal((source.match(/fetch\(/g) || []).length, 1);
   assert.doesNotMatch(source, /https?:\/\/|\bd3\b|cdnjs|unpkg|jsdelivr/i, 'no CDN and no library');
   assert.ok(fs.existsSync(path.join(root, 'assets/land-110m.json')));
-  assert.match(read('bundle.js'), /STORY_RENDERERS\.orbit\s*=/, 'the bundle has the new renderers');
+  assert.match(read('story-bundle.js'), /STORY_RENDERERS\.orbit\s*=/, 'the bundle has the new renderers');
 });
 
 // ---- the renderers, run with a recording context and a fetch that the test releases

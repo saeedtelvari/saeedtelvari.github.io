@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en" class="site-c">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How VE models work — Sa'eed Telvari</title>
+  <meta name="description" content="A scroll story from orbit to a live vertical-equilibrium (VE) model: how a VE model stores CO₂ in a depleted gas field under the North Sea. By Sa'eed Telvari.">
+  <link rel="canonical" href="https://saeedtelvari.github.io/ve-story.html">
+  <meta name="theme-color" content="#c9d6dc">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="How VE models work — Sa'eed Telvari">
+  <meta property="og:description" content="A scroll story from orbit to a live vertical-equilibrium model of CO₂ storage in a depleted gas field.">
+  <meta property="og:url" content="https://saeedtelvari.github.io/ve-story.html">
+  <meta property="og:image" content="https://saeedtelvari.github.io/assets/social-card-story.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Earth seen from orbit with the North Sea marked, next to the name Sa’eed Telvari: the first frame of a scroll story about CO₂ storage under the North Sea">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="How VE models work — Sa'eed Telvari">
+  <meta name="twitter:description" content="A scroll story from orbit to a live vertical-equilibrium model of CO₂ storage in a depleted gas field.">
+  <meta name="twitter:image" content="https://saeedtelvari.github.io/assets/social-card-story.jpg">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"How VE models work","url":"https://saeedtelvari.github.io/ve-story.html","image":"https://saeedtelvari.github.io/assets/social-card-story.jpg","author":{"@type":"Person","name":"Sa'eed Telvari","url":"https://saeedtelvari.github.io/"}}</script>
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+  <link rel="stylesheet" href="./colors_and_type.css?v=56">
+  <link rel="stylesheet" href="./story.css?v=1">
+  <link rel="icon" href="./favicon.ico" sizes="32x32">
+  <link rel="icon" href="./assets/logo-minimalist.webp" type="image/webp">
+  <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
+  <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script defer src="./story-bundle.js?v=1"></script>
+  <script defer src="./bundle.js?v=59"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { background: #c9d6dc; color: #1f2a30; overflow-x: hidden; }
+    ::-webkit-scrollbar { width: 10px; }
+    ::-webkit-scrollbar-track { background: #c9d6dc; }
+    ::-webkit-scrollbar-thumb { background: #7d6b5d; border-radius: 6px; }
+    ::-webkit-scrollbar-thumb:hover { background: #66564a; }
+
+    /* The sky of the story shows until React renders the page. Then it goes at once: a fade would hide the name for longer. */
+    #app-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      background: #c9d6dc;
+    }
+    #app-loader.loader-finished { opacity: 0; pointer-events: none; }
+    .shell-progress {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 28%;
+      height: 2px;
+      background: #1f2a30;
+      animation: shell-progress 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    @keyframes shell-progress {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(360%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .shell-progress { width: 100%; opacity: 0.4; animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app-loader" aria-hidden="true"><div class="shell-progress"></div></div>
+  <div id="root" data-page="story"></div>
+  <noscript>
+    <style>#app-loader { display: none; }</style>
+    <main style="max-width:720px;margin:0 auto;padding:48px 24px;font-family:Literata,Georgia,serif;line-height:1.7">
+      <h1 style="font-family:Literata,Georgia,serif">How VE models work</h1>
+      <p>A scroll story about vertical-equilibrium (VE) models of CO₂ storage in depleted gas fields under the North Sea. It needs JavaScript.</p>
+      <p>
+        <a href="./index.html">Homepage</a> ·
+        <a href="./simulator.html">VE simulator</a> ·
+        <a href="./index.html#publications">Publications</a>
+      </p>
+    </main>
+  </noscript>
+</body>
+</html>

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const src = fs.readFileSync(path.join(__dirname, '../App.jsx'), 'utf8');
 const helpers = new Function(src.slice(src.indexOf('// ---- navigation helpers'), src.indexOf('// ---- end navigation helpers')) +
-  '\nreturn { siteActiveSection, siteLegacyTarget, SITE_NAV_ITEMS };')();
+  '\nreturn { siteActiveSection, siteLegacyTarget, SITE_NAV_ITEMS, SITE_SECTION_IDS, SITE_PAGE_TARGETS };')();
 
 test('the active section is the one under the reading line', () => {
   const rects = [{ id: 'research', top: 900, bottom: 2000 }, { id: 'projects', top: 2100, bottom: 2900 }];
@@ -22,6 +22,18 @@ test('old links still land somewhere sensible', () => {
 });
 
 test('navigation items are real links in the agreed order', () => {
-  assert.deepEqual(helpers.SITE_NAV_ITEMS.map(i => i.label), ['Research', 'Projects', 'Publications', 'Simulator', 'CV', 'Contact']);
-  assert.ok(helpers.SITE_NAV_ITEMS.every(i => /^\.\/(index|cv|simulator)\.html/.test(i.href)));
+  assert.deepEqual(helpers.SITE_NAV_ITEMS.map(i => i.label), ['Research', 'Projects', 'Publications', 'VE simulator', 'How VE works', 'CV', 'Contact']);
+  assert.ok(helpers.SITE_NAV_ITEMS.every(i => /^\.\/(index|cv|simulator|ve-story)\.html/.test(i.href)));
+});
+
+test('the nav item for the story page is a real link to ve-story.html', () => {
+  const item = helpers.SITE_NAV_ITEMS.find(entry => entry.id === 'story');
+  assert.ok(item, 'the story item exists');
+  assert.equal(item.href, './ve-story.html');
+  assert.equal(item.label, 'How VE works');
+});
+
+test('the story page scrolls to its end panel and the homepage keeps its sections', () => {
+  assert.deepEqual(helpers.SITE_PAGE_TARGETS.story, ['story-end']);
+  assert.deepEqual(helpers.SITE_PAGE_TARGETS.home, helpers.SITE_SECTION_IDS);
 });

@@ -119,14 +119,14 @@ const SITE_ACTIVITY = [
 const SITE_PROJECTS = [
   {
     id: 'simulator',
-    title: 'CO₂ storage simulator',
+    title: 'VE simulator',
     body: 'A vertical-equilibrium simulator of CO₂ plume migration, structural, residual and dissolution trapping, fault leakage and pressure build-up in a saline aquifer, in SI units with a visible mass balance and an uncertainty study. It runs in the browser.',
     links: [
-      { label: 'Open the simulator', href: './simulator.html' },
+      { label: 'Open the VE simulator', href: './simulator.html' },
       { label: 'Read the method', href: './simulator.html#method' },
     ],
     image: { src: './assets/project-simulator.webp', width: 640, height: 360,
-      alt: 'Map view of the CO₂ storage simulator: a plume under a faulted dome, coloured by trapping class.' },
+      alt: 'Map view of the VE simulator: a plume under a faulted dome, coloured by trapping class.' },
   },
   {
     id: 'mupsi',
@@ -205,52 +205,6 @@ const SITE_CV = {
   ],
 };
 
-// The words of the story at the top of the homepage (docs/superpowers/specs/2026-10-25-homepage-story-design.md).
-// A caption has two sentences at most. *h* marks italic text. Chapters with two captions switch at the middle.
-const SITE_STORY = {
-  label: 'From orbit to a live vertical-equilibrium model',
-  name: 'Sa’eed Telvari',
-  // The CO₂ numbers of chapter 0. base and baseYear are the start of the count: the level before industry.
-  // value and year come from the NOAA Mauna Loa record: the annual mean of the latest complete year, in ppm.
-  // To update them, read the last row of the file at url, then write its year and its mean here (see the spec, Rules for the story).
-  // The first caption of chapter 0 says "more than 420 ppm". A test fails if value is not above 420.
-  co2: {
-    base: 280,
-    baseYear: 1850,
-    value: 427.35,
-    year: 2025,
-    source: 'NOAA Global Monitoring Laboratory, Mauna Loa annual mean CO₂',
-    url: 'https://gml.noaa.gov/webdata/ccgg/trends/co2/co2_annmean_mlo.txt',
-  },
-  // The ppm line, from co2: "280 ppm in 1850. 427 ppm in 2025." The value shows as a whole number.
-  get ppm() {
-    return `${this.co2.base} ppm in ${this.co2.baseYear}. ${Math.round(this.co2.value)} ppm in ${this.co2.year}.`;
-  },
-  captions: {
-    orbit: ['There is more than 420 ppm of CO₂ in the air. I model how rock under the North Sea can hold it for thousands of years.'],
-    fields: ['Hundreds of gas fields under the North Sea no longer produce. Projects in the UK, the Netherlands and Denmark plan to store CO₂ in some of them.'],
-    descent: ['Carbon capture and storage puts CO₂ back into rock, deep under the sea floor.'],
-    rock: [
-      'The well goes about 2 km down, through clay, chalk and a shale caprock.',
-      'The sandstone is a dome that held natural gas for millions of years. Most of the gas is produced, so the dome can now store CO₂.',
-    ],
-    grid: [
-      'A 3D model splits the reservoir into cells that follow the layers and the fault. Field models have millions of cells, and one run can take days.',
-      'Faults cut the reservoir and can leak. In the MuPSI project, which studies fault integrity, I apply these models to depleted gas fields.',
-    ],
-    ve: [
-      'Gas is lighter than brine. Both the CO₂ and the methane rise to the top of each column.',
-      'The rock stays 3D, but the vertical cells go. VE solves one value per column, the plume thickness *h*, so it runs up to 100× faster.',
-    ],
-    live: ['This VE model runs in your browser.'],
-  },
-  // Links under the caption of the last chapter. An entry with an id scrolls to that section of the page.
-  actions: [
-    { label: 'Open the simulator', href: './simulator.html' },
-    { label: 'Read my research', href: './index.html#research', id: 'research' },
-  ],
-};
-
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { SITE_LINKS, SITE_PUBLICATIONS, SITE_ACTIVITY, SITE_PROJECTS, SITE_CV, SITE_STORY };
+  module.exports = { SITE_LINKS, SITE_PUBLICATIONS, SITE_ACTIVITY, SITE_PROJECTS, SITE_CV };
 }

@@ -57,7 +57,7 @@
 // A renderer that throws is reported once in the console. The story then goes on.
 //
 // Colours: STORY_COLORS has the same values as the --story-* tokens in colors_and_type.css.
-// Captions are HTML above the canvas. The words are in SITE_STORY (site-content.js).
+// Captions are HTML above the canvas. The words are in SITE_STORY (story-content.js).
 // The place of each caption is in colors_and_type.css: .story-chapter[data-chapter="id"].
 // To change the caption colour for one chapter, set --story-text on .story-stage[data-chapter="id"].
 // The site header covers the top 64 px of the stage. The skip control is at the top right under the header.
@@ -273,9 +273,9 @@ const storyLeave = (element, exit, fade) => {
   element.style.visibility = exit >= 1 ? 'hidden' : '';
 };
 
-// The "Skip to research" link. In the pinned stage it is in the stage, so it leaves with the stage.
+// The "Skip to the end" link goes to the end panel of the page (StoryEnd.jsx, id story-end). In the pinned stage it is in the stage, so it leaves with the stage.
 const StorySkip = ({ onNavigate }) => (
-  <a className="story-skip" href="#research" onClick={event => storyGo(event, 'research', onNavigate)}>Skip to research</a>
+  <a className="story-skip" href="#story-end" onClick={event => storyGo(event, 'story-end', onNavigate)}>Skip to the end</a>
 );
 
 // A plain click goes to a section of the page with the same helper as the header. Other clicks keep the link.

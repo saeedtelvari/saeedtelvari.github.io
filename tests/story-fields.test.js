@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { SITE_STORY } = require('../site-content.js');
+const { SITE_STORY } = require('../story-content.js');
 
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
@@ -132,9 +132,9 @@ test('the stage fields is the second stage, between orbit and descent, with 8 se
   for (const name of COMPANIES) assert.ok(!hasName(caption[0], name), `the caption has no "${name}"`);
   assert.doesNotMatch(caption[0], /mupsi/i);
   assert.match(stage, /chapter\.id === 'fields' && typeof StoryFieldsList === 'function' && <StoryFieldsList on=\{on\} \/>/, 'the list is in the words of the stage fields');
-  const files = [...read('build.js').match(/const files = \[([\s\S]*?)\];/)[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
+  const files = [...read('build.js').match(/const storyFiles = \[([\s\S]*?)\];/)[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
   assert.ok(files.indexOf('StoryFields.jsx') === files.indexOf('StoryEarth.jsx') + 1 && files.indexOf('StoryFields.jsx') < files.indexOf('StoryRock.jsx'), 'StoryFields.jsx follows StoryEarth.jsx in the build');
-  const bundle = read('bundle.js');
+  const bundle = read('story-bundle.js');
   assert.ok(bundle.includes('// File: StoryFields.jsx') && /STORY_RENDERERS\.fields=/.test(bundle), 'build the current source before testing');
 });
 
@@ -342,7 +342,7 @@ test('the width estimates are above the widths that were measured in Literata an
 // ---- the renderer, run from the compiled bundle with a recording context
 
 const loadFields = ({ failData = false } = {}) => {
-  const bundle = read('bundle.js');
+  const bundle = read('story-bundle.js');
   const code = between(bundle, '// File: StoryEarth.jsx', '// File: StoryRock.jsx');
   assert.ok(code.includes('StoryFieldsList') && code.includes('STORY_RENDERERS.fields='), 'build the current source before testing');
   const stage = read('StoryStage.jsx');

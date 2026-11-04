@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { SITE_STORY } = require('../site-content.js');
+const { SITE_STORY } = require('../story-content.js');
 
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
@@ -257,7 +257,8 @@ test('SITE_STORY has the captions of the spec, word for word', () => {
     const quotes = [...cells[cells.length - 2].matchAll(/"([^"]+)"/g)].map(match => match[1]);
     const captions = SITE_STORY.captions[SPEC_IDS[i]];
     assert.deepEqual(quotes.slice(0, captions.length), captions, `${SPEC_IDS[i]} captions match the spec`);
-    if (SPEC_IDS[i] === 'live') assert.deepEqual(quotes.slice(1), SITE_STORY.actions.map(action => action.label), 'the buttons match the spec');
+    // The spec is older than the rename: it says "the simulator" where the page says "the VE simulator".
+    if (SPEC_IDS[i] === 'live') assert.deepEqual(quotes.slice(1), SITE_STORY.actions.map(action => action.label.replace('the VE simulator', 'the simulator')), 'the buttons match the spec');
   });
   const board = read('docs/superpowers/specs/2026-10-25-homepage-story-mockups/storyboard.html');
   // The storyboard is a mockup. It keeps the first sentence of the ppm line and a placeholder for the value.
@@ -315,7 +316,7 @@ test('the ppm count goes from 280 to the value in 1.2 seconds with an ease-out c
 });
 
 test('STORY_COLORS match the --story tokens in the stylesheet and in the spec', () => {
-  const css = read('colors_and_type.css');
+  const css = read('story.css');
   const tokens = Object.fromEntries([...css.matchAll(/--story-([a-z0-9]+):\s*(#[0-9a-f]{6});/g)].map(match => [match[1], match[2]]));
   assert.deepEqual(tokens, STORY_COLORS);
   const specFile = 'docs/superpowers/specs/2026-10-25-homepage-story-design.md';
@@ -346,31 +347,37 @@ test('every chapter has a placeholder renderer that fills the sky and writes its
   }
 });
 
-test('the story is wired into the build and the home page, and the old hero is not', () => {
-  const files = [...read('build.js').match(/const files = \[([\s\S]*?)\];/)[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
+test('the story is in its own bundle, and ve-story.html loads it before the site bundle', () => {
+  const list = name => [...read('build.js').match(new RegExp(`const ${name} = \\[([\\s\\S]*?)\\];`))[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
+  const files = list('storyFiles');
+  const siteFiles = list('files');
   const at = name => files.indexOf(name);
-  assert.ok(at('StoryStage.jsx') > at('site-content.js'), 'the copy loads before the story');
+  assert.ok(at('StoryStage.jsx') > at('story-content.js'), 'the copy loads before the story');
   assert.ok(at('StoryChapters.jsx') > at('StoryStage.jsx'), 'the registry exists before the placeholders fill it');
-  assert.ok(at('StoryChapters.jsx') < at('HomeSections.jsx'));
-  assert.ok(!files.includes('GeologicalDescent.jsx'), 'the old descent is not in the bundle: the sections sit on the sky ground');
-  assert.ok(!files.includes('SubsurfaceHero.jsx') && !files.includes('hero-geology.js'), 'the old hero is not in the bundle');
+  assert.equal(at('StoryPage.jsx'), files.length - 1, 'the page component is last');
+  assert.ok(files.every(file => !siteFiles.includes(file)), 'no story file is in the site bundle');
+  for (const file of ['SubsurfaceHero.jsx', 'GeologicalDescent.jsx', 'hero-geology.js']) assert.ok(siteFiles.includes(file), file + ' is in the site bundle again');
   const app = read('App.jsx');
-  assert.match(app, /<StoryStage onNavigate=\{navigate\} \/>/);
-  assert.doesNotMatch(app, /<SubsurfaceHero/);
-  assert.doesNotMatch(app, /<GeologicalDescent/);
-  assert.ok(app.indexOf('<StoryStage') < app.indexOf('<main id="main-content"'), 'the story is above the sections');
-  const html = read('index.html');
+  assert.match(app, /sitePage === 'story' && storyAvailable \? <StoryPage \/>/);
+  assert.match(app, /typeof StoryPage === 'function'/, 'App.jsx works on pages without story-bundle.js');
+  assert.doesNotMatch(app, /StoryStage/, 'the site bundle does not name the stage');
+  const page = read('StoryPage.jsx');
+  assert.match(page, /<StoryStage onNavigate=\{navigate\} \/>/);
+  assert.ok(page.indexOf('<StoryStage') < page.indexOf('<main id="main-content"'), 'the story is above the end panel');
+  const html = read('ve-story.html');
   assert.match(html, /<meta name="theme-color" content="#c9d6dc">/);
-  assert.match(html, /family=Literata:ital,opsz,wght@0,7\.\.72,400;0,7\.\.72,600;1,7\.\.72,400/);
-  assert.match(html, /#app-loader \{[^}]*background: #c9d6dc/);
-  const bundle = read('bundle.js');
+  assert.match(html, /family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400/);
+  assert.match(html, /#app-loader {[^}]*background: #c9d6dc/);
+  assert.ok(html.indexOf('story-bundle.js') > 0 && html.indexOf('story-bundle.js') < html.indexOf('/bundle.js'), 'story-bundle.js loads before bundle.js');
+  const bundle = read('story-bundle.js');
   assert.ok(bundle.includes('// File: StoryStage.jsx') && !bundle.includes('// File: SubsurfaceHero.jsx'), 'build the current source before testing');
+  assert.ok(!read('bundle.js').includes('// File: StoryStage.jsx'), 'the site bundle has no story code');
 });
 
 /// ---- the pinned stage and the static frames, run from the compiled bundle with a small fake DOM
 
 const fakePage = ({ reduced = false, scrollend = true } = {}) => {
-  const bundle = read('bundle.js');
+  const bundle = read('story-bundle.js');
   const code = between(bundle, '// File: StoryStage.jsx', '// File: StoryChapters.jsx');
   assert.ok(code.includes('const StoryPinned'), 'build the current source before testing');
   // now is the clock of the timers in ms. t is the time of the last animation frame.
@@ -1099,7 +1106,7 @@ test('the skip link is in the pinned stage, so it rides up with the stage; the s
   assert.equal(wrap.children[0].type, page.get('StorySkip'));
   const stageChildren = element.children.filter(Boolean);
   assert.equal(stageChildren[0], wrap, 'it is the first child of the stage, so the keyboard reaches it first');
-  const css = read('colors_and_type.css');
+  const css = read('story.css');
   const rule = css.slice(css.indexOf('.story-skip-wrap--stage {'), css.indexOf('}', css.indexOf('.story-skip-wrap--stage {')));
   assert.match(rule, /position: absolute/, 'in the stage it is not sticky');
 
@@ -1112,7 +1119,7 @@ test('the skip link is in the pinned stage, so it rides up with the stage; the s
 });
 
 test('the fade needs no reduced-motion rule: it has no transition, and the static layout never runs it', () => {
-  const css = read('colors_and_type.css');
+  const css = read('story.css');
   for (const selector of ['.story-skip-wrap', '.story-rail']) {
     const open = css.indexOf(`${selector} {`);
     assert.ok(open >= 0, selector);
@@ -1156,12 +1163,12 @@ test('the captions are real text in reading order, and the live links are real l
 
   const links = (on) => nodes(StoryWords({ chapter: chapters[6], on, caption: 0, onNavigate: null })).filter(node => node.type === 'a');
   assert.deepEqual(links(true).map(link => [link.props.href, link.children[0]]),
-    [['./simulator.html', 'Open the simulator'], ['./index.html#research', 'Read my research']]);
+    [['./simulator.html', 'Open the VE simulator'], ['./index.html#research', 'Read my research']]);
   assert.ok(links(true).every(link => link.props.tabIndex === undefined), 'the links are in the tab order while the chapter is on');
   assert.ok(links(false).every(link => link.props.tabIndex === -1), 'and out of it when the chapter is off');
 });
 
-test('the skip control is a real link to #research and a plain click uses the page helper', () => {
+test('the skip control is a real link to the end panel and a plain click uses the page helper', () => {
   for (const withHelper of [true, false]) {
     const page = fakePage();
     page.refs.push({});
@@ -1169,15 +1176,15 @@ test('the skip control is a real link to #research and a plain click uses the pa
     const onNavigate = withHelper ? (id, event) => calls.push([id, event]) : null;
     const skip = page.get('StorySkip')({ onNavigate });
     assert.equal(skip.props.className, 'story-skip');
-    assert.equal(skip.props.href, '#research');
-    assert.equal(skip.children[0], 'Skip to research');
+    assert.equal(skip.props.href, '#story-end');
+    assert.equal(skip.children[0], 'Skip to the end');
     let prevented = 0;
     const click = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, preventDefault: () => { prevented += 1; } };
     skip.props.onClick(click);
     if (withHelper) {
-      assert.deepEqual([calls.length, calls[0][0], calls[0][1] === click], [1, 'research', true], 'the header helper gets the click');
+      assert.deepEqual([calls.length, calls[0][0], calls[0][1] === click], [1, 'story-end', true], 'the header helper gets the click');
     } else {
-      assert.deepEqual([page.scrolled, prevented], [['research'], 1], 'siteScrollTo runs and the browser jump is stopped');
+      assert.deepEqual([page.scrolled, prevented], [['story-end'], 1], 'siteScrollTo runs and the browser jump is stopped');
       skip.props.onClick({ ...click, ctrlKey: true });
       assert.deepEqual([page.scrolled.length, prevented], [1, 1], 'a ctrl-click keeps the link');
     }
@@ -1227,7 +1234,7 @@ const snapRanges = (areas, viewport) => areas.map(({ top, height }) => [top, hei
 const isSnapOffset = (ranges, offset) => ranges.some(([from, to]) => offset >= from && offset <= to);
 
 test('the scroll steps are the snap points: seven boxes of one screen, and the last box is as tall as the rest of the page', () => {
-  const css = read('colors_and_type.css').replace(/\r\n/g, '\n');
+  const css = read('story.css').replace(/\r\n/g, '\n');
   const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const block = (text, open) => {
     const at = text.indexOf(open);
@@ -1328,7 +1335,7 @@ test('requestDraw in a static frame paints that canvas again on the next animati
 });
 
 test('no renderer uses a synthetic event, and the renderers and the stage use requestDraw', () => {
-  const bundle = read('bundle.js');
+  const bundle = read('story-bundle.js');
   assert.ok(bundle.includes('requestDraw'), 'build the current source before testing');
   for (const file of ['StoryStage.jsx', 'StoryEarth.jsx', 'StoryFields.jsx', 'StoryRock.jsx', 'StoryBlock.jsx']) {
     assert.doesNotMatch(read(file), /dispatchEvent|new Event\(/, `${file} sends no synthetic event`);
@@ -1424,7 +1431,7 @@ test('under reduced motion the ppm line shows the final value at once and nothin
 });
 
 test('the count-up needs one CSS rule, at the end of the file, with digits of equal width', () => {
-  const css = read('colors_and_type.css');
+  const css = read('story.css');
   assert.match(css.slice(css.lastIndexOf('Story block controls')), /\.story-count \{ font-variant-numeric: tabular-nums; \}/);
-  assert.match(css, /\.visually-hidden \{[^}]*clip: rect\(0 0 0 0\)/, 'the hidden copy uses the site class');
+  assert.match(read('colors_and_type.css'), /\.visually-hidden \{[^}]*clip: rect\(0 0 0 0\)/, 'the hidden copy uses the site class');
 });
