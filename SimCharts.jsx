@@ -1,4 +1,4 @@
-// SimCharts.jsx — SVG charts for the CO2 simulator: inventory through time and the
+// SimCharts.jsx — SVG charts for the VE simulator: inventory through time and the
 // uncertainty histogram, tornado and run scatter. Colours come from CSS tokens.
 
 const simNiceStep = (span, target) => {
