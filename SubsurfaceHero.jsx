@@ -1031,7 +1031,6 @@ const Identity = React.memo(({ onNavigate }) => (
         <Icon name="play" size={14} />Open the VE simulator
       </a>
       <a className="btn btn--quiet" href="./ve-story.html" onClick={event => onNavigate && onNavigate('story', event)}>How VE models work</a>
-      <a className="btn btn--quiet" href="./cv.html" onClick={event => onNavigate && onNavigate('cv', event)}>Read my CV</a>
       <ul className="hero-profiles">
         {HERO_PROFILES.map(({ icon, label, href }) => (
           <li key={icon}>

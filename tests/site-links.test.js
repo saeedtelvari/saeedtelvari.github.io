@@ -19,7 +19,9 @@ test('the hero has the primary button "Open the VE simulator" and the second but
     href: chunk.match(/href="([^"]+)"/)[1],
     text: chunk.slice(chunk.search(/(\}|")>/) + 2).replace(/<[^>]+>/g, '').trim(),
   }));
-  assert.deepEqual(links.slice(0, 2), [
+  // Two buttons only, so the button row and the profile icons keep the layout of the earlier homepage.
+  // The CV stays in the header.
+  assert.deepEqual(links, [
     { className: 'btn btn--primary', href: './simulator.html', text: 'Open the VE simulator' },
     { className: 'btn btn--quiet', href: './ve-story.html', text: 'How VE models work' },
   ]);
