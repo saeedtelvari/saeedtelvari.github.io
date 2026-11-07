@@ -69,8 +69,8 @@ const GeologicalDescent = ({ children }) => {
     'shale', 'sandstone', 'siltstone', 'dolomite', 'shale', 'limestone', 'shale', 'sandstone',
     'sandstone', 'siltstone', 'limestone', 'shale', 'dolomite', 'sandstone', 'shale', 'sandstone', 'basement',
   ];
-  // Earth-graded flat colours: the whole bed before its texture loads, and a light tint after.
-  const colors = { shale: '#2e2925', sandstone: '#7a6347', siltstone: '#5f5044', limestone: '#7a7468', dolomite: '#857a64', basement: '#6e625a' };
+  // North Sea night: cool blue-grey flat colours. They fill the whole bed before its texture loads, and they tint it after.
+  const colors = { shale: '#1c2632', sandstone: '#52657a', siltstone: '#3c495a', limestone: '#5b6b7b', dolomite: '#566676', basement: '#445160' };
   const random = seed => { const n = Math.sin(seed * 127.1 + 311.7) * 43758.5453; return n - Math.floor(n); };
   const weights = materials.slice(0, -1).map((_, i) => .45 + random(i + 8) * 1.4);
   const basementLevel = total - footer - lastSection * .58;
@@ -154,6 +154,10 @@ const GeologicalDescent = ({ children }) => {
   return (
       <svg className="geological-descent-art" viewBox={`0 0 1440 ${total}`} preserveAspectRatio="none" aria-hidden="true">
         <defs>
+          {/* The photos of rock are warm. This filter drops their colour and gives them a cool blue-grey cast. */}
+          <filter id="descent-cool" colorInterpolationFilters="sRGB">
+            <feColorMatrix type="matrix" values=".17 .572 .058 0 0  .196 .658 .066 0 0  .225 .758 .077 0 0  0 0 0 1 0" />
+          </filter>
           <linearGradient id="descent-wrap-x">
             {[0, .15, .5, .85, 1].map((offset, i) => <stop key={i} offset={offset} stopColor="#fff" stopOpacity={[0, .2, 1, .2, 0][i]} />)}
           </linearGradient>
@@ -164,7 +168,7 @@ const GeologicalDescent = ({ children }) => {
           {[...new Set(materials)].map(material => (
             <React.Fragment key={material}>
               <pattern id={`descent-raw-${material}`} width="840" height="840" patternUnits="userSpaceOnUse">
-                <image href={texturesOn ? `./assets/geology-${material}.webp?v=3` : undefined} width="840" height="840" preserveAspectRatio="none" />
+                <image filter="url(#descent-cool)" href={texturesOn ? `./assets/geology-${material}.webp?v=3` : undefined} width="840" height="840" preserveAspectRatio="none" />
               </pattern>
               <pattern id={`descent-raw-${material}-x`} href={`#descent-raw-${material}`} patternTransform="translate(420 0)" />
               <pattern id={`descent-raw-${material}-y`} href={`#descent-raw-${material}`} patternTransform="translate(0 420)" />
@@ -191,14 +195,14 @@ const GeologicalDescent = ({ children }) => {
             <rect width="160" height="160" filter="url(#descent-mineral-grain)" />
           </pattern>
           <linearGradient id="descent-bridge" x1="0" y1="0" x2="0" y2="1">
-            <stop stopColor="#1d150f" /><stop offset="1" stopColor="#1d150f" stopOpacity="0" />
+            <stop stopColor="#141c27" /><stop offset="1" stopColor="#141c27" stopOpacity="0" />
           </linearGradient>
           <linearGradient id="descent-reading-veil">
-            <stop stopColor="#120e0b" stopOpacity=".45" /><stop offset=".2" stopColor="#120e0b" stopOpacity=".6" />
-            <stop offset=".8" stopColor="#120e0b" stopOpacity=".6" /><stop offset="1" stopColor="#120e0b" stopOpacity=".45" />
+            <stop stopColor="#0f1722" stopOpacity=".45" /><stop offset=".2" stopColor="#0f1722" stopOpacity=".6" />
+            <stop offset=".8" stopColor="#0f1722" stopOpacity=".6" /><stop offset="1" stopColor="#0f1722" stopOpacity=".45" />
           </linearGradient>
         </defs>
-        <rect width="1440" height={total} fill="#120e0b" />
+        <rect width="1440" height={total} fill="#0f1722" />
         {materials.map((material, i) => (
           <g key={i}>
             <path data-bed={i} data-pinch-out={[6, 18, 37].includes(i) ? true : undefined} d={beds[i]} fill={colors[material]} />
@@ -214,10 +218,10 @@ const GeologicalDescent = ({ children }) => {
                     return sum + (fault.bed === i && t > 0 && t < 1 && x > faultX(fault, y) ? fault.throw * Math.sin(Math.PI * t) : 0);
                   }, 0);
                   return [x, y + offset];
-                }))} stroke={material === 'shale' ? '#a4aea8' : '#494b40'} strokeOpacity=".16" strokeWidth=".55" />
+                }))} stroke={material === 'shale' ? '#9db0c4' : '#3d4a5a'} strokeOpacity=".16" strokeWidth=".55" />
               ))}
               <path data-fractures={i} data-material={material} data-fracture-count={fracturedBeds.includes(i) && material !== 'basement' ? 18 : fractureCounts[material]}
-                stroke={material === 'basement' ? '#382e2a' : '#3f4239'} strokeOpacity=".42" strokeWidth=".7"
+                stroke={material === 'basement' ? '#2b3644' : '#34404f'} strokeOpacity=".42" strokeWidth=".7"
                 d={Array.from({ length: fracturedBeds.includes(i) && material !== 'basement' ? 18 : fractureCounts[material] }, (_, n) => {
                   const seed = i * 97 + n * 5;
                   const x = 12 + (n * 91 + random(seed) * 65) % 1416;
@@ -228,7 +232,7 @@ const GeologicalDescent = ({ children }) => {
                   return `M${x} ${y}l${lean * .45} ${length * .48} ${lean * .55 + 2} ${length * .52}`
                     + (n % 3 === 0 ? `m${-lean * .55 - 3} ${-length * .52}l${-lean * .35} ${length * .3}` : '');
                 }).join('')} />
-              {(material === 'basement' || fracturedBeds.includes(i)) && <path stroke="#ddd3b9" strokeOpacity=".36" strokeWidth="1"
+              {(material === 'basement' || fracturedBeds.includes(i)) && <path stroke="#c9d6e3" strokeOpacity=".36" strokeWidth="1"
                 d={Array.from({ length: material === 'basement' ? 12 : 3 }, (_, n) => {
                   const x = 35 + random(i * 37 + n * 11) * 1370;
                   const y = boundaryY(i, x) + (boundaryY(i + 1, x) - boundaryY(i, x)) * random(n * 17 + i);
@@ -239,7 +243,7 @@ const GeologicalDescent = ({ children }) => {
         ))}
         {profiles.slice(1, -1).map((points, i) => (
           <path key={i} data-contact={i + 1} d={trace(points)} fill="none"
-            stroke="#a9a595" strokeOpacity={i === materials.length - 2 ? '.3' : '.1'} strokeWidth={i === materials.length - 2 ? 1 : .6} />
+            stroke="#9fb1c4" strokeOpacity={i === materials.length - 2 ? '.3' : '.1'} strokeWidth={i === materials.length - 2 ? 1 : .6} />
         ))}
         {faults.map((fault, i) => {
           const line = trace(Array.from({ length: 13 }, (_, n) => {
@@ -247,19 +251,19 @@ const GeologicalDescent = ({ children }) => {
             return [faultX(fault, y) + Math.sin(n * 1.8 + i) * Math.min(1.2, fault.length * .015), y];
           }));
           return <g key={i} className="descent-fault" clipPath={`url(#descent-bed-${fault.bed})`}>
-            <path data-fault={i} data-fault-material={materials[fault.bed]} d={line} fill="none" stroke="#42372e" strokeOpacity=".48" strokeWidth="1" />
-            <path d={line} transform="translate(1.5 0)" fill="none" stroke="#b0a58e" strokeOpacity=".23" strokeWidth=".6" />
+            <path data-fault={i} data-fault-material={materials[fault.bed]} d={line} fill="none" stroke="#2c3745" strokeOpacity=".48" strokeWidth="1" />
+            <path d={line} transform="translate(1.5 0)" fill="none" stroke="#a9bbcd" strokeOpacity=".23" strokeWidth=".6" />
           </g>;
         })}
         {structuralFaults.map((fault, i) => <path key={i} data-structural-fault={i}
           d={`M${faultX(fault, fault.y)} ${fault.y}l${fault.slope * fault.length} ${fault.length}`}
-          fill="none" stroke="#b3aaa0" strokeOpacity=".28" strokeWidth=".8" />)}
+          fill="none" stroke="#aebccb" strokeOpacity=".28" strokeWidth=".8" />)}
         {[sandstoneBed, lowerSandstone].map((bed, n) => (
           <g key={bed} className="descent-motion" data-visible="false" clipPath={`url(#descent-bed-${bed})`}>
             {[38, 1240].map(x => <React.Fragment key={x}>
-              <path d={`M${x} ${middle(bed, x)}l108 -4`} fill="none" stroke="#d8cfc4" strokeOpacity=".12" strokeWidth="1" />
+              <path d={`M${x} ${middle(bed, x)}l108 -4`} fill="none" stroke="#cfdae6" strokeOpacity=".12" strokeWidth="1" />
               {[0, 1, 2].map(i => <ellipse key={i} className="descent-flow" cx={x} cy={middle(bed, x)} rx="3" ry="1.1"
-                fill="#e2d9cd" style={{ animationDelay: `${-i * 1.1 - n * 9}s` }} />)}
+                fill="#d9e5f0" style={{ animationDelay: `${-i * 1.1 - n * 9}s` }} />)}
             </React.Fragment>)}
           </g>
         ))}
