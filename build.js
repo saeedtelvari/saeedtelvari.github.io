@@ -41,7 +41,7 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
       'StoryBlock.jsx',
       'StoryPage.jsx'
     ];
-    const simulatorFiles = ['ve2d-model.js', 'sim-block3d.js', 'GuidePage.jsx', 'SimCharts.jsx', 'SimViews.jsx', 'SimulatorPage.jsx'];
+    const simulatorFiles = ['ve2d-model.js', 'sim-block3d.js', 'GuidePage.jsx', 'SimCharts.jsx', 'SimViews.jsx', 'SimFirstRun.jsx', 'SimulatorPage.jsx'];
 
     // The site bundle and the story bundle drop the comments and the extra white space. The sources keep both.
     // A test that reads one of these bundles must not depend on spacing.

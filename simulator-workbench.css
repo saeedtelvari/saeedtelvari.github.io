@@ -1597,6 +1597,56 @@
   .sim-method nav ol { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 }
 
+/* ------------------------------------------------------------------ first-run guide */
+
+/* A small panel at the bottom left of the map. It sits above the legend. */
+.sim-guide {
+  position: absolute;
+  left: 12px;
+  bottom: 56px;
+  z-index: 6;
+  width: min(300px, calc(100% - 24px));
+  padding: 12px 14px 10px;
+  border: 1px solid var(--sim-rule-strong);
+  border-radius: 10px;
+  color: var(--sim-ink);
+  background: var(--sim-surface-2);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.35);
+  font: 400 13px/1.45 var(--sim-font-ui);
+  animation: sim-fade 220ms var(--sim-ease);
+}
+
+.sim-guide__count { margin: 0 0 2px; color: var(--sim-ink-faint); font-size: 11px; letter-spacing: 0.04em; }
+.sim-guide__title { margin: 0 0 6px; font: 700 14px/1.3 var(--sim-font-head); }
+.sim-guide__body p { margin: 0 0 6px; color: var(--sim-ink-muted); }
+.sim-guide__goal { padding: 6px 8px; border-left: 3px solid var(--sim-accent); background: var(--sim-accent-soft); }
+.sim-guide__goal strong { color: var(--sim-ink); }
+.sim-guide__dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: var(--dot);
+}
+
+.sim-guide__actions { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.sim-guide__spacer { flex: 1; }
+.sim-guide .sim-button { min-height: 30px; padding: 4px 10px; }
+
+@media (max-width: 760px) {
+  .sim-guide { left: 8px; right: 8px; width: auto; bottom: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sim-guide { animation: none; }
+}
+
+@media print {
+  .sim-guide,
+  #sim-guide-button { display: none !important; }
+}
+
 /* ------------------------------------------------------------------ motion preferences */
 
 @media (prefers-reduced-motion: reduce) {
