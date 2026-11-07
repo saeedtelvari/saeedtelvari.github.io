@@ -820,6 +820,7 @@ const SimulatorPage = () => {
   const [share, setShare] = useState('Share');
   const [layers, setLayers] = useState({ contours: true, traps: true, residual: true, dissolved: false, pressure: false, flow: true });
   const [sectionLine, setSectionLine] = useState(null);
+  const [guideOpen, setGuideOpen] = useState(() => simGuideShouldOpen());
   const autoplayed = useRef(false);
   const tabRefs = useRef({});
 
@@ -1017,11 +1018,13 @@ const SimulatorPage = () => {
                   {SIM_VIEWS.map(item => <button key={item.id} type="button" aria-pressed={view === item.id} onClick={() => setView(item.id)}>{item.label}</button>)}
                 </div>
                 <div className="sim-overlay__right">
+                  {view === 'map' && <button type="button" id="sim-guide-button" className="sim-button" aria-haspopup="dialog" aria-expanded={guideOpen} onClick={() => setGuideOpen(true)}>Guide</button>}
                   {view !== 'section' && <SimLayersMenu layers={layers} onChange={setLayers} view={view} />}
                 </div>
               </div>
               {model && <SimLegend view={view} layers={layers} model={model} />}
             </div>
+            {view === 'map' && <SimFirstRun open={guideOpen} onClose={() => setGuideOpen(false)} />}
             <SimTransport year={shownYear} years={model?.years || scenario.years} injYears={model?.injYears || scenario.injYears} computedYears={computedYears}
               playing={playing} speed={speed} onPlay={play} onSeek={seek} onSpeed={() => setSpeed(s => (s + 1) % SIM_SPEEDS.length)} />
           </section>
