@@ -172,7 +172,7 @@ test('the project card, the story button and the homepage text use the new name'
   assert.deepEqual(project.links.map(link => link.label), ['Open the VE simulator', 'Read the method']);
   assert.match(project.image.alt, /VE simulator/);
   const story = require('../story-content.js');
-  assert.deepEqual(story.SITE_STORY.actions.map(action => action.label), ['Open the VE simulator', 'Read my research']);
+  assert.deepEqual(story.SITE_STORY.actions.map(action => action.label), ['Open the VE simulator', 'Read the publications']);
 });
 
 test('the MuPSI wording of today and the true no-script text stay in the restored homepage', () => {
