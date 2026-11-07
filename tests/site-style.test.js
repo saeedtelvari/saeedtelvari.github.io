@@ -1,5 +1,6 @@
 // Two looks live in this repository.
-// - The homepage, the CV and the simulator use the dark "Earth night" look. Their rules are in colors_and_type.css.
+// - The simulator uses the dark "Earth night" look. The homepage and the CV use "North Sea night". It has the same rules
+//   with cool blue-grey tokens, which the class site-ns on <html> sets. All these rules are in colors_and_type.css.
 // - The story page (ve-story.html) uses style C, the light textbook cutaway. Its rules are in story.css.
 //   Only ve-story.html loads story.css, and only that page has the class site-c on <html>.
 // These tests pin both sides, and they pin the border between them.
@@ -114,23 +115,25 @@ test('colors_and_type.css has the dark look only: no story token, no story rule,
   const bar = allRules.find(rule => rule.selector === '.app-header--site .app-header__bar');
   assert.match(bar.body, /gradient\(180deg, rgba\(7, 10, 16, 0\.55\)/, 'the header is transparent over the hero');
   const scrolled = allRules.find(rule => rule.selector === '.app-header--site.is-scrolled .app-header__bar');
-  assert.match(scrolled.body, /rgba\(18, 14, 11, 0\.9\)/, 'and an Earth surface after the page moves');
+  assert.match(scrolled.body, /rgba\(15, 23, 34, 0\.9\)/, 'and a North Sea surface after the page moves');
   assert.match(allRules.find(rule => rule.selector === '.site-footer').body, /var\(--sim-/, 'the footer reads the night tokens');
 });
 
 test('index.html and cv.html keep the dark look: night colours, no site-c class, no story file', () => {
   for (const page of ['index.html', 'cv.html']) {
     const html = read(page);
-    assert.match(html, /<html lang="en">/, `${page}: no site-c class on <html>`);
-    assert.match(html, /<meta name="theme-color" content="#120e0b">/, `${page}: theme colour is the night ground`);
-    assert.match(html, /body \{ background: #120e0b; color: #f4ede3;/, `${page}: body ground and ink`);
+    assert.match(html, /<html lang="en" class="site-ns">/, `${page}: the class site-ns, and no site-c class, on <html>`);
+    assert.match(html, /<meta name="theme-color" content="#0f1722">/, `${page}: theme colour is the night ground`);
+    assert.match(html, /body \{ background: #0f1722; color: #e8edf2;/, `${page}: body ground and ink`);
     assert.doesNotMatch(html, /#c9d6dc|#1f2a30/i, `${page}: no colour of style C`);
     assert.match(html, /family=Montserrat[^"]*family=Open\+Sans[^"]*family=JetBrains\+Mono/, `${page}: loads the three site fonts`);
     assert.doesNotMatch(html, /Literata/, `${page}: loads no story font`);
     assert.doesNotMatch(html, /story\.css|story-bundle\.js|land-110m|story-run|north-sea-ccs/, `${page}: loads no story file`);
   }
   const index = read('index.html');
-  assert.match(index, /#app-loader \{[^}]*linear-gradient\(180deg, #070d1a/, 'the loader shows the night sky');
+  assert.match(index, /#app-loader \{[^}]*linear-gradient\(180deg, #070d1a[^;]*#0f1722 100%\)/, 'the loader shows the night sky over the North Sea ground');
+  assert.match(index, /::-webkit-scrollbar-track \{ background: #0f1722; \}/);
+  assert.match(index, /::-webkit-scrollbar-thumb \{ background: #34475f;/);
   assert.match(index, /<meta property="og:image" content="https:\/\/saeedtelvari\.github\.io\/assets\/social-card\.jpg">/);
 });
 
