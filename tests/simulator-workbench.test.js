@@ -224,3 +224,14 @@ test('uncertainty results survive switching to the simulator and back', () => {
 test('the stylesheet is cache-busted with the bundles', () => {
   assert.match(read('simulator.html'), /simulator-workbench\.css\?v=\d+/);
 });
+
+test('the app bar wraps below 1180 px, so tablets get no hidden controls', () => {
+  const css = read('simulator-workbench.css');
+  const start = css.indexOf('@media (max-width: 1179px)');
+  assert.ok(start >= 0, 'the 1179 px block exists');
+  const next = css.indexOf('@media', start + 1);
+  const block = css.slice(start, next === -1 ? undefined : next);
+  assert.match(block, /\.sim-appbar \{[^}]*flex-wrap: wrap/);
+  assert.match(block, /\.sim-actions \{[^}]*flex-wrap: wrap/);
+  assert.match(read('simulator.html'), /simulator-workbench\.css\?v=5/);
+});

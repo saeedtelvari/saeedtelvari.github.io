@@ -1498,6 +1498,10 @@
 .sim-sheet-backdrop { display: none; }
 
 @media (max-width: 1179px) {
+  /* Below 1180 px the bar wraps. The tabs and the actions then fit on narrow screens. */
+  .sim-appbar { flex-wrap: wrap; row-gap: 10px; }
+  .sim-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; margin-left: auto; }
+
   .sim-workbench { grid-template-columns: minmax(0, 1fr) 300px; }
 
   .sim-rail--inputs {
