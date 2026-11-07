@@ -36,7 +36,7 @@ const SiteSection = ({ id, title, children }) => (
 );
 
 const SITE_THEMES = [
-  ['VE models for depleted gas fields', 'Three-phase CO₂–methane–brine VE with a black-oil approximation, checked against compositional simulation and up to 100× faster.'],
+  ['VE models for depleted gas fields', 'Three-phase CO₂–methane–brine VE with a black-oil approximation, checked against compositional simulation and up to 100× faster (preprint, 2026).'],
   ['Storage screening under uncertainty', 'Ensembles of fast VE runs that test many scenarios and uncertain reservoir properties at field scale.'],
   ['Machine learning for upscaling and digital rock', 'CNNs that upscale permeability tensors and predict two-phase flow properties from micro-CT images.'],
 ];
@@ -147,7 +147,7 @@ const PublicationsSection = () => {
     <SiteSection id="publications" title="Publications">
       <ol className="pubs">
         {SITE_PUBLICATIONS.map(pub => (
-          <li key={pub.id} className="pub">
+          <li key={pub.id} id={`pub-${pub.id}`} className="pub">
             <span className="pub__year">{pub.year}</span>
             <div className="pub__body">
               <h3 className="pub__title"><a href={pub.url} target="_blank" rel="noreferrer">{pub.title}</a></h3>
@@ -197,6 +197,7 @@ const ContactSection = () => {
             </button>
             <span className="visually-hidden" aria-live="polite">{status.email ? `${status.email}: email address` : ''}</span>
           </div>
+          <p className="contact__cv">CV: <a href="./assets/cv.pdf">CV (PDF)</a> · <a href="./cv.html">CV (web)</a></p>
           <p className="contact__address"><Icon name="pin" size={16} />Institute of GeoEnergy Engineering, Heriot-Watt University, Edinburgh, UK</p>
         </div>
         <ul className="contact__profiles">

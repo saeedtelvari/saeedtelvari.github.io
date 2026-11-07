@@ -19,11 +19,13 @@
   <meta name="twitter:title" content="Sa'eed Telvari — CO₂ storage and reservoir simulation">
   <meta name="twitter:description" content="Vertical-equilibrium models of CO₂ storage in depleted gas fields, a browser-based VE simulator for CO₂ storage, publications and CV.">
   <meta name="twitter:image" content="https://saeedtelvari.github.io/assets/social-card.jpg">
-  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Person","name":"Sa'eed Telvari","url":"https://saeedtelvari.github.io/","image":"https://saeedtelvari.github.io/assets/social-card.jpg","jobTitle":"PhD Candidate in Petroleum Engineering","affiliation":{"@type":"CollegeOrUniversity","name":"Heriot-Watt University"},"alumniOf":{"@type":"CollegeOrUniversity","name":"Amirkabir University of Technology"},"knowsAbout":["Vertical equilibrium models","CO2 storage","Depleted gas reservoirs","Reservoir simulation","MRST","Machine learning for permeability upscaling"],"email":"mailto:st4014@hw.ac.uk","sameAs":["https://orcid.org/0000-0002-4896-295X","https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ","https://github.com/saeedtelvari","https://www.linkedin.com/in/stelvari/"]}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Person","name":"Sa'eed Telvari","url":"https://saeedtelvari.github.io/","image":"https://saeedtelvari.github.io/assets/social-card.jpg","jobTitle":"PhD Candidate in Petroleum Engineering","affiliation":{"@type":"CollegeOrUniversity","name":"Heriot-Watt University"},"alumniOf":{"@type":"CollegeOrUniversity","name":"Amirkabir University of Technology"},"knowsAbout":["Vertical equilibrium models","CO2 storage","Depleted gas reservoirs","Reservoir simulation","MRST","Machine learning for permeability upscaling"],"email":"st4014@hw.ac.uk","sameAs":["https://orcid.org/0000-0002-4896-295X","https://scholar.google.co.uk/citations?user=_nGa8EQAAAAJ","https://github.com/saeedtelvari","https://www.linkedin.com/in/stelvari/"]}</script>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <!-- The font sheet loads without blocking the first paint. The text shows in a system font until the fonts arrive. -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap"></noscript>
   <link rel="stylesheet" href="./colors_and_type.css?v=57">
   <link rel="icon" href="./favicon.ico" sizes="32x32">
   <link rel="icon" href="./assets/logo-minimalist.webp" type="image/webp">
@@ -49,6 +51,9 @@
       transition: opacity 450ms cubic-bezier(0.23, 1, 0.32, 1);
     }
     #app-loader.loader-finished { opacity: 0; pointer-events: none; }
+    /* The loader shows the hero text in the place where React draws it, so the visitor reads it before React runs.
+       The classes come from colors_and_type.css. The name has no reveal animation here. */
+    #app-loader .loader-name { color: #e4eef6; }
     .shell-progress {
       position: absolute;
       left: 0;
@@ -68,13 +73,23 @@
   </style>
 </head>
 <body>
-  <div id="app-loader" aria-hidden="true"><div class="shell-progress"></div></div>
+  <div id="app-loader" aria-hidden="true">
+    <div class="hero-identity">
+      <p class="hero-role">PhD candidate, Heriot-Watt University</p>
+      <div class="hero-name loader-name">Sa’eed Telvari</div>
+      <p class="hero-summary">
+        I build vertical-equilibrium models of CO<sub>2</sub> storage in depleted gas fields: reduced-order simulators
+        that run up to 100× faster than full 3D compositional models (preprint, 2026).
+      </p>
+    </div>
+    <div class="shell-progress"></div>
+  </div>
   <div id="root"></div>
   <noscript>
     <style>#app-loader { display: none; }</style>
     <main style="max-width:720px;margin:0 auto;padding:48px 24px;font-family:'Open Sans',system-ui,sans-serif;line-height:1.7">
       <h1 style="font-family:Montserrat,system-ui,sans-serif">Sa'eed Telvari</h1>
-      <p>PhD candidate, Heriot-Watt University. I build vertical-equilibrium models of CO₂ storage in depleted gas fields. They reproduce compositional simulations, with speed-ups of up to 100×.</p>
+      <p>PhD candidate, Heriot-Watt University. I build vertical-equilibrium models of CO₂ storage in depleted gas fields. They reproduce compositional simulations, with speed-ups of up to 100× (preprint, 2026).</p>
       <p>
         <a href="./simulator.html">VE simulator</a> ·
         <a href="./ve-story.html">How VE models work</a> ·

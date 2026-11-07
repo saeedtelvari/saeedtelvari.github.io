@@ -156,7 +156,7 @@ const SimulatorStandalone = () => {
     <div className="ve-standalone" data-screen-label="03 VE Simulator">
       <SkipLink />
       <Header active="simulator" onNavigate={(id, event) => siteNavigate('simulator', id, event)} variant="workbench" />
-      <main id="main-content"><SimulatorPage /></main>
+      <main id="main-content" tabIndex={-1}><SimulatorPage /></main>
     </div>
   );
 };
