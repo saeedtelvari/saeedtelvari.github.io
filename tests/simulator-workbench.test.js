@@ -234,5 +234,7 @@ test('the app bar wraps below 1180 px, so tablets get no hidden controls', () =>
   const block = css.slice(start, next === -1 ? undefined : next);
   assert.match(block, /\.sim-appbar \{[^}]*flex-wrap: wrap/);
   assert.match(block, /\.sim-actions \{[^}]*flex-wrap: wrap/);
-  assert.match(read('simulator.html'), /simulator-workbench\.css\?v=5/);
+  // Version 5 added the wrap rules. A later version keeps them, so the check accepts 5 or more.
+  const version = Number((read('simulator.html').match(/simulator-workbench\.css\?v=(\d+)/) || [])[1]);
+  assert.ok(version >= 5, `the stylesheet version is 5 or more (found ${version})`);
 });

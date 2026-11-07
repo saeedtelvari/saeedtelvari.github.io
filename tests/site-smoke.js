@@ -79,7 +79,7 @@ has('build.js', /simulator-bundle\.js/, 'the heavy simulator must have a page-sp
 const simulatorBundleVersions = [...read('simulator.html').matchAll(/simulator-bundle\.js\?v=([^"']+)/g)].map(match => match[1]);
 assert.ok(simulatorBundleVersions.length >= 2, 'simulator bundle must be preloaded and executed');
 assert.equal(new Set(simulatorBundleVersions).size, 1, 'simulator preload and script URLs must use the same cache version');
-assert.equal(simulatorBundleVersions[0], '26', 'simulator page must load the current bundle version');
+assert.equal(simulatorBundleVersions[0], '27', 'simulator page must load the current bundle version');
 for (const page of ['index.html', 'cv.html', 've-story.html']) lacks(page, /simulator-bundle\.js/, page + ' must not download the simulator bundle');
 for (const page of ['index.html', 'cv.html', 'simulator.html']) lacks(page, /story-bundle\.js|story\.css/, page + ' must not download the story bundle or the story styles');
 has('ve-story.html', /story-bundle\.js\?v=\d+/, 'the story page loads the story bundle');

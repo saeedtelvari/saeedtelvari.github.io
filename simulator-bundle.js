@@ -2979,6 +2979,33 @@ void main() {
 // GuidePage.jsx — Method: the equations, numerics, verification and limits of the model
 // in ve2d-model.js, written to match the code exactly. Equations are typeset with KaTeX.
 
+// Shared text. The Method tab and the screening report (SimReport.jsx) both use it.
+// A pair of stars in a reference marks italic text.
+const SIM_CAVEAT_TEXT = "This is an educational model of CO₂ storage in a confined saline aquifer, built on the vertical-equilibrium (VE) approximation used by MRST's co2lab. It runs in your browser in about a second, so the inputs can be explored freely. It is not a substitute for a field study: the aquifer is homogeneous, the fluids have constant properties and the caprock is a perfect seal except at faults.";
+const SIM_LIMITATIONS = ["Sharp interface: no capillary fringe, so very thin plumes are idealised.", "Constant fluid densities and viscosities; no CO₂ compressibility, temperature or composition effects.", "Homogeneous permeability; no layering inside the aquifer.", "Brine mobility in the residual zone is not reduced; dissolved CO₂ does not migrate.", "After injection the total flux is set to zero once the pressure has relaxed.", "No geomechanics: the fracture margin is a guide, not a calculation."];
+const SIM_REFERENCES = ["Barnes, Lehman and Mulla (2014). Priority-flood: an optimal depression-filling algorithm. *Computers & Geosciences* 62.", "Bennion and Bachu (2008). Drainage and imbibition relative permeability relationships for supercritical CO₂/brine. *SPE Reservoir Evaluation & Engineering* 11(3).", "Bretan, Yielding and Jones (2003). Using calibrated shale gouge ratio to estimate hydrocarbon column heights. *AAPG Bulletin* 87(3).", "Gasda, Nordbotten and Celia (2009). Vertical equilibrium with sub-scale analytical methods for geological CO₂ sequestration. *Computational Geosciences* 13.", "Hesse, Orr and Tchelepi (2008). Gravity currents with residual trapping. *Journal of Fluid Mechanics* 611.", "Kim and Sanderson (2005). The relationship between displacement and length of faults: a review. *Earth-Science Reviews* 68.", "Lee, Efendiev and Tchelepi (2015). Hybrid upwind discretization of nonlinear two-phase flow with gravity. *Advances in Water Resources* 82.", "MacMinn, Szulczewski and Juanes (2011). CO₂ migration in saline aquifers. Part 2: capillary and solubility trapping. *Journal of Fluid Mechanics* 688.", "Manzocchi, Walsh, Nell and Yielding (1999). Fault transmissibility multipliers for flow simulation models. *Petroleum Geoscience* 5.", "Neufeld et al. (2010). Convective dissolution of carbon dioxide in saline aquifers. *Geophysical Research Letters* 37.", "Nilsen, Lie and Andersen (2016). Fully-implicit simulation of vertical-equilibrium models with hysteresis and capillary fringe. *Computational Geosciences* 20.", "Nordbotten and Celia (2006). Similarity solutions for fluid injection into confined aquifers. *Journal of Fluid Mechanics* 561.", "Nordbotten and Celia (2012). *Geological Storage of CO₂: Modeling Approaches for Large-Scale Simulation*. Wiley.", "Peaceman (1978). Interpretation of well-block pressures in numerical reservoir simulation. *SPE Journal* 18(3)."];
+// The DOI of each reference, in the same order. Each one was checked against Crossref.
+const SIM_REFERENCE_DOIS = ['10.1016/j.cageo.2013.04.024', '10.2118/99326-pa', '10.1306/08010201128', '10.1007/s10596-009-9138-x', '10.1017/s002211200800219x', '10.1016/j.earscirev.2004.06.003', '10.1016/j.advwatres.2015.04.007', '10.1017/jfm.2011.379', '10.1144/petgeo.5.1.53', '10.1029/2010gl044728', '10.1007/s10596-015-9547-y', '10.1017/s0022112006000802', '10.1002/9781118137086', '10.2118/6893-pa'];
+const simEmphasis = text => text.split("*").map((part, i) => i % 2 ? /*#__PURE__*/React.createElement("em", {
+  key: i
+}, part) : part);
+// end of shared text
+
+// KaTeX loads once, when the Method tab first opens. The simulator page does not fetch it.
+const SIM_KATEX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min';
+const simLoadKatex = () => {
+  if (window.katex || window.__simKatexRequested) return;
+  window.__simKatexRequested = true;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `${SIM_KATEX_URL}.css`;
+  document.head.appendChild(link);
+  const script = document.createElement('script');
+  script.src = `${SIM_KATEX_URL}.js`;
+  script.async = true;
+  script.onload = () => window.dispatchEvent(new Event('sim-katex-ready'));
+  document.head.appendChild(script);
+};
 const SimTex = ({
   tex,
   block = false
@@ -2987,14 +3014,19 @@ const SimTex = ({
   const [ready, setReady] = useState(typeof window !== 'undefined' && !!window.katex);
   useEffect(() => {
     if (ready) return undefined;
+    const done = () => {
+      if (window.katex) setReady(true);
+    };
+    window.addEventListener('sim-katex-ready', done);
     const timer = setInterval(() => {
       if (window.katex) {
         setReady(true);
         clearInterval(timer);
       }
     }, 200);
-    const stop = setTimeout(() => clearInterval(timer), 8000);
+    const stop = setTimeout(() => clearInterval(timer), 30000);
     return () => {
+      window.removeEventListener('sim-katex-ready', done);
       clearInterval(timer);
       clearTimeout(stop);
     };
@@ -3013,6 +3045,9 @@ const SimTex = ({
 };
 const SIM_METHOD_SECTIONS = [['scope', 'What the model is'], ['geometry', 'Geometry'], ['equations', 'Plume equation'], ['fluxes', 'Fluxes'], ['pressure', 'Pressure and injection'], ['edges', 'Model edges'], ['faults', 'Faults and leakage'], ['dissolution', 'Dissolution'], ['inventory', 'Traps and inventory'], ['numerics', 'Numerics'], ['verification', 'Verification'], ['limits', 'Limitations'], ['parameters', 'Parameters'], ['references', 'References']];
 const GuidePage = () => {
+  useEffect(() => {
+    simLoadKatex();
+  }, []);
   const d = VE2D.DEFAULTS;
   const rows = [['Permeability', 'k', `${d.permMd} mD`, 'Homogeneous'], ['Porosity', '\\phi', d.porosity, ''], ['Aquifer thickness', 'H', `${d.thickness} m`, 'Mean'], ['Thickness variation', '\\sigma_H', `${d.thicknessVar} %`, 'Log-normal, smooth along strike'], ['Residual brine saturation', 'S_{wr}', d.swr, 'co2lab Johansen example'], ['Residual CO₂ saturation', 'S_{gr}', d.sgr, 'co2lab Johansen example'], ['CO₂ relative permeability end point', 'k_{rg}^{*}', d.krg, 'Within Bennion & Bachu (2008) range'], ['CO₂ / brine density', '\\rho_g,\\ \\rho_w', `${d.rhoCo2} / ${d.rhoBrine} kg/m³`, 'About 1500 m depth'], ['CO₂ / brine viscosity', '\\mu_g,\\ \\mu_w', `${d.muCo2} / ${d.muBrine} mPa·s`, ''], ['Total compressibility', 'c_t', `${d.ct}×10⁻⁴ bar⁻¹`, 'Rock plus brine'], ['Dissolution rate', 'r_d', `${d.disRate} kg m⁻² yr⁻¹`, 'co2lab default 5×10⁻¹¹ m/s at φ = 0.2'], ['CO₂ solubility in brine', 'c_{sat}', `${d.disCap} kg/m³`, 'CO2store value used by co2lab'], ['Fault-zone width, caprock thickness', 'w,\\ L_c', '5 m, 100 m', 'Fixed']];
   return /*#__PURE__*/React.createElement("div", {
@@ -3025,7 +3060,7 @@ const GuidePage = () => {
     href: `#m-${id}`
   }, label))))), /*#__PURE__*/React.createElement("article", null, /*#__PURE__*/React.createElement("h2", {
     id: "m-scope"
-  }, "What the model is"), /*#__PURE__*/React.createElement("p", null, "This is an educational model of CO\u2082 storage in a confined saline aquifer, built on the vertical-equilibrium (VE) approximation used by MRST's co2lab. It runs in your browser in about a second, so the inputs can be explored freely. It is not a substitute for a field study: the aquifer is homogeneous, the fluids have constant properties and the caprock is a perfect seal except at faults."), /*#__PURE__*/React.createElement("p", null, "All quantities are in SI units inside the model; the interface shows megatonnes, millidarcies, metres, kilometres, bar and years. One run drives every view: the map, the 3D block, the section, the charts and the uncertainty study all read the same result."), /*#__PURE__*/React.createElement("h2", {
+  }, "What the model is"), /*#__PURE__*/React.createElement("p", null, SIM_CAVEAT_TEXT), /*#__PURE__*/React.createElement("p", null, "All quantities are in SI units inside the model; the interface shows megatonnes, millidarcies, metres, kilometres, bar and years. One run drives every view: the map, the 3D block, the section, the charts and the uncertainty study all read the same result."), /*#__PURE__*/React.createElement("h2", {
     id: "m-geometry"
   }, "Geometry"), /*#__PURE__*/React.createElement("p", null, "The aquifer covers 20 \xD7 12 km on a Cartesian grid of 500, 250 or 167 m cells. Its top surface, the base of the caprock, is an analytic depth field ", /*#__PURE__*/React.createElement(SimTex, {
     tex: "z_t(x,y)"
@@ -3117,10 +3152,13 @@ const GuidePage = () => {
   }), " per unit area."), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("strong", null, "Dissolved"), ", ", /*#__PURE__*/React.createElement("strong", null, "Left the model"), " and ", /*#__PURE__*/React.createElement("strong", null, "Leaked through faults"), ": cumulative totals.")), /*#__PURE__*/React.createElement("p", null, "The outcomes show the mass-balance error, injected minus the six classes, at every year."), /*#__PURE__*/React.createElement("h2", {
     id: "m-numerics"
   }, "Numerics"), /*#__PURE__*/React.createElement("p", null, "Transport is explicit with an adaptive time step: the step is limited so that no cell can change by more than 40 % of its imbibition storage, using bounds on the derivatives of every face flux; a step that would empty a column is shortened rather than clipped, so no mass is ever deleted. One step may add at most a quarter of the injector cell's pore volume. Leakage and dissolution are applied after each transport step. Films thinner than a micrometre do not move."), /*#__PURE__*/React.createElement("h2", {
-    id: "m-verification"
+    id: "m-verification",
+    tabIndex: -1
   }, "Verification"), /*#__PURE__*/React.createElement("p", null, "The engine is tested in Node on every change. The current results:"), /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Check"), /*#__PURE__*/React.createElement("th", null, "Result"))), /*#__PURE__*/React.createElement("tbody", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, "Mass balance over 1000 years, default scenario"), /*#__PURE__*/React.createElement("td", null, "Worst relative error 9\xD710\u207B\xB9\xB3 (250 m grid)")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, "Closed aquifer: mean build-up vs injected volume / (\u03C6 c", /*#__PURE__*/React.createElement("sub", null, "t"), " V)"), /*#__PURE__*/React.createElement("td", null, "178.6 bar, error below 0.01 %")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, "Injection without buoyancy vs Nordbotten and Celia (2006)"), /*#__PURE__*/React.createElement("td", null, "Volume-weighted plume radius +7.5 % after 30 years (167 m grid)")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, "Thin plume on a 1\xB0 slope vs buoyant Darcy speed"), /*#__PURE__*/React.createElement("td", null, "56.1 vs 58.1 m/yr (\u22123.4 %)")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, "Grid convergence, 250 m vs 167 m, year 1000"), /*#__PURE__*/React.createElement("td", null, "Footprint +1.1 %, leaked 4.68 % vs 4.55 % of injected")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, "Symmetry, bounds, sealing faults, seal capacity, solubility cap, outflow direction"), /*#__PURE__*/React.createElement("td", null, "Pass")))), /*#__PURE__*/React.createElement("h2", {
     id: "m-limits"
-  }, "Limitations"), /*#__PURE__*/React.createElement("ul", null, /*#__PURE__*/React.createElement("li", null, "Sharp interface: no capillary fringe, so very thin plumes are idealised."), /*#__PURE__*/React.createElement("li", null, "Constant fluid densities and viscosities; no CO\u2082 compressibility, temperature or composition effects."), /*#__PURE__*/React.createElement("li", null, "Homogeneous permeability; no layering inside the aquifer."), /*#__PURE__*/React.createElement("li", null, "Brine mobility in the residual zone is not reduced; dissolved CO\u2082 does not migrate."), /*#__PURE__*/React.createElement("li", null, "After injection the total flux is set to zero once the pressure has relaxed."), /*#__PURE__*/React.createElement("li", null, "No geomechanics: the fracture margin is a guide, not a calculation.")), /*#__PURE__*/React.createElement("h2", {
+  }, "Limitations"), /*#__PURE__*/React.createElement("ul", null, SIM_LIMITATIONS.map(text => /*#__PURE__*/React.createElement("li", {
+    key: text
+  }, text))), /*#__PURE__*/React.createElement("h2", {
     id: "m-parameters"
   }, "Parameters"), /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Parameter"), /*#__PURE__*/React.createElement("th", null, "Symbol"), /*#__PURE__*/React.createElement("th", null, "Default"), /*#__PURE__*/React.createElement("th", null, "Source or note"))), /*#__PURE__*/React.createElement("tbody", null, rows.map(([name, symbol, value, note]) => /*#__PURE__*/React.createElement("tr", {
     key: name
@@ -3128,7 +3166,12 @@ const GuidePage = () => {
     tex: symbol
   })), /*#__PURE__*/React.createElement("td", null, value), /*#__PURE__*/React.createElement("td", null, note))))), /*#__PURE__*/React.createElement("h2", {
     id: "m-references"
-  }, "References"), /*#__PURE__*/React.createElement("ul", null, /*#__PURE__*/React.createElement("li", null, "Barnes, Lehman and Mulla (2014). Priority-flood: an optimal depression-filling algorithm. ", /*#__PURE__*/React.createElement("em", null, "Computers & Geosciences"), " 62."), /*#__PURE__*/React.createElement("li", null, "Bennion and Bachu (2008). Drainage and imbibition relative permeability relationships for supercritical CO\u2082/brine. ", /*#__PURE__*/React.createElement("em", null, "SPE Reservoir Evaluation & Engineering"), " 11(3)."), /*#__PURE__*/React.createElement("li", null, "Bretan, Yielding and Jones (2003). Using calibrated shale gouge ratio to estimate hydrocarbon column heights. ", /*#__PURE__*/React.createElement("em", null, "AAPG Bulletin"), " 87(3)."), /*#__PURE__*/React.createElement("li", null, "Gasda, Nordbotten and Celia (2009). Vertical equilibrium with sub-scale analytical methods for geological CO\u2082 sequestration. ", /*#__PURE__*/React.createElement("em", null, "Computational Geosciences"), " 13."), /*#__PURE__*/React.createElement("li", null, "Hesse, Orr and Tchelepi (2008). Gravity currents with residual trapping. ", /*#__PURE__*/React.createElement("em", null, "Journal of Fluid Mechanics"), " 611."), /*#__PURE__*/React.createElement("li", null, "Kim and Sanderson (2005). The relationship between displacement and length of faults: a review. ", /*#__PURE__*/React.createElement("em", null, "Earth-Science Reviews"), " 68."), /*#__PURE__*/React.createElement("li", null, "Lee, Efendiev and Tchelepi (2015). Hybrid upwind discretization of nonlinear two-phase flow with gravity. ", /*#__PURE__*/React.createElement("em", null, "Advances in Water Resources"), " 82."), /*#__PURE__*/React.createElement("li", null, "MacMinn, Szulczewski and Juanes (2011). CO\u2082 migration in saline aquifers. Part 2: capillary and solubility trapping. ", /*#__PURE__*/React.createElement("em", null, "Journal of Fluid Mechanics"), " 688."), /*#__PURE__*/React.createElement("li", null, "Manzocchi, Walsh, Nell and Yielding (1999). Fault transmissibility multipliers for flow simulation models. ", /*#__PURE__*/React.createElement("em", null, "Petroleum Geoscience"), " 5."), /*#__PURE__*/React.createElement("li", null, "Neufeld et al. (2010). Convective dissolution of carbon dioxide in saline aquifers. ", /*#__PURE__*/React.createElement("em", null, "Geophysical Research Letters"), " 37."), /*#__PURE__*/React.createElement("li", null, "Nilsen, Lie and Andersen (2016). Fully-implicit simulation of vertical-equilibrium models with hysteresis and capillary fringe. ", /*#__PURE__*/React.createElement("em", null, "Computational Geosciences"), " 20."), /*#__PURE__*/React.createElement("li", null, "Nordbotten and Celia (2006). Similarity solutions for fluid injection into confined aquifers. ", /*#__PURE__*/React.createElement("em", null, "Journal of Fluid Mechanics"), " 561."), /*#__PURE__*/React.createElement("li", null, "Nordbotten and Celia (2012). ", /*#__PURE__*/React.createElement("em", null, "Geological Storage of CO\u2082: Modeling Approaches for Large-Scale Simulation"), ". Wiley."), /*#__PURE__*/React.createElement("li", null, "Peaceman (1978). Interpretation of well-block pressures in numerical reservoir simulation. ", /*#__PURE__*/React.createElement("em", null, "SPE Journal"), " 18(3)."))));
+  }, "References"), /*#__PURE__*/React.createElement("ul", null, SIM_REFERENCES.map((text, i) => /*#__PURE__*/React.createElement("li", {
+    key: text
+  }, simEmphasis(text), " ", /*#__PURE__*/React.createElement("a", {
+    href: `https://doi.org/${SIM_REFERENCE_DOIS[i]}`,
+    rel: "noopener"
+  }, "doi:", SIM_REFERENCE_DOIS[i]))))));
 };
 Object.assign(window, {
   GuidePage
@@ -3192,7 +3235,7 @@ const SimInventoryChart = ({
   const [chartRef, W] = simUseWidth(300);
   const H = 176;
   const m = {
-    left: 34,
+    left: 42,
     right: 8,
     top: 8,
     bottom: 22
@@ -3273,9 +3316,12 @@ const SimInventoryChart = ({
     y: y(t) + 4,
     textAnchor: "end"
   }, t))), /*#__PURE__*/React.createElement("text", {
-    x: 4,
-    y: m.top + 4
-  }, "Mt"), /*#__PURE__*/React.createElement("rect", {
+    className: "sim-chart__unit",
+    transform: `rotate(-90 11 ${(m.top + H - m.bottom) / 2})`,
+    x: 11,
+    y: (m.top + H - m.bottom) / 2 + 4,
+    textAnchor: "middle"
+  }, "Mt CO\u2082"), /*#__PURE__*/React.createElement("rect", {
     x: x(0),
     y: m.top,
     width: x(injYears) - x(0),
@@ -3755,6 +3801,20 @@ const SimLegend = ({
   layers,
   model
 }) => {
+  // Depth range of the aquifer top, for the colour key and the contour note of the map.
+  const depthRange = useMemo(() => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const z of model.zt) {
+      if (z < lo) lo = z;
+      if (z > hi) hi = z;
+    }
+    return {
+      lo,
+      hi,
+      interval: simContourInterval(hi - lo)
+    };
+  }, [model]);
   const hasFaults = model.faults.length > 0;
   const hasLeakyFault = model.faults.some(fault => fault.kf > 0);
   const hasTraps = model.traps.some(trap => trap.size >= 4);
@@ -3773,6 +3833,17 @@ const SimLegend = ({
     label: 'Dissolved',
     swatch: 'var(--sim-c-dissolved)'
   });
+  if (view === 'map') {
+    items.push({
+      label: `Depth to aquifer top, ${simFormatNumber(depthRange.lo)} to ${simFormatNumber(depthRange.hi)} m`,
+      ramp: true
+    });
+    if (layers.contours) items.push({
+      label: `Contours of depth to aquifer top, every ${depthRange.interval} m`,
+      swatch: 'var(--sim-ink)',
+      kind: 'line'
+    });
+  }
   if (view !== 'section') {
     if (hasLeakyFault) items.push({
       label: 'Leaking fault',
@@ -3803,7 +3874,10 @@ const SimLegend = ({
     className: "sim-legend__item",
     role: "listitem",
     key: item.label
-  }, /*#__PURE__*/React.createElement("span", {
+  }, item.ramp ? /*#__PURE__*/React.createElement("span", {
+    className: "sim-legend__ramp",
+    "aria-hidden": "true"
+  }) : /*#__PURE__*/React.createElement("span", {
     className: `sim-swatch${item.kind ? ` sim-swatch--${item.kind}` : ''}`,
     style: {
       '--swatch': item.swatch
@@ -3821,9 +3895,9 @@ const SimLayersMenu = ({
     className: "sim-menu sim-layers"
   }, /*#__PURE__*/React.createElement("summary", {
     className: "sim-button"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-layer-group",
-    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "layer-group",
+    size: 15
   }), " Layers"), /*#__PURE__*/React.createElement("div", {
     className: "sim-menu__panel"
   }, options.map(([key, label]) => /*#__PURE__*/React.createElement("label", {
@@ -4033,9 +4107,9 @@ const SimMapView = ({
           const y = toY(points[k + 1]);
           ctx.lineWidth = 3;
           ctx.strokeStyle = light ? palette.depth[1] : palette.depth[5];
-          ctx.strokeText(String(contour.level), x, y);
+          ctx.strokeText(`${contour.level} m`, x, y);
           ctx.fillStyle = light ? palette.depth[6] : palette.depth[0];
-          ctx.fillText(String(contour.level), x, y);
+          ctx.fillText(`${contour.level} m`, x, y);
         }
       }
     }
@@ -4272,6 +4346,11 @@ const SimMapView = ({
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('km', layout.ox + layout.w + 12, layout.oy + layout.h + 6);
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('km', layout.ox - 6, layout.oy - 8);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
     const bar = 5000 * layout.scale;
     const bx = layout.ox + 14;
     const by = layout.oy + layout.h - 16;
@@ -5480,6 +5559,403 @@ const SimSectionView = ({
   }, "A\u2032"));
 };
 
+// File: SimFirstRun.jsx
+// First-run guide for the simulator. It has three short cards.
+// The panel is not modal. The visitor can still use the map while it is open.
+
+const SIM_GUIDE_KEY = 've-simulator-guide-seen';
+
+// The goal comes from a run of the default scenario.
+// The default well leaks about 5 % of the CO₂ in 1,000 years.
+const SIM_GUIDE_GOAL = 'Move the well so that nothing leaks in 1,000 years.';
+
+// Read the storage flag. Blocked storage must not stop the page.
+const simGuideShouldOpen = () => {
+  try {
+    return window.localStorage.getItem(SIM_GUIDE_KEY) !== '1';
+  } catch (error) {
+    return true;
+  }
+};
+const simGuideMarkSeen = () => {
+  try {
+    window.localStorage.setItem(SIM_GUIDE_KEY, '1');
+  } catch (error) {
+    // Storage is blocked. The guide will show once for each page load.
+  }
+};
+const SimGuideDot = ({
+  colour
+}) => /*#__PURE__*/React.createElement("span", {
+  className: "sim-guide__dot",
+  style: {
+    '--dot': colour
+  },
+  "aria-hidden": "true"
+});
+const SIM_GUIDE_CARDS = [{
+  title: 'Read the map',
+  body: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", null, "This map shows CO\u2082 seen from above, in a saline aquifer."), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement(SimGuideDot, {
+    colour: "var(--sim-glow-free)"
+  }), "Teal is CO\u2082 that can move (free plume).", ' ', /*#__PURE__*/React.createElement(SimGuideDot, {
+    colour: "var(--sim-glow-structural)"
+  }), "Blue and ", /*#__PURE__*/React.createElement(SimGuideDot, {
+    colour: "var(--sim-c-residual)"
+  }), "pink are trapped CO\u2082."))
+}, {
+  title: 'Change the scenario',
+  body: /*#__PURE__*/React.createElement("p", null, "Drag the well (INJ-1) on the map, or change an input. The model runs again in your browser.")
+}, {
+  title: 'Watch the fault',
+  body: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", null, "Watch the fault (F1). CO\u2082 leaks when the column under the fault passes the fault\u2019s seal capacity."), /*#__PURE__*/React.createElement("p", {
+    className: "sim-guide__goal"
+  }, /*#__PURE__*/React.createElement("strong", null, "Try this:"), " ", SIM_GUIDE_GOAL))
+}];
+
+// mode is null (closed), 'auto' (first visit) or 'button' (the Guide button opened it).
+// The automatic open does not move focus. The visitor keeps the normal Tab order.
+const SimFirstRun = ({
+  mode,
+  onClose
+}) => {
+  const open = !!mode;
+  const byButton = mode === 'button';
+  const [index, setIndex] = useState(0);
+  const nextRef = useRef(null);
+  const last = index === SIM_GUIDE_CARDS.length - 1;
+  const card = SIM_GUIDE_CARDS[index];
+  const close = useCallback(() => {
+    simGuideMarkSeen();
+    onClose();
+    // After a button open, return focus to the Guide button.
+    if (byButton) {
+      const button = document.getElementById('sim-guide-button');
+      if (button) button.focus();
+    }
+  }, [onClose, byButton]);
+
+  // Start at card 1 each time the panel opens.
+  // Move focus into the panel only after a button open.
+  useEffect(() => {
+    if (!open) return;
+    setIndex(0);
+    if (byButton && nextRef.current) nextRef.current.focus({
+      preventScroll: true
+    });
+  }, [open, byButton]);
+  if (!open) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "sim-guide",
+    role: "dialog",
+    "aria-modal": "false",
+    "aria-labelledby": "sim-guide-title",
+    onKeyDown: event => {
+      if (event.key === 'Escape') close();
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "sim-guide__count"
+  }, index + 1, " of ", SIM_GUIDE_CARDS.length), /*#__PURE__*/React.createElement("h2", {
+    className: "sim-guide__title",
+    id: "sim-guide-title"
+  }, card.title), /*#__PURE__*/React.createElement("div", {
+    className: "sim-guide__body",
+    "aria-live": "polite"
+  }, card.body), /*#__PURE__*/React.createElement("div", {
+    className: "sim-guide__actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "sim-button sim-button--quiet",
+    onClick: close
+  }, "Skip"), /*#__PURE__*/React.createElement("span", {
+    className: "sim-guide__spacer"
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "sim-button",
+    disabled: index === 0,
+    onClick: () => setIndex(index - 1)
+  }, "Back"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "sim-button sim-button--primary",
+    ref: nextRef,
+    onClick: () => last ? close() : setIndex(index + 1)
+  }, last ? 'Done' : 'Next')));
+};
+Object.assign(window, {
+  SimFirstRun,
+  simGuideShouldOpen,
+  SIM_GUIDE_KEY
+});
+
+// File: SimReport.jsx
+// SimReport.jsx — the two-page screening report of the VE simulator.
+// simReportHtml is pure: it turns a plain data object into one HTML document string.
+// simOpenReport opens that string in a new window and prints it.
+// The formatting helpers (simFormatMass and others) and the field tables come from SimulatorPage.jsx.
+
+const SIM_REPORT_URL = 'https://saeedtelvari.github.io/simulator.html';
+
+// The labels of the "Model edges and grid" group in the inputs rail.
+const SIM_REPORT_GRIDS = {
+  coarse: '500 m',
+  standard: '250 m',
+  fine: '167 m'
+};
+const SIM_REPORT_EDGES = {
+  open: 'Open',
+  closed: 'Closed'
+};
+const simReportEscape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;'
+})[ch]);
+
+// Text with *italic* marks, as the reference list uses, becomes safe HTML.
+const simReportEm = text => String(text).split('*').map((part, i) => i % 2 ? `<em>${simReportEscape(part)}</em>` : simReportEscape(part)).join('');
+const simReportValue = (value, meta) => {
+  if (!Number.isFinite(Number(value))) return simReportEscape(value);
+  const number = simFormatNumber(value, meta.digits ?? 0);
+  return simReportEscape(meta.unit ? `${number} ${meta.unit}` : number);
+};
+const simReportStamp = date => {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const simReportBalance = row => {
+  const balance = row.injected > 0 ? Math.abs(row.balance) / row.injected : 0;
+  return balance < 1e-12 ? '< 10⁻¹²' : balance.toExponential(1);
+};
+const simReportCss = `
+@page { size: A4 portrait; margin: 12mm 13mm 14mm; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; color: #15202b; background: #fff; font: 8.6pt/1.38 "Open Sans", "Segoe UI", Arial, sans-serif; }
+h1 { margin: 0; font-size: 19pt; line-height: 1.15; }
+h2 { margin: 11px 0 4px; padding-bottom: 2px; border-bottom: 1px solid #9aa7b4; font-size: 10.5pt; break-after: avoid; }
+p { margin: 3px 0; }
+small, .note { color: #4a5764; }
+.lead { margin-top: 2px; font-size: 9.5pt; font-weight: 600; }
+.meta { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 6px 0 0; }
+.meta dt { color: #4a5764; }
+.meta dd { margin: 0; overflow-wrap: anywhere; }
+.caveat { margin-top: 8px; padding: 5px 8px; border-left: 3px solid #b26a00; background: #fbf4e6; }
+.fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 14px; margin: 0; }
+.fields div { display: flex; justify-content: space-between; gap: 6px; padding: 1px 0; border-bottom: 1px dotted #c3ccd5; break-inside: avoid; }
+.fields dt { color: #3a4754; }
+.fields dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 1.5px 5px; border-bottom: 1px solid #d5dce3; text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+thead th { border-bottom: 1px solid #6b7a88; color: #26323e; }
+tr { break-inside: avoid; page-break-inside: avoid; }
+.two { display: grid; grid-template-columns: 1.25fr 1fr; gap: 14px; align-items: start; }
+.swatch { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 2px; }
+.figures { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+figure { margin: 0; break-inside: avoid; page-break-inside: avoid; }
+figure img, figure svg { display: block; width: 100%; height: auto; border: 1px solid #c3ccd5; background: #fff; }
+figcaption { margin-top: 2px; color: #4a5764; font-size: 7.8pt; }
+ul.plain { margin: 2px 0; padding-left: 15px; }
+ul.plain li { margin: 1px 0; break-inside: avoid; }
+ul.refs { font-size: 7.6pt; line-height: 1.3; columns: 2; column-gap: 16px; }
+ul.refs li { margin: 0 0 2px; }
+.pagebreak { break-before: page; page-break-before: always; }
+footer { margin-top: 10px; padding-top: 4px; border-top: 1px solid #9aa7b4; color: #4a5764; font-size: 7.8pt; }
+`;
+
+// The six inventory classes in Mt and %, the injected total and the mass balance error.
+const simReportInventoryTable = (final, current, colors) => {
+  const cell = (row, item) => row ? `<td>${simReportEscape(simFormatMass(row[item.key]))}</td><td>${simReportEscape(simFormatPercent(row[item.key], row.injected))}</td>` : '<td>–</td><td>–</td>';
+  const swatch = item => {
+    const color = colors && /^#[0-9a-fA-F]{3,8}$|^rgba?\([\d\s.,%/]+\)$/.test(colors[item.key] || '') ? colors[item.key] : '#888888';
+    return `<span class="swatch" style="background:${color}"></span>`;
+  };
+  const rows = SIM_INVENTORY.slice().reverse().map(item => `<tr><td>${swatch(item)}${simReportEscape(item.label)}</td>${cell(final.row, item)}${cell(current.row, item)}</tr>`).join('');
+  const total = row => row ? `<td colspan="2">${simReportEscape(simFormatMass(row.injected))}</td>` : '<td colspan="2">–</td>';
+  const balance = row => row ? `<td colspan="2">${simReportEscape(simReportBalance(row))}</td>` : '<td colspan="2">–</td>';
+  return `<table><thead><tr><th>Inventory class</th><th colspan="2">Final, year ${simReportEscape(Math.round(final.year))}</th><th colspan="2">Current, year ${simReportEscape(Math.round(current.year))}</th></tr>
+<tr><th></th><th>Mt</th><th>%</th><th>Mt</th><th>%</th></tr></thead><tbody>${rows}
+<tr><td><strong>Injected total</strong></td>${total(final.row)}${total(current.row)}</tr>
+<tr><td>Mass balance error (relative)</td>${balance(final.row)}${balance(current.row)}</tr></tbody></table>`;
+};
+const simReportPlumeTable = (final, current) => {
+  const items = [['CO₂ footprint', 'km²', row => simFormatNumber(row.footprint / 1e6, 1)], ['Thickest column', 'm', row => simFormatNumber(row.maxColumn, 1)], ['Mobile plume reach', 'km from well', row => simFormatNumber(row.migration / 1000, 1)], ['Peak pressure rise at the well', 'bar', row => simFormatNumber(row.bhpPeak / 1e5, 1)]];
+  const rows = items.map(([label, unit, fn]) => `<tr><td>${simReportEscape(label)} <small>(${simReportEscape(unit)})</small></td><td>${final.row ? simReportEscape(fn(final.row)) : '–'}</td><td>${current.row ? simReportEscape(fn(current.row)) : '–'}</td></tr>`).join('');
+  return `<table><thead><tr><th>Plume and pressure</th><th>Final, year ${simReportEscape(Math.round(final.year))}</th><th>Current, year ${simReportEscape(Math.round(current.year))}</th></tr></thead><tbody>${rows}</tbody></table>`;
+};
+const simReportInputs = scenario => {
+  const items = Object.keys(SIM_FIELDS).map(key => `<div><dt>${simReportEscape(SIM_FIELDS[key].label)}</dt><dd>${simReportValue(scenario[key], SIM_FIELDS[key])}</dd></div>`);
+  items.push(`<div><dt>Grid cell size</dt><dd>${simReportEscape(SIM_REPORT_GRIDS[scenario.grid] || scenario.grid)}</dd></div>`);
+  items.push(`<div><dt>Model edges</dt><dd>${simReportEscape(SIM_REPORT_EDGES[scenario.boundary] || scenario.boundary)}</dd></div>`);
+  const faults = scenario.faults || [];
+  const faultKeys = Object.keys(SIM_FAULT_FIELDS);
+  const faultTable = faults.length ? `<table><thead><tr><th>Fault</th>${faults.map((_, i) => `<th>${i + 1}</th>`).join('')}</tr></thead><tbody>${faultKeys.map(key => `<tr><td>${simReportEscape(SIM_FAULT_FIELDS[key].label)} <small>${simReportEscape(SIM_FAULT_FIELDS[key].unit)}</small></td>${faults.map(f => `<td>${simReportValue(f[key], {
+    digits: SIM_FAULT_FIELDS[key].digits
+  })}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<p class="note">No faults.</p>';
+  return `<dl class="fields">${items.join('')}</dl><div style="margin-top:6px">${faultTable}</div>`;
+};
+const simReportUq = uq => {
+  if (!uq || !uq.table || !uq.table.length) return '<p>No uncertainty run.</p>';
+  const rows = uq.table.map(m => `<tr><td>${simReportEscape(m.label)}</td>${[m.p10, m.p50, m.p90].map(v => `<td>${simReportEscape(simFormatNumber(v, m.digits))} ${simReportEscape(m.unit)}</td>`).join('')}</tr>`).join('');
+  return `<p class="note">${simReportEscape(uq.runs)} runs, outcomes at year ${simReportEscape(uq.years)}. P10, P50 and P90 are the 10th, 50th and 90th percentiles.</p>
+<table><thead><tr><th>Outcome</th><th>P10</th><th>P50</th><th>P90</th></tr></thead><tbody>${rows}</tbody></table>`;
+};
+const simReportFigures = (data, current) => {
+  const parts = [];
+  const png = typeof data.mapPng === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(data.mapPng) ? data.mapPng : null;
+  const svg = typeof data.mapSvg === 'string' && data.mapSvg.startsWith('<svg') ? data.mapSvg : null;
+  const chart = typeof data.chartSvg === 'string' && data.chartSvg.startsWith('<svg') ? data.chartSvg : null;
+  if (png) parts.push(`<figure><img src="${png}" alt="Current model view"><figcaption>${simReportEscape(data.viewLabel || 'Current view')} at year ${simReportEscape(Math.round(current.year))}.</figcaption></figure>`);else if (svg) parts.push(`<figure>${svg}<figcaption>Section at year ${simReportEscape(Math.round(current.year))}.</figcaption></figure>`);
+  if (chart) parts.push(`<figure>${chart}<figcaption>CO₂ inventory through time. The dashed line is the injected total.</figcaption></figure>`);
+  return parts.length ? `<div class="figures">${parts.join('')}</div>` : '<p class="note">No figure is available for this view.</p>';
+};
+const simReportHtml = data => {
+  const final = {
+    year: data.finalYear,
+    row: data.finalRow
+  };
+  const current = {
+    year: data.currentYear,
+    row: data.currentRow
+  };
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VE screening report</title>
+<style>${simReportCss}</style></head><body>
+<header>
+<h1>VE screening report</h1>
+<p class="lead">Educational model. Not a substitute for a field study.</p>
+<dl class="meta">
+<dt>Date and time</dt><dd>${simReportEscape(simReportStamp(data.generatedAt))}</dd>
+<dt>Scenario</dt><dd>${simReportEscape(data.scenarioName)}</dd>
+<dt>Share link</dt><dd>${simReportEscape(data.shareUrl)}</dd>
+</dl>
+</header>
+<p class="caveat">${simReportEscape(SIM_CAVEAT_TEXT)}</p>
+<h2>Inputs</h2>
+${simReportInputs(data.scenario)}
+<h2>Results</h2>
+<div class="two">
+<div>${simReportInventoryTable(final, current, data.classColors)}</div>
+<div>${simReportPlumeTable(final, current)}</div>
+</div>
+<h2>Figures</h2>
+${simReportFigures(data, current)}
+<h2>Uncertainty</h2>
+${simReportUq(data.uq)}
+<h2>Limitations</h2>
+<ul class="plain">${SIM_LIMITATIONS.map(text => `<li>${simReportEscape(text)}</li>`).join('')}</ul>
+<h2>References</h2>
+<ul class="plain refs">${SIM_REFERENCES.map((text, i) => `<li>${simReportEm(text)}${SIM_REFERENCE_DOIS[i] ? ` doi:${simReportEscape(SIM_REFERENCE_DOIS[i])}` : ''}</li>`).join('')}</ul>
+<footer>Made with the VE simulator, <a href="${SIM_REPORT_URL}">${SIM_REPORT_URL}</a></footer>
+</body></html>`;
+};
+
+// Copy an SVG from the page with its computed colours written into the attributes.
+// The copy then prints without the page CSS. Dark ink replaces the page ink for paper.
+const simReportInlineSvg = svg => {
+  if (!svg) return null;
+  const clone = svg.cloneNode(true);
+  const sources = [svg, ...svg.querySelectorAll('*')];
+  const targets = [clone, ...clone.querySelectorAll('*')];
+  const props = ['fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'opacity', 'fill-opacity', 'font-size', 'font-family', 'font-weight'];
+  const drop = [];
+  sources.forEach((source, i) => {
+    const target = targets[i];
+    const style = window.getComputedStyle(source);
+    const cls = source.getAttribute('class') || '';
+    const tag = source.tagName.toLowerCase();
+    for (const prop of props) target.setAttribute(prop, style.getPropertyValue(prop));
+    if (tag === 'text') target.setAttribute('fill', '#3a4754');
+    if (cls.includes('sim-chart__grid')) target.setAttribute('stroke', '#d5dce3');
+    if (cls.includes('sim-chart__axis')) target.setAttribute('stroke', '#7b8896');
+    if (cls.includes('sim-chart__injected')) target.setAttribute('stroke', '#15202b');
+    if (tag === 'path' && !cls) target.setAttribute('stroke', '#ffffff');
+    if (cls.includes('sim-chart__cursor') || source.getAttribute('stroke-dasharray') === '2 2') drop.push(target);
+    target.removeAttribute('class');
+    target.removeAttribute('style');
+  });
+  drop.forEach(node => node.remove());
+  const box = svg.viewBox && svg.viewBox.baseVal;
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  if (box && box.width) {
+    clone.setAttribute('width', box.width);
+    clone.setAttribute('height', box.height);
+  }
+  clone.removeAttribute('role');
+  clone.removeAttribute('aria-label');
+  return new XMLSerializer().serializeToString(clone);
+};
+
+// Show the report in the same tab when the browser blocks the new window.
+const simReportOverlay = html => {
+  const wrap = document.createElement('div');
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-label', 'Screening report');
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;background:#e9edf1;';
+  const bar = document.createElement('div');
+  bar.style.cssText = 'display:flex;gap:8px;align-items:center;padding:8px 12px;background:#15202b;color:#fff;font:14px sans-serif;';
+  const note = document.createElement('span');
+  note.setAttribute('role', 'status');
+  note.style.flex = '1';
+  const message = 'Your browser blocked the pop-up, so the report is shown here. Choose Print, then Save as PDF.';
+  const print = document.createElement('button');
+  print.type = 'button';
+  print.textContent = 'Print';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.textContent = 'Close';
+  bar.append(note, print, close);
+  const frame = document.createElement('iframe');
+  frame.title = 'Screening report';
+  frame.style.cssText = 'flex:1;border:0;background:#fff;width:100%;max-width:900px;margin:0 auto;';
+  frame.srcdoc = html;
+  wrap.append(bar, frame);
+  document.body.appendChild(wrap);
+  print.addEventListener('click', () => {
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+  });
+  close.addEventListener('click', () => wrap.remove());
+  wrap.addEventListener('keydown', event => {
+    if (event.key === 'Escape') wrap.remove();
+  });
+  print.focus();
+  // The text is set after the overlay is in the page, so a screen reader announces it.
+  setTimeout(() => {
+    note.textContent = message;
+  }, 50);
+};
+
+// Open the report in a new window and print it after the images load.
+const simOpenReport = html => {
+  let win = null;
+  try {
+    win = window.open('', '_blank');
+  } catch (_) {
+    win = null;
+  }
+  if (!win) {
+    simReportOverlay(html);
+    return 'overlay';
+  }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  const images = Array.from(win.document.images);
+  const ready = Promise.all(images.map(img => img.complete ? Promise.resolve() : new Promise(resolve => {
+    img.onload = img.onerror = resolve;
+  })));
+  Promise.race([ready, new Promise(resolve => setTimeout(resolve, 2000))]).then(() => {
+    win.focus();
+    win.print();
+  });
+  return 'window';
+};
+
 // File: SimulatorPage.jsx
 function _extends() { _extends = Object.assign ? Object.assign.bind() : function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; }; return _extends.apply(this, arguments); }
 // SimulatorPage.jsx — VE simulator: scenario inputs, streamed results, playback,
@@ -5545,9 +6021,17 @@ const SIM_FRAME_YEARS = 5;
 const SIM_SPEEDS = [25, 60, 150];
 const SIM_THEME_KEY = 'co2-simulator-theme';
 const SIM_PALETTE_KEY = 'co2-simulator-palette';
+// The page default matches the homepage. The base CSS block stays Earth.
+const SIM_DEFAULT_PALETTE = 'north-sea';
 // Colour palettes (data-palette on the root; tokens in simulator-workbench.css). The
 // previews show four steps of the night rock ramp and three CO₂ colours.
 const SIM_PALETTES = [{
+  id: 'north-sea',
+  label: 'North Sea night',
+  hint: 'Slate rock, the homepage colours',
+  ramp: ['#a9b6c4', '#738294', '#445367', '#1d2937'],
+  fluids: ['#38e8d1', '#6a99ff', '#ff99c2']
+}, {
   id: 'earth',
   label: 'Earth',
   hint: 'Sandstone rock, gemstone CO₂',
@@ -5776,9 +6260,9 @@ const simPersistTheme = (theme, storage) => {
 const simStoredPalette = storage => {
   try {
     const value = storage?.getItem(SIM_PALETTE_KEY);
-    return SIM_PALETTES.some(option => option.id === value) ? value : 'earth';
+    return SIM_PALETTES.some(option => option.id === value) ? value : SIM_DEFAULT_PALETTE;
   } catch (_) {
-    return 'earth';
+    return SIM_DEFAULT_PALETTE;
   }
 };
 const simPersistPalette = (id, storage) => {
@@ -5795,6 +6279,12 @@ const simCopyText = async (text, clipboard) => {
     return false;
   }
 };
+
+// The citation text that "Cite this run" copies. The address holds the scenario query.
+const simCitation = (url, date = new Date()) => `Telvari, S. (2026). VE simulator [web application]. ${url}. Accessed ${date.toISOString().slice(0, 10)}.`;
+
+// Text for the live region after a copy action.
+const simCopyNotice = (ok, done, fallback) => ok ? done : fallback;
 const simDownload = (content, filename, type) => {
   const blob = content instanceof Blob ? content : new Blob([content], {
     type
@@ -5812,36 +6302,36 @@ const simMessages = (model, row, frame, run) => {
   if (!model || !row) return messages;
   if (run.truncated) messages.push({
     tone: 'danger',
-    icon: 'fa-triangle-exclamation',
+    icon: 'triangle-exclamation',
     text: `The run stopped at year ${run.history.at(-1)?.year}: these inputs need more time steps than the browser budget allows.`
   });
   model.faults.forEach((fault, index) => {
     if (frame?.leaking?.[index]) messages.push({
       tone: 'danger',
-      icon: 'fa-arrow-up',
+      icon: 'arrow-up',
       text: `Fault F${index + 1} is leaking: the CO₂ column against it exceeds its ${fault.sealCap} m seal capacity.`
     });
   });
   const marginBar = SIM_FRACTURE_MARGIN_BAR_PER_M * model.depth;
   if (row.bhpPeak / 1e5 > marginBar) messages.push({
     tone: 'warning',
-    icon: 'fa-gauge-high',
+    icon: 'gauge-high',
     text: `Peak pressure rise at the well, ${simFormatNumber(row.bhpPeak / 1e5)} bar, exceeds a typical fracture margin of about ${simFormatNumber(marginBar)} bar at ${simFormatNumber(model.depth)} m.`
   });
   const leakingNow = frame?.leaking && [...frame.leaking].some(Boolean);
   if (!leakingNow && row.leaked > 0) messages.push({
     tone: 'warning',
-    icon: 'fa-arrow-up',
+    icon: 'arrow-up',
     text: `${simFormatMass(row.leaked)} has leaked through faults so far; no fault is leaking now.`
   });
   if (row.exited > 1e-4 * row.injected) messages.push({
     tone: 'warning',
-    icon: 'fa-arrow-right-from-bracket',
+    icon: 'arrow-right-from-bracket',
     text: `${simFormatMass(row.exited)} has left the model across an open edge.`
   });
   if (!messages.length && row.injected > 0) messages.push({
     tone: 'info',
-    icon: 'fa-circle-check',
+    icon: 'circle-check',
     text: 'Nothing has leaked or left the model so far.'
   });
   return messages;
@@ -6320,9 +6810,9 @@ const SimInputs = ({
     className: "sim-icon-button sim-sheet-close",
     onClick: onClose,
     "aria-label": "Close inputs"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-times",
-    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "close",
+    size: 15
   }))), /*#__PURE__*/React.createElement("div", {
     className: "sim-scenario"
   }, /*#__PURE__*/React.createElement("label", {
@@ -6345,9 +6835,9 @@ const SimInputs = ({
     type: "button",
     className: "sim-button",
     onClick: onRandom
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-shuffle",
-    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "shuffle",
+    size: 15
   }), " New random structure"))), /*#__PURE__*/React.createElement(SimGroup, {
     title: "Injection"
   }, field('rateMt'), field('injYears'), field('wellX'), field('wellY'), field('years')), /*#__PURE__*/React.createElement(SimGroup, {
@@ -6396,9 +6886,9 @@ const SimInputs = ({
         kf: 10
       }]
     })
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-plus",
-    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "plus",
+    size: 15
   }), " Add a fault")), /*#__PURE__*/React.createElement(SimGroup, {
     title: "Trapping and fluids",
     open: false
@@ -6451,8 +6941,15 @@ const SimOutcomes = ({
   run,
   history,
   year,
-  onSeek
+  onSeek,
+  onMethod
 }) => {
+  const [citeNotice, setCiteNotice] = useState('');
+  const cite = async () => {
+    const ok = await simCopyText(simCitation(window.location.href), navigator.clipboard);
+    setCiteNotice(simCopyNotice(ok, 'Citation copied', 'Copy failed. Copy the address bar and cite it by hand.'));
+    setTimeout(() => setCiteNotice(''), 3000);
+  };
   if (!model || !row) {
     return /*#__PURE__*/React.createElement("div", {
       className: "sim-outcome-section"
@@ -6527,10 +7024,32 @@ const SimOutcomes = ({
   }, messages.map(message => /*#__PURE__*/React.createElement("li", {
     key: message.text,
     "data-tone": message.tone
-  }, /*#__PURE__*/React.createElement("i", {
-    className: `fas ${message.icon}`,
-    "aria-hidden": "true"
-  }), /*#__PURE__*/React.createElement("span", null, message.text))))));
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: message.icon,
+    size: 15
+  }), /*#__PURE__*/React.createElement("span", null, message.text))))), /*#__PURE__*/React.createElement("section", {
+    className: "sim-outcome-section sim-trust",
+    "aria-label": "About this result"
+  }, /*#__PURE__*/React.createElement("p", null, "Educational VE model of a saline aquifer. Mass balance and four benchmark checks: see", ' ', /*#__PURE__*/React.createElement("span", {
+    style: {
+      whiteSpace: "nowrap"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "sim-linkbutton",
+    onClick: onMethod
+  }, "Method"), ".")), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "sim-button",
+    onClick: cite
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "copy",
+    size: 15
+  }), " Cite this run"), /*#__PURE__*/React.createElement("span", {
+    className: "sim-trust__notice",
+    role: "status",
+    "aria-live": "polite"
+  }, citeNotice)));
 };
 const SimTransport = ({
   year,
@@ -6551,9 +7070,9 @@ const SimTransport = ({
     className: "sim-play",
     onClick: onPlay,
     "aria-label": playing ? 'Pause' : year >= years ? 'Replay from year 0' : 'Play'
-  }, /*#__PURE__*/React.createElement("i", {
-    className: `fas ${playing ? 'fa-pause' : year >= years ? 'fa-rotate-left' : 'fa-play'}`,
-    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: playing ? 'pause' : year >= years ? 'restart' : 'play',
+    size: 18
   })), /*#__PURE__*/React.createElement("div", {
     className: "sim-steps"
   }, /*#__PURE__*/React.createElement("button", {
@@ -6561,17 +7080,17 @@ const SimTransport = ({
     className: "sim-icon-button",
     onClick: () => onSeek(Math.max(0, Math.ceil(year / SIM_FRAME_YEARS - 1) * SIM_FRAME_YEARS)),
     "aria-label": "Back 5 years"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-backward-step",
-    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "backward-step",
+    size: 15
   })), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "sim-icon-button",
     onClick: () => onSeek(Math.min(computedYears, Math.floor(year / SIM_FRAME_YEARS + 1) * SIM_FRAME_YEARS)),
     "aria-label": "Forward 5 years"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-forward-step",
-    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "forward-step",
+    size: 15
   }))), /*#__PURE__*/React.createElement("div", {
     className: "sim-scrubber"
   }, /*#__PURE__*/React.createElement("div", {
@@ -6608,8 +7127,8 @@ const SimTransport = ({
     type: "button",
     className: "sim-button sim-speed",
     onClick: onSpeed,
-    "aria-label": `Playback speed ${speed + 1}×, change`
-  }, speed + 1, "\xD7"));
+    "aria-label": `Playback speed: ${SIM_SPEEDS[speed]} yr/s. Change speed.`
+  }, SIM_SPEEDS[speed], " yr/s"));
 };
 
 // ---------------------------------------------------------------- uncertainty
@@ -6679,7 +7198,8 @@ const SimUncertainty = ({
   scenario,
   onLoad,
   theme,
-  hidden
+  hidden,
+  reportRef
 }) => {
   const [specs, setSpecs] = useState(() => simDefaultUqSpecs(scenario));
   const [runs, setRuns] = useState(50);
@@ -6797,6 +7317,12 @@ const SimUncertainty = ({
       tornado
     };
   }, [state.rows, metric]);
+  // The screening report reads the table from here.
+  if (reportRef) reportRef.current = results ? {
+    runs: state.rows.length,
+    years: scenario.years,
+    table: results.table
+  } : null;
   return /*#__PURE__*/React.createElement("div", {
     className: "sim-uq",
     id: "sim-panel-uncertainty",
@@ -6911,9 +7437,9 @@ const SimUncertainty = ({
     className: "sim-button sim-button--primary",
     disabled: !active.length,
     onClick: start
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-play",
-    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "play",
+    size: 15
   }), " Run ", runs, " scenarios"), state.error && /*#__PURE__*/React.createElement("p", {
     className: "sim-field__feedback",
     role: "status"
@@ -7008,6 +7534,7 @@ const SimulatorPage = () => {
   const [speed, setSpeed] = useState(0);
   const [sheet, setSheet] = useState(null);
   const [share, setShare] = useState('Share');
+  const [shareNotice, setShareNotice] = useState('');
   const [layers, setLayers] = useState({
     contours: true,
     traps: true,
@@ -7017,6 +7544,7 @@ const SimulatorPage = () => {
     flow: true
   });
   const [sectionLine, setSectionLine] = useState(null);
+  const [guideOpen, setGuideOpen] = useState(() => simGuideShouldOpen() ? 'auto' : null);
   const autoplayed = useRef(false);
   const tabRefs = useRef({});
   const run = useSimSimulation(scenario);
@@ -7030,7 +7558,9 @@ const SimulatorPage = () => {
   const shownYear = model ? Math.min(year, model.years) : 0;
   const frame = useMemo(() => simFrameAt(shown.frames, shownYear), [shown.frames, shownYear]);
   const row = useMemo(() => simRowAt(shown.history, shownYear), [shown.history, shownYear]);
-  useEffect(() => {
+
+  // A layout effect sets the palette before the first paint, so no brown flash shows.
+  React.useLayoutEffect(() => {
     const root = document.querySelector('.ve-standalone');
     root?.setAttribute('data-theme', theme);
     root?.setAttribute('data-palette', paletteId);
@@ -7127,7 +7657,24 @@ const SimulatorPage = () => {
   const copyLink = async () => {
     const ok = await simCopyText(window.location.href, navigator.clipboard);
     setShare(ok ? 'Link copied' : 'Copy the address bar');
-    setTimeout(() => setShare('Share'), 2200);
+    setShareNotice(simCopyNotice(ok, 'Link copied', 'Copy failed. Copy the link from the address bar.'));
+    setTimeout(() => {
+      setShare('Share');
+      setShareNotice('');
+    }, 2200);
+  };
+  // Open the Method tab at its Verification section.
+  const openMethod = () => {
+    setSection('method');
+    setTimeout(() => {
+      const target = document.getElementById('m-verification');
+      if (target) {
+        target.scrollIntoView();
+        target.focus({
+          preventScroll: true
+        });
+      }
+    }, 60);
   };
   const exportRef = useRef(null);
   const paletteRef = useRef(null);
@@ -7153,6 +7700,43 @@ const SimulatorPage = () => {
     }
     const svg = document.querySelector('.sim-view svg.sim-view__svg');
     if (svg) simDownload(new XMLSerializer().serializeToString(svg), `co2-section-year-${Math.round(shownYear)}.svg`, 'image/svg+xml');
+  };
+
+  // The screening report: collect what the page already shows, then open it for print.
+  const uqReportRef = useRef(null);
+  const exportReport = () => {
+    exportRef.current?.removeAttribute('open');
+    if (!model || !row) return;
+    const root = document.querySelector('.ve-standalone') || document.body;
+    const css = window.getComputedStyle(root);
+    const classColors = {};
+    for (const item of SIM_INVENTORY) classColors[item.key] = css.getPropertyValue(item.color).trim();
+    const canvas = document.querySelector('.sim-view canvas[data-export]');
+    let mapPng = null;
+    try {
+      mapPng = canvas ? (canvas.simComposite?.() || canvas).toDataURL('image/png') : null;
+    } catch (_) {
+      mapPng = null;
+    }
+    const sectionSvg = canvas ? null : simReportInlineSvg(document.querySelector('.sim-view svg.sim-view__svg'));
+    const chartSvg = simReportInlineSvg(document.querySelector('.sim-chart svg'));
+    const data = {
+      generatedAt: new Date(),
+      scenarioName: VE2D.PRESETS[scenario.preset]?.label || 'Custom scenario',
+      shareUrl: window.location.href,
+      scenario,
+      finalYear: model.years,
+      finalRow: simRowAt(shown.history, model.years),
+      currentYear: shownYear,
+      currentRow: row,
+      classColors,
+      viewLabel: view === '3d' ? '3D block' : 'Map',
+      mapPng,
+      mapSvg: sectionSvg,
+      chartSvg,
+      uq: uqReportRef.current
+    };
+    simOpenReport(simReportHtml(data));
   };
   const onTabKey = event => {
     const index = SIM_SECTIONS.findIndex(s => s.id === section);
@@ -7219,31 +7803,36 @@ const SimulatorPage = () => {
     className: "sim-button sim-inputs-trigger",
     onClick: () => setSheet('inputs'),
     "aria-expanded": sheet === 'inputs',
-    "aria-controls": "sim-inputs"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-sliders",
-    "aria-hidden": "true"
+    "aria-controls": "sim-inputs",
+    "aria-label": "Inputs"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "sliders",
+    size: 15
   }), /*#__PURE__*/React.createElement("span", {
     className: "sim-button__label"
   }, "Inputs")), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "sim-button",
     onClick: copyLink,
-    "aria-label": "Copy a link to this scenario"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-link",
-    "aria-hidden": "true"
+    "aria-label": share === 'Share' ? 'Share: copy a link to this scenario' : share
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "link",
+    size: 15
   }), /*#__PURE__*/React.createElement("span", {
     className: "sim-button__label"
-  }, share)), /*#__PURE__*/React.createElement("details", {
+  }, share)), /*#__PURE__*/React.createElement("span", {
+    className: "sim-sr-only",
+    role: "status",
+    "aria-live": "polite"
+  }, shareNotice), /*#__PURE__*/React.createElement("details", {
     className: "sim-menu",
     ref: exportRef
   }, /*#__PURE__*/React.createElement("summary", {
     className: "sim-button",
     "aria-label": "Export"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-download",
-    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "download",
+    size: 15
   }), /*#__PURE__*/React.createElement("span", {
     className: "sim-button__label"
   }, "Export")), /*#__PURE__*/React.createElement("div", {
@@ -7258,15 +7847,19 @@ const SimulatorPage = () => {
   }, "Grid at this year ", /*#__PURE__*/React.createElement("small", null, "CSV")), /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: exportImage
-  }, "Current view ", /*#__PURE__*/React.createElement("small", null, view === 'section' ? 'SVG' : 'PNG')))), /*#__PURE__*/React.createElement("details", {
+  }, "Current view ", /*#__PURE__*/React.createElement("small", null, view === 'section' ? 'SVG' : 'PNG')), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: exportReport,
+    disabled: !model || !row
+  }, "Screening report ", /*#__PURE__*/React.createElement("small", null, "PDF")))), /*#__PURE__*/React.createElement("details", {
     className: "sim-menu sim-palettes",
     ref: paletteRef
   }, /*#__PURE__*/React.createElement("summary", {
     className: "sim-button",
-    "aria-label": "Colour palette"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-palette",
-    "aria-hidden": "true"
+    "aria-label": "Palette: choose the colours"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "palette",
+    size: 15
   }), /*#__PURE__*/React.createElement("span", {
     className: "sim-button__label"
   }, "Palette")), /*#__PURE__*/React.createElement("fieldset", {
@@ -7299,9 +7892,9 @@ const SimulatorPage = () => {
     className: "sim-icon-button",
     onClick: () => setTheme(t => t === 'night' ? 'day' : 'night'),
     "aria-label": theme === 'night' ? 'Switch to the day theme' : 'Switch to the night theme'
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "fas fa-circle-half-stroke",
-    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "circle-half-stroke",
+    size: 15
   })))), section === 'simulator' && /*#__PURE__*/React.createElement("div", {
     className: "sim-workbench",
     id: "sim-panel-simulator",
@@ -7358,7 +7951,14 @@ const SimulatorPage = () => {
     onClick: () => setView(item.id)
   }, item.label))), /*#__PURE__*/React.createElement("div", {
     className: "sim-overlay__right"
-  }, view !== 'section' && /*#__PURE__*/React.createElement(SimLayersMenu, {
+  }, view === 'map' && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    id: "sim-guide-button",
+    className: "sim-button",
+    "aria-haspopup": "dialog",
+    "aria-expanded": !!guideOpen,
+    onClick: () => setGuideOpen('button')
+  }, "Guide"), view !== 'section' && /*#__PURE__*/React.createElement(SimLayersMenu, {
     layers: layers,
     onChange: setLayers,
     view: view
@@ -7366,7 +7966,10 @@ const SimulatorPage = () => {
     view: view,
     layers: layers,
     model: model
-  })), /*#__PURE__*/React.createElement(SimTransport, {
+  })), view === 'map' && /*#__PURE__*/React.createElement(SimFirstRun, {
+    mode: guideOpen,
+    onClose: () => setGuideOpen(null)
+  }), /*#__PURE__*/React.createElement(SimTransport, {
     year: shownYear,
     years: model?.years || scenario.years,
     injYears: model?.injYears || scenario.injYears,
@@ -7386,8 +7989,10 @@ const SimulatorPage = () => {
     run: shown,
     history: shown.history,
     year: shownYear,
-    onSeek: seek
+    onSeek: seek,
+    onMethod: openMethod
   }))), /*#__PURE__*/React.createElement(SimUncertainty, {
+    reportRef: uqReportRef,
     scenario: scenario,
     onLoad: loadRealization,
     theme: theme,
