@@ -1,6 +1,36 @@
 // GuidePage.jsx — Method: the equations, numerics, verification and limits of the model
 // in ve2d-model.js, written to match the code exactly. Equations are typeset with KaTeX.
 
+// Shared text. The Method tab and the screening report (SimReport.jsx) both use it.
+// A pair of stars in a reference marks italic text.
+const SIM_CAVEAT_TEXT = "This is an educational model of CO₂ storage in a confined saline aquifer, built on the vertical-equilibrium (VE) approximation used by MRST's co2lab. It runs in your browser in about a second, so the inputs can be explored freely. It is not a substitute for a field study: the aquifer is homogeneous, the fluids have constant properties and the caprock is a perfect seal except at faults.";
+const SIM_LIMITATIONS = [
+  "Sharp interface: no capillary fringe, so very thin plumes are idealised.",
+  "Constant fluid densities and viscosities; no CO₂ compressibility, temperature or composition effects.",
+  "Homogeneous permeability; no layering inside the aquifer.",
+  "Brine mobility in the residual zone is not reduced; dissolved CO₂ does not migrate.",
+  "After injection the total flux is set to zero once the pressure has relaxed.",
+  "No geomechanics: the fracture margin is a guide, not a calculation."
+];
+const SIM_REFERENCES = [
+  "Barnes, Lehman and Mulla (2014). Priority-flood: an optimal depression-filling algorithm. *Computers & Geosciences* 62.",
+  "Bennion and Bachu (2008). Drainage and imbibition relative permeability relationships for supercritical CO₂/brine. *SPE Reservoir Evaluation & Engineering* 11(3).",
+  "Bretan, Yielding and Jones (2003). Using calibrated shale gouge ratio to estimate hydrocarbon column heights. *AAPG Bulletin* 87(3).",
+  "Gasda, Nordbotten and Celia (2009). Vertical equilibrium with sub-scale analytical methods for geological CO₂ sequestration. *Computational Geosciences* 13.",
+  "Hesse, Orr and Tchelepi (2008). Gravity currents with residual trapping. *Journal of Fluid Mechanics* 611.",
+  "Kim and Sanderson (2005). The relationship between displacement and length of faults: a review. *Earth-Science Reviews* 68.",
+  "Lee, Efendiev and Tchelepi (2015). Hybrid upwind discretization of nonlinear two-phase flow with gravity. *Advances in Water Resources* 82.",
+  "MacMinn, Szulczewski and Juanes (2011). CO₂ migration in saline aquifers. Part 2: capillary and solubility trapping. *Journal of Fluid Mechanics* 688.",
+  "Manzocchi, Walsh, Nell and Yielding (1999). Fault transmissibility multipliers for flow simulation models. *Petroleum Geoscience* 5.",
+  "Neufeld et al. (2010). Convective dissolution of carbon dioxide in saline aquifers. *Geophysical Research Letters* 37.",
+  "Nilsen, Lie and Andersen (2016). Fully-implicit simulation of vertical-equilibrium models with hysteresis and capillary fringe. *Computational Geosciences* 20.",
+  "Nordbotten and Celia (2006). Similarity solutions for fluid injection into confined aquifers. *Journal of Fluid Mechanics* 561.",
+  "Nordbotten and Celia (2012). *Geological Storage of CO₂: Modeling Approaches for Large-Scale Simulation*. Wiley.",
+  "Peaceman (1978). Interpretation of well-block pressures in numerical reservoir simulation. *SPE Journal* 18(3)."
+];
+const simEmphasis = text => text.split("*").map((part, i) => (i % 2 ? <em key={i}>{part}</em> : part));
+// end of shared text
+
 const SimTex = ({ tex, block = false }) => {
   const ref = useRef(null);
   const [ready, setReady] = useState(typeof window !== 'undefined' && !!window.katex);
@@ -58,12 +88,7 @@ const GuidePage = () => {
       </nav>
       <article>
         <h2 id="m-scope">What the model is</h2>
-        <p>
-          This is an educational model of CO₂ storage in a confined saline aquifer, built on the vertical-equilibrium (VE)
-          approximation used by MRST's co2lab. It runs in your browser in about a second, so the inputs can be explored
-          freely. It is not a substitute for a field study: the aquifer is homogeneous, the fluids have constant
-          properties and the caprock is a perfect seal except at faults.
-        </p>
+        <p>{SIM_CAVEAT_TEXT}</p>
         <p>
           All quantities are in SI units inside the model; the interface shows megatonnes, millidarcies, metres,
           kilometres, bar and years. One run drives every view: the map, the 3D block, the section, the charts and the
@@ -216,12 +241,7 @@ const GuidePage = () => {
 
         <h2 id="m-limits">Limitations</h2>
         <ul>
-          <li>Sharp interface: no capillary fringe, so very thin plumes are idealised.</li>
-          <li>Constant fluid densities and viscosities; no CO₂ compressibility, temperature or composition effects.</li>
-          <li>Homogeneous permeability; no layering inside the aquifer.</li>
-          <li>Brine mobility in the residual zone is not reduced; dissolved CO₂ does not migrate.</li>
-          <li>After injection the total flux is set to zero once the pressure has relaxed.</li>
-          <li>No geomechanics: the fracture margin is a guide, not a calculation.</li>
+          {SIM_LIMITATIONS.map(text => <li key={text}>{text}</li>)}
         </ul>
 
         <h2 id="m-parameters">Parameters</h2>
@@ -232,20 +252,7 @@ const GuidePage = () => {
 
         <h2 id="m-references">References</h2>
         <ul>
-          <li>Barnes, Lehman and Mulla (2014). Priority-flood: an optimal depression-filling algorithm. <em>Computers &amp; Geosciences</em> 62.</li>
-          <li>Bennion and Bachu (2008). Drainage and imbibition relative permeability relationships for supercritical CO₂/brine. <em>SPE Reservoir Evaluation &amp; Engineering</em> 11(3).</li>
-          <li>Bretan, Yielding and Jones (2003). Using calibrated shale gouge ratio to estimate hydrocarbon column heights. <em>AAPG Bulletin</em> 87(3).</li>
-          <li>Gasda, Nordbotten and Celia (2009). Vertical equilibrium with sub-scale analytical methods for geological CO₂ sequestration. <em>Computational Geosciences</em> 13.</li>
-          <li>Hesse, Orr and Tchelepi (2008). Gravity currents with residual trapping. <em>Journal of Fluid Mechanics</em> 611.</li>
-          <li>Kim and Sanderson (2005). The relationship between displacement and length of faults: a review. <em>Earth-Science Reviews</em> 68.</li>
-          <li>Lee, Efendiev and Tchelepi (2015). Hybrid upwind discretization of nonlinear two-phase flow with gravity. <em>Advances in Water Resources</em> 82.</li>
-          <li>MacMinn, Szulczewski and Juanes (2011). CO₂ migration in saline aquifers. Part 2: capillary and solubility trapping. <em>Journal of Fluid Mechanics</em> 688.</li>
-          <li>Manzocchi, Walsh, Nell and Yielding (1999). Fault transmissibility multipliers for flow simulation models. <em>Petroleum Geoscience</em> 5.</li>
-          <li>Neufeld et al. (2010). Convective dissolution of carbon dioxide in saline aquifers. <em>Geophysical Research Letters</em> 37.</li>
-          <li>Nilsen, Lie and Andersen (2016). Fully-implicit simulation of vertical-equilibrium models with hysteresis and capillary fringe. <em>Computational Geosciences</em> 20.</li>
-          <li>Nordbotten and Celia (2006). Similarity solutions for fluid injection into confined aquifers. <em>Journal of Fluid Mechanics</em> 561.</li>
-          <li>Nordbotten and Celia (2012). <em>Geological Storage of CO₂: Modeling Approaches for Large-Scale Simulation</em>. Wiley.</li>
-          <li>Peaceman (1978). Interpretation of well-block pressures in numerical reservoir simulation. <em>SPE Journal</em> 18(3).</li>
+          {SIM_REFERENCES.map(text => <li key={text}>{simEmphasis(text)}</li>)}
         </ul>
       </article>
     </div>

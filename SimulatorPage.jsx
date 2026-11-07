@@ -662,7 +662,7 @@ const simPercentile = (sorted, p) => {
   return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
 };
 
-const SimUncertainty = ({ scenario, onLoad, theme, hidden }) => {
+const SimUncertainty = ({ scenario, onLoad, theme, hidden, reportRef }) => {
   const [specs, setSpecs] = useState(() => simDefaultUqSpecs(scenario));
   const [runs, setRuns] = useState(50);
   const [grid, setGrid] = useState('coarse');
@@ -713,6 +713,8 @@ const SimUncertainty = ({ scenario, onLoad, theme, hidden }) => {
       .sort((a, b) => Math.abs(b.rho) - Math.abs(a.rho));
     return { table, params, tornado };
   }, [state.rows, metric]);
+  // The screening report reads the table from here.
+  if (reportRef) reportRef.current = results ? { runs: state.rows.length, years: scenario.years, table: results.table } : null;
 
   return (
     <div className="sim-uq" id="sim-panel-uncertainty" role="tabpanel" aria-labelledby="sim-tab-uncertainty" hidden={hidden}>
@@ -928,6 +930,39 @@ const SimulatorPage = () => {
     if (svg) simDownload(new XMLSerializer().serializeToString(svg), `co2-section-year-${Math.round(shownYear)}.svg`, 'image/svg+xml');
   };
 
+  // The screening report: collect what the page already shows, then open it for print.
+  const uqReportRef = useRef(null);
+  const exportReport = () => {
+    exportRef.current?.removeAttribute('open');
+    if (!model || !row) return;
+    const root = document.querySelector('.ve-standalone') || document.body;
+    const css = window.getComputedStyle(root);
+    const classColors = {};
+    for (const item of SIM_INVENTORY) classColors[item.key] = css.getPropertyValue(item.color).trim();
+    const canvas = document.querySelector('.sim-view canvas[data-export]');
+    let mapPng = null;
+    try { mapPng = canvas ? (canvas.simComposite?.() || canvas).toDataURL('image/png') : null; } catch (_) { mapPng = null; }
+    const sectionSvg = canvas ? null : simReportInlineSvg(document.querySelector('.sim-view svg.sim-view__svg'));
+    const chartSvg = simReportInlineSvg(document.querySelector('.sim-chart svg'));
+    const data = {
+      generatedAt: new Date(),
+      scenarioName: VE2D.PRESETS[scenario.preset]?.label || 'Custom scenario',
+      shareUrl: window.location.href,
+      scenario,
+      finalYear: model.years,
+      finalRow: simRowAt(shown.history, model.years),
+      currentYear: shownYear,
+      currentRow: row,
+      classColors,
+      viewLabel: view === '3d' ? '3D block' : 'Map',
+      mapPng,
+      mapSvg: sectionSvg,
+      chartSvg,
+      uq: uqReportRef.current
+    };
+    simOpenReport(simReportHtml(data), { onNote: text => { setShare(text); setTimeout(() => setShare('Share'), 6000); } });
+  };
+
   const onTabKey = event => {
     const index = SIM_SECTIONS.findIndex(s => s.id === section);
     const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
@@ -973,6 +1008,7 @@ const SimulatorPage = () => {
               <button type="button" onClick={exportInventory}>Inventory through time <small>CSV</small></button>
               <button type="button" onClick={exportGrid} disabled={!frame}>Grid at this year <small>CSV</small></button>
               <button type="button" onClick={exportImage}>Current view <small>{view === 'section' ? 'SVG' : 'PNG'}</small></button>
+              <button type="button" onClick={exportReport} disabled={!model || !row}>Screening report <small>PDF</small></button>
             </div>
           </details>
           <details className="sim-menu sim-palettes" ref={paletteRef}>
@@ -1026,7 +1062,7 @@ const SimulatorPage = () => {
           </aside>
         </div>
       )}
-      <SimUncertainty scenario={scenario} onLoad={loadRealization} theme={theme} hidden={section !== 'uncertainty'} />
+      <SimUncertainty reportRef={uqReportRef} scenario={scenario} onLoad={loadRealization} theme={theme} hidden={section !== 'uncertainty'} />
       {section === 'method' && (
         <div className="sim-method" id="sim-panel-method" role="tabpanel" aria-labelledby="sim-tab-method">
           <GuidePage />
