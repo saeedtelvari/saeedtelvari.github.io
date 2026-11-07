@@ -307,6 +307,12 @@ const storyEarthLayout = (width, height, still = false) => {
   const W = width;
   const H = height;
   const compact = !still && (W <= 640 || W < 0.9 * H);
+  // The real bottom of each caption block, measured by the pinned stage. A chapter that is not measured yet has 0.
+  const seen = !still && typeof STORY_CAPTION_BOTTOM === 'object' ? STORY_CAPTION_BOTTOM : {};
+  const clear = id => (seen[id] > 0 ? seen[id] : 0);
+  // The chapter bar stands on the bottom of the stage (see StoryStage.jsx). The large art ends 10 px above it.
+  // Before the first measure (and in a test) no room is kept. A static frame has no bar.
+  const bar = still || !(seen.bar > 0) ? 0 : seen.bar + 10;
   const skip = still ? 0 : 128;
   let globe;
   let keep;
@@ -320,20 +326,21 @@ const storyEarthLayout = (width, height, still = false) => {
     const R = 0.78 * W;
     // The bottom of the caption. In the band at the top (below 641 px) it depends on the number of lines.
     const room = W - 32;
-    const bottom = W <= 640 ? 128 + 36 + 11 + 25.5 * Math.ceil(1000 / room) + 11 + 21 * Math.ceil(302 / room) : 340;
+    const bottom = Math.max(W <= 640 ? 128 + 36 + 11 + 25.5 * Math.ceil(1000 / room) + 11 + 21 * Math.ceil(302 / room) : 340, clear('orbit') + 12);
     globe = { cx: 0.5 * W, cy: Math.max(0.46 * H, 360, bottom + 34 * R / 330 + 14) + R, R };
     keep = { x: 0.5 * W, y: bottom };
-    const y = Math.max(0.42 * H, 352);
-    card = { x: 16, y, w: W - 32, h: H - 24 - y };
+    const y = Math.max(0.42 * H, 352, bottom + 12);
+    card = { x: 16, y, w: W - 32, h: H - Math.max(24, bar) - y };
     // The caption of fields has 4 or 5 lines (143 characters, 1400 px at the most), and the button "Map data and sources" is under it.
     // Above 640 px the caption stands at the left, so the map starts lower.
-    const top = W <= 640 ? 128 + 25.5 * Math.ceil(1400 / room) + 12 + 44 + 14 : 360;
-    fields = { x: 16, y: top, w: W - 32, h: H - 16 - top };
+    const top = Math.max(W <= 640 ? 128 + 25.5 * Math.ceil(1400 / room) + 12 + 44 + 14 : 360, clear('fields') + 14);
+    fields = { x: 16, y: top, w: W - 32, h: H - Math.max(16, bar) - top };
     const s = storyEarthClamp(W / 260, 1.2, 2);
-    scene = { s, ox: 0.52 * W - 548 * s, oy: 0.52 * H - 232 * s };
+    // The label of the well (y = 440 in the side view) stays above the chapter bar.
+    scene = { s, ox: 0.52 * W - 548 * s, oy: Math.min(0.52 * H - 232 * s, bar > 0 ? H - bar - 12 - 440 * s : Infinity) };
     const iw = storyEarthClamp(0.29 * W, 112, 200);
     // The caption of descent: 25.5 px for each line, below 128 px.
-    const below = W <= 640 ? 128 + 25.5 * Math.ceil(640 / room) : 190;
+    const below = Math.max(W <= 640 ? 128 + 25.5 * Math.ceil(640 / room) : 190, clear('descent'));
     inset = { x: W - 16 - iw, y: Math.max(216, below + 12), w: iw, h: iw * 0.73 };
     const left = -scene.ox / s;
     sun = { x: 0.27 * W, y: Math.max(0.34 * H, below + 36), r: 20 };
@@ -346,10 +353,10 @@ const storyEarthLayout = (width, height, still = false) => {
     globe = { ...centre, R: Math.min(H * 330 / 450, 0.52 * W, away) };
     const x = 0.46 * W;
     const y = Math.max(skip, 0.16 * H);
-    card = { x, y, w: W - Math.max(16, 0.03 * W) - x, h: H - 28 - y };
+    card = { x, y, w: W - Math.max(16, 0.03 * W) - x, h: H - Math.max(28, bar) - y };
     fields = { x: 0.41 * W, y, w: W - 16 - 0.41 * W, h: card.h };
     const s = Math.min(W / 800, H / 450);
-    scene = { s, ox: (W - 800 * s) / 2, oy: 0.516 * H - 232 * s };
+    scene = { s, ox: (W - 800 * s) / 2, oy: Math.min(0.516 * H - 232 * s, bar > 0 ? H - bar - 12 - 440 * s : Infinity) };
     const si = Math.min(s, 1.7);
     inset = { x: W - Math.max(16, 24 * si) - 176 * si, y: Math.max(scene.oy + 62 * s, skip), w: 176 * si, h: 128 * si };
     sun = { x: scene.ox + 410 * s, y: scene.oy + 118 * s, r: 24 * s };

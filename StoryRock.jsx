@@ -46,7 +46,8 @@ const rockLayout = (width, height, options = {}) => {
   const caption = options.caption || (narrow ? 'top' : 'side');
   const length = options.length || 20.235;
   const chars = options.captionChars || 127;
-  const foot = caption === 'none' ? 10 : narrow ? 28 : 22;
+  // options.bar is the height of the chapter bar at the bottom of the stage. The cutaway ends above it.
+  const foot = caption === 'none' ? 10 : Math.max(narrow ? 28 : 22, options.bar > 0 ? options.bar + 10 : 0);
   let x0;
   let y0;
   if (narrow) {
@@ -464,12 +465,13 @@ const rockLoad = frame => {
 
 // Everything that depends on the size of the stage but not on the camera.
 const rockPrepare = frame => {
-  const key = `${frame.width}x${frame.height}${frame.reducedMotion ? 's' : 'p'}`;
+  const bar = frame.reducedMotion || typeof STORY_CAPTION_BOTTOM !== 'object' ? 0 : STORY_CAPTION_BOTTOM.bar || 0;
+  const key = `${frame.width}x${frame.height}${frame.reducedMotion ? 's' : 'p'}:${bar}`;
   if (rockState.prep && rockState.prep.key === key) return rockState.prep;
   const section = rockSection();
   const captions = (typeof SITE_STORY === 'object' && SITE_STORY.captions && SITE_STORY.captions.rock) || [];
   const chars = captions.reduce((most, text) => Math.max(most, text.length), 0) || 127;
-  const layout = rockLayout(frame.width, frame.height, { caption: frame.reducedMotion ? 'none' : undefined, length: section.length, captionChars: chars });
+  const layout = rockLayout(frame.width, frame.height, { caption: frame.reducedMotion ? 'none' : undefined, length: section.length, captionChars: chars, bar });
   const spec = rockCameraSpec(layout, { wellS: section.well.s, seaFloor: section.horizons[0].depth[0] / 1000, reservoir: section.well.topDepth / 1000 });
   const bounds = [0, 1, 2, 3, 4, 5, 6, 7].map(index => rockBoundary(section, index, layout.s0, layout.s1));
   const bandsAtWell = rockBandsAt(section, section.well.s);
