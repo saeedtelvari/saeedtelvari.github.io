@@ -183,6 +183,7 @@ test('the MuPSI wording of today and the true no-script text stay in the restore
   const sections = read('HomeSections.jsx');
   assert.match(sections, /at field scale/);
   assert.doesNotMatch(sections, /28-case/);
-  assert.match(read('index.html'), /They reproduce compositional simulations, with speed-ups of up to 100×\./);
-  assert.doesNotMatch(read('index.html'), /faster than full 3D compositional models/);
+  assert.match(read('index.html'), /They reproduce compositional simulations, with speed-ups of up to 100× \(preprint, 2026\)\./);
+  // The loader repeats the hero summary. Only the no-script text must keep the true wording.
+  assert.doesNotMatch(read('index.html').split('<noscript>').pop(), /faster than full 3D compositional models/);
 });

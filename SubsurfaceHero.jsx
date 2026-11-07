@@ -65,6 +65,21 @@ const heroPercentText = (value, total) => {
 };
 
 const HERO_YEARS = 2000;
+
+// The main-thread fallback times the run like the worker does. computeMs is in milliseconds.
+const heroSimulateTimed = options => {
+  const start = performance.now();
+  const run = HeroGeology.simulate(heroGeology, options);
+  run.computeMs = performance.now() - start;
+  return run;
+};
+
+// The one line under the player note. It states only the browser time of this hero model.
+const heroReceiptText = (years, milliseconds) => {
+  const seconds = milliseconds / 1000;
+  const time = seconds < 0.05 ? 'under 0.1 s' : `${seconds.toFixed(1)} s`;
+  return `This model ran ${years.toLocaleString('en-US')} years in ${time} in your browser.`;
+};
 const HERO_UNIT = 15; // SVG units per solver unit of height
 // One random section per page load; the worker simulates it.
 const heroGeology = HeroGeology.randomGeology();
@@ -197,12 +212,12 @@ const SubsurfaceHero = ({ onNavigate }) => {
   useEffect(() => {
     const options = { years: HERO_YEARS };
     if (!window.Worker) {
-      const timer = setTimeout(() => setRun(HeroGeology.simulate(heroGeology, options)), 0);
+      const timer = setTimeout(() => setRun(heroSimulateTimed(options)), 0);
       return () => clearTimeout(timer);
     }
-    const worker = new Worker('./hero-simulation-worker.js?v=10');
+    const worker = new Worker('./hero-simulation-worker.js?v=11');
     worker.onmessage = event => setRun(event.data);
-    worker.onerror = () => setRun(HeroGeology.simulate(heroGeology, options));
+    worker.onerror = () => setRun(heroSimulateTimed(options));
     worker.postMessage({ geology: heroGeology, options });
     return () => worker.terminate();
   }, []);
@@ -287,7 +302,7 @@ const SubsurfaceHero = ({ onNavigate }) => {
       <HeroLabels />
       <HeroLeakReadout frame={frame} year={year} injectionYears={injectionYears} />
       <Identity onNavigate={onNavigate} />
-      <HeroPlayer year={year} playing={playing} speed={speed} frame={frame} injectionYears={injectionYears}
+      <HeroPlayer year={year} playing={playing} speed={speed} frame={frame} run={run} injectionYears={injectionYears}
         ship={ship.phase} exaggeration={exaggeration} controls={controls} />
     </section>
   );
@@ -542,7 +557,7 @@ const HeroLeakReadout = ({ frame, year, injectionYears }) => {
 /* =====================================================
    Player — controls, the CO2 inventory and the scale note
    ===================================================== */
-const HeroPlayer = ({ year, playing, speed, frame, injectionYears, ship, exaggeration, controls }) => {
+const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, ship, exaggeration, controls }) => {
   const phase = heroPhase(year, injectionYears, ship);
   const inventory = frame ? frame.inventory : { mobile: 0, residual: 0, leaked: 0, injected: 0 };
   const share = value => heroPercentText(value, inventory.injected);
@@ -560,7 +575,7 @@ const HeroPlayer = ({ year, playing, speed, frame, injectionYears, ship, exagger
         <button type="button" className="hero-player__small" onClick={controls.restart} aria-label="Restart simulation">
           <Icon name="restart" size={15} />
         </button>
-        <button type="button" className="hero-player__small hero-player__speed" onClick={controls.speed} aria-label={`Playback speed ${speed} times`}>{speed}×</button>
+        <button type="button" className="hero-player__small hero-player__speed" onClick={controls.speed} aria-label={`${speed}× playback speed`}>{speed}×</button>
       </div>
       <p className="hero-player__title">Live VE model, year <span className="hero-player__year">{shownYear}</span> <span className="hero-player__phase">{phase}</span></p>
       <div className="hero-player__bar" role="img"
@@ -570,7 +585,8 @@ const HeroPlayer = ({ year, playing, speed, frame, injectionYears, ship, exagger
       <ul className="hero-player__legend" aria-hidden="true">
         {classes.map(([key, label, value]) => <li key={key}><i className={`is-${key}`} />{label} {share(value)}%</li>)}
       </ul>
-      <p className="hero-player__note">Schematic saline aquifer, 10 km wide, vertical exaggeration ×{exaggeration}.</p>
+      <p className="hero-player__note">Teaching model: a schematic saline aquifer, 10 km wide, vertical exaggeration ×{exaggeration}. The depleted-gas model is in the 2026 preprint.</p>
+      {run && run.computeMs > 0 && <p className="hero-player__receipt">{heroReceiptText(run.years, run.computeMs)}</p>}
     </div>
   );
 };
@@ -1024,7 +1040,8 @@ const Identity = React.memo(({ onNavigate }) => (
     <HeroName variant="contour" />
     <p className="hero-summary hero-reveal">
       I build vertical-equilibrium models of CO<sub>2</sub> storage in depleted gas fields: reduced-order simulators
-      that run up to 100× faster than full 3D compositional models.
+      that run up to 100× faster than full 3D compositional models{' '}
+      (<a className="hero-summary__source" href="#pub-ve-depleted-gas-2026" onClick={event => onNavigate && onNavigate('publications', event)}>preprint, 2026</a>).
     </p>
     <div className="hero-actions hero-reveal">
       <a className="btn btn--primary" href="./simulator.html" onClick={event => onNavigate && onNavigate('simulator', event)}>
@@ -1041,6 +1058,13 @@ const Identity = React.memo(({ onNavigate }) => (
         ))}
       </ul>
     </div>
+    <nav className="hero-doors hero-reveal" aria-label="Paths for visitors">
+      <ul>
+        <li><span>Reviewing my work?</span> <a href="#publications" onClick={event => onNavigate && onNavigate('publications', event)}>Papers and BibTeX</a></li>
+        <li><span>Hiring?</span> <a href="./assets/cv.pdf">CV (PDF)</a></li>
+        <li><span>Working on CCS?</span> <a href="./simulator.html#method">The method and its checks</a></li>
+      </ul>
+    </nav>
   </div>
 ));
 
