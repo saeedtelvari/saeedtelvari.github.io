@@ -1597,6 +1597,39 @@
   .sim-method nav ol { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 }
 
+/* ------------------------------------------------------------------ audit: labels, trust line, legend */
+
+/* Field hints use the muted ink: the faint ink is below 4.5:1 on the panel colours. */
+.sim-field__hint { color: var(--sim-ink-muted); }
+
+.sim-speed { min-width: 72px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* The depth colour key in the map legend. */
+.sim-legend__ramp {
+  flex: none;
+  width: 44px;
+  height: 8px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--sim-depth-0), var(--sim-depth-1), var(--sim-depth-2), var(--sim-depth-3), var(--sim-depth-4), var(--sim-depth-5), var(--sim-depth-6));
+  box-shadow: 0 0 0 1px var(--sim-rule-strong, var(--sim-rule));
+}
+
+/* The trust line and the citation button at the foot of the outcomes rail. */
+.sim-trust { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.sim-trust p { flex: 1 1 100%; margin: 0; color: var(--sim-ink-muted); font-size: 12.5px; line-height: 1.5; }
+.sim-trust__notice { color: var(--sim-ink-muted); font-size: 12.5px; }
+.sim-linkbutton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sim-accent-text, var(--sim-accent));
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.sim-linkbutton:focus-visible { outline: 2px solid var(--sim-accent); outline-offset: 2px; border-radius: 2px; }
+
 /* ------------------------------------------------------------------ motion preferences */
 
 @media (prefers-reduced-motion: reduce) {

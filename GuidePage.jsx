@@ -1,14 +1,32 @@
 // GuidePage.jsx — Method: the equations, numerics, verification and limits of the model
 // in ve2d-model.js, written to match the code exactly. Equations are typeset with KaTeX.
 
+// KaTeX loads once, when the Method tab first opens. The simulator page does not fetch it.
+const SIM_KATEX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min';
+const simLoadKatex = () => {
+  if (window.katex || window.__simKatexRequested) return;
+  window.__simKatexRequested = true;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `${SIM_KATEX_URL}.css`;
+  document.head.appendChild(link);
+  const script = document.createElement('script');
+  script.src = `${SIM_KATEX_URL}.js`;
+  script.async = true;
+  script.onload = () => window.dispatchEvent(new Event('sim-katex-ready'));
+  document.head.appendChild(script);
+};
+
 const SimTex = ({ tex, block = false }) => {
   const ref = useRef(null);
   const [ready, setReady] = useState(typeof window !== 'undefined' && !!window.katex);
   useEffect(() => {
     if (ready) return undefined;
+    const done = () => { if (window.katex) setReady(true); };
+    window.addEventListener('sim-katex-ready', done);
     const timer = setInterval(() => { if (window.katex) { setReady(true); clearInterval(timer); } }, 200);
-    const stop = setTimeout(() => clearInterval(timer), 8000);
-    return () => { clearInterval(timer); clearTimeout(stop); };
+    const stop = setTimeout(() => clearInterval(timer), 30000);
+    return () => { window.removeEventListener('sim-katex-ready', done); clearInterval(timer); clearTimeout(stop); };
   }, [ready]);
   useEffect(() => {
     if (ready && ref.current) window.katex.render(tex, ref.current, { displayMode: block, throwOnError: false });
@@ -35,6 +53,7 @@ const SIM_METHOD_SECTIONS = [
 ];
 
 const GuidePage = () => {
+  useEffect(() => { simLoadKatex(); }, []);
   const d = VE2D.DEFAULTS;
   const rows = [
     ['Permeability', 'k', `${d.permMd} mD`, 'Homogeneous'],
@@ -200,7 +219,7 @@ const GuidePage = () => {
           micrometre do not move.
         </p>
 
-        <h2 id="m-verification">Verification</h2>
+        <h2 id="m-verification" tabIndex={-1}>Verification</h2>
         <p>The engine is tested in Node on every change. The current results:</p>
         <table>
           <thead><tr><th>Check</th><th>Result</th></tr></thead>
@@ -232,20 +251,20 @@ const GuidePage = () => {
 
         <h2 id="m-references">References</h2>
         <ul>
-          <li>Barnes, Lehman and Mulla (2014). Priority-flood: an optimal depression-filling algorithm. <em>Computers &amp; Geosciences</em> 62.</li>
-          <li>Bennion and Bachu (2008). Drainage and imbibition relative permeability relationships for supercritical CO₂/brine. <em>SPE Reservoir Evaluation &amp; Engineering</em> 11(3).</li>
-          <li>Bretan, Yielding and Jones (2003). Using calibrated shale gouge ratio to estimate hydrocarbon column heights. <em>AAPG Bulletin</em> 87(3).</li>
-          <li>Gasda, Nordbotten and Celia (2009). Vertical equilibrium with sub-scale analytical methods for geological CO₂ sequestration. <em>Computational Geosciences</em> 13.</li>
-          <li>Hesse, Orr and Tchelepi (2008). Gravity currents with residual trapping. <em>Journal of Fluid Mechanics</em> 611.</li>
-          <li>Kim and Sanderson (2005). The relationship between displacement and length of faults: a review. <em>Earth-Science Reviews</em> 68.</li>
-          <li>Lee, Efendiev and Tchelepi (2015). Hybrid upwind discretization of nonlinear two-phase flow with gravity. <em>Advances in Water Resources</em> 82.</li>
-          <li>MacMinn, Szulczewski and Juanes (2011). CO₂ migration in saline aquifers. Part 2: capillary and solubility trapping. <em>Journal of Fluid Mechanics</em> 688.</li>
-          <li>Manzocchi, Walsh, Nell and Yielding (1999). Fault transmissibility multipliers for flow simulation models. <em>Petroleum Geoscience</em> 5.</li>
-          <li>Neufeld et al. (2010). Convective dissolution of carbon dioxide in saline aquifers. <em>Geophysical Research Letters</em> 37.</li>
-          <li>Nilsen, Lie and Andersen (2016). Fully-implicit simulation of vertical-equilibrium models with hysteresis and capillary fringe. <em>Computational Geosciences</em> 20.</li>
-          <li>Nordbotten and Celia (2006). Similarity solutions for fluid injection into confined aquifers. <em>Journal of Fluid Mechanics</em> 561.</li>
-          <li>Nordbotten and Celia (2012). <em>Geological Storage of CO₂: Modeling Approaches for Large-Scale Simulation</em>. Wiley.</li>
-          <li>Peaceman (1978). Interpretation of well-block pressures in numerical reservoir simulation. <em>SPE Journal</em> 18(3).</li>
+          <li>Barnes, Lehman and Mulla (2014). Priority-flood: an optimal depression-filling algorithm. <em>Computers &amp; Geosciences</em> 62. <a href="https://doi.org/10.1016/j.cageo.2013.04.024" rel="noopener">doi:10.1016/j.cageo.2013.04.024</a></li>
+          <li>Bennion and Bachu (2008). Drainage and imbibition relative permeability relationships for supercritical CO₂/brine. <em>SPE Reservoir Evaluation &amp; Engineering</em> 11(3). <a href="https://doi.org/10.2118/99326-pa" rel="noopener">doi:10.2118/99326-pa</a></li>
+          <li>Bretan, Yielding and Jones (2003). Using calibrated shale gouge ratio to estimate hydrocarbon column heights. <em>AAPG Bulletin</em> 87(3). <a href="https://doi.org/10.1306/08010201128" rel="noopener">doi:10.1306/08010201128</a></li>
+          <li>Gasda, Nordbotten and Celia (2009). Vertical equilibrium with sub-scale analytical methods for geological CO₂ sequestration. <em>Computational Geosciences</em> 13. <a href="https://doi.org/10.1007/s10596-009-9138-x" rel="noopener">doi:10.1007/s10596-009-9138-x</a></li>
+          <li>Hesse, Orr and Tchelepi (2008). Gravity currents with residual trapping. <em>Journal of Fluid Mechanics</em> 611. <a href="https://doi.org/10.1017/s002211200800219x" rel="noopener">doi:10.1017/s002211200800219x</a></li>
+          <li>Kim and Sanderson (2005). The relationship between displacement and length of faults: a review. <em>Earth-Science Reviews</em> 68. <a href="https://doi.org/10.1016/j.earscirev.2004.06.003" rel="noopener">doi:10.1016/j.earscirev.2004.06.003</a></li>
+          <li>Lee, Efendiev and Tchelepi (2015). Hybrid upwind discretization of nonlinear two-phase flow with gravity. <em>Advances in Water Resources</em> 82. <a href="https://doi.org/10.1016/j.advwatres.2015.04.007" rel="noopener">doi:10.1016/j.advwatres.2015.04.007</a></li>
+          <li>MacMinn, Szulczewski and Juanes (2011). CO₂ migration in saline aquifers. Part 2: capillary and solubility trapping. <em>Journal of Fluid Mechanics</em> 688. <a href="https://doi.org/10.1017/jfm.2011.379" rel="noopener">doi:10.1017/jfm.2011.379</a></li>
+          <li>Manzocchi, Walsh, Nell and Yielding (1999). Fault transmissibility multipliers for flow simulation models. <em>Petroleum Geoscience</em> 5. <a href="https://doi.org/10.1144/petgeo.5.1.53" rel="noopener">doi:10.1144/petgeo.5.1.53</a></li>
+          <li>Neufeld et al. (2010). Convective dissolution of carbon dioxide in saline aquifers. <em>Geophysical Research Letters</em> 37. <a href="https://doi.org/10.1029/2010gl044728" rel="noopener">doi:10.1029/2010gl044728</a></li>
+          <li>Nilsen, Lie and Andersen (2016). Fully-implicit simulation of vertical-equilibrium models with hysteresis and capillary fringe. <em>Computational Geosciences</em> 20. <a href="https://doi.org/10.1007/s10596-015-9547-y" rel="noopener">doi:10.1007/s10596-015-9547-y</a></li>
+          <li>Nordbotten and Celia (2006). Similarity solutions for fluid injection into confined aquifers. <em>Journal of Fluid Mechanics</em> 561. <a href="https://doi.org/10.1017/s0022112006000802" rel="noopener">doi:10.1017/s0022112006000802</a></li>
+          <li>Nordbotten and Celia (2012). <em>Geological Storage of CO₂: Modeling Approaches for Large-Scale Simulation</em>. Wiley. <a href="https://doi.org/10.1002/9781118137086" rel="noopener">doi:10.1002/9781118137086</a></li>
+          <li>Peaceman (1978). Interpretation of well-block pressures in numerical reservoir simulation. <em>SPE Journal</em> 18(3). <a href="https://doi.org/10.2118/6893-pa" rel="noopener">doi:10.2118/6893-pa</a></li>
         </ul>
       </article>
     </div>
