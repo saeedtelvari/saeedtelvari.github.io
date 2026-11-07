@@ -1130,6 +1130,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   text-underline-offset: 3px;
 }
 .hero-doors a:hover { text-decoration-color: currentColor; }
+.hero-doors__short { display: none; }
 .hero-profiles { display: flex; gap: 2px; margin: 0 0 0 6px; padding: 0; list-style: none; }
 .hero-profiles a {
   display: inline-flex;
@@ -1234,11 +1235,14 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   .hero-summary { margin-top: 12px; font-size: 15.5px; line-height: 1.55; }
   .hero-actions { gap: 10px; margin-top: 16px; }
   .hero-actions > .btn { flex: 1 1 auto; padding: 0 14px; }
-  /* No room above the rock on phones, so the paths sit on a dark panel like the player. */
-  .hero-doors { width: auto; max-width: none; margin-top: 8px; padding: 2px 12px; border-radius: 12px; background: rgba(8, 14, 28, 0.78); }
-  .hero-doors ul { flex-direction: column; }
-  .hero-doors li { display: flex; flex-wrap: wrap; align-items: center; column-gap: 6px; }
-  .hero-doors a { min-height: 44px; }
+  /* On phones the paths are one short row. The questions stay for screen readers. */
+  .hero-doors { width: auto; max-width: none; margin-top: 0; }
+  .hero-doors ul { gap: 0 18px; }
+  .hero-doors li { display: flex; }
+  .hero-doors a { min-height: 44px; font-size: 14px; text-shadow: 0 1px 3px rgba(4, 8, 16, 0.95), 0 0 8px rgba(4, 8, 16, 0.8); }
+  .hero-doors__long { display: none; }
+  .hero-doors__short { display: inline; }
+  .hero-doors__ask { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .hero-profiles { width: 100%; gap: 4px; margin: 2px 0 0 -6px; }
   .hero-profiles a { width: 34px; height: 34px; }
   .hero-player {

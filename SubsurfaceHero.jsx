@@ -1060,9 +1060,9 @@ const Identity = React.memo(({ onNavigate }) => (
     </div>
     <nav className="hero-doors hero-reveal" aria-label="Paths for visitors">
       <ul>
-        <li><span>Reviewing my work?</span> <a href="#publications" onClick={event => onNavigate && onNavigate('publications', event)}>Papers and BibTeX</a></li>
-        <li><span>Hiring?</span> <a href="./assets/cv.pdf">CV (PDF)</a></li>
-        <li><span>Working on CCS?</span> <a href="./simulator.html#method">The method and its checks</a></li>
+        <li><span className="hero-doors__ask">Reviewing my work?</span> <a href="#publications" onClick={event => onNavigate && onNavigate('publications', event)}><span className="hero-doors__long">Papers and BibTeX</span><span className="hero-doors__short">Papers &amp; BibTeX</span></a></li>
+        <li><span className="hero-doors__ask">Hiring?</span> <a href="./assets/cv.pdf">CV (PDF)</a></li>
+        <li><span className="hero-doors__ask">Working on CCS?</span> <a href="./simulator.html#method"><span className="hero-doors__long">The method and its checks</span><span className="hero-doors__short">Method</span></a></li>
       </ul>
     </nav>
   </div>
