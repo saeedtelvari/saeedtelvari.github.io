@@ -1,7 +1,8 @@
 // Header.jsx — fixed navigation shared by the homepage, the CV and the simulator.
-// The site variant is clear over the pinned story (ink text on the sky). It is a solid bar in the
-// ground colour with an ink hairline after the story, and on the CV page.
-// The workbench variant is the simulator's solid 56 px bar. Do not change how it looks.
+// The site variant is transparent over the hero sky and turns into an Earth surface once
+// the page scrolls; the workbench variant is the simulator's solid 56 px bar.
+// The story page sets story. Its header is clear over the pinned story (ink text on the light sky)
+// and it is a solid bar after the story. The class is-over-story marks the clear state.
 
 const { useEffect, useState, useRef } = React;
 
@@ -28,22 +29,27 @@ const HEADER_PROFILES = [
   { icon: 'linkedin', label: 'LinkedIn', href: SITE_LINKS.linkedin },
 ];
 
-const Header = ({ active, onNavigate, variant = 'site' }) => {
+const Header = ({ active, onNavigate, variant = 'site', story = false }) => {
+  const [scrolled, setScrolled] = useState(false);
   const [overStory, setOverStory] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const menuButtonRef = useRef(null);
   const closeButtonRef = useRef(null);
   const mobileDrawerRef = useRef(null);
 
-  // The pinned stage fills the screen while the story is on. The bar is clear then.
-  // The bar turns solid when the stage starts to leave, so the art does not slide under the nav text.
-  // Without a stage (the CV, or the static frames for reduced motion) the bar is always solid.
+  // Over the hero the site header is transparent; it gains a surface once the page moves.
   useEffect(() => {
     if (variant !== 'site') return undefined;
+    // On the story page the pinned stage fills the screen. The bar is clear until the stage starts to leave.
+    // Without a stage (the static frames for reduced motion) the bar is solid.
     const onScroll = () => {
-      const story = document.getElementById('story');
-      const stage = story && story.querySelector('.story-stage');
-      setOverStory(!!stage && story.getBoundingClientRect().bottom > stage.offsetHeight - 1);
+      if (story) {
+        const section = document.getElementById('story');
+        const stage = section && section.querySelector('.story-stage');
+        setOverStory(!!stage && section.getBoundingClientRect().bottom > stage.offsetHeight - 1);
+      } else {
+        setScrolled(window.scrollY > 24);
+      }
     };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -52,16 +58,16 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onScroll);
     };
-  }, [variant]);
+  }, [variant, story]);
 
   // The open drawer is modal: the page behind is inert, Tab cycles inside, Escape closes.
   useEffect(() => {
     if (!mobileOpen) return undefined;
     const mainContent = document.getElementById('main-content');
-    const story = document.getElementById('story');
+    const storySection = story ? document.getElementById('story') : null;
     const drawer = mobileDrawerRef.current;
     setHeaderBackgroundInert(mainContent, true);
-    setHeaderBackgroundInert(story, true);
+    setHeaderBackgroundInert(storySection, true);
     if (closeButtonRef.current) closeButtonRef.current.focus();
     const onModalKeyDown = event => {
       if (event.key === 'Escape') {
@@ -81,17 +87,17 @@ const Header = ({ active, onNavigate, variant = 'site' }) => {
     return () => {
       document.removeEventListener('keydown', onModalKeyDown);
       setHeaderBackgroundInert(mainContent, false);
-      setHeaderBackgroundInert(story, false);
+      setHeaderBackgroundInert(storySection, false);
       if (menuButtonRef.current) menuButtonRef.current.focus();
     };
-  }, [mobileOpen]);
+  }, [mobileOpen, story]);
 
   const handleItemClick = (id, event) => {
     setMobileOpen(false);
     if (onNavigate) onNavigate(id, event);
   };
 
-  const classes = ['app-header', `app-header--${variant}`, overStory ? 'is-over-story' : ''].filter(Boolean).join(' ');
+  const classes = ['app-header', `app-header--${variant}`, scrolled ? 'is-scrolled' : '', overStory ? 'is-over-story' : ''].filter(Boolean).join(' ');
   const navLink = it => (
     <a className="app-nav__link" href={it.href} aria-current={active === it.id ? 'page' : undefined}
       onClick={event => handleItemClick(it.id, event)}>{it.label}</a>

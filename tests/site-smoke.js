@@ -10,28 +10,37 @@ const lacks = (file, pattern, message) => assert.doesNotMatch(read(file), patter
 has('App.jsx', /hashchange/, 'home navigation must react to same-document hash changes');
 has('App.jsx', /history\.(pushState|replaceState)/, 'navigation must keep browser history in sync');
 lacks('App.jsx', /minDuration\s*=\s*900/, 'the loader must not force a 900ms delay');
-has('App.jsx', /React\.useLayoutEffect\(\(\) => dismissLoader\(\), \[\]\)/, 'the homepage hides the loader before the first paint of the story');
+has('StoryPage.jsx', /React\.useLayoutEffect\(\(\) => dismissLoader\(\), \[\]\)/, 'the story page hides the loader before the first paint of the story');
 
 has('Header.jsx', /href=\{it\.href\}/, 'header navigation needs real link destinations');
 has('Header.jsx', /mobileOpen\s*&&/, 'the closed mobile drawer must not remain focusable');
 has('Footer.jsx', /href=\{href\}/, 'footer navigation needs real link destinations');
 
-for (const page of ['index.html', 'simulator.html']) {
+for (const page of ['index.html', 've-story.html', 'simulator.html']) {
   has(page, /rel="canonical"/, `${page} needs a canonical URL`);
   has(page, /property="og:title"/, `${page} needs Open Graph metadata`);
   has(page, /application\/ld\+json/, `${page} needs structured data`);
 }
 
-// The social cards exist, are JPEG files of a sensible size, and the alt text does not describe the old hero.
-for (const page of ['index.html', 'cv.html']) {
+has('SubsurfaceHero.jsx', /Open the VE simulator/, 'hero needs a primary simulator CTA');
+has('SubsurfaceHero.jsx', /How VE models work/, 'hero needs a second button for the story page');
+has('SubsurfaceHero.jsx', /aria-label=\{label\}/, 'social links need distinct accessible names');
+has('SubsurfaceHero.jsx', /aria-label="Simulation year"/, 'hero timeline slider needs an accessible name');
+has('SubsurfaceHero.jsx', /new Worker\(['"]\.\/hero-simulation-worker\.js/, 'hero precomputation must run off the main thread');
+assert.ok(fs.existsSync(path.join(root, 'hero-simulation-worker.js')), 'hero worker must exist');
+
+// The social cards exist and are JPEG files of a sensible size. Each page has its own card.
+const cards = { 'index.html': 'assets/social-card.jpg', 'cv.html': 'assets/social-card.jpg', 've-story.html': 'assets/social-card-story.jpg' };
+for (const [page, expected] of Object.entries(cards)) {
   const card = read(page).match(/property="og:image" content="https:\/\/saeedtelvari\.github\.io\/([^"]+)"/)[1];
+  assert.equal(card, expected, page + ' uses its own social card');
   const bytes = fs.readFileSync(path.join(root, card));
   assert.ok(bytes.length < 200000 && bytes[0] === 0xff && bytes[1] === 0xd8, page + ' social card must be a JPEG under 200 KB');
   has(page, /property="og:image:width" content="1200"/, page + ' card width');
   has(page, /property="og:image:height" content="630"/, page + ' card height');
-  lacks(page, /faulted aquifer|above a live/, page + ' card alt text must not describe the old hero');
 }
-lacks('index.html', /social-card\.jpg/, 'the old social card is gone');
+lacks('index.html', /social-card-story/, 'the homepage keeps its own card');
+has('index.html', /faulted aquifer/, 'the homepage card text describes the live hero');
 
 lacks('CVPage.jsx', /Saeed-Telvari-CV\.pdf/, 'CV page must not request a missing PDF asset');
 has('CVPage.jsx', /window\.print\(\)/, 'CV page print action must invoke browser print');
@@ -60,7 +69,9 @@ has('SimulatorPage.jsx', /<details/, 'mobile controls need progressive disclosur
 assert.ok(fs.existsSync(path.join(root, 'simulation-worker.js')), 'simulation worker must exist');
 assert.ok(!fs.existsSync(path.join(root, 'uq-worker.js')), 'the old copy of the solver must stay deleted');
 has('simulator.html', /KaTeX\/0\.16\.9\/katex\.min\.js/, 'method equations need the pinned KaTeX build');
-has('simulator.html', /<title>CO₂ Storage Simulator \| Sa'eed Telvari<\/title>/, 'simulator needs its plain page name');
+has('simulator.html', /<title>VE simulator: CO₂ storage — Sa'eed Telvari<\/title>/, 'simulator needs its plain page name');
+has('ve-story.html', /<title>How VE models work — Sa'eed Telvari<\/title>/, 'the story page needs its title');
+has('ve-story.html', /data-page="story"/, 'the story page renders its own entry');
 has('simulator.html', /simulator-workbench\.css/, 'simulator needs its dedicated workbench stylesheet');
 assert.ok(fs.existsSync(path.join(root, 'simulator-workbench.css')), 'workbench stylesheet must exist');
 
@@ -68,19 +79,23 @@ has('build.js', /simulator-bundle\.js/, 'the heavy simulator must have a page-sp
 const simulatorBundleVersions = [...read('simulator.html').matchAll(/simulator-bundle\.js\?v=([^"']+)/g)].map(match => match[1]);
 assert.ok(simulatorBundleVersions.length >= 2, 'simulator bundle must be preloaded and executed');
 assert.equal(new Set(simulatorBundleVersions).size, 1, 'simulator preload and script URLs must use the same cache version');
-assert.equal(simulatorBundleVersions[0], '25', 'simulator page must load the current bundle version');
-lacks('index.html', /simulator-bundle\.js/, 'home page must not download the simulator bundle');
+assert.equal(simulatorBundleVersions[0], '26', 'simulator page must load the current bundle version');
+for (const page of ['index.html', 'cv.html', 've-story.html']) lacks(page, /simulator-bundle\.js/, page + ' must not download the simulator bundle');
+for (const page of ['index.html', 'cv.html', 'simulator.html']) lacks(page, /story-bundle\.js|story\.css/, page + ' must not download the story bundle or the story styles');
+has('ve-story.html', /story-bundle\.js\?v=\d+/, 'the story page loads the story bundle');
+has('ve-story.html', /story\.css\?v=\d+/, 'the story page loads the story styles');
 
-for (const page of ['index.html', 'cv.html']) {
+for (const page of ['index.html', 'cv.html', 've-story.html']) {
   lacks(page, /font-awesome/, page + ' uses inline icons');
   has(page, /<script defer src="https:\/\/unpkg\.com\/react@18\.3\.1/, page + ' defers React');
   has(page, /<noscript>/, page + ' has a no-JavaScript fallback');
   has(page, /rel="apple-touch-icon"/, page + ' has a touch icon');
 }
-const bundleVersion = page => [...read(page).matchAll(/(?<!simulator-)bundle\.js\?v=([\d.]+)/g)].map(m => m[1]);
-const versions = new Set(['index.html', 'cv.html', 'simulator.html'].flatMap(bundleVersion));
+const bundleVersion = page => [...read(page).matchAll(/(?<!(?:simulator|story)-)bundle\.js\?v=([\d.]+)/g)].map(m => m[1]);
+const allPages = ['index.html', 'cv.html', 've-story.html', 'simulator.html'];
+const versions = new Set(allPages.flatMap(bundleVersion));
 assert.equal(versions.size, 1, 'all pages load the same bundle.js version');
-const cssVersions = new Set(['index.html', 'cv.html', 'simulator.html'].flatMap(page => [...read(page).matchAll(/colors_and_type\.css\?v=([\d.]+)/g)].map(m => m[1])));
+const cssVersions = new Set(allPages.flatMap(page => [...read(page).matchAll(/colors_and_type\.css\?v=([\d.]+)/g)].map(m => m[1])));
 assert.equal(cssVersions.size, 1, 'all pages load the same colors_and_type.css version');
 assert.ok(fs.existsSync(path.join(root, 'robots.txt')) && fs.existsSync(path.join(root, 'sitemap.xml')), 'robots.txt and sitemap.xml exist');
 has('SimulatorPage.jsx', /location\.hash === '#method'/, 'the method guide can be linked directly');

@@ -1,6 +1,5 @@
-// HomeSections.jsx — the homepage below the story: research, projects, publications, contact.
+// HomeSections.jsx — the homepage below the hero: research, projects, publications, contact.
 // Facts come from site-content.js, which the CV shares.
-// The sections sit on the sky ground of the story (style C). The CSS is in colors_and_type.css.
 
 const { useState } = React;
 
@@ -27,17 +26,10 @@ const useCopyStatus = () => {
   return [status, copy];
 };
 
-// A thin strip of four rock beds: sandstone, shale, chalk and older rock. It echoes the cutaway of the story.
-// Use it once for each section heading. It is decoration only.
-const Strata = () => (
-  <span className="strata" aria-hidden="true"><span /><span /><span /><span /></span>
-);
-
 const SiteSection = ({ id, title, children }) => (
-  <section id={id} className="site-section" aria-labelledby={`${id}-title`}>
-    <div className="site-section__inner">
+  <section id={id} className="section-panel" aria-labelledby={`${id}-title`}>
+    <div className="sheet">
       <h2 id={`${id}-title`} className="section-title">{title}</h2>
-      <Strata />
       {children}
     </div>
   </section>
@@ -164,7 +156,7 @@ const PublicationsSection = () => {
               <p className="pub__summary">{pub.summary}</p>
               <div className="pub__actions">
                 <a className="btn btn--quiet btn--small" href={pub.url} target="_blank" rel="noreferrer">
-                  <Icon name="external" size={15} /><span>DOI <span className="tnum">{pub.doi}</span></span>
+                  <Icon name="external" size={15} />DOI {pub.doi}
                 </a>
                 <button type="button" className="btn btn--quiet btn--small" onClick={() => copy(pub.id, pub.bibtex)}
                   aria-label={`Copy BibTeX for ${pub.title}`}>
@@ -197,7 +189,7 @@ const ContactSection = () => {
     <SiteSection id="contact" title="Contact">
       <div className="contact">
         <div className="contact__main">
-          <p className="lead">For collaborations, preprints or questions about VE models and the simulator, email me.</p>
+          <p className="lead">For collaborations, preprints or questions about VE models and the VE simulator, email me.</p>
           <div className="contact__email">
             <a href={`mailto:${SITE_LINKS.email}`}><Icon name="mail" size={18} />{SITE_LINKS.email}</a>
             <button type="button" className="btn btn--quiet btn--small" onClick={() => copy('email', SITE_LINKS.email)} aria-label="Copy email address">
@@ -222,4 +214,4 @@ const ContactSection = () => {
   );
 };
 
-Object.assign(window, { ResearchSection, ProjectsSection, PublicationsSection, ContactSection, ActivityList, Strata, siteCopy });
+Object.assign(window, { ResearchSection, ProjectsSection, PublicationsSection, ContactSection, ActivityList, siteCopy });

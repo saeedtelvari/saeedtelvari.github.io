@@ -1,5 +1,8 @@
-// Style C below the story: the sections, the header, the footer and the CV use the --story-* tokens.
-// The simulator shares colors_and_type.css, so its rules must not change. These tests pin both.
+// Two looks live in this repository.
+// - The homepage, the CV and the simulator use the dark "Earth night" look. Their rules are in colors_and_type.css.
+// - The story page (ve-story.html) uses style C, the light textbook cutaway. Its rules are in story.css.
+//   Only ve-story.html loads story.css, and only that page has the class site-c on <html>.
+// These tests pin both sides, and they pin the border between them.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
@@ -55,38 +58,33 @@ const ruleKey = rule => `${rule.media ? `${rule.media} | ` : ''}${rule.selector}
 const hash = text => crypto.createHash('sha256').update(text).digest('hex').slice(0, 12);
 
 const sheet = read('colors_and_type.css');
-const blocks = cssBlocks(sheet);
-const allRules = blocks.flatMap(block => block.rules);
+const allRules = cssBlocks(sheet).flatMap(block => block.rules);
+const storySheet = read('story.css');
+const storyRules = cssBlocks(storySheet).flatMap(block => block.rules);
 
-const isStory = rule => /^(STORY|Story block)/.test(rule.block);
-
-// Rules that the simulator also uses. They must keep their text. The site has its own rules next to them.
-const NEW_PRINT_SELECTORS = ['.cv-sheet', '.cv .strata'];
+// The rules that the simulator also uses. Their text must not change. The hashes are the values at the tag
+// homepage-archive-2026-10, the last state before style C. To change one on purpose, change the rule and the hash together.
 const SHARED_GROUPS = [
   ['tokens', rule => /^SA'EED TELVARI/.test(rule.block)],
   ['base elements', rule => /^BASE ELEMENTS/.test(rule.block)],
   ['primitives', rule => /^SITE PRIMITIVES/.test(rule.block) && ['.visually-hidden', '.skip-link', '.skip-link:focus', '.icon'].includes(rule.selector)],
-  ['cv print', rule => /^CV/.test(rule.block) && rule.media === '@media print' && !NEW_PRINT_SELECTORS.includes(rule.selector)],
+  ['cv print', rule => /^CV/.test(rule.block) && rule.media === '@media print'],
   ['focus rings', rule => /^ACCESSIBILITY/.test(rule.block)],
   ['reduced motion', rule => /^PREFERS REDUCED MOTION/.test(rule.block)],
   ['print', rule => /^PRINT/.test(rule.block)],
   ['header (workbench and shared)', rule => /^HEADER/.test(rule.block) && !/app-header--site/.test(rule.selector)],
 ];
-// Hashes of the shared rules as they were before style C. To update one on purpose, change the rule and the hash together.
-// The reduced-motion hash changed once, on purpose: the cleanup removed the hero rules of that block. The simulator does not use them.
 const SHARED_HASHES = {
   'tokens': '60f96e2f4687',
   'base elements': 'fad404039db3',
   'primitives': 'd4b3abbd0a71',
   'cv print': '0b7f52531d24',
   'focus rings': 'b87604d3554b',
-  'reduced motion': 'a2b3c528f520',
+  'reduced motion': 'eb506ebab4ae',
   'print': 'a3415cef1122',
   'header (workbench and shared)': '160833376739',
   'workbench': '8f72bddd381f',
 };
-const isShared = rule => SHARED_GROUPS.some(([, test]) => test(rule));
-const siteRules = allRules.filter(rule => !isShared(rule));
 
 test('the rules that the simulator shares are unchanged, and the workbench header and .ve-standalone rules too', () => {
   for (const [name, test] of SHARED_GROUPS) {
@@ -102,115 +100,156 @@ test('the rules that the simulator shares are unchanged, and the workbench heade
     `the .ve-standalone and workbench header rules in simulator-workbench.css changed: ${workbench.map(rule => ruleKey(rule)).join(' ; ')}`);
 });
 
-test('no homepage or CV rule uses the old cream or the dark night colours', () => {
-  assert.ok(siteRules.length > 150, 'the site rules were parsed');
-  const night = new RegExp([
-    'rgba?\\(\\s*(?:244\\s*,\\s*237\\s*,\\s*227|18\\s*,\\s*14\\s*,\\s*11|7\\s*,\\s*10\\s*,\\s*16|8\\s*,\\s*6\\s*,\\s*4|26\\s*,\\s*21\\s*,\\s*17|34\\s*,\\s*28\\s*,\\s*23|232\\s*,\\s*161\\s*,\\s*90)\\b',
-    '#(?:120e0b|f4ede3|1a1511|221c17|2c241d|e8a15a)\\b',
-  ].join('|'), 'i');
-  for (const rule of siteRules) {
-    assert.doesNotMatch(rule.body, night, `${ruleKey(rule)} uses a colour of the old night theme`);
-    // The site reads --story-* tokens. Only the easing curve comes from the --sim-* set.
-    assert.doesNotMatch(rule.body.replace(/var\(--sim-ease\)/g, ''), /var\(--sim-/, `${ruleKey(rule)} reads a --sim-* token`);
+test('colors_and_type.css has the dark look only: no story token, no story rule, no .site-c rule', () => {
+  assert.ok(allRules.length > 250, 'the site rules were parsed');
+  assert.doesNotMatch(sheet, /--story-/, 'no story token');
+  assert.doesNotMatch(sheet, /Literata/, 'no story font');
+  for (const rule of allRules) {
+    assert.doesNotMatch(rule.selector, /\.site-c|\.story/, `${ruleKey(rule)} is a rule of the story page`);
   }
+  // The restored homepage: the hero, the descent, the sheets and the dark header and footer.
+  for (const selector of ['.hero-scene', '.hero-name', '.geological-descent', '.section-panel', '.sheet', '.site-footer--geological', '.app-header--site.is-scrolled .app-header__bar']) {
+    assert.ok(allRules.some(rule => rule.selector === selector), `${selector} is back`);
+  }
+  const bar = allRules.find(rule => rule.selector === '.app-header--site .app-header__bar');
+  assert.match(bar.body, /gradient\(180deg, rgba\(7, 10, 16, 0\.55\)/, 'the header is transparent over the hero');
+  const scrolled = allRules.find(rule => rule.selector === '.app-header--site.is-scrolled .app-header__bar');
+  assert.match(scrolled.body, /rgba\(18, 14, 11, 0\.9\)/, 'and an Earth surface after the page moves');
+  assert.match(allRules.find(rule => rule.selector === '.site-footer').body, /var\(--sim-/, 'the footer reads the night tokens');
 });
 
-test('index.html and cv.html use the style C page colours and fonts', () => {
+test('index.html and cv.html keep the dark look: night colours, no site-c class, no story file', () => {
   for (const page of ['index.html', 'cv.html']) {
     const html = read(page);
-    assert.match(html, /<html lang="en" class="site-c">/, `${page}: the site-c class on <html>`);
-    assert.match(html, /<meta name="theme-color" content="#c9d6dc">/, `${page}: theme colour is the story sky`);
-    assert.match(html, /body \{ background: #c9d6dc; color: #1f2a30;/, `${page}: body ground and ink`);
-    assert.match(html, /::-webkit-scrollbar-track \{ background: #c9d6dc; \}/, `${page}: scrollbar track`);
-    assert.doesNotMatch(html, /#120e0b|#f4ede3|#4a3c30|#5e4c3c/i, `${page}: no colour of the night theme`);
-    assert.match(html, /family=Literata:ital,opsz,wght@/, `${page}: loads Literata`);
-    assert.doesNotMatch(html, /Montserrat|Open\+Sans|Open Sans|JetBrains/, `${page}: loads no other font`);
+    assert.match(html, /<html lang="en">/, `${page}: no site-c class on <html>`);
+    assert.match(html, /<meta name="theme-color" content="#120e0b">/, `${page}: theme colour is the night ground`);
+    assert.match(html, /body \{ background: #120e0b; color: #f4ede3;/, `${page}: body ground and ink`);
+    assert.doesNotMatch(html, /#c9d6dc|#1f2a30/i, `${page}: no colour of style C`);
+    assert.match(html, /family=Montserrat[^"]*family=Open\+Sans[^"]*family=JetBrains\+Mono/, `${page}: loads the three site fonts`);
+    assert.doesNotMatch(html, /Literata/, `${page}: loads no story font`);
+    assert.doesNotMatch(html, /story\.css|story-bundle\.js|land-110m|story-run|north-sea-ccs/, `${page}: loads no story file`);
   }
-  // The simulator keeps its own page: only the ?v= values change.
+  const index = read('index.html');
+  assert.match(index, /#app-loader \{[^}]*linear-gradient\(180deg, #070d1a/, 'the loader shows the night sky');
+  assert.match(index, /<meta property="og:image" content="https:\/\/saeedtelvari\.github\.io\/assets\/social-card\.jpg">/);
+});
+
+test('the CV is dark on screen, and black on white in print', () => {
+  const cvRules = allRules.filter(rule => /^CV/.test(rule.block));
+  assert.ok(cvRules.some(rule => rule.selector === '.cv-head'), 'the CV head rule is there');
+  const screen = cvRules.filter(rule => !rule.media);
+  for (const rule of screen) assert.doesNotMatch(rule.body, /--story-/, `${ruleKey(rule)} reads a story token`);
+  assert.ok(screen.some(rule => /var\(--sim-/.test(rule.body)), 'the CV screen rules read the night tokens');
+  const print = cvRules.filter(rule => rule.media === '@media print');
+  assert.ok(print.some(rule => rule.selector === '.cv, .cv *' && /color: #111 !important/.test(rule.body)), 'black text');
+  assert.ok(print.some(rule => rule.selector === '.cv-print' && /display: none !important/.test(rule.body)), 'no print button on paper');
+  const page = allRules.filter(rule => /^PRINT/.test(rule.block));
+  const body = page.find(rule => rule.selector === 'body');
+  assert.match(body.body, /background: #ffffff !important/, 'white paper');
+  assert.match(body.body, /color: #111111 !important/);
+  assert.match(page.find(rule => /app-header/.test(rule.selector)).body, /display: none !important/, 'no header on paper');
+});
+
+test('ve-story.html is the one style C page: site-c class, sky colours, Literata, story.css after the shared sheet', () => {
+  const html = read('ve-story.html');
+  assert.match(html, /<html lang="en" class="site-c">/);
+  assert.match(html, /<meta name="theme-color" content="#c9d6dc">/);
+  assert.match(html, /body \{ background: #c9d6dc; color: #1f2a30;/);
+  assert.match(html, /::-webkit-scrollbar-track \{ background: #c9d6dc; \}/);
+  assert.doesNotMatch(html, /#120e0b|#f4ede3|#4a3c30|#5e4c3c/i, 'no colour of the night theme');
+  assert.match(html, /family=Literata:ital,opsz,wght@/);
+  assert.doesNotMatch(html, /Montserrat|Open\+Sans|Open Sans|JetBrains/, 'no other font');
+  assert.ok(html.indexOf('colors_and_type.css') > 0 && html.indexOf('colors_and_type.css') < html.indexOf('story.css'), 'story.css comes second, so it overrides the shared rules');
+  for (const page of ['index.html', 'cv.html', 'simulator.html']) {
+    assert.doesNotMatch(read(page), /class="site-c"|story\.css/, `${page} is not a style C page`);
+  }
+  // The simulator keeps its own page: only the name text and the ?v= values change.
   const simulator = read('simulator.html');
   assert.match(simulator, /family=Montserrat[^"]*family=Open\+Sans[^"]*family=JetBrains\+Mono/);
   assert.match(simulator, /body \{\s*background: #0b1120;/);
-  assert.doesNotMatch(simulator, /class="site-c"/, 'the simulator is not a style C page');
 });
 
-test('the page ground is the story sky, so the story flows into the first section with no edge', () => {
-  const tokens = Object.fromEntries([...sheet.matchAll(/(--story-[a-z0-9-]+):\s*([^;]+);/g)].map(match => [match[1], match[2].trim()]));
-  assert.equal(tokens['--story-ground'], 'var(--story-sky)');
+// A selector belongs to the story page when each of its parts starts with the class site-c or names a story class.
+const SCOPED = /^(html\.site-c|\.site-c|:root$|html:has\(\.story)/;
+const classesOf = selector => [...selector.matchAll(/\.([a-zA-Z][\w-]*)/g)].map(match => match[1]);
+const sharedClasses = new Set(allRules.flatMap(rule => classesOf(rule.selector)));
+
+test('every rule of story.css is scoped by .site-c or uses a class that only the story page has', () => {
+  assert.ok(storyRules.length > 150, 'the story rules were parsed');
+  let prefixed = 0;
+  for (const rule of storyRules) {
+    for (const part of rule.selector.split(',').map(item => item.trim())) {
+      if (SCOPED.test(part)) { if (part.startsWith('.site-c ')) prefixed += 1; continue; }
+      const classes = classesOf(part);
+      assert.ok(classes.length > 0, `${ruleKey(rule)} (${part}) has neither the site-c scope nor a class`);
+      for (const name of classes) {
+        assert.ok(/^story-?/.test(name) && !sharedClasses.has(name), `${ruleKey(rule)}: .${name} is a name of the shared sheet, so the rule needs the .site-c scope`);
+      }
+    }
+  }
+  assert.ok(prefixed > 50, 'the header, footer and button overrides carry the scope');
+  assert.match(storySheet, /html\.site-c \{ color-scheme: light; \}/);
+});
+
+test('story.css has the story tokens, and the shared sheet has none of them', () => {
+  const tokens = Object.fromEntries([...storySheet.matchAll(/(--story-[a-z0-9-]+):\s*([^;]+);/g)].map(match => [match[1], match[2].trim()]));
   assert.equal(tokens['--story-sky'], '#c9d6dc');
-  const story = allRules.find(rule => rule.selector === '.story' && rule.block.startsWith('STORY'));
+  assert.equal(tokens['--story-ink'], '#1f2a30');
+  assert.match(tokens['--story-font'], /^'Literata'/);
+  assert.doesNotMatch(sheet, /--story-/);
+});
+
+test('the page ground is the story sky, so the story flows into the end panel with no edge', () => {
+  const tokens = Object.fromEntries([...storySheet.matchAll(/(--story-[a-z0-9-]+):\s*([^;]+);/g)].map(match => [match[1], match[2].trim()]));
+  assert.equal(tokens['--story-ground'], 'var(--story-sky)');
+  const story = storyRules.find(rule => rule.selector === '.story' && rule.block.startsWith('STORY'));
   assert.match(story.body, /background: var\(--story-sky\)/);
-  const bodyRule = allRules.find(rule => rule.selector === '.site-c body');
+  const bodyRule = storyRules.find(rule => rule.selector === '.site-c body');
   assert.match(bodyRule.body, /background: var\(--story-ground\)/);
   assert.match(bodyRule.body, /font-family: var\(--story-font\)/);
-  assert.match(tokens['--story-font'], /^'Literata'/);
-  const bar = allRules.find(rule => rule.selector === '.app-header--site .app-header__bar');
+  const bar = storyRules.find(rule => rule.selector === '.site-c .app-header--site .app-header__bar');
   assert.match(bar.body, /background: var\(--story-ground\)/, 'after the story the bar has the ground colour');
   assert.match(bar.body, /border-bottom-color: var\(--story-ink\)/, 'and an ink hairline');
-  const footer = allRules.find(rule => rule.selector === '.site-footer');
+  const over = storyRules.find(rule => rule.selector === '.site-c .app-header--site.is-over-story .app-header__bar');
+  assert.match(over.body, /background: none/, 'over the story the bar is clear');
+  const footer = storyRules.find(rule => rule.selector === '.site-c .site-footer');
   assert.match(footer.body, /background: var\(--story-footer-bg\)/);
-  assert.equal(tokens['--story-rock-older'], '#7d6b5d');
-  assert.match(tokens['--story-footer-bg'], /^#[0-9a-f]{6}$/);
+  const end = storyRules.find(rule => rule.selector === '.story-end');
+  assert.match(end.body, /background: var\(--story-ground\)/, 'the end panel sits on the sky ground');
 });
 
 test('the data colours stay data: no link, button, header or footer rule uses CO2 blue or methane red', () => {
-  const chrome = /(^|[\s,>+~(])(a|button)(?![\w-])|\.(btn|app-header|app-nav|app-drawer|site-footer|skip-link|text-link|story-btn|story-skip)\b|:where\(a\b/;
+  const chrome = /(^|[\s,>+~(])(a|button)(?![\w-])|\.(btn|app-header|app-nav|app-drawer|site-footer|skip-link|text-link|story-btn|story-skip|story-end)\b|:where\(a\b/;
   const data = /#3b6cf0|#c8463d|--story-co2|--story-ch4|--sim-c-|--sim-glow-/i;
   let checked = 0;
-  for (const rule of allRules) {
+  for (const rule of storyRules) {
     if (!chrome.test(rule.selector)) continue;
     checked += 1;
     assert.doesNotMatch(rule.body, data, `${ruleKey(rule)} uses a data colour`);
   }
   assert.ok(checked > 40, 'the link, button and header rules were found');
   // The legend chips are the one place for the data colours in the story styles.
-  assert.ok(allRules.some(rule => /story-controls__chip--co2/.test(rule.selector) && /--story-co2/.test(rule.body)));
+  assert.ok(storyRules.some(rule => /story-controls__chip--co2/.test(rule.selector) && /--story-co2/.test(rule.body)));
 });
 
 test('style C is flat: no shadows, no gradients, no caps, no letter-spaced labels, two radii', () => {
-  const own = siteRules.filter(rule => !isStory(rule));
+  const own = storyRules.filter(rule => /^(STORY PAGE STYLES|End panel)/.test(rule.block));
+  assert.ok(own.length > 50, 'the shared-part overrides and the end panel were found');
   const flat = /box-shadow|text-shadow|drop-shadow|gradient\(|backdrop-filter|-webkit-backdrop-filter/;
   const caps = /text-transform:\s*uppercase|font-variant-caps:\s*all|font-variant:\s*small-caps/;
   const spaced = /letter-spacing:\s*(?!-|0(?:px|em|rem)?\s*(?:;|$)|normal)[\d.]/;
+  const night = /rgba?\(\s*(?:244\s*,\s*237\s*,\s*227|18\s*,\s*14\s*,\s*11|7\s*,\s*10\s*,\s*16|26\s*,\s*21\s*,\s*17|232\s*,\s*161\s*,\s*90)\b|#(?:120e0b|f4ede3|1a1511|221c17|2c241d|e8a15a)\b/i;
   const radii = new Set();
   for (const rule of own) {
-    assert.doesNotMatch(rule.body, flat, `${ruleKey(rule)} is not flat`);
+    // The clear header bar removes the blur of the dark bar. That is allowed: it sets none.
+    assert.doesNotMatch(rule.body.replace(/(-webkit-)?backdrop-filter:\s*none;?/g, ''), flat, `${ruleKey(rule)} is not flat`);
     assert.doesNotMatch(rule.body, caps, `${ruleKey(rule)} sets capitals`);
     assert.doesNotMatch(rule.body, spaced, `${ruleKey(rule)} spaces its letters`);
+    assert.doesNotMatch(rule.body, night, `${ruleKey(rule)} uses a colour of the night theme`);
+    assert.doesNotMatch(rule.body.replace(/var\(--sim-ease\)/g, ''), /var\(--sim-/, `${ruleKey(rule)} reads a --sim-* token`);
     for (const match of rule.body.matchAll(/border-radius:\s*([^;]+)/g)) radii.add(match[1].trim());
     assert.doesNotMatch(rule.body, /monospace|JetBrains|Montserrat|Open Sans|var\(--font-mono\)/, `${ruleKey(rule)} uses an old font`);
   }
-  assert.deepEqual([...radii].sort(), ['0', '50%', '999px', 'var(--story-radius)'], 'one radius for panels, one for pills');
-  const tokens = sheet.match(/--story-radius:\s*([^;]+);/)[1].trim();
-  assert.equal(tokens, '10px');
-});
-
-test('the strata strip is four beds in the rock colours, once for each section and CV heading', () => {
-  const beds = ['sand', 'shale', 'chalk', 'rock-older'];
-  beds.forEach((bed, index) => {
-    const rule = allRules.find(item => item.selector === `.strata > span:nth-child(${index + 1})`);
-    assert.ok(rule, `bed ${index + 1}`);
-    assert.match(rule.body, new RegExp(`background: var\\(--story-${bed}\\)`));
-  });
-  assert.equal(allRules.find(rule => rule.selector === '.cv .strata' && rule.media === '@media print').body, 'display: none;', 'no strata on paper');
-  const sections = read('HomeSections.jsx');
-  assert.equal((sections.match(/<Strata \/>/g) || []).length, 1, 'SiteSection draws one strip, so each of the four sections has one');
-  assert.equal((read('CVPage.jsx').match(/<Strata \/>/g) || []).length, 1, 'CVSection draws one strip for each CV heading');
-  assert.doesNotMatch(read('App.jsx'), /GeologicalDescent/, 'the old descent is not in the page');
-  assert.doesNotMatch(read('build.js'), /GeologicalDescent/, 'and not in the build');
-  for (const gone of ['GeologicalDescent.jsx', 'SubsurfaceHero.jsx', 'hero-geology.js', 'hero-simulation-worker.js']) {
-    assert.ok(!fs.existsSync(path.join(root, gone)), gone + ' is deleted; the tag homepage-archive-2026-10 keeps it');
-  }
-  assert.doesNotMatch(sheet, /\.hero-|\.geological-descent|\.descent-/, 'the stylesheet has no rule of the old hero or descent');
-});
-
-test('the CV keeps its print rules and its sheet is for the screen only', () => {
-  const printRules = allRules.filter(rule => /^CV/.test(rule.block) && rule.media === '@media print');
-  const own = printRules.filter(rule => NEW_PRINT_SELECTORS.includes(rule.selector));
-  assert.equal(own.length, 2, 'two rules switch off the sheet and the strata on paper');
-  const sheetRule = own.find(rule => rule.selector === '.cv-sheet');
-  assert.match(sheetRule.body, /background: none/);
-  assert.match(sheetRule.body, /border: 0/);
-  const originals = printRules.filter(rule => !NEW_PRINT_SELECTORS.includes(rule.selector));
-  assert.ok(originals.some(rule => rule.selector === '.cv, .cv *' && /color: #111 !important/.test(rule.body)), 'black text');
-  assert.ok(originals.some(rule => rule.selector === '.cv-print' && /display: none !important/.test(rule.body)));
+  assert.deepEqual([...radii].sort(), ['50%', '999px'].filter(item => radii.has(item)), 'the shared-part overrides use pills only');
+  assert.equal(storySheet.match(/--story-radius:\s*([^;]+);/)[1].trim(), '10px');
 });

@@ -1,4 +1,5 @@
-// App.jsx — entries for the three pages (home, CV, simulator) and their navigation.
+// App.jsx — entries for the four pages (home, story, CV, simulator) and their navigation.
+// The story page needs story-bundle.js. The other pages do not load it, so this file must work without it.
 
 const { useState, useEffect } = React;
 
@@ -7,13 +8,16 @@ const SITE_NAV_ITEMS = [
   { id: 'research', label: 'Research', href: './index.html#research' },
   { id: 'projects', label: 'Projects', href: './index.html#projects' },
   { id: 'publications', label: 'Publications', href: './index.html#publications' },
-  { id: 'simulator', label: 'Simulator', href: './simulator.html' },
+  { id: 'simulator', label: 'VE simulator', href: './simulator.html' },
+  { id: 'story', label: 'How VE works', href: './ve-story.html' },
   { id: 'cv', label: 'CV', href: './cv.html' },
   { id: 'contact', label: 'Contact', href: './index.html#contact' },
 ];
 const SITE_SECTION_IDS = ['research', 'projects', 'publications', 'contact'];
+// Targets on one page that a click scrolls to. The story page has its end panel.
+const SITE_PAGE_TARGETS = { home: SITE_SECTION_IDS, story: ['story-end'] };
 
-// The section whose top has passed the reading line (viewport coordinates); the story at the top is 'home'.
+// The section whose top has passed the reading line (viewport coordinates); the hero is 'home'.
 const siteActiveSection = (rects, line) => {
   let active = 'home';
   for (const rect of rects) if (rect.top <= line) active = rect.id;
@@ -40,13 +44,13 @@ const siteScrollTo = id => {
 // Links are real; only plain clicks on targets within the current page are handled here.
 const siteNavigate = (page, id, event) => {
   if (event && (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
-  const samePage = id === page || (page === 'home' && SITE_SECTION_IDS.includes(id));
+  const samePage = id === page || (SITE_PAGE_TARGETS[page] || []).includes(id);
   if (!samePage) {
     if (!event) window.location.href = siteHref(id);
     return;
   }
   if (event) event.preventDefault();
-  if (page === 'home' && id !== 'home') {
+  if (id !== page) {
     siteScrollTo(id);
     window.history.pushState({ id }, '', `${window.location.pathname}#${id}`);
   } else {
@@ -71,8 +75,7 @@ const SiteHome = () => {
   const [active, setActive] = useState('home');
   const navigate = (id, event) => siteNavigate('home', id, event);
 
-  // A layout effect hides the loader before the first paint of the story, so the name is not late by one frame.
-  React.useLayoutEffect(() => dismissLoader(), []);
+  useEffect(() => dismissLoader(), []);
 
   // Old and new anchors: pages redirect, sections scroll into view after the first layout.
   useEffect(() => {
@@ -118,15 +121,17 @@ const SiteHome = () => {
     <React.Fragment>
       <SkipLink />
       <Header active={active} onNavigate={navigate} />
-      {/* The story is first on the page. The sections and the footer follow it on the same sky ground. */}
-      <StoryStage onNavigate={navigate} />
-      <main id="main-content" tabIndex={-1}>
-        <ResearchSection />
-        <ProjectsSection />
-        <PublicationsSection />
-        <ContactSection />
-      </main>
-      <Footer onNavigate={navigate} />
+      {/* The descent's rock starts below the hero and runs behind every section and the footer. */}
+      <GeologicalDescent>
+        <main id="main-content" tabIndex={-1}>
+          <SubsurfaceHero onNavigate={navigate} />
+          <ResearchSection />
+          <ProjectsSection />
+          <PublicationsSection />
+          <ContactSection />
+        </main>
+        <Footer onNavigate={navigate} geological />
+      </GeologicalDescent>
     </React.Fragment>
   );
 };
@@ -159,4 +164,11 @@ const SimulatorStandalone = () => {
 const rootEl = document.getElementById('root');
 const sitePage = rootEl && typeof rootEl.getAttribute === 'function' ? rootEl.getAttribute('data-page') : null;
 const root = ReactDOM.createRoot(rootEl);
-root.render(sitePage === 'simulator' ? <SimulatorStandalone /> : sitePage === 'cv' ? <CVStandalone /> : <SiteHome />);
+// StoryPage comes from story-bundle.js, which only ve-story.html loads.
+const storyAvailable = typeof StoryPage === 'function';
+root.render(
+  sitePage === 'simulator' ? <SimulatorStandalone />
+    : sitePage === 'cv' ? <CVStandalone />
+    : sitePage === 'story' && storyAvailable ? <StoryPage />
+    : <SiteHome />
+);

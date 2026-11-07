@@ -1,4 +1,4 @@
-// SimulatorPage.jsx — CO2 Storage Simulator: scenario inputs, streamed results, playback,
+// SimulatorPage.jsx — VE simulator: scenario inputs, streamed results, playback,
 // outcomes and the uncertainty study. Views are in SimViews.jsx, charts in SimCharts.jsx,
 // the method page in GuidePage.jsx, the physics in ve2d-model.js.
 const { useCallback, useEffect, useMemo, useRef, useState } = React;
@@ -953,7 +953,7 @@ const SimulatorPage = () => {
     <div className="sim">
       <header className="sim-appbar">
         <div className="sim-title">
-          <h1>CO₂ Storage Simulator</h1>
+          <h1>VE simulator</h1>
           <p>Vertical-equilibrium model of plume migration, trapping and leakage in a saline aquifer</p>
         </div>
         <div className="sim-sections" role="tablist" aria-label="Simulator sections" onKeyDown={onTabKey}>

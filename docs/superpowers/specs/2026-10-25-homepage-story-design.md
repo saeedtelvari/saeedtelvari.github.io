@@ -1,3 +1,5 @@
+> **Note, 2026-11-04.** The story now lives on ve-story.html. The homepage is the restored earlier design.
+
 # Story homepage — design spec (draft)
 
 Date: 2026-10-25. Branch: `redesign/homepage-story` (from origin/main `c9cc5f5`). Style board: [2026-10-25-homepage-story-mockups/styles.html](2026-10-25-homepage-story-mockups/styles.html). Storyboard: [2026-10-25-homepage-story-mockups/storyboard.html](2026-10-25-homepage-story-mockups/storyboard.html).

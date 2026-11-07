@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { SITE_STORY } = require('../site-content.js');
+const { SITE_STORY } = require('../story-content.js');
 const StoryGeometry = require('../story-geometry.js');
 const storedRun = require('../assets/story-run.json');
 
@@ -948,10 +948,10 @@ test('story-worker.js reports an error and does not throw when the run fails', (
 // ---- the build, the styles and the pages
 
 test('the build puts StoryBlock.jsx after StoryChapters.jsx and the bundle has it', () => {
-  const files = [...read('build.js').match(/const files = \[([\s\S]*?)\];/)[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
+  const files = [...read('build.js').match(/const storyFiles = \[([\s\S]*?)\];/)[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
   assert.ok(files.indexOf('StoryBlock.jsx') > files.indexOf('StoryChapters.jsx'), 'the block replaces the placeholders, so it loads after them');
   assert.ok(files.indexOf('story-geometry.js') < files.indexOf('StoryBlock.jsx'), 'StoryGeometry exists before the block');
-  const bundle = read('bundle.js');
+  const bundle = read('story-bundle.js');
   assert.ok(bundle.includes('// File: StoryBlock.jsx'), 'build the current source before testing');
   assert.ok(bundle.includes('const storyBlockLayout') && /STORY_RENDERERS\.live\s*=\s*\{/.test(bundle), 'the bundle holds the current block code');
   assert.ok(bundle.indexOf('// File: StoryChapters.jsx') < bundle.indexOf('// File: StoryBlock.jsx'));
@@ -961,7 +961,7 @@ test('the build puts StoryBlock.jsx after StoryChapters.jsx and the bundle has i
 });
 
 test('the Story block controls are the last part of the Story styles, in style C', () => {
-  const css = read('colors_and_type.css');
+  const css = read('story.css');
   const start = css.indexOf('Story block controls');
   assert.ok(start > css.indexOf('.story-rail'), 'after the stage rules');
   assert.ok(start > css.indexOf('.app-header--site.is-over-story'), 'at the end of the Story block');

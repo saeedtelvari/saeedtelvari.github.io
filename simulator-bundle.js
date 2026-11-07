@@ -3135,7 +3135,7 @@ Object.assign(window, {
 });
 
 // File: SimCharts.jsx
-// SimCharts.jsx — SVG charts for the CO2 simulator: inventory through time and the
+// SimCharts.jsx — SVG charts for the VE simulator: inventory through time and the
 // uncertainty histogram, tornado and run scatter. Colours come from CSS tokens.
 
 const simNiceStep = (span, target) => {
@@ -5482,7 +5482,7 @@ const SimSectionView = ({
 
 // File: SimulatorPage.jsx
 function _extends() { _extends = Object.assign ? Object.assign.bind() : function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; }; return _extends.apply(this, arguments); }
-// SimulatorPage.jsx — CO2 Storage Simulator: scenario inputs, streamed results, playback,
+// SimulatorPage.jsx — VE simulator: scenario inputs, streamed results, playback,
 // outcomes and the uncertainty study. Views are in SimViews.jsx, charts in SimCharts.jsx,
 // the method page in GuidePage.jsx, the physics in ve2d-model.js.
 // [destructured React]
@@ -7191,7 +7191,7 @@ const SimulatorPage = () => {
     className: "sim-appbar"
   }, /*#__PURE__*/React.createElement("div", {
     className: "sim-title"
-  }, /*#__PURE__*/React.createElement("h1", null, "CO\u2082 Storage Simulator"), /*#__PURE__*/React.createElement("p", null, "Vertical-equilibrium model of plume migration, trapping and leakage in a saline aquifer")), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("h1", null, "VE simulator"), /*#__PURE__*/React.createElement("p", null, "Vertical-equilibrium model of plume migration, trapping and leakage in a saline aquifer")), /*#__PURE__*/React.createElement("div", {
     className: "sim-sections",
     role: "tablist",
     "aria-label": "Simulator sections",
