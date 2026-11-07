@@ -257,8 +257,8 @@ test('chapter live: the notes of chapter ve fade out, and the 3D cells switch br
 });
 
 test('the counter goes from the number of cells to the number of columns to solve', () => {
-  assert.deepEqual(H.storyBlockCounter(2700, 540, 0), { big: '2,700 cells', small: 'in this 3D model' });
-  assert.deepEqual(H.storyBlockCounter(2700, 540, 0.5), { big: '2,700 cells', small: 'in this 3D model' });
+  assert.deepEqual(H.storyBlockCounter(2700, 540, 0), { big: '2,700 cells', small: 'in this sketch' });
+  assert.deepEqual(H.storyBlockCounter(2700, 540, 0.5), { big: '2,700 cells', small: 'in this sketch' });
   assert.deepEqual(H.storyBlockCounter(2700, 540, 1), { big: '540 columns', small: 'to solve, not 2,700 cells' });
   const mid = H.storyBlockCounter(2700, 540, 0.75);
   assert.match(mid.big, /^1,6\d\d columns$/);
@@ -654,7 +654,7 @@ test('a static frame (reduced motion) draws once with local 1 and asks to paint 
   assert.ok(gridAfter.fills.some(color => page.storyBlockState.palette.fill.includes(color) && !page.storyBlockState.palette.rock.includes(color)), 'grid at year 30 with the cells');
   assert.ok(gridAfter.counts.stroke > 300, 'the grid lines are all there');
   assert.deepEqual(asks, { ve: 1, grid: 1, live: 1 }, 'the repaints ask for nothing more');
-  assert.equal(page.storyLive.redraw, null, 'a static frame is not the player');
+  assert.equal(typeof page.storyLive.redraw, 'function', 'the static frame hands its own requestDraw to the controls of the live frame');
 });
 
 test('a failed load leaves the rock, reports once and puts the stage to rest', async () => {
@@ -963,7 +963,7 @@ test('the build puts StoryBlock.jsx after StoryChapters.jsx and the bundle has i
 test('the Story block controls are the last part of the Story styles, in style C', () => {
   const css = read('story.css');
   const start = css.indexOf('Story block controls');
-  assert.ok(start > css.indexOf('.story-rail'), 'after the stage rules');
+  assert.ok(start > css.indexOf('.story-chapters'), 'after the stage rules');
   assert.ok(start > css.indexOf('.app-header--site.is-over-story'), 'at the end of the Story block');
   const part = css.slice(start);
   for (const selector of ['.story-controls', '.story-controls__play', '.story-controls__range', '.story-controls__legend', '.story-controls__chip--ch4', '.story-controls__chip--co2', '.story-controls__switch', '.story-controls__toggle']) {

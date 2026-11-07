@@ -362,14 +362,17 @@ const storyBlockLive = (local, cells, year, s = {}) => {
   return s;
 };
 
+// The label under the cell counter. The number of cells changes with the screen width, so the counter names a sketch.
+const STORY_BLOCK_SKETCH = 'in this sketch';
+
 // The counter of chapter ve. At local 0.5 it shows the cells. At local 1 it shows the columns to solve.
 const storyBlockCounter = (cells, columns, local) => {
   const t = storyClamp((local - 0.5) / 0.5);
   const e = storyBlockEase(t);
   const count = storyBlockInt(cells + (columns - cells) * e);
-  if (t <= 0) return { big: `${storyBlockInt(cells)} cells`, small: 'in this 3D model' };
+  if (t <= 0) return { big: `${storyBlockInt(cells)} cells`, small: STORY_BLOCK_SKETCH };
   if (t >= 1) return { big: `${storyBlockInt(columns)} columns`, small: `to solve, not ${storyBlockInt(cells)} cells` };
-  return e < 0.5 ? { big: `${count} cells`, small: 'in this 3D model' } : { big: `${count} columns`, small: 'to solve in the VE model' };
+  return e < 0.5 ? { big: `${count} cells`, small: STORY_BLOCK_SKETCH } : { big: `${count} columns`, small: 'to solve in this sketch' };
 };
 
 // Position of a year among the sorted years of the frames. Fills out with lo, hi and t.
@@ -1076,7 +1079,7 @@ const storyBlockDraw = (entry, id, ctx, frame) => {
   if (stored.status === 'idle') storyBlockLoad();
   // This draw shows the rock with no gas. The arrival of the run asks the stage or the static frame for one more draw.
   if (stored.status === 'loading' && typeof frame.requestDraw === 'function') storyBlockState.waiting.add(frame.requestDraw);
-  if (id === 'live' && !frame.reducedMotion) storyLive.redraw = frame.requestDraw;
+  if (id === 'live') storyLive.redraw = frame.requestDraw;
   const pal = storyBlockState.palette || (storyBlockState.palette = storyBlockPalette(STORY_COLORS));
   const s = storyBlockState.scene;
   // The first part of chapter grid is the morph from the cutaway of chapter rock. Without that chapter it is the plain block.
@@ -1115,6 +1118,10 @@ const storyLive = {
   shown: -1,
   shownState: '',
   onVisibility: null,
+  // static is true when the controls stand in a static frame (reduced motion). loop is the id of the small loop of that frame.
+  static: false,
+  loop: 0,
+  staticLast: null,
   // The frame.requestDraw of the pinned stage. The live draw keeps it for the controls and the worker.
   redraw: null,
 };
@@ -1149,8 +1156,15 @@ const storyBlockSyncControls = () => {
 // The player advances in the draw call. This returns the scene of the chapter live.
 const storyBlockLiveScene = (entry, frame, s) => {
   const live = storyLive;
-  const running = live.mounted && !frame.reducedMotion;
-  if (running) {
+  // In the static frame of reduced motion the controls are mounted too, but nothing moves by itself.
+  // The year changes only by the slider or by the play button (storyBlockStaticLoop), and the cells switch at once.
+  const running = live.mounted;
+  const timed = running && !frame.reducedMotion;
+  if (running && !timed) {
+    live.cells = live.target;
+    storyBlockSyncControls();
+  }
+  if (timed) {
     const dt = storyBlockStep(frame.time, live.last);
     live.last = frame.time;
     if (live.playing) {
@@ -1169,11 +1183,32 @@ const storyBlockLiveScene = (entry, frame, s) => {
   // The stage gives live local 1 at once. While the player is mounted, the notes of chapter ve fade on the
   // player's own clock, so they do not vanish in one frame.
   let local = frame.local;
-  if (running && Number.isFinite(frame.time)) {
+  if (running && !timed) {
+    local = 0.1;
+  } else if (running && Number.isFinite(frame.time)) {
     if (live.mountedAt == null) live.mountedAt = frame.time;
     local = Math.min(local, 0.1 * (frame.time - live.mountedAt) / STORY_BLOCK_NOTE_FADE_MS);
   }
   return storyBlockLive(local, running ? live.cells : 0, running ? live.year : STORY_BLOCK_GRID_YEARS, s);
+};
+
+// The play button in the static frame of reduced motion. The visitor starts it, so it is not autoplay.
+// The frame has no animation loop, so the button runs a small one that asks for one draw on each frame.
+const storyBlockStaticLoop = live => {
+  if (live.loop || !live.static) return;
+  live.staticLast = null;
+  const step = time => {
+    live.loop = 0;
+    if (!live.mounted || !live.playing) return;
+    const dt = live.staticLast === null ? 0 : storyBlockStep(time, live.staticLast);
+    live.staticLast = time;
+    live.year = storyBlockAdvance(live.year, dt, live.lastYear);
+    if (live.year >= live.lastYear) live.playing = false;
+    storyBlockSyncControls();
+    storyBlockRedraw();
+    if (live.playing) live.loop = requestAnimationFrame(step);
+  };
+  live.loop = requestAnimationFrame(step);
 };
 
 // The time in ms that the notes of chapter ve take to fade out after the player mounts.
@@ -1235,6 +1270,7 @@ const storyBlockControls = (layer, live) => {
       if (live.year >= live.lastYear) live.year = 0;
       live.playing = true;
       live.last = null;
+      storyBlockStaticLoop(live);
     }
     live.resume = false;
     storyBlockSyncControls();
@@ -1320,7 +1356,9 @@ STORY_RENDERERS.live = {
     live.shown = -1;
     live.shownState = '';
     live.mountedAt = null;
-    live.playing = !storyBlockReducedNow();
+    live.static = storyBlockReducedNow();
+    live.loop = 0;
+    live.playing = !live.static;
     live.nodes = storyBlockControls(layer, live);
     live.mounted = true;
     live.onVisibility = () => storyBlockVisibility(live);
@@ -1335,6 +1373,8 @@ STORY_RENDERERS.live = {
     live.mounted = false;
     live.playing = false;
     live.resume = false;
+    if (live.loop) cancelAnimationFrame(live.loop);
+    live.loop = 0;
     document.removeEventListener('visibilitychange', live.onVisibility);
     const root = live.nodes && live.nodes.root;
     if (root && root.parentNode) root.parentNode.removeChild(root);

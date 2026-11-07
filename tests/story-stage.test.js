@@ -258,7 +258,8 @@ test('SITE_STORY has the captions of the spec, word for word', () => {
     const captions = SITE_STORY.captions[SPEC_IDS[i]];
     assert.deepEqual(quotes.slice(0, captions.length), captions, `${SPEC_IDS[i]} captions match the spec`);
     // The spec is older than the rename: it says "the simulator" where the page says "the VE simulator".
-    if (SPEC_IDS[i] === 'live') assert.deepEqual(quotes.slice(1), SITE_STORY.actions.map(action => action.label.replace('the VE simulator', 'the simulator')), 'the buttons match the spec');
+    // It also says "Read my research" where the page says "Read the publications" (the link goes to the publications).
+    if (SPEC_IDS[i] === 'live') assert.deepEqual(quotes.slice(1), SITE_STORY.actions.map(action => action.label.replace('the VE simulator', 'the simulator').replace('Read the publications', 'Read my research')), 'the buttons match the spec');
   });
   const board = read('docs/superpowers/specs/2026-10-25-homepage-story-mockups/storyboard.html');
   // The storyboard is a mockup. It keeps the first sentence of the ppm line and a placeholder for the value.
@@ -363,7 +364,8 @@ test('the story is in its own bundle, and ve-story.html loads it before the site
   assert.doesNotMatch(app, /StoryStage/, 'the site bundle does not name the stage');
   const page = read('StoryPage.jsx');
   assert.match(page, /<StoryStage onNavigate=\{navigate\} \/>/);
-  assert.ok(page.indexOf('<StoryStage') < page.indexOf('<main id="main-content"'), 'the story is above the end panel');
+  assert.ok(page.indexOf('<main id="main-content"') < page.indexOf('<StoryStage'), 'the main element wraps the story');
+  assert.ok(page.indexOf('<StoryStage') < page.indexOf('<StoryEnd />'), 'the story is above the end panel');
   const html = read('ve-story.html');
   assert.match(html, /<meta name="theme-color" content="#c9d6dc">/);
   assert.match(html, /family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400/);
@@ -1120,7 +1122,7 @@ test('the skip link is in the pinned stage, so it rides up with the stage; the s
 
 test('the fade needs no reduced-motion rule: it has no transition, and the static layout never runs it', () => {
   const css = read('story.css');
-  for (const selector of ['.story-skip-wrap', '.story-rail']) {
+  for (const selector of ['.story-skip-wrap', '.story-chapters']) {
     const open = css.indexOf(`${selector} {`);
     assert.ok(open >= 0, selector);
     assert.doesNotMatch(css.slice(open, css.indexOf('}', open)), /transition|animation|opacity/, `${selector} has no timer`);
@@ -1156,14 +1158,14 @@ test('the captions are real text in reading order, and the live links are real l
   assert.deepEqual(captionsOf('rock', false, 0).map(node => node.props['data-on']), [false, false]);
 
   const orbit = nodes(StoryWords({ chapter: chapters[0], on: true, caption: 0, onNavigate: null }));
-  const name = orbit.find(node => node.type === 'h1');
-  assert.equal(name.children[0], SITE_STORY.name, 'the name is the h1');
+  assert.equal(orbit.find(node => node.type === 'h1').children[0], SITE_STORY.title, 'the title of the page is the h1');
+  assert.equal(orbit.find(node => node.type === 'p' && /story-name/.test(node.props.className)).children[0], SITE_STORY.name, 'the name is a large paragraph');
   assert.ok(orbit.some(node => node.type === page.get('StoryPpm') && node.props.on === true), 'the ppm line is its own component');
   assert.ok(!nodes(StoryWords({ chapter: chapters[1], on: true, caption: 0, onNavigate: null })).some(node => node.type === page.get('StoryPpm')), 'only the orbit has it');
 
   const links = (on) => nodes(StoryWords({ chapter: chapters[6], on, caption: 0, onNavigate: null })).filter(node => node.type === 'a');
   assert.deepEqual(links(true).map(link => [link.props.href, link.children[0]]),
-    [['./simulator.html', 'Open the VE simulator'], ['./index.html#research', 'Read my research']]);
+    [['./simulator.html', 'Open the VE simulator'], ['./index.html#publications', 'Read the publications']]);
   assert.ok(links(true).every(link => link.props.tabIndex === undefined), 'the links are in the tab order while the chapter is on');
   assert.ok(links(false).every(link => link.props.tabIndex === -1), 'and out of it when the chapter is off');
 });

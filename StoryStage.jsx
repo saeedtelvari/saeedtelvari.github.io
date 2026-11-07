@@ -53,7 +53,8 @@
 //                     inside draw() or in a getter: the next frame then runs with no other event.
 //   mount(layer)      Only the chapter live uses it. layer is an empty div that fills the stage.
 //   unmount()         The layer takes pointer events while live is current. mount runs when the scroll settles on live.
-//                     unmount runs when the visitor scrolls out of live. Neither runs in a static frame.
+//                     unmount runs when the visitor scrolls out of live. In the static frame of reduced motion, mount gets
+//                     a layer under the art, and the renderer must not start anything by itself there.
 // A renderer that throws is reported once in the console. The story then goes on.
 //
 // Colours: STORY_COLORS has the same values as the --story-* tokens in colors_and_type.css.
@@ -185,6 +186,9 @@ const storyAdvance = (state, dt) => {
 // and the long wait is only a safety net. A browser with no scrollend uses the short wait. A new scroll event starts the wait again.
 const STORY_SETTLE_MS = 150;
 const STORY_SETTLE_SAFETY_MS = 800;
+
+// Play all waits this long after the animation of a stage ends. The visitor reads the caption in that time.
+const STORY_ALL_HOLD_MS = 1500;
 
 // The longest step of the playback clock. A longer gap between two frames is a pause that the page did not report.
 const STORY_MAX_STEP_MS = 250;
@@ -349,20 +353,38 @@ const StoryPpm = ({ on }) => {
   );
 };
 
+// The line under the ppm line: how long the story is and how to move on. With reduced motion there is no Play all.
+const StoryIntro = ({ on }) => {
+  const reduced = useStoryReducedMotion();
+  return <p className="story-howto story-fade" data-on={on}>{reduced ? SITE_STORY.introReduced : SITE_STORY.intro}</p>;
+};
+
 // The words of one chapter. In the pinned story, on and caption say which parts the visitor sees now.
 // A caption of null means that all captions are on.
 const StoryWords = ({ chapter, on, caption, onNavigate }) => {
   const copy = SITE_STORY.captions[chapter.id] || [];
   const actions = chapter.id === 'live' ? SITE_STORY.actions : [];
+  const speed = SITE_STORY.speedSource;
   return (
     <React.Fragment>
-      {chapter.id === 'orbit' && <h1 className="story-name story-fade" data-on={on}>{SITE_STORY.name}</h1>}
+      {chapter.id === 'orbit' && <h1 className="story-eyebrow story-fade" data-on={on}>{SITE_STORY.title}</h1>}
+      {chapter.id === 'orbit' && <p className="story-name story-fade" data-on={on}>{SITE_STORY.name}</p>}
+      <p className="visually-hidden">{SITE_STORY.descriptions[chapter.id]}</p>
       <div className="story-stack">
         {copy.map((text, k) => (
           <p key={k} className="story-caption story-fade" data-on={on && (caption === null || k === caption)}><StoryText text={text} /></p>
         ))}
       </div>
+      {chapter.id === 've' && (
+        <p className="story-source story-fade" data-on={on && (caption === null || caption === 1)}>
+          {speed.before}
+          <a href={speed.href} tabIndex={on && (caption === null || caption === 1) ? undefined : -1}>{speed.link}</a>
+          {speed.after}
+        </p>
+      )}
       {chapter.id === 'orbit' && <StoryPpm on={on} />}
+      {chapter.id === 'orbit' && <p className="story-source story-fade" data-on={on}>{SITE_STORY.ppmSource}</p>}
+      {chapter.id === 'orbit' && <StoryIntro on={on} />}
       {chapter.id === 'fields' && typeof StoryFieldsList === 'function' && <StoryFieldsList on={on} />}
       {actions.length > 0 && (
         <div className="story-actions story-fade" data-on={on}>
@@ -377,6 +399,42 @@ const StoryWords = ({ chapter, on, caption, onNavigate }) => {
   );
 };
 
+// The chapter control: seven buttons, one for each stage, and the button Play all.
+// In the pinned story each button holds a fill (an i element) that the stage scales with the playback of its stage.
+// Wide screens show the names under the segments. A phone shows "3 of 7 · Into the rock" with the buttons previous and next.
+// index is the current stage. all says that Play all runs. onGo(i) moves to stage i. onAll() starts or stops Play all.
+// showAll is false with reduced motion: nothing plays there.
+const StoryChapterNav = ({ navRef, index, all, onGo, onAll, showAll }) => {
+  const count = STORY_CHAPTERS.length;
+  const title = STORY_CHAPTERS[index].title;
+  return (
+    <nav ref={navRef} className="story-chapters" aria-label="Story chapters">
+      <button type="button" className="story-chapters__step story-chapters__prev" aria-label="Previous chapter"
+        disabled={index <= 0} onClick={() => onGo(index - 1)}><span aria-hidden="true">‹</span></button>
+      <p className="story-chapters__now" aria-hidden="true">{`${index + 1} of ${count} · ${title}`}</p>
+      <button type="button" className="story-chapters__step story-chapters__next" aria-label="Next chapter"
+        disabled={index >= count - 1} onClick={() => onGo(index + 1)}><span aria-hidden="true">›</span></button>
+      {showAll && (
+        <button type="button" className="story-chapters__all" data-story-playall="" data-state={all ? 'playing' : 'paused'}
+          title="Plays the 7 steps one after the other, about 1 minute" onClick={onAll}>
+          <span>{all ? 'Pause' : 'Play all'}</span>
+          {!all && <small className="story-chapters__hint"> · about 1 min</small>}
+        </button>
+      )}
+      <ol className="story-chapters__list">
+        {STORY_CHAPTERS.map((chapter, i) => (
+          <li key={chapter.id}>
+            <button type="button" className="story-chapters__seg" aria-current={i === index ? 'step' : undefined} onClick={() => onGo(i)}>
+              <span className="story-chapters__track"><i /></span>
+              <span className="story-chapters__name">{chapter.title}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+};
+
 /// The pinned story. One animation frame loop draws the canvas from refs. The scroll only chooses the stage.
 // The stage plays by itself when the scroll settles on it (see the director above).
 // React state holds only the chapter and the caption that the captions need.
@@ -387,6 +445,8 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
   const railRef = useRef(null);
   const skipRef = useRef(null);
   const [view, setView] = useState({ index: 0, caption: 0 });
+  const [all, setAll] = useState(false);
+  const controlRef = useRef(null);
 
   useEffect(() => {
     const section = sectionRef.current;
@@ -417,6 +477,13 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
     // The settle wait: 0, or the id of the timer.
     let timer = 0;
     let shown = view;
+    // restart is the stage that a chapter button asked for: it plays from its start when the scroll settles there.
+    // allOn is true while Play all runs. holdMs counts the time that the finished stage has waited.
+    let restart = -1;
+    let allOn = false;
+    let holdMs = 0;
+    let holdAt = null;
+    const last = STORY_CHAPTERS.length - 1;
     let mounted = null;
     const filled = [];
 
@@ -474,7 +541,13 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
       const position = storyPosition({ top: section.getBoundingClientRect().top, viewport: height });
       helpWheel(position);
       rested = storyRestAt(position);
-      const next = storySettle(director, storyStageAt(position));
+      const stage = storyStageAt(position);
+      let next = storySettle(director, stage);
+      // A chapter button plays its stage from the start, also when the stage lies behind the old stage.
+      if (restart >= 0) {
+        if (restart === stage) next = storyPlay(stage);
+        restart = -1;
+      }
       if (next === director) return;
       director = next;
       clock = null;
@@ -486,6 +559,43 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
       timer = setTimeout(settle, hasScrollEnd ? STORY_SETTLE_SAFETY_MS : STORY_SETTLE_MS);
     };
     const onScroll = () => { waitForRest(); schedule(); };
+
+    // Play all stops at any wheel, touch scroll, key press or press elsewhere. The button itself handles its own press.
+    const cancelEvents = ['wheel', 'touchmove', 'keydown', 'pointerdown'];
+    const onCancel = event => {
+      if (event.target && event.target.closest && event.target.closest('[data-story-playall]')) return;
+      stopAll();
+    };
+    function stopAll() {
+      if (!allOn) return;
+      allOn = false;
+      holdMs = 0;
+      holdAt = null;
+      cancelEvents.forEach(name => window.removeEventListener(name, onCancel));
+      setAll(false);
+    }
+    // Move to a stage and play it from its start. The jump is at once: the stage is pinned, so only the art and the words change.
+    const go = index => {
+      if (!alive || index < 0 || index > last) return;
+      const target = window.scrollY + section.getBoundingClientRect().top + index * height;
+      restart = index;
+      holdMs = 0;
+      holdAt = null;
+      if (Math.abs(target - window.scrollY) < 2) { settle(); return; }
+      window.scrollTo({ top: target, behavior: 'instant' });
+      settle();
+    };
+    const playAll = () => {
+      if (allOn || !alive) return;
+      allOn = true;
+      holdMs = 0;
+      holdAt = null;
+      cancelEvents.forEach(name => window.addEventListener(name, onCancel, { passive: true }));
+      setAll(true);
+      // It plays the stage that the visitor sees. On the live stage it starts again at the first stage.
+      go(director.index >= last ? 0 : director.index);
+    };
+    controlRef.current = { go: index => { stopAll(); go(index); }, toggleAll: () => { if (allOn) stopAll(); else playAll(); } };
 
     const tick = now => {
       frame = 0;
@@ -507,6 +617,17 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
         clock = now;
       } else {
         clock = null;
+      }
+      // Play all: when the stage has ended and the hold time has passed, the next stage starts.
+      if (allOn) {
+        if (director.mode === 'rest' && awake()) {
+          holdMs += holdAt === null ? 0 : Math.min(now - holdAt, STORY_MAX_STEP_MS);
+          holdAt = now;
+          if (director.index >= last) stopAll();
+          else if (holdMs >= STORY_ALL_HOLD_MS) go(director.index + 1);
+        } else {
+          holdAt = null;
+        }
       }
       const { index, local } = director;
       const { id } = STORY_CHAPTERS[index];
@@ -535,7 +656,7 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
         drawnIndex = index;
         dirty = false;
       }
-      if (running() || (director.mode === 'play' && awake())) schedule();
+      if (running() || (director.mode === 'play' && awake()) || allOn) schedule();
     };
     const schedule = () => { if (alive && !frame) frame = requestAnimationFrame(tick); };
     const awake = () => visible && !document.hidden;
@@ -570,6 +691,8 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
     schedule();
 
     return () => {
+      stopAll();
+      controlRef.current = null;
       alive = false;
       cancelAnimationFrame(frame);
       clearTimeout(timer);
@@ -597,9 +720,9 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
           </div>
         ))}
       </div>
-      <div ref={railRef} className="story-rail" aria-hidden="true">
-        {STORY_CHAPTERS.map(chapter => <span key={chapter.id}><i /></span>)}
-      </div>
+      <StoryChapterNav navRef={railRef} index={view.index} all={all} showAll
+        onGo={index => controlRef.current && controlRef.current.go(index)}
+        onAll={() => controlRef.current && controlRef.current.toggleAll()} />
     </div>
   );
 };
@@ -608,10 +731,12 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
 const StoryFrame = ({ chapter, onNavigate }) => {
   const boxRef = useRef(null);
   const canvasRef = useRef(null);
+  const layerRef = useRef(null);
 
   useEffect(() => {
     const box = boxRef.current;
     const canvas = canvasRef.current;
+    const layer = layerRef.current;
     if (!box || !canvas) return undefined;
     const ctx = canvas.getContext('2d');
     let alive = true;
@@ -631,18 +756,27 @@ const StoryFrame = ({ chapter, onNavigate }) => {
       canvas.height = Math.round(height * dpr);
       storyPaint(ctx, chapter.id, { local: 1, p: chapter.to, width, height, dpr, time: 0, reducedMotion: true, requestDraw });
     };
+    // The live frame mounts the same controls as the pinned stage. They do not play by themselves (see StoryBlock.jsx).
+    const entry = chapter.id === 'live' && layer ? STORY_RENDERERS.live : null;
+    if (entry && entry.mount) storyGuard('live.mount', () => entry.mount(layer));
     const sizes = new ResizeObserver(paint);
     sizes.observe(box);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(paint);
     paint();
-    return () => { alive = false; if (queued) cancelAnimationFrame(queued); sizes.disconnect(); };
+    return () => {
+      alive = false;
+      if (queued) cancelAnimationFrame(queued);
+      sizes.disconnect();
+      if (entry && entry.unmount) storyGuard('live.unmount', () => entry.unmount());
+    };
   }, [chapter]);
 
   return (
-    <div className="story-frame" role="group" aria-label={chapter.title} data-chapter={chapter.id}>
+    <div id={`story-frame-${chapter.id}`} className="story-frame" role="group" aria-label={chapter.title} data-chapter={chapter.id}>
       <div ref={boxRef} className="story-frame__art">
         <canvas ref={canvasRef} aria-hidden="true" />
       </div>
+      {chapter.id === 'live' && <div ref={layerRef} className="story-layer story-layer--frame" />}
       <div className="story-frame__words">
         <StoryWords chapter={chapter} on caption={null} onNavigate={onNavigate} />
       </div>
@@ -658,6 +792,30 @@ const StorySteps = () => (
   </div>
 );
 
+// The chapter control of the static frames. A button jumps to the frame of its chapter. There is no Play all.
+// The current chapter is the last frame whose top has passed the middle of the screen.
+const StoryStaticNav = () => {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    const frames = STORY_CHAPTERS.map(chapter => document.getElementById(`story-frame-${chapter.id}`));
+    const update = () => {
+      let now = 0;
+      frames.forEach((node, i) => { if (node && node.getBoundingClientRect().top < window.innerHeight / 2) now = i; });
+      setIndex(now);
+    };
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    return () => window.removeEventListener('scroll', update);
+  }, []);
+  const go = i => {
+    const node = document.getElementById(`story-frame-${STORY_CHAPTERS[i].id}`);
+    if (!node) return;
+    node.scrollIntoView({ block: 'start', behavior: 'auto' });
+    setIndex(i);
+  };
+  return <StoryChapterNav index={index} all={false} showAll={false} onGo={go} onAll={() => {}} />;
+};
+
 const StoryStage = ({ onNavigate }) => {
   const sectionRef = useRef(null);
   const reduced = useStoryReducedMotion();
@@ -669,6 +827,7 @@ const StoryStage = ({ onNavigate }) => {
         ? (
           <React.Fragment>
             <div className="story-skip-wrap"><StorySkip onNavigate={onNavigate} /></div>
+            <StoryStaticNav />
             {STORY_CHAPTERS.map(chapter => <StoryFrame key={chapter.id} chapter={chapter} onNavigate={onNavigate} />)}
           </React.Fragment>
         )
