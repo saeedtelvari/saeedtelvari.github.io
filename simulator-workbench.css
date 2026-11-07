@@ -1600,10 +1600,14 @@
 /* ------------------------------------------------------------------ first-run guide */
 
 /* A small panel at the bottom left of the map. It sits above the legend. */
+/* It is a child of the stage. It shares the grid cell of the map view. */
 .sim-guide {
-  position: absolute;
-  left: 12px;
-  bottom: 56px;
+  grid-row: 1;
+  grid-column: 1;
+  align-self: end;
+  justify-self: start;
+  margin: 0 0 56px 12px;
+  position: relative;
   z-index: 6;
   width: min(300px, calc(100% - 24px));
   padding: 12px 14px 10px;
@@ -1635,7 +1639,10 @@
 .sim-guide .sim-button { min-height: 30px; padding: 4px 10px; }
 
 @media (max-width: 760px) {
-  .sim-guide { left: 8px; right: 8px; width: auto; bottom: 8px; }
+  /* On phones the panel sits below the map, in its own row above the transport bar. */
+  .sim-stage:has(> .sim-guide) { grid-template-rows: auto auto auto; }
+  .sim-stage > .sim-transport { grid-row: 3; }
+  .sim-guide { grid-row: 2; align-self: stretch; justify-self: stretch; margin: 8px; width: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {

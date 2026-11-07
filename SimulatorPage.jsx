@@ -1018,9 +1018,9 @@ const SimulatorPage = () => {
                   {view !== 'section' && <SimLayersMenu layers={layers} onChange={setLayers} view={view} />}
                 </div>
               </div>
-              {view === 'map' && <SimFirstRun open={guideOpen} onClose={() => setGuideOpen(false)} />}
               {model && <SimLegend view={view} layers={layers} model={model} />}
             </div>
+            {view === 'map' && <SimFirstRun open={guideOpen} onClose={() => setGuideOpen(false)} />}
             <SimTransport year={shownYear} years={model?.years || scenario.years} injYears={model?.injYears || scenario.injYears} computedYears={computedYears}
               playing={playing} speed={speed} onPlay={play} onSeek={seek} onSpeed={() => setSpeed(s => (s + 1) % SIM_SPEEDS.length)} />
           </section>
