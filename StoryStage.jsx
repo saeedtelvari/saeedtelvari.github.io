@@ -239,7 +239,7 @@ const storyCount = (ms, from, to) => {
 const STORY_MAX_DPR = 2;
 const STORY_REDUCED_QUERY = '(prefers-reduced-motion: reduce)';
 
-// The real bottom of the caption block of each chapter, in px from the top of the stage. The pinned stage measures it
+// The real bottom of the caption block of each chapter, in px from the top of the stage. The key bar is the height of the chapter bar. The pinned stage measures it
 // (see measureCaptions). The art keeps its clear band below this line (StoryEarth.jsx). It is empty until the first
 // measure, and the art then uses its own estimate.
 const STORY_CAPTION_BOTTOM = {};
@@ -512,6 +512,11 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
       if (!stage.querySelectorAll || !stage.getBoundingClientRect) return false;
       const top = stage.getBoundingClientRect().top;
       let changed = false;
+      // The chapter bar stands on the bottom of the stage. The art keeps its bottom edge above it. Its key is "bar" (a height).
+      if (rail.getBoundingClientRect) {
+        const bar = Math.round(rail.getBoundingClientRect().height);
+        if (STORY_CAPTION_BOTTOM.bar !== bar) { STORY_CAPTION_BOTTOM.bar = bar; changed = true; }
+      }
       stage.querySelectorAll('.story-chapter').forEach(node => {
         const id = node.getAttribute('data-chapter');
         const bottom = Math.round(node.getBoundingClientRect().bottom - top);
