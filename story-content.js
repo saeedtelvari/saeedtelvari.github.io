@@ -21,6 +21,25 @@ const SITE_STORY = {
   get ppm() {
     return `${this.co2.base} ppm in ${this.co2.baseYear}. ${Math.round(this.co2.value)} ppm in ${this.co2.year}.`;
   },
+  // The first screen. title is the h1 of the page. The name shows as a large paragraph.
+  title: 'How VE models work',
+  // The line under the ppm line, and its version for reduced motion (no Play all there).
+  intro: '7 short steps, about 1 minute. Scroll, or press Play all.',
+  introReduced: '7 short steps. Scroll down.',
+  // The source of the ppm line (co2.source has the full name).
+  ppmSource: 'Source: NOAA, Mauna Loa annual mean.',
+  // The source of the speed-up in the VE caption. The link goes to the publications of the homepage.
+  speedSource: { before: 'Speed-up from ', link: 'Telvari et al. (2026)', after: ', preprint, Hugin Formation East case.', href: './index.html#publications' },
+  // One text version of the figure of each chapter. The page hides it from the eye and shows it to a screen reader.
+  descriptions: {
+    orbit: 'Figure: the Earth seen from space, with the North Sea near the top of the disc. A counter rises from 280 ppm of CO₂ in 1850 to the value of today.',
+    fields: 'Figure: a map of the southern and central North Sea. Grey points mark gas fields that no longer produce. Outlines, markers and names show the planned CO₂ storage projects. A key explains the symbols, and the list "Map data and sources" gives each project with its status.',
+    descent: 'Figure: the map zooms to one example site. The camera then goes down to a single offshore platform on the sea.',
+    rock: 'Figure: a cutaway of the rock under the platform. The well goes down through layers of clay, chalk and shale to a sandstone dome at about 2 km depth. The dome holds a methane gas cap above brine. A fault cuts one flank of the dome.',
+    grid: 'Figure: a 3D grid of cells draws onto the dome and follows the layers and the fault. A 3D run then shows a CO₂ plume that grows near the well, while the methane gas cap moves a little.',
+    ve: 'Figure: the horizontal cell boundaries fade out and the rock keeps its full thickness. Each column becomes one cell with a sharp gas interface at depth h. A counter falls from the number of cells to the number of columns.',
+    live: 'Figure: the same dome and fault as a block, running live in the browser. Controls start and stop the run, set the year, and switch between VE columns and 3D cells.',
+  },
   captions: {
     orbit: ['There is more than 420 ppm of CO₂ in the air. I model how rock under the North Sea can hold it for thousands of years.'],
     fields: ['Hundreds of gas fields under the North Sea no longer produce. Projects in the UK, the Netherlands and Denmark plan to store CO₂ in some of them.'],
@@ -42,7 +61,7 @@ const SITE_STORY = {
   // Links under the caption of the last chapter. An entry with an id scrolls to that element of the page. The links here go to other pages.
   actions: [
     { label: 'Open the VE simulator', href: './simulator.html' },
-    { label: 'Read my research', href: './index.html#research' },
+    { label: 'Read the publications', href: './index.html#publications' },
   ],
 };
 

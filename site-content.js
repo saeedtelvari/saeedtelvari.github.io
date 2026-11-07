@@ -25,11 +25,11 @@ const SITE_PUBLICATIONS = [
     doi: '10.31223/X5P49D',
     url: 'https://doi.org/10.31223/X5P49D',
     summary: 'Extends vertical-equilibrium modelling to CO₂–methane–brine flow in depleted gas reservoirs and reproduces compositional simulations, including a Hugin Formation East field case, with speed-ups of up to 100×.',
-    bibtex: `@article{telvari2026vertical,
+    bibtex: `@misc{telvari2026vertical,
   title={A Vertical Equilibrium Model for CO2 Migration in Depleted Gas Fields},
   author={Telvari, Sa'eed and Ramachandran, Harish and Wang, Gang and Doster, Florian},
-  journal={EarthArXiv},
-  note={Preprint},
+  howpublished={EarthArXiv preprint},
+  note={Under review in Geoenergy Science and Engineering},
   year={2026},
   doi={10.31223/X5P49D}
 }`,
@@ -120,7 +120,7 @@ const SITE_PROJECTS = [
   {
     id: 'simulator',
     title: 'VE simulator',
-    body: 'A vertical-equilibrium simulator of CO₂ plume migration, structural, residual and dissolution trapping, fault leakage and pressure build-up in a saline aquifer, in SI units with a visible mass balance and an uncertainty study. It runs in the browser.',
+    body: 'A vertical-equilibrium simulator of CO₂ plume migration, structural, residual and dissolution trapping, fault leakage and pressure build-up in a saline aquifer, in SI units with a visible mass balance and an uncertainty study. It runs in the browser. It is a teaching model of a saline aquifer. The depleted-gas model is in the 2026 preprint.',
     links: [
       { label: 'Open the VE simulator', href: './simulator.html' },
       { label: 'Read the method', href: './simulator.html#method' },

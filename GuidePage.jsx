@@ -1,14 +1,79 @@
 // GuidePage.jsx — Method: the equations, numerics, verification and limits of the model
 // in ve2d-model.js, written to match the code exactly. Equations are typeset with KaTeX.
 
+// Shared text. The Method tab and the screening report (SimReport.jsx) both use it.
+// A pair of stars in a reference marks italic text.
+const SIM_CAVEAT_TEXT = "This is an educational model of CO₂ storage in a confined saline aquifer, built on the vertical-equilibrium (VE) approximation used by MRST's co2lab. It runs in your browser in about a second, so the inputs can be explored freely. It is not a substitute for a field study: the aquifer is homogeneous, the fluids have constant properties and the caprock is a perfect seal except at faults.";
+const SIM_LIMITATIONS = [
+  "Sharp interface: no capillary fringe, so very thin plumes are idealised.",
+  "Constant fluid densities and viscosities; no CO₂ compressibility, temperature or composition effects.",
+  "Homogeneous permeability; no layering inside the aquifer.",
+  "Brine mobility in the residual zone is not reduced; dissolved CO₂ does not migrate.",
+  "After injection the total flux is set to zero once the pressure has relaxed.",
+  "No geomechanics: the fracture margin is a guide, not a calculation."
+];
+const SIM_REFERENCES = [
+  "Barnes, Lehman and Mulla (2014). Priority-flood: an optimal depression-filling algorithm. *Computers & Geosciences* 62.",
+  "Bennion and Bachu (2008). Drainage and imbibition relative permeability relationships for supercritical CO₂/brine. *SPE Reservoir Evaluation & Engineering* 11(3).",
+  "Bretan, Yielding and Jones (2003). Using calibrated shale gouge ratio to estimate hydrocarbon column heights. *AAPG Bulletin* 87(3).",
+  "Gasda, Nordbotten and Celia (2009). Vertical equilibrium with sub-scale analytical methods for geological CO₂ sequestration. *Computational Geosciences* 13.",
+  "Hesse, Orr and Tchelepi (2008). Gravity currents with residual trapping. *Journal of Fluid Mechanics* 611.",
+  "Kim and Sanderson (2005). The relationship between displacement and length of faults: a review. *Earth-Science Reviews* 68.",
+  "Lee, Efendiev and Tchelepi (2015). Hybrid upwind discretization of nonlinear two-phase flow with gravity. *Advances in Water Resources* 82.",
+  "MacMinn, Szulczewski and Juanes (2011). CO₂ migration in saline aquifers. Part 2: capillary and solubility trapping. *Journal of Fluid Mechanics* 688.",
+  "Manzocchi, Walsh, Nell and Yielding (1999). Fault transmissibility multipliers for flow simulation models. *Petroleum Geoscience* 5.",
+  "Neufeld et al. (2010). Convective dissolution of carbon dioxide in saline aquifers. *Geophysical Research Letters* 37.",
+  "Nilsen, Lie and Andersen (2016). Fully-implicit simulation of vertical-equilibrium models with hysteresis and capillary fringe. *Computational Geosciences* 20.",
+  "Nordbotten and Celia (2006). Similarity solutions for fluid injection into confined aquifers. *Journal of Fluid Mechanics* 561.",
+  "Nordbotten and Celia (2012). *Geological Storage of CO₂: Modeling Approaches for Large-Scale Simulation*. Wiley.",
+  "Peaceman (1978). Interpretation of well-block pressures in numerical reservoir simulation. *SPE Journal* 18(3)."
+];
+// The DOI of each reference, in the same order. Each one was checked against Crossref.
+const SIM_REFERENCE_DOIS = [
+  '10.1016/j.cageo.2013.04.024',
+  '10.2118/99326-pa',
+  '10.1306/08010201128',
+  '10.1007/s10596-009-9138-x',
+  '10.1017/s002211200800219x',
+  '10.1016/j.earscirev.2004.06.003',
+  '10.1016/j.advwatres.2015.04.007',
+  '10.1017/jfm.2011.379',
+  '10.1144/petgeo.5.1.53',
+  '10.1029/2010gl044728',
+  '10.1007/s10596-015-9547-y',
+  '10.1017/s0022112006000802',
+  '10.1002/9781118137086',
+  '10.2118/6893-pa'
+];
+const simEmphasis = text => text.split("*").map((part, i) => (i % 2 ? <em key={i}>{part}</em> : part));
+// end of shared text
+
+// KaTeX loads once, when the Method tab first opens. The simulator page does not fetch it.
+const SIM_KATEX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min';
+const simLoadKatex = () => {
+  if (window.katex || window.__simKatexRequested) return;
+  window.__simKatexRequested = true;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `${SIM_KATEX_URL}.css`;
+  document.head.appendChild(link);
+  const script = document.createElement('script');
+  script.src = `${SIM_KATEX_URL}.js`;
+  script.async = true;
+  script.onload = () => window.dispatchEvent(new Event('sim-katex-ready'));
+  document.head.appendChild(script);
+};
+
 const SimTex = ({ tex, block = false }) => {
   const ref = useRef(null);
   const [ready, setReady] = useState(typeof window !== 'undefined' && !!window.katex);
   useEffect(() => {
     if (ready) return undefined;
+    const done = () => { if (window.katex) setReady(true); };
+    window.addEventListener('sim-katex-ready', done);
     const timer = setInterval(() => { if (window.katex) { setReady(true); clearInterval(timer); } }, 200);
-    const stop = setTimeout(() => clearInterval(timer), 8000);
-    return () => { clearInterval(timer); clearTimeout(stop); };
+    const stop = setTimeout(() => clearInterval(timer), 30000);
+    return () => { window.removeEventListener('sim-katex-ready', done); clearInterval(timer); clearTimeout(stop); };
   }, [ready]);
   useEffect(() => {
     if (ready && ref.current) window.katex.render(tex, ref.current, { displayMode: block, throwOnError: false });
@@ -35,6 +100,7 @@ const SIM_METHOD_SECTIONS = [
 ];
 
 const GuidePage = () => {
+  useEffect(() => { simLoadKatex(); }, []);
   const d = VE2D.DEFAULTS;
   const rows = [
     ['Permeability', 'k', `${d.permMd} mD`, 'Homogeneous'],
@@ -58,12 +124,7 @@ const GuidePage = () => {
       </nav>
       <article>
         <h2 id="m-scope">What the model is</h2>
-        <p>
-          This is an educational model of CO₂ storage in a confined saline aquifer, built on the vertical-equilibrium (VE)
-          approximation used by MRST's co2lab. It runs in your browser in about a second, so the inputs can be explored
-          freely. It is not a substitute for a field study: the aquifer is homogeneous, the fluids have constant
-          properties and the caprock is a perfect seal except at faults.
-        </p>
+        <p>{SIM_CAVEAT_TEXT}</p>
         <p>
           All quantities are in SI units inside the model; the interface shows megatonnes, millidarcies, metres,
           kilometres, bar and years. One run drives every view: the map, the 3D block, the section, the charts and the
@@ -200,7 +261,7 @@ const GuidePage = () => {
           micrometre do not move.
         </p>
 
-        <h2 id="m-verification">Verification</h2>
+        <h2 id="m-verification" tabIndex={-1}>Verification</h2>
         <p>The engine is tested in Node on every change. The current results:</p>
         <table>
           <thead><tr><th>Check</th><th>Result</th></tr></thead>
@@ -216,12 +277,7 @@ const GuidePage = () => {
 
         <h2 id="m-limits">Limitations</h2>
         <ul>
-          <li>Sharp interface: no capillary fringe, so very thin plumes are idealised.</li>
-          <li>Constant fluid densities and viscosities; no CO₂ compressibility, temperature or composition effects.</li>
-          <li>Homogeneous permeability; no layering inside the aquifer.</li>
-          <li>Brine mobility in the residual zone is not reduced; dissolved CO₂ does not migrate.</li>
-          <li>After injection the total flux is set to zero once the pressure has relaxed.</li>
-          <li>No geomechanics: the fracture margin is a guide, not a calculation.</li>
+          {SIM_LIMITATIONS.map(text => <li key={text}>{text}</li>)}
         </ul>
 
         <h2 id="m-parameters">Parameters</h2>
@@ -232,20 +288,7 @@ const GuidePage = () => {
 
         <h2 id="m-references">References</h2>
         <ul>
-          <li>Barnes, Lehman and Mulla (2014). Priority-flood: an optimal depression-filling algorithm. <em>Computers &amp; Geosciences</em> 62.</li>
-          <li>Bennion and Bachu (2008). Drainage and imbibition relative permeability relationships for supercritical CO₂/brine. <em>SPE Reservoir Evaluation &amp; Engineering</em> 11(3).</li>
-          <li>Bretan, Yielding and Jones (2003). Using calibrated shale gouge ratio to estimate hydrocarbon column heights. <em>AAPG Bulletin</em> 87(3).</li>
-          <li>Gasda, Nordbotten and Celia (2009). Vertical equilibrium with sub-scale analytical methods for geological CO₂ sequestration. <em>Computational Geosciences</em> 13.</li>
-          <li>Hesse, Orr and Tchelepi (2008). Gravity currents with residual trapping. <em>Journal of Fluid Mechanics</em> 611.</li>
-          <li>Kim and Sanderson (2005). The relationship between displacement and length of faults: a review. <em>Earth-Science Reviews</em> 68.</li>
-          <li>Lee, Efendiev and Tchelepi (2015). Hybrid upwind discretization of nonlinear two-phase flow with gravity. <em>Advances in Water Resources</em> 82.</li>
-          <li>MacMinn, Szulczewski and Juanes (2011). CO₂ migration in saline aquifers. Part 2: capillary and solubility trapping. <em>Journal of Fluid Mechanics</em> 688.</li>
-          <li>Manzocchi, Walsh, Nell and Yielding (1999). Fault transmissibility multipliers for flow simulation models. <em>Petroleum Geoscience</em> 5.</li>
-          <li>Neufeld et al. (2010). Convective dissolution of carbon dioxide in saline aquifers. <em>Geophysical Research Letters</em> 37.</li>
-          <li>Nilsen, Lie and Andersen (2016). Fully-implicit simulation of vertical-equilibrium models with hysteresis and capillary fringe. <em>Computational Geosciences</em> 20.</li>
-          <li>Nordbotten and Celia (2006). Similarity solutions for fluid injection into confined aquifers. <em>Journal of Fluid Mechanics</em> 561.</li>
-          <li>Nordbotten and Celia (2012). <em>Geological Storage of CO₂: Modeling Approaches for Large-Scale Simulation</em>. Wiley.</li>
-          <li>Peaceman (1978). Interpretation of well-block pressures in numerical reservoir simulation. <em>SPE Journal</em> 18(3).</li>
+          {SIM_REFERENCES.map((text, i) => <li key={text}>{simEmphasis(text)} <a href={`https://doi.org/${SIM_REFERENCE_DOIS[i]}`} rel="noopener">doi:{SIM_REFERENCE_DOIS[i]}</a></li>)}
         </ul>
       </article>
     </div>

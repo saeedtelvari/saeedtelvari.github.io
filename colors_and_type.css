@@ -514,6 +514,8 @@ code, kbd, .mono {
 .contact { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 40px; align-items: start; }
 .contact__email { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 8px 0 18px; }
 .contact__email a { display: inline-flex; align-items: center; gap: 10px; color: var(--sim-ink); font: 500 17px/1.4 var(--sim-font-mono); }
+.sheet .contact__cv { margin: 0 0 10px; color: var(--sim-ink-muted); font-size: 14.5px; }
+.sheet .contact__cv a { text-decoration: underline; text-underline-offset: 3px; }
 .sheet .contact__address { display: flex; align-items: center; gap: 8px; color: var(--sim-ink-muted); font-size: 14.5px; }
 .contact__profiles { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .contact__profiles a {
@@ -1103,14 +1105,32 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 }
 .hero-role { margin: 0 0 8px; color: var(--sim-ink-muted); font: 600 15px/1.4 var(--sim-font-ui); }
 .hero-summary {
-  max-width: 46ch;
+  max-width: 56ch;
   margin: 18px 0 0;
   color: rgba(232, 237, 242, 0.9);
   font: 400 17px/1.6 var(--sim-font-ui);
   text-wrap: pretty;
 }
 .hero-summary sub { line-height: 0; }
+.hero-summary__source { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--hero-accent) 60%, transparent); text-underline-offset: 3px; }
+.hero-summary__source:hover { color: var(--hero-accent); }
 .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 24px; }
+/* Three quiet paths under the buttons: a short question, then the target in the accent colour. */
+.hero-doors { width: max-content; max-width: calc(100vw - 48px); margin-top: 2px; }
+.hero-doors ul { display: flex; flex-wrap: wrap; gap: 0 22px; margin: 0; padding: 0; list-style: none; }
+.hero-doors li { color: var(--sim-ink-muted); font: 400 13px/1.4 var(--sim-font-ui); }
+.hero-doors a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  color: var(--hero-accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--hero-accent) 40%, transparent);
+  text-underline-offset: 3px;
+}
+.hero-doors a:hover { text-decoration-color: currentColor; }
+.hero-doors__short { display: none; }
 .hero-profiles { display: flex; gap: 2px; margin: 0 0 0 6px; padding: 0; list-style: none; }
 .hero-profiles a {
   display: inline-flex;
@@ -1193,6 +1213,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 .hero-player .is-residual { background: repeating-linear-gradient(135deg, var(--sim-glow-residual) 0 2px, var(--sim-c-residual) 2px 5px); }
 .hero-player .is-leaked { background: var(--sim-glow-leaked); }
 .hero-player__note { margin: 6px 0 0; color: var(--sim-ink-faint); font: 12px/1.45 var(--sim-font-ui); }
+.hero-player__receipt { margin: 4px 0 0; color: var(--sim-ink-muted); font: 12px/1.45 var(--sim-font-ui); font-variant-numeric: tabular-nums; }
 
 @media (max-width: 600px) {
   .hero-axis { width: 58px; font-size: 10.5px; }
@@ -1214,6 +1235,14 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   .hero-summary { margin-top: 12px; font-size: 15.5px; line-height: 1.55; }
   .hero-actions { gap: 10px; margin-top: 16px; }
   .hero-actions > .btn { flex: 1 1 auto; padding: 0 14px; }
+  /* On phones the paths are one short row. The questions stay for screen readers. */
+  .hero-doors { width: auto; max-width: none; margin-top: 0; }
+  .hero-doors ul { gap: 0 18px; }
+  .hero-doors li { display: flex; }
+  .hero-doors a { min-height: 44px; font-size: 14px; text-shadow: 0 1px 3px rgba(4, 8, 16, 0.95), 0 0 8px rgba(4, 8, 16, 0.8); }
+  .hero-doors__long { display: none; }
+  .hero-doors__short { display: inline; }
+  .hero-doors__ask { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .hero-profiles { width: 100%; gap: 4px; margin: 2px 0 0 -6px; }
   .hero-profiles a { width: 34px; height: 34px; }
   .hero-player {
@@ -1235,7 +1264,8 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   .hero-player__scrub { height: 16px; }
   .hero-player__small { height: 28px; min-width: 30px; }
   .hero-player__bar,
-  .hero-player__note { display: none; }
+  .hero-player__note,
+  .hero-player__receipt { display: none; }
   .hero-player__title { margin: 0; font-size: 12.5px; }
   .hero-player__legend { gap: 4px 12px; font-size: 11.5px; }
 }
@@ -1522,7 +1552,7 @@ a:focus:not(:focus-visible) {
   padding: 0;
   list-style: none;
 }
-.site-footer__links a { color: var(--sim-ink-muted); font: 500 14px/2 var(--sim-font-ui); }
+.site-footer__links a { display: inline-flex; align-items: center; min-height: 28px; color: var(--sim-ink-muted); font: 500 14px/2 var(--sim-font-ui); }
 .site-footer__links a:hover { color: var(--sim-ink); }
 
 /* =====================================================

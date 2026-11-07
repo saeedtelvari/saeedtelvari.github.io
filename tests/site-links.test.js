@@ -172,7 +172,7 @@ test('the project card, the story button and the homepage text use the new name'
   assert.deepEqual(project.links.map(link => link.label), ['Open the VE simulator', 'Read the method']);
   assert.match(project.image.alt, /VE simulator/);
   const story = require('../story-content.js');
-  assert.deepEqual(story.SITE_STORY.actions.map(action => action.label), ['Open the VE simulator', 'Read my research']);
+  assert.deepEqual(story.SITE_STORY.actions.map(action => action.label), ['Open the VE simulator', 'Read the publications']);
 });
 
 test('the MuPSI wording of today and the true no-script text stay in the restored homepage', () => {
@@ -183,6 +183,7 @@ test('the MuPSI wording of today and the true no-script text stay in the restore
   const sections = read('HomeSections.jsx');
   assert.match(sections, /at field scale/);
   assert.doesNotMatch(sections, /28-case/);
-  assert.match(read('index.html'), /They reproduce compositional simulations, with speed-ups of up to 100×\./);
-  assert.doesNotMatch(read('index.html'), /faster than full 3D compositional models/);
+  assert.match(read('index.html'), /They reproduce compositional simulations, with speed-ups of up to 100× \(preprint, 2026\)\./);
+  // The loader repeats the hero summary. Only the no-script text must keep the true wording.
+  assert.doesNotMatch(read('index.html').split('<noscript>').pop(), /faster than full 3D compositional models/);
 });

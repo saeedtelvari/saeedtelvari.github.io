@@ -344,9 +344,9 @@ html.site-c { color-scheme: light; }
 .story-chapter[data-chapter="orbit"] { top: max(12%, calc(var(--site-header-h) + 16px)); width: 37%; }
 .story-chapter[data-chapter="fields"] { top: max(10%, calc(var(--site-header-h) + 16px)); width: 31%; }
 .story-chapter[data-chapter="descent"] { top: max(10%, calc(var(--site-header-h) + 16px)); }
-.story-chapter[data-chapter="rock"] { bottom: calc(6% + 12px); width: 24%; }
+.story-chapter[data-chapter="rock"] { bottom: max(calc(6% + 12px), 76px); width: 24%; }
 .story-chapter[data-chapter="grid"],
-.story-chapter[data-chapter="ve"] { bottom: calc(6% + 12px); width: 27%; }
+.story-chapter[data-chapter="ve"] { bottom: max(calc(6% + 12px), 76px); width: 27%; }
 .story-chapter[data-chapter="live"] { top: max(9%, calc(var(--site-header-h) + 16px)); width: 32%; }
 
 .story-name {
@@ -354,6 +354,13 @@ html.site-c { color-scheme: light; }
   color: inherit;
   font: 600 clamp(34px, 4.6vw, 76px)/1.06 var(--story-font);
   letter-spacing: -0.01em;
+}
+.story-eyebrow {
+  margin: 0 0 6px;
+  color: inherit;
+  font: 600 clamp(13px, 0.5vw + 8px, 17px)/1.3 var(--story-font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .story-caption {
   margin: 0;
@@ -367,6 +374,15 @@ html.site-c { color-scheme: light; }
   color: #1d3f9e;
   font: italic 400 clamp(15px, 1.1vw + 6px, 22px)/1.4 var(--story-font);
 }
+
+.story-source,
+.story-howto {
+  margin: 0;
+  color: var(--story-muted);
+  font: 400 clamp(12px, 0.4vw + 8px, 14px)/1.4 var(--story-font);
+}
+.story-source a { color: inherit; text-decoration: underline; }
+.story-howto { font-style: italic; font-size: clamp(14px, 0.6vw + 8px, 17px); color: var(--story-ink); }
 
 /* The captions of one chapter share one place and cross-fade. */
 .story--pinned .story-stack { display: grid; }
@@ -448,25 +464,55 @@ html.site-c { color-scheme: light; }
 .story-data__panel a { color: inherit; text-decoration: underline; }
 .story-data__panel .story-data__note { color: var(--story-muted); font-size: 13px; }
 
-/* Seven segments. StoryStage fills each one with transform: scaleX. */
-.story-rail {
+/* The chapter control: seven buttons, one for each stage, and Play all. StoryStage fills each segment with transform: scaleX.
+   Wide screens: the segments with the names under them, and Play all at the right.
+   Phones (below 640 px): the row "3 of 7 · Into the rock" with previous, next and Play all, and the segments under it. */
+.story-chapters {
   position: absolute;
-  right: 8px;
-  bottom: 6px;
-  left: 8px;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 4;
   display: flex;
-  gap: 4px;
-  pointer-events: none;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 6px 16px 8px;
+  background: rgba(243, 239, 228, 0.9);
+  color: var(--story-ink);
+  font: 400 13px/1.2 var(--story-font);
 }
-.story-rail span {
+.story-chapters__list {
+  display: flex;
   flex: 1;
-  height: 3px;
+  gap: 4px;
+  order: 1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.story-chapters__list li { flex: 1; min-width: 0; }
+.story-chapters__seg {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 0 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.story-chapters__track {
+  display: block;
+  height: 4px;
   overflow: hidden;
   border-radius: 2px;
   background: rgba(31, 42, 48, 0.18);
 }
-.story-rail i {
+.story-chapters__track i {
   display: block;
   width: 100%;
   height: 100%;
@@ -474,6 +520,48 @@ html.site-c { color-scheme: light; }
   transform: scaleX(0);
   transform-origin: 0 50%;
 }
+.story-chapters__name {
+  overflow: hidden;
+  color: var(--story-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.story-chapters__seg[aria-current="step"] .story-chapters__name { color: var(--story-ink); font-weight: 600; }
+@media (hover: hover) and (pointer: fine) {
+  .story-chapters__seg:hover .story-chapters__name { color: var(--story-ink); text-decoration: underline; }
+}
+/* The static frames show no fill: the current segment is solid. */
+.story--static .story-chapters__seg[aria-current="step"] .story-chapters__track { background: var(--story-ink); }
+.story-chapters__all {
+  order: 2;
+  flex: none;
+  align-self: center;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1.5px solid var(--story-ink);
+  border-radius: 999px;
+  background: var(--story-ink);
+  color: var(--story-cream);
+  font: 600 14px/1 var(--story-font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.story-chapters__all[data-state="playing"] { background: var(--story-cream); color: var(--story-ink); }
+.story-chapters__hint { font-weight: 400; opacity: 0.85; }
+.story-chapters__step,
+.story-chapters__now { display: none; }
+.story--static .story-chapters {
+  position: static;
+  max-width: 1120px;
+  margin: 0 auto 24px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--story-cream);
+}
+
+/* Reduced motion: the controls of the live frame stand under the art, in the page flow. */
+.story-layer--frame { position: static; pointer-events: auto; margin-top: 12px; }
+.story-layer--frame .story-controls { position: static; }
 
 /* Reduced motion: seven static frames, one after the other. */
 .story--static { padding: calc(var(--site-header-h) + 16px) 0 24px; }
@@ -505,6 +593,55 @@ html.site-c { color-scheme: light; }
     width: auto;
   }
   .story-skip { right: 12px; }
+  /* The chapter control becomes two rows. Every button is at least 44 px high. */
+  .story-chapters {
+    display: grid;
+    grid-template-columns: 44px 1fr 44px auto;
+    grid-template-areas: "prev now next all" "list list list list";
+    align-items: center;
+    gap: 0 6px;
+    padding: 4px 12px 6px;
+  }
+  .story-chapters__step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 1.5px solid var(--story-ink);
+    border-radius: 999px;
+    background: var(--story-cream);
+    color: var(--story-ink);
+    font: 400 24px/1 var(--story-font);
+  }
+  .story-chapters__step:disabled { opacity: 0.35; }
+  .story-chapters__prev { grid-area: prev; }
+  .story-chapters__next { grid-area: next; }
+  .story-chapters__now {
+    display: block;
+    grid-area: now;
+    margin: 0;
+    overflow: hidden;
+    font: 600 14px/1.2 var(--story-font);
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .story-chapters__all { grid-area: all; min-height: 44px; padding: 0 14px; }
+  .story-chapters__hint { display: none; }
+  .story-chapters__list { grid-area: list; order: 0; }
+  .story-chapters__seg { min-height: 44px; padding: 20px 0 0; }
+  .story-chapters__name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .story--static .story-chapters { margin: 0 16px 16px; }
+  /* Static frames: the skip button is part of the page flow, so it never covers a caption line. */
+  .story--static .story-skip-wrap { position: static; display: flex; justify-content: flex-end; height: auto; margin: 0 16px 12px; }
+  .story--static .story-skip { position: static; }
   /* The static frame of the North Sea map is taller than 16:9: the key and the attribution need room, and the names are small. */
   .story-frame[data-chapter="fields"] .story-frame__art { aspect-ratio: 4 / 5; }
 }
@@ -517,7 +654,7 @@ html.site-c { color-scheme: light; }
 .story-controls {
   position: absolute;
   right: 5.5%;
-  bottom: 6%;
+  bottom: max(6%, 64px);
   left: 5.5%;
   display: flex;
   flex-wrap: wrap;
@@ -680,7 +817,7 @@ html.site-c { color-scheme: light; }
   transform: translateX(20px);
 }
 @media (max-width: 640px) {
-  .story-controls { right: 16px; bottom: 16px; left: 16px; gap: 4px 16px; }
+  .story-controls { right: 16px; bottom: 112px; left: 16px; gap: 4px 16px; }
   .story-controls__time { flex-basis: 200px; gap: 10px; }
   .story-controls__switch { margin-left: 0; }
 }

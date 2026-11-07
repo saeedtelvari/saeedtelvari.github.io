@@ -61,14 +61,14 @@ lacks('GuidePage.jsx', /\*\*Brooks-Corey/, 'raw Markdown markers must not be vis
 
 has('SimulatorPage.jsx', /role="tab"/, 'simulator tabs need tab semantics');
 has('SimulatorPage.jsx', /tabIndex=\{section ===/, 'simulator tabs need roving keyboard focus');
-has('SimulatorPage.jsx', /Copy a link to this scenario/, 'simulator state needs a share action');
+has('SimulatorPage.jsx', /copy a link to this scenario/, 'simulator state needs a share action');
 has('SimulatorPage.jsx', /Inventory through time/, 'simulator results need CSV export');
 has('SimulatorPage.jsx', /Current view/, 'simulator visualization needs image export');
 has('SimulatorPage.jsx', /new Worker\(['"]\.\/simulation-worker\.js/, 'simulation runs and uncertainty batches must run off the main thread');
 has('SimulatorPage.jsx', /<details/, 'mobile controls need progressive disclosure');
 assert.ok(fs.existsSync(path.join(root, 'simulation-worker.js')), 'simulation worker must exist');
 assert.ok(!fs.existsSync(path.join(root, 'uq-worker.js')), 'the old copy of the solver must stay deleted');
-has('simulator.html', /KaTeX\/0\.16\.9\/katex\.min\.js/, 'method equations need the pinned KaTeX build');
+has('GuidePage.jsx', /KaTeX\/0\.16\.9\/katex\.min/, 'method equations need the pinned KaTeX build, loaded on demand');
 has('simulator.html', /<title>VE simulator: CO₂ storage — Sa'eed Telvari<\/title>/, 'simulator needs its plain page name');
 has('ve-story.html', /<title>How VE models work — Sa'eed Telvari<\/title>/, 'the story page needs its title');
 has('ve-story.html', /data-page="story"/, 'the story page renders its own entry');
@@ -79,7 +79,7 @@ has('build.js', /simulator-bundle\.js/, 'the heavy simulator must have a page-sp
 const simulatorBundleVersions = [...read('simulator.html').matchAll(/simulator-bundle\.js\?v=([^"']+)/g)].map(match => match[1]);
 assert.ok(simulatorBundleVersions.length >= 2, 'simulator bundle must be preloaded and executed');
 assert.equal(new Set(simulatorBundleVersions).size, 1, 'simulator preload and script URLs must use the same cache version');
-assert.equal(simulatorBundleVersions[0], '26', 'simulator page must load the current bundle version');
+assert.equal(simulatorBundleVersions[0], '27', 'simulator page must load the current bundle version');
 for (const page of ['index.html', 'cv.html', 've-story.html']) lacks(page, /simulator-bundle\.js/, page + ' must not download the simulator bundle');
 for (const page of ['index.html', 'cv.html', 'simulator.html']) lacks(page, /story-bundle\.js|story\.css/, page + ' must not download the story bundle or the story styles');
 has('ve-story.html', /story-bundle\.js\?v=\d+/, 'the story page loads the story bundle');

@@ -58,7 +58,8 @@ const storyBlockResolution = width => (width <= STORY_BLOCK_NARROW ? { nx: 20, n
 // - clock: top left corner of the run clock and the counter.
 // - view: angles in radians and the share of the width that the depth takes (see storyBlockExaggeration).
 // A reduced-motion frame is a 16:9 canvas with its captions below it, so only the run clock is kept clear.
-const storyBlockLayout = (width, height, reduced = false, captions = { top: 150, bottom: 190 }) => {
+// bar is the height of the chapter bar at the bottom of the stage (0 when unknown). On a phone the block and its clock stay above it and above the controls.
+const storyBlockLayout = (width, height, reduced = false, captions = { top: 150, bottom: 190 }, bar = 0) => {
   const narrow = width <= STORY_BLOCK_NARROW;
   const scale = narrow ? 0.7 : storyClamp(width / 1280, 0.7, 1.25);
   const fonts = {
@@ -81,10 +82,11 @@ const storyBlockLayout = (width, height, reduced = false, captions = { top: 150,
     keeps.push({ x0: 0, y0: 0, x1: clock.x + Math.round(width * 0.3), y1: clock.y + fonts.big * 1.18 + fonts.small * 2.8 + 10 });
   } else if (narrow) {
     const band = STORY_BLOCK_HEADER + 64 + Math.max(captions.top, captions.bottom) + 12;
-    box = { x0: 12, y0: band, x1: width - 12, y1: height - 118 };
-    clock = { x: 16, y: height - 104 };
+    const lower = Math.max(118, bar > 0 ? bar + 10 + 106 : 0);
+    box = { x0: 12, y0: band, x1: width - 12, y1: height - lower };
+    clock = { x: 16, y: height - lower + 14 };
   } else {
-    box = { x0: Math.round(width * 0.12), y0: STORY_BLOCK_HEADER + 8, x1: width - Math.round(width * 0.03), y1: height - 104 };
+    box = { x0: Math.round(width * 0.12), y0: STORY_BLOCK_HEADER + 8, x1: width - Math.round(width * 0.03), y1: height - Math.max(104, bar > 0 ? bar + 14 : 0) };
     clock = { x: Math.round(width * 0.055), y: Math.max(Math.round(height * 0.09), STORY_BLOCK_HEADER + 16) };
     const wordsBottom = Math.max(clock.y + fonts.big * 1.18 + fonts.small * 2.8, clock.y + captions.top) + 12;
     keeps.push({ x0: 0, y0: height - Math.round(height * 0.06) - 12 - captions.bottom - 12, x1: Math.round(width * 0.325) + 12, y1: height });
@@ -362,14 +364,17 @@ const storyBlockLive = (local, cells, year, s = {}) => {
   return s;
 };
 
+// The label under the cell counter. The number of cells changes with the screen width, so the counter names a sketch.
+const STORY_BLOCK_SKETCH = 'in this sketch';
+
 // The counter of chapter ve. At local 0.5 it shows the cells. At local 1 it shows the columns to solve.
 const storyBlockCounter = (cells, columns, local) => {
   const t = storyClamp((local - 0.5) / 0.5);
   const e = storyBlockEase(t);
   const count = storyBlockInt(cells + (columns - cells) * e);
-  if (t <= 0) return { big: `${storyBlockInt(cells)} cells`, small: 'in this 3D model' };
+  if (t <= 0) return { big: `${storyBlockInt(cells)} cells`, small: STORY_BLOCK_SKETCH };
   if (t >= 1) return { big: `${storyBlockInt(columns)} columns`, small: `to solve, not ${storyBlockInt(cells)} cells` };
-  return e < 0.5 ? { big: `${count} cells`, small: 'in this 3D model' } : { big: `${count} columns`, small: 'to solve in the VE model' };
+  return e < 0.5 ? { big: `${count} cells`, small: STORY_BLOCK_SKETCH } : { big: `${count} columns`, small: 'to solve in this sketch' };
 };
 
 // Position of a year among the sorted years of the frames. Fills out with lo, hi and t.
@@ -498,8 +503,8 @@ const STORY_BLOCK_LABELS = [
 const STORY_BLOCK_WELL_UP = { wide: 0.2, tall: 0.3 };
 
 // Build the polygons of the block for one stage size. The draw loop reads these arrays.
-const storyBlockBuild = (width, height, reduced, captions) => {
-  const layout = storyBlockLayout(width, height, reduced, captions);
+const storyBlockBuild = (width, height, reduced, captions, bar = 0) => {
+  const layout = storyBlockLayout(width, height, reduced, captions, bar);
   const { nx, ny, nz } = storyBlockResolution(width);
   const grid = StoryGeometry.storyGrid(nx, ny, nz);
   const scenario = StoryGeometry.STORY_SCENARIO;
@@ -575,7 +580,7 @@ const storyBlockBuild = (width, height, reduced, captions) => {
   storyBlockState.builds += 1;
   const block = {
     id: storyBlockState.builds,
-    key: `${width}x${height}${reduced ? 'r' : ''}`,
+    key: `${width}x${height}${reduced ? 'r' : ''}:${bar}`,
     layout, grid, nz, cut, flags, tone, X, YT, YB, world, minTop,
     // The view of the block in its place (storyBlockViewAt), and the buffers of the morph (made at the first morph draw).
     view: { theta: layout.view.theta, phi: layout.view.elevation, e: exaggeration, S: fit.scale, X0: fit.ox, Y0: fit.oy },
@@ -643,11 +648,12 @@ const storyBlockBuild = (width, height, reduced, captions) => {
 };
 
 const storyBlockGet = frame => {
-  const key = `${frame.width}x${frame.height}${frame.reducedMotion ? 'r' : ''}`;
+  const bar = frame.reducedMotion || typeof STORY_CAPTION_BOTTOM !== 'object' ? 0 : STORY_CAPTION_BOTTOM.bar || 0;
+  const key = `${frame.width}x${frame.height}${frame.reducedMotion ? 'r' : ''}:${bar}`;
   const have = storyBlockState.block;
   if (have && have.key === key) return have;
   const copy = typeof SITE_STORY !== 'undefined' ? SITE_STORY.captions : {};
-  const block = storyBlockBuild(frame.width, frame.height, frame.reducedMotion, storyBlockCaptionHeights(frame.width, copy));
+  const block = storyBlockBuild(frame.width, frame.height, frame.reducedMotion, storyBlockCaptionHeights(frame.width, copy), bar);
   storyBlockState.block = block;
   storyBlockBindAll(block);
   return block;
@@ -1076,7 +1082,7 @@ const storyBlockDraw = (entry, id, ctx, frame) => {
   if (stored.status === 'idle') storyBlockLoad();
   // This draw shows the rock with no gas. The arrival of the run asks the stage or the static frame for one more draw.
   if (stored.status === 'loading' && typeof frame.requestDraw === 'function') storyBlockState.waiting.add(frame.requestDraw);
-  if (id === 'live' && !frame.reducedMotion) storyLive.redraw = frame.requestDraw;
+  if (id === 'live') storyLive.redraw = frame.requestDraw;
   const pal = storyBlockState.palette || (storyBlockState.palette = storyBlockPalette(STORY_COLORS));
   const s = storyBlockState.scene;
   // The first part of chapter grid is the morph from the cutaway of chapter rock. Without that chapter it is the plain block.
@@ -1115,6 +1121,10 @@ const storyLive = {
   shown: -1,
   shownState: '',
   onVisibility: null,
+  // static is true when the controls stand in a static frame (reduced motion). loop is the id of the small loop of that frame.
+  static: false,
+  loop: 0,
+  staticLast: null,
   // The frame.requestDraw of the pinned stage. The live draw keeps it for the controls and the worker.
   redraw: null,
 };
@@ -1149,8 +1159,15 @@ const storyBlockSyncControls = () => {
 // The player advances in the draw call. This returns the scene of the chapter live.
 const storyBlockLiveScene = (entry, frame, s) => {
   const live = storyLive;
-  const running = live.mounted && !frame.reducedMotion;
-  if (running) {
+  // In the static frame of reduced motion the controls are mounted too, but nothing moves by itself.
+  // The year changes only by the slider or by the play button (storyBlockStaticLoop), and the cells switch at once.
+  const running = live.mounted;
+  const timed = running && !frame.reducedMotion;
+  if (running && !timed) {
+    live.cells = live.target;
+    storyBlockSyncControls();
+  }
+  if (timed) {
     const dt = storyBlockStep(frame.time, live.last);
     live.last = frame.time;
     if (live.playing) {
@@ -1169,11 +1186,32 @@ const storyBlockLiveScene = (entry, frame, s) => {
   // The stage gives live local 1 at once. While the player is mounted, the notes of chapter ve fade on the
   // player's own clock, so they do not vanish in one frame.
   let local = frame.local;
-  if (running && Number.isFinite(frame.time)) {
+  if (running && !timed) {
+    local = 0.1;
+  } else if (running && Number.isFinite(frame.time)) {
     if (live.mountedAt == null) live.mountedAt = frame.time;
     local = Math.min(local, 0.1 * (frame.time - live.mountedAt) / STORY_BLOCK_NOTE_FADE_MS);
   }
   return storyBlockLive(local, running ? live.cells : 0, running ? live.year : STORY_BLOCK_GRID_YEARS, s);
+};
+
+// The play button in the static frame of reduced motion. The visitor starts it, so it is not autoplay.
+// The frame has no animation loop, so the button runs a small one that asks for one draw on each frame.
+const storyBlockStaticLoop = live => {
+  if (live.loop || !live.static) return;
+  live.staticLast = null;
+  const step = time => {
+    live.loop = 0;
+    if (!live.mounted || !live.playing) return;
+    const dt = live.staticLast === null ? 0 : storyBlockStep(time, live.staticLast);
+    live.staticLast = time;
+    live.year = storyBlockAdvance(live.year, dt, live.lastYear);
+    if (live.year >= live.lastYear) live.playing = false;
+    storyBlockSyncControls();
+    storyBlockRedraw();
+    if (live.playing) live.loop = requestAnimationFrame(step);
+  };
+  live.loop = requestAnimationFrame(step);
 };
 
 // The time in ms that the notes of chapter ve take to fade out after the player mounts.
@@ -1235,6 +1273,7 @@ const storyBlockControls = (layer, live) => {
       if (live.year >= live.lastYear) live.year = 0;
       live.playing = true;
       live.last = null;
+      storyBlockStaticLoop(live);
     }
     live.resume = false;
     storyBlockSyncControls();
@@ -1320,7 +1359,9 @@ STORY_RENDERERS.live = {
     live.shown = -1;
     live.shownState = '';
     live.mountedAt = null;
-    live.playing = !storyBlockReducedNow();
+    live.static = storyBlockReducedNow();
+    live.loop = 0;
+    live.playing = !live.static;
     live.nodes = storyBlockControls(layer, live);
     live.mounted = true;
     live.onVisibility = () => storyBlockVisibility(live);
@@ -1335,6 +1376,8 @@ STORY_RENDERERS.live = {
     live.mounted = false;
     live.playing = false;
     live.resume = false;
+    if (live.loop) cancelAnimationFrame(live.loop);
+    live.loop = 0;
     document.removeEventListener('visibilitychange', live.onVisibility);
     const root = live.nodes && live.nodes.root;
     if (root && root.parentNode) root.parentNode.removeChild(root);

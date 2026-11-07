@@ -28,9 +28,12 @@ const SIM_FRAME_YEARS = 5;
 const SIM_SPEEDS = [25, 60, 150];
 const SIM_THEME_KEY = 'co2-simulator-theme';
 const SIM_PALETTE_KEY = 'co2-simulator-palette';
+// The page default matches the homepage. The base CSS block stays Earth.
+const SIM_DEFAULT_PALETTE = 'north-sea';
 // Colour palettes (data-palette on the root; tokens in simulator-workbench.css). The
 // previews show four steps of the night rock ramp and three CO₂ colours.
 const SIM_PALETTES = [
+  { id: 'north-sea', label: 'North Sea night', hint: 'Slate rock, the homepage colours', ramp: ['#a9b6c4', '#738294', '#445367', '#1d2937'], fluids: ['#38e8d1', '#6a99ff', '#ff99c2'] },
   { id: 'earth', label: 'Earth', hint: 'Sandstone rock, gemstone CO₂', ramp: ['#c0a684', '#8b7157', '#59402e', '#2a140a'], fluids: ['#38e8d1', '#6a99ff', '#ff99c2'] },
   { id: 'shoreline', label: 'Shoreline', hint: 'Sand-to-navy rock, coastal CO₂', ramp: ['#baa88b', '#668276', '#2f4e5b', '#051a38'], fluids: ['#ff7f55', '#fbd530', '#6adcc4'] },
   { id: 'aurora', label: 'Aurora', hint: 'Moonlit rock, aurora CO₂', ramp: ['#b1c0cd', '#748496', '#3d4c62', '#0d1a32'], fluids: ['#47f4a3', '#ffc73a', '#fe7ccb'] },
@@ -177,9 +180,9 @@ const simPersistTheme = (theme, storage) => {
 const simStoredPalette = storage => {
   try {
     const value = storage?.getItem(SIM_PALETTE_KEY);
-    return SIM_PALETTES.some(option => option.id === value) ? value : 'earth';
+    return SIM_PALETTES.some(option => option.id === value) ? value : SIM_DEFAULT_PALETTE;
   } catch (_) {
-    return 'earth';
+    return SIM_DEFAULT_PALETTE;
   }
 };
 
@@ -197,6 +200,13 @@ const simCopyText = async (text, clipboard) => {
   }
 };
 
+// The citation text that "Cite this run" copies. The address holds the scenario query.
+const simCitation = (url, date = new Date()) =>
+  `Telvari, S. (2026). VE simulator [web application]. ${url}. Accessed ${date.toISOString().slice(0, 10)}.`;
+
+// Text for the live region after a copy action.
+const simCopyNotice = (ok, done, fallback) => (ok ? done : fallback);
+
 const simDownload = (content, filename, type) => {
   const blob = content instanceof Blob ? content : new Blob([content], { type });
   const link = document.createElement('a');
@@ -211,16 +221,16 @@ const simDownload = (content, filename, type) => {
 const simMessages = (model, row, frame, run) => {
   const messages = [];
   if (!model || !row) return messages;
-  if (run.truncated) messages.push({ tone: 'danger', icon: 'fa-triangle-exclamation', text: `The run stopped at year ${run.history.at(-1)?.year}: these inputs need more time steps than the browser budget allows.` });
+  if (run.truncated) messages.push({ tone: 'danger', icon: 'triangle-exclamation', text: `The run stopped at year ${run.history.at(-1)?.year}: these inputs need more time steps than the browser budget allows.` });
   model.faults.forEach((fault, index) => {
-    if (frame?.leaking?.[index]) messages.push({ tone: 'danger', icon: 'fa-arrow-up', text: `Fault F${index + 1} is leaking: the CO₂ column against it exceeds its ${fault.sealCap} m seal capacity.` });
+    if (frame?.leaking?.[index]) messages.push({ tone: 'danger', icon: 'arrow-up', text: `Fault F${index + 1} is leaking: the CO₂ column against it exceeds its ${fault.sealCap} m seal capacity.` });
   });
   const marginBar = SIM_FRACTURE_MARGIN_BAR_PER_M * model.depth;
-  if (row.bhpPeak / 1e5 > marginBar) messages.push({ tone: 'warning', icon: 'fa-gauge-high', text: `Peak pressure rise at the well, ${simFormatNumber(row.bhpPeak / 1e5)} bar, exceeds a typical fracture margin of about ${simFormatNumber(marginBar)} bar at ${simFormatNumber(model.depth)} m.` });
+  if (row.bhpPeak / 1e5 > marginBar) messages.push({ tone: 'warning', icon: 'gauge-high', text: `Peak pressure rise at the well, ${simFormatNumber(row.bhpPeak / 1e5)} bar, exceeds a typical fracture margin of about ${simFormatNumber(marginBar)} bar at ${simFormatNumber(model.depth)} m.` });
   const leakingNow = frame?.leaking && [...frame.leaking].some(Boolean);
-  if (!leakingNow && row.leaked > 0) messages.push({ tone: 'warning', icon: 'fa-arrow-up', text: `${simFormatMass(row.leaked)} has leaked through faults so far; no fault is leaking now.` });
-  if (row.exited > 1e-4 * row.injected) messages.push({ tone: 'warning', icon: 'fa-arrow-right-from-bracket', text: `${simFormatMass(row.exited)} has left the model across an open edge.` });
-  if (!messages.length && row.injected > 0) messages.push({ tone: 'info', icon: 'fa-circle-check', text: 'Nothing has leaked or left the model so far.' });
+  if (!leakingNow && row.leaked > 0) messages.push({ tone: 'warning', icon: 'arrow-up', text: `${simFormatMass(row.leaked)} has leaked through faults so far; no fault is leaking now.` });
+  if (row.exited > 1e-4 * row.injected) messages.push({ tone: 'warning', icon: 'arrow-right-from-bracket', text: `${simFormatMass(row.exited)} has left the model across an open edge.` });
+  if (!messages.length && row.injected > 0) messages.push({ tone: 'info', icon: 'circle-check', text: 'Nothing has leaked or left the model so far.' });
   return messages;
 };
 
@@ -470,7 +480,7 @@ const SimInputs = ({ scenario, onChange, onPreset, onRandom, onClose }) => {
     <>
       <div className="sim-rail__head">
         <h2>Scenario</h2>
-        <button type="button" className="sim-icon-button sim-sheet-close" onClick={onClose} aria-label="Close inputs"><i className="fas fa-times" aria-hidden="true" /></button>
+        <button type="button" className="sim-icon-button sim-sheet-close" onClick={onClose} aria-label="Close inputs"><Icon name="close" size={15} /></button>
       </div>
       <div className="sim-scenario">
         <label className="sim-sr-only" htmlFor="sim-preset">Scenario</label>
@@ -481,7 +491,7 @@ const SimInputs = ({ scenario, onChange, onPreset, onRandom, onClose }) => {
         </select>
         <p>{preset ? preset.description : 'Your own combination of inputs. Share it with the link button.'}</p>
         <div className="sim-scenario__row">
-          <button type="button" className="sim-button" onClick={onRandom}><i className="fas fa-shuffle" aria-hidden="true" /> New random structure</button>
+          <button type="button" className="sim-button" onClick={onRandom}><Icon name="shuffle" size={15} /> New random structure</button>
         </div>
       </div>
       <SimGroup title="Injection">
@@ -518,7 +528,7 @@ const SimInputs = ({ scenario, onChange, onPreset, onRandom, onClose }) => {
         ))}
         {scenario.faults.length < VE2D.MAX_FAULTS && (
           <button type="button" className="sim-button" onClick={() => onChange({ faults: [...scenario.faults, { x: 6 + 4 * scenario.faults.length, y: 6, strike: 20, length: 6, throw: 10, trans: 0.5, sealCap: 20, kf: 10 }] })}>
-            <i className="fas fa-plus" aria-hidden="true" /> Add a fault
+            <Icon name="plus" size={15} /> Add a fault
           </button>
         )}
       </SimGroup>
@@ -542,7 +552,13 @@ const SimInputs = ({ scenario, onChange, onPreset, onRandom, onClose }) => {
 
 // ---------------------------------------------------------------- outcomes
 
-const SimOutcomes = ({ model, row, frame, run, history, year, onSeek }) => {
+const SimOutcomes = ({ model, row, frame, run, history, year, onSeek, onMethod }) => {
+  const [citeNotice, setCiteNotice] = useState('');
+  const cite = async () => {
+    const ok = await simCopyText(simCitation(window.location.href), navigator.clipboard);
+    setCiteNotice(simCopyNotice(ok, 'Citation copied', 'Copy failed. Copy the address bar and cite it by hand.'));
+    setTimeout(() => setCiteNotice(''), 3000);
+  };
   if (!model || !row) {
     return (
       <div className="sim-outcome-section">
@@ -593,9 +609,17 @@ const SimOutcomes = ({ model, row, frame, run, history, year, onSeek }) => {
         <h3 id="sim-notes">Notes</h3>
         <ul className="sim-messages">
           {messages.map(message => (
-            <li key={message.text} data-tone={message.tone}><i className={`fas ${message.icon}`} aria-hidden="true" /><span>{message.text}</span></li>
+            <li key={message.text} data-tone={message.tone}><Icon name={message.icon} size={15} /><span>{message.text}</span></li>
           ))}
         </ul>
+      </section>
+      <section className="sim-outcome-section sim-trust" aria-label="About this result">
+        <p>
+          Educational VE model of a saline aquifer. Mass balance and four benchmark checks: see{' '}
+          <span style={{ whiteSpace: "nowrap" }}><button type="button" className="sim-linkbutton" onClick={onMethod}>Method</button>.</span>
+        </p>
+        <button type="button" className="sim-button" onClick={cite}><Icon name="copy" size={15} /> Cite this run</button>
+        <span className="sim-trust__notice" role="status" aria-live="polite">{citeNotice}</span>
       </section>
     </>
   );
@@ -606,11 +630,11 @@ const SimTransport = ({ year, years, injYears, computedYears, playing, speed, on
   return (
     <div className="sim-transport">
       <button type="button" className="sim-play" onClick={onPlay} aria-label={playing ? 'Pause' : year >= years ? 'Replay from year 0' : 'Play'}>
-        <i className={`fas ${playing ? 'fa-pause' : year >= years ? 'fa-rotate-left' : 'fa-play'}`} aria-hidden="true" />
+        <Icon name={playing ? 'pause' : year >= years ? 'restart' : 'play'} size={18} />
       </button>
       <div className="sim-steps">
-        <button type="button" className="sim-icon-button" onClick={() => onSeek(Math.max(0, Math.ceil(year / SIM_FRAME_YEARS - 1) * SIM_FRAME_YEARS))} aria-label="Back 5 years"><i className="fas fa-backward-step" aria-hidden="true" /></button>
-        <button type="button" className="sim-icon-button" onClick={() => onSeek(Math.min(computedYears, Math.floor(year / SIM_FRAME_YEARS + 1) * SIM_FRAME_YEARS))} aria-label="Forward 5 years"><i className="fas fa-forward-step" aria-hidden="true" /></button>
+        <button type="button" className="sim-icon-button" onClick={() => onSeek(Math.max(0, Math.ceil(year / SIM_FRAME_YEARS - 1) * SIM_FRAME_YEARS))} aria-label="Back 5 years"><Icon name="backward-step" size={15} /></button>
+        <button type="button" className="sim-icon-button" onClick={() => onSeek(Math.min(computedYears, Math.floor(year / SIM_FRAME_YEARS + 1) * SIM_FRAME_YEARS))} aria-label="Forward 5 years"><Icon name="forward-step" size={15} /></button>
       </div>
       <div className="sim-scrubber">
         <div className="sim-scrubber__bands" aria-hidden="true">
@@ -622,7 +646,7 @@ const SimTransport = ({ year, years, injYears, computedYears, playing, speed, on
         <div className="sim-scrubber__ticks" aria-hidden="true">{ticks.map(t => <span key={t}>{t}</span>)}</div>
       </div>
       <div className="sim-year" aria-live="off"><strong>{Math.round(year)}</strong> <span>of {years} years</span></div>
-      <button type="button" className="sim-button sim-speed" onClick={onSpeed} aria-label={`Playback speed ${speed + 1}×, change`}>{speed + 1}×</button>
+      <button type="button" className="sim-button sim-speed" onClick={onSpeed} aria-label={`Playback speed: ${SIM_SPEEDS[speed]} yr/s. Change speed.`}>{SIM_SPEEDS[speed]} yr/s</button>
     </div>
   );
 };
@@ -662,7 +686,7 @@ const simPercentile = (sorted, p) => {
   return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
 };
 
-const SimUncertainty = ({ scenario, onLoad, theme, hidden }) => {
+const SimUncertainty = ({ scenario, onLoad, theme, hidden, reportRef }) => {
   const [specs, setSpecs] = useState(() => simDefaultUqSpecs(scenario));
   const [runs, setRuns] = useState(50);
   const [grid, setGrid] = useState('coarse');
@@ -713,6 +737,8 @@ const SimUncertainty = ({ scenario, onLoad, theme, hidden }) => {
       .sort((a, b) => Math.abs(b.rho) - Math.abs(a.rho));
     return { table, params, tornado };
   }, [state.rows, metric]);
+  // The screening report reads the table from here.
+  if (reportRef) reportRef.current = results ? { runs: state.rows.length, years: scenario.years, table: results.table } : null;
 
   return (
     <div className="sim-uq" id="sim-panel-uncertainty" role="tabpanel" aria-labelledby="sim-tab-uncertainty" hidden={hidden}>
@@ -745,7 +771,7 @@ const SimUncertainty = ({ scenario, onLoad, theme, hidden }) => {
               <div className="sim-progress" role="progressbar" aria-label="Uncertainty runs completed" aria-valuemin={0} aria-valuemax={state.total} aria-valuenow={state.done}><span style={{ width: `${100 * state.done / Math.max(1, state.total)}%` }} /></div>
               <button type="button" className="sim-button" onClick={cancel}>Cancel ({state.done} of {state.total})</button>
             </>
-            : <button type="button" className="sim-button sim-button--primary" disabled={!active.length} onClick={start}><i className="fas fa-play" aria-hidden="true" /> Run {runs} scenarios</button>}
+            : <button type="button" className="sim-button sim-button--primary" disabled={!active.length} onClick={start}><Icon name="play" size={15} /> Run {runs} scenarios</button>}
           {state.error && <p className="sim-field__feedback" role="status">{state.error}</p>}
         </div>
       </aside>
@@ -815,8 +841,10 @@ const SimulatorPage = () => {
   const [speed, setSpeed] = useState(0);
   const [sheet, setSheet] = useState(null);
   const [share, setShare] = useState('Share');
+  const [shareNotice, setShareNotice] = useState('');
   const [layers, setLayers] = useState({ contours: true, traps: true, residual: true, dissolved: false, pressure: false, flow: true });
   const [sectionLine, setSectionLine] = useState(null);
+  const [guideOpen, setGuideOpen] = useState(() => (simGuideShouldOpen() ? 'auto' : null));
   const autoplayed = useRef(false);
   const tabRefs = useRef({});
 
@@ -832,7 +860,8 @@ const SimulatorPage = () => {
   const frame = useMemo(() => simFrameAt(shown.frames, shownYear), [shown.frames, shownYear]);
   const row = useMemo(() => simRowAt(shown.history, shownYear), [shown.history, shownYear]);
 
-  useEffect(() => {
+  // A layout effect sets the palette before the first paint, so no brown flash shows.
+  React.useLayoutEffect(() => {
     const root = document.querySelector('.ve-standalone');
     root?.setAttribute('data-theme', theme);
     root?.setAttribute('data-palette', paletteId);
@@ -912,7 +941,16 @@ const SimulatorPage = () => {
   const copyLink = async () => {
     const ok = await simCopyText(window.location.href, navigator.clipboard);
     setShare(ok ? 'Link copied' : 'Copy the address bar');
-    setTimeout(() => setShare('Share'), 2200);
+    setShareNotice(simCopyNotice(ok, 'Link copied', 'Copy failed. Copy the link from the address bar.'));
+    setTimeout(() => { setShare('Share'); setShareNotice(''); }, 2200);
+  };
+  // Open the Method tab at its Verification section.
+  const openMethod = () => {
+    setSection('method');
+    setTimeout(() => {
+      const target = document.getElementById('m-verification');
+      if (target) { target.scrollIntoView(); target.focus({ preventScroll: true }); }
+    }, 60);
   };
   const exportRef = useRef(null);
   const paletteRef = useRef(null);
@@ -926,6 +964,39 @@ const SimulatorPage = () => {
     if (canvas) { (canvas.simComposite?.() || canvas).toBlob(blob => blob && simDownload(blob, `co2-${view}-year-${Math.round(shownYear)}.png`)); return; }
     const svg = document.querySelector('.sim-view svg.sim-view__svg');
     if (svg) simDownload(new XMLSerializer().serializeToString(svg), `co2-section-year-${Math.round(shownYear)}.svg`, 'image/svg+xml');
+  };
+
+  // The screening report: collect what the page already shows, then open it for print.
+  const uqReportRef = useRef(null);
+  const exportReport = () => {
+    exportRef.current?.removeAttribute('open');
+    if (!model || !row) return;
+    const root = document.querySelector('.ve-standalone') || document.body;
+    const css = window.getComputedStyle(root);
+    const classColors = {};
+    for (const item of SIM_INVENTORY) classColors[item.key] = css.getPropertyValue(item.color).trim();
+    const canvas = document.querySelector('.sim-view canvas[data-export]');
+    let mapPng = null;
+    try { mapPng = canvas ? (canvas.simComposite?.() || canvas).toDataURL('image/png') : null; } catch (_) { mapPng = null; }
+    const sectionSvg = canvas ? null : simReportInlineSvg(document.querySelector('.sim-view svg.sim-view__svg'));
+    const chartSvg = simReportInlineSvg(document.querySelector('.sim-chart svg'));
+    const data = {
+      generatedAt: new Date(),
+      scenarioName: VE2D.PRESETS[scenario.preset]?.label || 'Custom scenario',
+      shareUrl: window.location.href,
+      scenario,
+      finalYear: model.years,
+      finalRow: simRowAt(shown.history, model.years),
+      currentYear: shownYear,
+      currentRow: row,
+      classColors,
+      viewLabel: view === '3d' ? '3D block' : 'Map',
+      mapPng,
+      mapSvg: sectionSvg,
+      chartSvg,
+      uq: uqReportRef.current
+    };
+    simOpenReport(simReportHtml(data));
   };
 
   const onTabKey = event => {
@@ -965,18 +1036,20 @@ const SimulatorPage = () => {
         </div>
         <div className="sim-actions">
           <span className="sim-status-pill" data-state={run.status} role="status">{statusText}</span>
-          {section === 'simulator' && <button type="button" className="sim-button sim-inputs-trigger" onClick={() => setSheet('inputs')} aria-expanded={sheet === 'inputs'} aria-controls="sim-inputs"><i className="fas fa-sliders" aria-hidden="true" /><span className="sim-button__label">Inputs</span></button>}
-          <button type="button" className="sim-button" onClick={copyLink} aria-label="Copy a link to this scenario"><i className="fas fa-link" aria-hidden="true" /><span className="sim-button__label">{share}</span></button>
+          {section === 'simulator' && <button type="button" className="sim-button sim-inputs-trigger" onClick={() => setSheet('inputs')} aria-expanded={sheet === 'inputs'} aria-controls="sim-inputs" aria-label="Inputs"><Icon name="sliders" size={15} /><span className="sim-button__label">Inputs</span></button>}
+          <button type="button" className="sim-button" onClick={copyLink} aria-label={share === 'Share' ? 'Share: copy a link to this scenario' : share}><Icon name="link" size={15} /><span className="sim-button__label">{share}</span></button>
+          <span className="sim-sr-only" role="status" aria-live="polite">{shareNotice}</span>
           <details className="sim-menu" ref={exportRef}>
-            <summary className="sim-button" aria-label="Export"><i className="fas fa-download" aria-hidden="true" /><span className="sim-button__label">Export</span></summary>
+            <summary className="sim-button" aria-label="Export"><Icon name="download" size={15} /><span className="sim-button__label">Export</span></summary>
             <div className="sim-menu__panel">
               <button type="button" onClick={exportInventory}>Inventory through time <small>CSV</small></button>
               <button type="button" onClick={exportGrid} disabled={!frame}>Grid at this year <small>CSV</small></button>
               <button type="button" onClick={exportImage}>Current view <small>{view === 'section' ? 'SVG' : 'PNG'}</small></button>
+              <button type="button" onClick={exportReport} disabled={!model || !row}>Screening report <small>PDF</small></button>
             </div>
           </details>
           <details className="sim-menu sim-palettes" ref={paletteRef}>
-            <summary className="sim-button" aria-label="Colour palette"><i className="fas fa-palette" aria-hidden="true" /><span className="sim-button__label">Palette</span></summary>
+            <summary className="sim-button" aria-label="Palette: choose the colours"><Icon name="palette" size={15} /><span className="sim-button__label">Palette</span></summary>
             <fieldset className="sim-menu__panel">
               <legend className="sim-sr-only">Colour palette</legend>
               {SIM_PALETTES.map(option => (
@@ -991,7 +1064,7 @@ const SimulatorPage = () => {
             </fieldset>
           </details>
           <button type="button" className="sim-icon-button" onClick={() => setTheme(t => t === 'night' ? 'day' : 'night')} aria-label={theme === 'night' ? 'Switch to the day theme' : 'Switch to the night theme'}>
-            <i className="fas fa-circle-half-stroke" aria-hidden="true" />
+            <Icon name="circle-half-stroke" size={15} />
           </button>
         </div>
       </header>
@@ -1013,20 +1086,22 @@ const SimulatorPage = () => {
                   {SIM_VIEWS.map(item => <button key={item.id} type="button" aria-pressed={view === item.id} onClick={() => setView(item.id)}>{item.label}</button>)}
                 </div>
                 <div className="sim-overlay__right">
+                  {view === 'map' && <button type="button" id="sim-guide-button" className="sim-button" aria-haspopup="dialog" aria-expanded={!!guideOpen} onClick={() => setGuideOpen('button')}>Guide</button>}
                   {view !== 'section' && <SimLayersMenu layers={layers} onChange={setLayers} view={view} />}
                 </div>
               </div>
               {model && <SimLegend view={view} layers={layers} model={model} />}
             </div>
+            {view === 'map' && <SimFirstRun mode={guideOpen} onClose={() => setGuideOpen(null)} />}
             <SimTransport year={shownYear} years={model?.years || scenario.years} injYears={model?.injYears || scenario.injYears} computedYears={computedYears}
               playing={playing} speed={speed} onPlay={play} onSeek={seek} onSpeed={() => setSpeed(s => (s + 1) % SIM_SPEEDS.length)} />
           </section>
           <aside className="sim-rail sim-rail--outcomes" aria-label="Outcomes">
-            <SimOutcomes model={model} row={row} frame={frame} run={shown} history={shown.history} year={shownYear} onSeek={seek} />
+            <SimOutcomes model={model} row={row} frame={frame} run={shown} history={shown.history} year={shownYear} onSeek={seek} onMethod={openMethod} />
           </aside>
         </div>
       )}
-      <SimUncertainty scenario={scenario} onLoad={loadRealization} theme={theme} hidden={section !== 'uncertainty'} />
+      <SimUncertainty reportRef={uqReportRef} scenario={scenario} onLoad={loadRealization} theme={theme} hidden={section !== 'uncertainty'} />
       {section === 'method' && (
         <div className="sim-method" id="sim-panel-method" role="tabpanel" aria-labelledby="sim-tab-method">
           <GuidePage />

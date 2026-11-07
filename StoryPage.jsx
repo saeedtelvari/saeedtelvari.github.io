@@ -44,8 +44,8 @@ const StoryPage = () => {
     <React.Fragment>
       <SkipLink />
       <Header active="story" story onNavigate={navigate} />
-      <StoryStage onNavigate={navigate} />
       <main id="main-content" tabIndex={-1}>
+        <StoryStage onNavigate={navigate} />
         <StoryEnd />
       </main>
       <Footer onNavigate={navigate} />

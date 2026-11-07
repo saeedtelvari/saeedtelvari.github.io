@@ -138,6 +138,13 @@ const simSampleField = (model, values, x, y) => {
 // ---------------------------------------------------------------- legend & layers
 
 const SimLegend = ({ view, layers, model }) => {
+  // Depth range of the aquifer top, for the colour key and the contour note of the map.
+  const depthRange = useMemo(() => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const z of model.zt) { if (z < lo) lo = z; if (z > hi) hi = z; }
+    return { lo, hi, interval: simContourInterval(hi - lo) };
+  }, [model]);
   const hasFaults = model.faults.length > 0;
   const hasLeakyFault = model.faults.some(fault => fault.kf > 0);
   const hasTraps = model.traps.some(trap => trap.size >= 4);
@@ -147,6 +154,10 @@ const SimLegend = ({ view, layers, model }) => {
     { label: 'Residually trapped', swatch: 'var(--sim-c-residual)', kind: 'hatch' }
   ];
   if (view === 'section' || layers.dissolved) items.push({ label: 'Dissolved', swatch: 'var(--sim-c-dissolved)' });
+  if (view === 'map') {
+    items.push({ label: `Depth to aquifer top, ${simFormatNumber(depthRange.lo)} to ${simFormatNumber(depthRange.hi)} m`, ramp: true });
+    if (layers.contours) items.push({ label: `Contours of depth to aquifer top, every ${depthRange.interval} m`, swatch: 'var(--sim-ink)', kind: 'line' });
+  }
   if (view !== 'section') {
     if (hasLeakyFault) items.push({ label: 'Leaking fault', swatch: 'var(--sim-glow-leaked)', kind: 'line' });
     if (hasFaults) items.push({ label: view === '3d' ? 'Fault scarp' : 'Fault (ticks on downthrown side)', swatch: 'var(--sim-ink)', kind: 'line' });
@@ -157,7 +168,9 @@ const SimLegend = ({ view, layers, model }) => {
     <div className="sim-legend" role="list" aria-label="Legend">
       {items.map(item => (
         <div className="sim-legend__item" role="listitem" key={item.label}>
-          <span className={`sim-swatch${item.kind ? ` sim-swatch--${item.kind}` : ''}`} style={{ '--swatch': item.swatch }} aria-hidden="true" />
+          {item.ramp
+            ? <span className="sim-legend__ramp" aria-hidden="true" />
+            : <span className={`sim-swatch${item.kind ? ` sim-swatch--${item.kind}` : ''}`} style={{ '--swatch': item.swatch }} aria-hidden="true" />}
           {item.label}
         </div>
       ))}
@@ -176,7 +189,7 @@ const SimLayersMenu = ({ layers, onChange, view }) => {
   ].filter(([key]) => view === 'map' || (view === '3d' ? key !== 'flow' : !['contours', 'pressure', 'flow', 'traps'].includes(key)));
   return (
     <details className="sim-menu sim-layers">
-      <summary className="sim-button"><i className="fas fa-layer-group" aria-hidden="true" /> Layers</summary>
+      <summary className="sim-button"><Icon name="layer-group" size={15} /> Layers</summary>
       <div className="sim-menu__panel">
         {options.map(([key, label]) => (
           <label key={key}><input type="checkbox" checked={!!layers[key]} onChange={event => onChange({ ...layers, [key]: event.target.checked })} /> {label}</label>
@@ -326,9 +339,9 @@ const SimMapView = ({ model, frame, palette, layers, reducedMotion, line, onLine
           const y = toY(points[k + 1]);
           ctx.lineWidth = 3;
           ctx.strokeStyle = light ? palette.depth[1] : palette.depth[5];
-          ctx.strokeText(String(contour.level), x, y);
+          ctx.strokeText(`${contour.level} m`, x, y);
           ctx.fillStyle = light ? palette.depth[6] : palette.depth[0];
-          ctx.fillText(String(contour.level), x, y);
+          ctx.fillText(`${contour.level} m`, x, y);
         }
       }
     }
@@ -527,6 +540,11 @@ const SimMapView = ({ model, frame, palette, layers, reducedMotion, line, onLine
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('km', layout.ox + layout.w + 12, layout.oy + layout.h + 6);
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('km', layout.ox - 6, layout.oy - 8);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
     const bar = 5000 * layout.scale;
     const bx = layout.ox + 14;
     const by = layout.oy + layout.h - 16;
