@@ -1693,6 +1693,10 @@
 
 /* A small panel at the bottom left of the map. It sits above the legend. */
 /* It is a child of the stage. It shares the grid cell of the map view. */
+/* Place the map view and the transport bar by hand. Auto placement would move them. */
+.sim-stage > .sim-view { grid-row: 1; grid-column: 1; }
+.sim-stage > .sim-transport { grid-row: 2; grid-column: 1; }
+
 .sim-guide {
   grid-row: 1;
   grid-column: 1;
