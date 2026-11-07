@@ -56,7 +56,11 @@ const SIM_GUIDE_CARDS = [
   }
 ];
 
-const SimFirstRun = ({ open, onClose }) => {
+// mode is null (closed), 'auto' (first visit) or 'button' (the Guide button opened it).
+// The automatic open does not move focus. The visitor keeps the normal Tab order.
+const SimFirstRun = ({ mode, onClose }) => {
+  const open = !!mode;
+  const byButton = mode === 'button';
   const [index, setIndex] = useState(0);
   const nextRef = useRef(null);
   const last = index === SIM_GUIDE_CARDS.length - 1;
@@ -65,31 +69,25 @@ const SimFirstRun = ({ open, onClose }) => {
   const close = useCallback(() => {
     simGuideMarkSeen();
     onClose();
-    // Return focus to the Guide button.
-    const button = document.getElementById('sim-guide-button');
-    if (button) button.focus();
-  }, [onClose]);
+    // After a button open, return focus to the Guide button.
+    if (byButton) {
+      const button = document.getElementById('sim-guide-button');
+      if (button) button.focus();
+    }
+  }, [onClose, byButton]);
 
-  // Start at card 1 and move focus into the panel each time it opens.
+  // Start at card 1 each time the panel opens.
+  // Move focus into the panel only after a button open.
   useEffect(() => {
     if (!open) return;
     setIndex(0);
-    if (nextRef.current) nextRef.current.focus({ preventScroll: true });
-  }, [open]);
-
-  // Escape closes the guide.
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = event => {
-      if (event.key === 'Escape') close();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, close]);
+    if (byButton && nextRef.current) nextRef.current.focus({ preventScroll: true });
+  }, [open, byButton]);
 
   if (!open) return null;
   return (
-    <div className="sim-guide" role="dialog" aria-modal="false" aria-labelledby="sim-guide-title">
+    <div className="sim-guide" role="dialog" aria-modal="false" aria-labelledby="sim-guide-title"
+      onKeyDown={event => { if (event.key === 'Escape') close(); }}>
       <p className="sim-guide__count">{index + 1} of {SIM_GUIDE_CARDS.length}</p>
       <h2 className="sim-guide__title" id="sim-guide-title">{card.title}</h2>
       <div className="sim-guide__body" aria-live="polite">{card.body}</div>

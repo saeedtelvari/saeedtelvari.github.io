@@ -43,13 +43,22 @@ test('build.js lists SimFirstRun.jsx before SimulatorPage.jsx', () => {
 test('the dialog is labelled, not modal, and closes on Escape', () => {
   const source = read('SimFirstRun.jsx');
   assert.match(source, /role="dialog" aria-modal="false" aria-labelledby="sim-guide-title"/);
-  assert.match(source, /event\.key === 'Escape'/);
+  assert.match(source, /onKeyDown=\{event => \{ if \(event\.key === 'Escape'\) close\(\); \}\}/);
+});
+
+test('the automatic open does not move focus; only the Guide button does', () => {
+  const source = read('SimFirstRun.jsx');
+  assert.match(source, /if \(byButton && nextRef\.current\) nextRef\.current\.focus/);
+  assert.match(source, /if \(byButton\) \{\s*const button = document\.getElementById\('sim-guide-button'\)/);
+  assert.doesNotMatch(source, /document\.addEventListener\('keydown'/);
 });
 
 test('the Guide button has a name and the page mounts the guide', () => {
   const page = read('SimulatorPage.jsx');
   assert.match(page, /id="sim-guide-button"[^\n]*>Guide<\/button>/);
-  assert.match(page, /<SimFirstRun open=\{guideOpen\}/);
+  assert.match(page, /<SimFirstRun mode=\{guideOpen\}/);
+  assert.match(page, /setGuideOpen\('button'\)/);
+  assert.match(page, /simGuideShouldOpen\(\) \? 'auto' : null/);
 });
 
 test('the guide is hidden in print and stops animation under reduced motion', () => {
