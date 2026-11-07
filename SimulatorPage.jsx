@@ -28,9 +28,12 @@ const SIM_FRAME_YEARS = 5;
 const SIM_SPEEDS = [25, 60, 150];
 const SIM_THEME_KEY = 'co2-simulator-theme';
 const SIM_PALETTE_KEY = 'co2-simulator-palette';
+// The page default matches the homepage. The base CSS block stays Earth.
+const SIM_DEFAULT_PALETTE = 'north-sea';
 // Colour palettes (data-palette on the root; tokens in simulator-workbench.css). The
 // previews show four steps of the night rock ramp and three CO₂ colours.
 const SIM_PALETTES = [
+  { id: 'north-sea', label: 'North Sea night', hint: 'Slate rock, the homepage colours', ramp: ['#a9b6c4', '#738294', '#445367', '#1d2937'], fluids: ['#38e8d1', '#6a99ff', '#ff99c2'] },
   { id: 'earth', label: 'Earth', hint: 'Sandstone rock, gemstone CO₂', ramp: ['#c0a684', '#8b7157', '#59402e', '#2a140a'], fluids: ['#38e8d1', '#6a99ff', '#ff99c2'] },
   { id: 'shoreline', label: 'Shoreline', hint: 'Sand-to-navy rock, coastal CO₂', ramp: ['#baa88b', '#668276', '#2f4e5b', '#051a38'], fluids: ['#ff7f55', '#fbd530', '#6adcc4'] },
   { id: 'aurora', label: 'Aurora', hint: 'Moonlit rock, aurora CO₂', ramp: ['#b1c0cd', '#748496', '#3d4c62', '#0d1a32'], fluids: ['#47f4a3', '#ffc73a', '#fe7ccb'] },
@@ -177,9 +180,9 @@ const simPersistTheme = (theme, storage) => {
 const simStoredPalette = storage => {
   try {
     const value = storage?.getItem(SIM_PALETTE_KEY);
-    return SIM_PALETTES.some(option => option.id === value) ? value : 'earth';
+    return SIM_PALETTES.some(option => option.id === value) ? value : SIM_DEFAULT_PALETTE;
   } catch (_) {
-    return 'earth';
+    return SIM_DEFAULT_PALETTE;
   }
 };
 
@@ -832,7 +835,8 @@ const SimulatorPage = () => {
   const frame = useMemo(() => simFrameAt(shown.frames, shownYear), [shown.frames, shownYear]);
   const row = useMemo(() => simRowAt(shown.history, shownYear), [shown.history, shownYear]);
 
-  useEffect(() => {
+  // A layout effect sets the palette before the first paint, so no brown flash shows.
+  React.useLayoutEffect(() => {
     const root = document.querySelector('.ve-standalone');
     root?.setAttribute('data-theme', theme);
     root?.setAttribute('data-palette', paletteId);

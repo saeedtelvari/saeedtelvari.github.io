@@ -1,6 +1,7 @@
 /* CO2 Storage Simulator — "night survey" design system.
    Chrome is neutral; colour is reserved for data (inventory classes, depth, pressure).
-   Palettes (data-palette on .ve-standalone): Earth (default), Shoreline, Aurora,
+   Palettes (data-palette on .ve-standalone): North Sea (the page default), Earth (the
+   base block), Shoreline, Aurora,
    Thin section and Cyanotype, each with night and day tokens. Every set passed the
    categorical checks (lightness band, chroma floor, CVD and normal-vision separation,
    contrast) for its inventory colours; status colours (danger, warning) stay fixed. */
@@ -115,6 +116,97 @@
   --sim-rock-aquifer: #cdb7a1;
   --sim-rock-base: #8f6b57;
   --sim-rock-over: #f5f0e9;
+  color-scheme: light;
+}
+
+.ve-standalone[data-palette="north-sea"] {
+  /* North Sea night: the homepage night tokens with Earth's data colours */
+  --sim-bg: #0f1722;
+  --sim-surface: #16212f;
+  --sim-surface-2: #1c2a3b;
+  --sim-surface-3: #223349;
+  --sim-rule: #26354a;
+  --sim-rule-strong: #34475f;
+  --sim-ink: #e8edf2;
+  --sim-ink-muted: #9fb0c0;
+  --sim-ink-faint: #8396a9;
+  --sim-accent: #e8a15a;
+  --sim-accent-ink: #1e1206;
+  --sim-accent-soft: rgba(232, 161, 90, 0.14);
+  --sim-focus: #e8a15a;
+  --sim-danger: #ff8b80;
+  --sim-warning: #f2c66d;
+
+  --sim-c-dissolved: #32a0c5;
+  --sim-c-residual: #c1628a;
+  --sim-c-structural: #426bce;
+  --sim-c-free: #00a392;
+  --sim-c-exited: #8861a4;
+  --sim-c-leaked: #d64a33;
+  --sim-glow-free: #38e8d1;
+  --sim-glow-structural: #6a99ff;
+  --sim-glow-residual: #ff99c2;
+  --sim-glow-dissolved: #79e0ff;
+  --sim-glow-leaked: #ff6247;
+
+  --sim-depth-0: #a9b6c4;
+  --sim-depth-1: #8c9bab;
+  --sim-depth-2: #738294;
+  --sim-depth-3: #5b6a7d;
+  --sim-depth-4: #445367;
+  --sim-depth-5: #2f3d50;
+  --sim-depth-6: #1d2937;
+  --sim-contour: rgba(232, 237, 242, 0.3);
+  --sim-stage: #0b121b;
+  --sim-rock-cap: #4a5766;
+  --sim-rock-aquifer: #445367;
+  --sim-rock-base: #1d2937;
+  --sim-rock-over: #121b27;
+}
+
+.ve-standalone[data-palette="north-sea"][data-theme="day"] {
+  /* North Sea day: light slate surfaces, dark slate ink, Earth day data colours */
+  --sim-bg: #eef2f6;
+  --sim-surface: #fcfdfe;
+  --sim-surface-2: #f3f6f9;
+  --sim-surface-3: #e5ebf1;
+  --sim-rule: #d3dce5;
+  --sim-rule-strong: #b9c6d3;
+  --sim-ink: #18222e;
+  --sim-ink-muted: #4a5a6c;
+  --sim-ink-faint: #5b6c7f;
+  --sim-accent: #a4521b;
+  --sim-accent-ink: #ffffff;
+  --sim-accent-soft: rgba(164, 82, 27, 0.1);
+  --sim-focus: #a4521b;
+  --sim-danger: #b4232a;
+  --sim-warning: #8a5a00;
+
+  --sim-c-dissolved: #0082a9;
+  --sim-c-residual: #b14576;
+  --sim-c-structural: #2d54bc;
+  --sim-c-free: #008f7f;
+  --sim-c-exited: #784d96;
+  --sim-c-leaked: #c83c25;
+  --sim-glow-free: #008f7f;
+  --sim-glow-structural: #2d54bc;
+  --sim-glow-residual: #b14576;
+  --sim-glow-dissolved: #0082a9;
+  --sim-glow-leaked: #c83c25;
+
+  --sim-depth-0: #eaf0f6;
+  --sim-depth-1: #cfd9e3;
+  --sim-depth-2: #b5c2d0;
+  --sim-depth-3: #9ba9bb;
+  --sim-depth-4: #8190a5;
+  --sim-depth-5: #69788f;
+  --sim-depth-6: #536279;
+  --sim-contour: rgba(24, 34, 46, 0.38);
+  --sim-stage: #f6f9fb;
+  --sim-rock-cap: #c4ccd6;
+  --sim-rock-aquifer: #b5c2d0;
+  --sim-rock-base: #69788f;
+  --sim-rock-over: #eef2f6;
   color-scheme: light;
 }
 

@@ -135,14 +135,14 @@ test('a blocked storage falls back to the night theme', () => {
   assert.equal(h.simStoredTheme(null), 'night');
 });
 
-test('every palette defines a full night and day token set, Earth by default', () => {
+test('every palette defines a full night and day token set, North Sea by default', () => {
   const css = read('simulator-workbench.css');
   const blockOf = selector => {
     const start = css.indexOf(`${selector} {`);
     assert.ok(start >= 0, `missing ${selector}`);
     return css.slice(start, css.indexOf('}', start));
   };
-  assert.deepEqual(plain(h.SIM_PALETTES.map(p => p.id)), ['earth', 'shoreline', 'aurora', 'thin-section', 'cyanotype']);
+  assert.deepEqual(plain(h.SIM_PALETTES.map(p => p.id)), ['north-sea', 'earth', 'shoreline', 'aurora', 'thin-section', 'cyanotype']);
   for (const { id } of h.SIM_PALETTES) {
     const night = id === 'earth' ? '.ve-standalone' : `.ve-standalone[data-palette="${id}"]`;
     const day = id === 'earth' ? '.ve-standalone[data-theme="day"]' : `.ve-standalone[data-palette="${id}"][data-theme="day"]`;
@@ -164,11 +164,12 @@ test('every palette defines a full night and day token set, Earth by default', (
   assert.deepEqual(plain(h.SIM_INVENTORY.map(item => item.key)), ['dissolved', 'residual', 'structural', 'free', 'exited', 'leaked']);
 });
 
-test('an unknown or blocked stored palette falls back to Earth', () => {
-  assert.equal(h.simStoredPalette({ getItem() { throw new Error('blocked'); } }), 'earth');
+test('an unknown or blocked stored palette falls back to North Sea', () => {
+  assert.equal(h.simStoredPalette({ getItem() { throw new Error('blocked'); } }), 'north-sea');
   assert.equal(h.simStoredPalette({ getItem: () => 'aurora' }), 'aurora');
-  assert.equal(h.simStoredPalette({ getItem: () => 'indigo' }), 'earth');
-  assert.equal(h.simStoredPalette(null), 'earth');
+  assert.equal(h.simStoredPalette({ getItem: () => 'earth' }), 'earth');
+  assert.equal(h.simStoredPalette({ getItem: () => 'indigo' }), 'north-sea');
+  assert.equal(h.simStoredPalette(null), 'north-sea');
 });
 
 test('motion is restrained and switched off for reduced-motion users', () => {
