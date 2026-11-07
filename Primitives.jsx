@@ -45,6 +45,7 @@ const Icon = ({ name, size = 18, className = '' }) => {
       fill={icon.fill ? 'currentColor' : 'none'} stroke={icon.fill ? 'none' : 'currentColor'}
       strokeWidth={icon.fill ? undefined : 1.8} strokeLinecap="round" strokeLinejoin="round">
       <path d={icon.d} />
+      {icon.d2 && <path d={icon.d2} fill="currentColor" stroke="none" />}
     </svg>
   );
 };
