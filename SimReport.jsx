@@ -5,6 +5,10 @@
 
 const SIM_REPORT_URL = 'https://saeedtelvari.github.io/simulator.html';
 
+// The labels of the "Model edges and grid" group in the inputs rail.
+const SIM_REPORT_GRIDS = { coarse: '500 m', standard: '250 m', fine: '167 m' };
+const SIM_REPORT_EDGES = { open: 'Open', closed: 'Closed' };
+
 const simReportEscape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
 // Text with *italic* marks, as the reference list uses, becomes safe HTML.
@@ -96,8 +100,8 @@ const simReportPlumeTable = (final, current) => {
 
 const simReportInputs = scenario => {
   const items = Object.keys(SIM_FIELDS).map(key => `<div><dt>${simReportEscape(SIM_FIELDS[key].label)}</dt><dd>${simReportValue(scenario[key], SIM_FIELDS[key])}</dd></div>`);
-  items.push(`<div><dt>Grid</dt><dd>${simReportEscape(scenario.grid)}</dd></div>`);
-  items.push(`<div><dt>Model edges</dt><dd>${simReportEscape(scenario.boundary)}</dd></div>`);
+  items.push(`<div><dt>Grid cell size</dt><dd>${simReportEscape(SIM_REPORT_GRIDS[scenario.grid] || scenario.grid)}</dd></div>`);
+  items.push(`<div><dt>Model edges</dt><dd>${simReportEscape(SIM_REPORT_EDGES[scenario.boundary] || scenario.boundary)}</dd></div>`);
   const faults = scenario.faults || [];
   const faultKeys = Object.keys(SIM_FAULT_FIELDS);
   const faultTable = faults.length
@@ -195,7 +199,7 @@ const simReportInlineSvg = svg => {
 };
 
 // Show the report in the same tab when the browser blocks the new window.
-const simReportOverlay = (html, onNote) => {
+const simReportOverlay = html => {
   const wrap = document.createElement('div');
   wrap.setAttribute('role', 'dialog');
   wrap.setAttribute('aria-label', 'Screening report');
@@ -205,7 +209,7 @@ const simReportOverlay = (html, onNote) => {
   const note = document.createElement('span');
   note.setAttribute('role', 'status');
   note.style.flex = '1';
-  note.textContent = 'Your browser blocked the pop-up, so the report is shown here. Choose Print, then Save as PDF.';
+  const message = 'Your browser blocked the pop-up, so the report is shown here. Choose Print, then Save as PDF.';
   const print = document.createElement('button');
   print.type = 'button';
   print.textContent = 'Print';
@@ -223,14 +227,15 @@ const simReportOverlay = (html, onNote) => {
   close.addEventListener('click', () => wrap.remove());
   wrap.addEventListener('keydown', event => { if (event.key === 'Escape') wrap.remove(); });
   print.focus();
-  if (onNote) onNote('Pop-up blocked. The report is shown in this tab.');
+  // The text is set after the overlay is in the page, so a screen reader announces it.
+  setTimeout(() => { note.textContent = message; }, 50);
 };
 
 // Open the report in a new window and print it after the images load.
-const simOpenReport = (html, { onNote } = {}) => {
+const simOpenReport = html => {
   let win = null;
   try { win = window.open('', '_blank'); } catch (_) { win = null; }
-  if (!win) { simReportOverlay(html, onNote); return 'overlay'; }
+  if (!win) { simReportOverlay(html); return 'overlay'; }
   win.document.open();
   win.document.write(html);
   win.document.close();

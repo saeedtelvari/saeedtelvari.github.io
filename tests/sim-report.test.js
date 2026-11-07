@@ -123,6 +123,20 @@ test('the report has A4 print rules and no external fetch', () => {
   assert.ok(!/<link |<script|src="https?:|url\(https?:/.test(html));
 });
 
+test('the grid prints its cell size and the edges print the page label', () => {
+  const html = (grid, boundary) => api.simReportHtml(data({ scenario: { ...scenario, grid, boundary } }));
+  assert.match(html('coarse', 'open'), /Grid cell size<\/dt><dd>500 m<\/dd>/);
+  assert.match(html('standard', 'closed'), /Grid cell size<\/dt><dd>250 m<\/dd>/);
+  assert.match(html('fine', 'open'), /Grid cell size<\/dt><dd>167 m<\/dd>/);
+  assert.match(html('standard', 'closed'), /Model edges<\/dt><dd>Closed<\/dd>/);
+  assert.ok(!html('standard', 'open').includes('standard m'));
+});
+
+test('the report code does not touch the Share label', () => {
+  assert.ok(!/setShare\([^)]*(blocked|Pop-up)/i.test(read('SimulatorPage.jsx')));
+  assert.match(read('SimReport.jsx'), /setAttribute\('role', 'status'\)/);
+});
+
 test('build.js lists SimReport.jsx before SimulatorPage.jsx and the page has the menu item', () => {
   const build = read('build.js');
   assert.ok(build.indexOf("'SimReport.jsx'") > 0);

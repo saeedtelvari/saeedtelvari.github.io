@@ -960,7 +960,7 @@ const SimulatorPage = () => {
       chartSvg,
       uq: uqReportRef.current
     };
-    simOpenReport(simReportHtml(data), { onNote: text => { setShare(text); setTimeout(() => setShare('Share'), 6000); } });
+    simOpenReport(simReportHtml(data));
   };
 
   const onTabKey = event => {
