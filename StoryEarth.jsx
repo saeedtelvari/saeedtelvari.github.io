@@ -335,9 +335,14 @@ const storyEarthLayout = (width, height, still = false) => {
     // Above 640 px the caption stands at the left, so the map starts lower.
     const top = Math.max(W <= 640 ? 128 + 25.5 * Math.ceil(1400 / room) + 12 + 44 + 14 : 360, clear('fields') + 14);
     fields = { x: 16, y: top, w: W - 32, h: H - Math.max(16, bar) - top };
-    const s = storyEarthClamp(W / 260, 1.2, 2);
-    // The label of the well (y = 440 in the side view) stays above the chapter bar.
-    scene = { s, ox: 0.52 * W - 548 * s, oy: Math.min(0.52 * H - 232 * s, bar > 0 ? H - bar - 12 - 440 * s : Infinity) };
+    let s = storyEarthClamp(W / 260, 1.2, 2);
+    // The side view has the top of the platform at y = 150 and the label of the well at y = 440 (scene units).
+    // It must stay below the caption and above the chapter bar. If both limits do not fit, the scene gets smaller.
+    const capTop = clear('descent') > 0 ? clear('descent') + 8 : 0;
+    const floorY = bar > 0 ? H - bar - 12 : H;
+    if (bar > 0 && capTop > 0) s = Math.max(0.8, Math.min(s, (floorY - capTop) / 290));
+    const oyWant = Math.min(0.52 * H - 232 * s, bar > 0 ? floorY - 440 * s : Infinity);
+    scene = { s, ox: 0.52 * W - 548 * s, oy: Math.max(oyWant, capTop > 0 ? capTop - 150 * s : -Infinity) };
     const iw = storyEarthClamp(0.29 * W, 112, 200);
     // The caption of descent: 25.5 px for each line, below 128 px.
     const below = Math.max(W <= 640 ? 128 + 25.5 * Math.ceil(640 / room) : 190, clear('descent'));
