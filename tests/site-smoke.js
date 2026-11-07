@@ -61,14 +61,14 @@ lacks('GuidePage.jsx', /\*\*Brooks-Corey/, 'raw Markdown markers must not be vis
 
 has('SimulatorPage.jsx', /role="tab"/, 'simulator tabs need tab semantics');
 has('SimulatorPage.jsx', /tabIndex=\{section ===/, 'simulator tabs need roving keyboard focus');
-has('SimulatorPage.jsx', /Copy a link to this scenario/, 'simulator state needs a share action');
+has('SimulatorPage.jsx', /copy a link to this scenario/, 'simulator state needs a share action');
 has('SimulatorPage.jsx', /Inventory through time/, 'simulator results need CSV export');
 has('SimulatorPage.jsx', /Current view/, 'simulator visualization needs image export');
 has('SimulatorPage.jsx', /new Worker\(['"]\.\/simulation-worker\.js/, 'simulation runs and uncertainty batches must run off the main thread');
 has('SimulatorPage.jsx', /<details/, 'mobile controls need progressive disclosure');
 assert.ok(fs.existsSync(path.join(root, 'simulation-worker.js')), 'simulation worker must exist');
 assert.ok(!fs.existsSync(path.join(root, 'uq-worker.js')), 'the old copy of the solver must stay deleted');
-has('simulator.html', /KaTeX\/0\.16\.9\/katex\.min\.js/, 'method equations need the pinned KaTeX build');
+has('GuidePage.jsx', /KaTeX\/0\.16\.9\/katex\.min/, 'method equations need the pinned KaTeX build, loaded on demand');
 has('simulator.html', /<title>VE simulator: CO₂ storage — Sa'eed Telvari<\/title>/, 'simulator needs its plain page name');
 has('ve-story.html', /<title>How VE models work — Sa'eed Telvari<\/title>/, 'the story page needs its title');
 has('ve-story.html', /data-page="story"/, 'the story page renders its own entry');

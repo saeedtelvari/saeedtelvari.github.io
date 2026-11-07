@@ -44,7 +44,7 @@ const simUseHover = () => {
 const SimInventoryChart = ({ history, year, years, injYears, onSeek }) => {
   const [chartRef, W] = simUseWidth(300);
   const H = 176;
-  const m = { left: 34, right: 8, top: 8, bottom: 22 };
+  const m = { left: 42, right: 8, top: 8, bottom: 22 };
   const [hover, onMove, onLeave] = simUseHover();
   const geometry = useMemo(() => {
     if (!history || history.length < 2) return null;
@@ -79,7 +79,7 @@ const SimInventoryChart = ({ history, year, years, injYears, onSeek }) => {
         onPointerMove={event => onMove(event, W, H)} onPointerLeave={onLeave}
         onClick={() => hoverYear !== null && onSeek(hoverYear)} style={{ cursor: 'crosshair' }}>
         {yTicks.map(t => <g key={t}><line className="sim-chart__grid" x1={m.left} x2={W - m.right} y1={y(t)} y2={y(t)} /><text x={m.left - 6} y={y(t) + 4} textAnchor="end">{t}</text></g>)}
-        <text x={4} y={m.top + 4}>Mt</text>
+        <text className="sim-chart__unit" transform={`rotate(-90 11 ${(m.top + H - m.bottom) / 2})`} x={11} y={(m.top + H - m.bottom) / 2 + 4} textAnchor="middle">Mt CO₂</text>
         <rect x={x(0)} y={m.top} width={x(injYears) - x(0)} height={H - m.top - m.bottom} fill="var(--sim-accent-soft)" />
         {layers.map(layer => <path key={layer.key} d={layer.path} fill={`var(${layer.color})`} stroke="var(--sim-surface)" strokeWidth="0.75" />)}
         <path className="sim-chart__injected" d={injected} />

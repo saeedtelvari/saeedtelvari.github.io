@@ -28,17 +28,52 @@ const SIM_REFERENCES = [
   "Nordbotten and Celia (2012). *Geological Storage of CO₂: Modeling Approaches for Large-Scale Simulation*. Wiley.",
   "Peaceman (1978). Interpretation of well-block pressures in numerical reservoir simulation. *SPE Journal* 18(3)."
 ];
+// The DOI of each reference, in the same order. Each one was checked against Crossref.
+const SIM_REFERENCE_DOIS = [
+  '10.1016/j.cageo.2013.04.024',
+  '10.2118/99326-pa',
+  '10.1306/08010201128',
+  '10.1007/s10596-009-9138-x',
+  '10.1017/s002211200800219x',
+  '10.1016/j.earscirev.2004.06.003',
+  '10.1016/j.advwatres.2015.04.007',
+  '10.1017/jfm.2011.379',
+  '10.1144/petgeo.5.1.53',
+  '10.1029/2010gl044728',
+  '10.1007/s10596-015-9547-y',
+  '10.1017/s0022112006000802',
+  '10.1002/9781118137086',
+  '10.2118/6893-pa'
+];
 const simEmphasis = text => text.split("*").map((part, i) => (i % 2 ? <em key={i}>{part}</em> : part));
 // end of shared text
+
+// KaTeX loads once, when the Method tab first opens. The simulator page does not fetch it.
+const SIM_KATEX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min';
+const simLoadKatex = () => {
+  if (window.katex || window.__simKatexRequested) return;
+  window.__simKatexRequested = true;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `${SIM_KATEX_URL}.css`;
+  document.head.appendChild(link);
+  const script = document.createElement('script');
+  script.src = `${SIM_KATEX_URL}.js`;
+  script.async = true;
+  script.onload = () => window.dispatchEvent(new Event('sim-katex-ready'));
+  document.head.appendChild(script);
+};
 
 const SimTex = ({ tex, block = false }) => {
   const ref = useRef(null);
   const [ready, setReady] = useState(typeof window !== 'undefined' && !!window.katex);
   useEffect(() => {
     if (ready) return undefined;
+    const done = () => { if (window.katex) setReady(true); };
+    window.addEventListener('sim-katex-ready', done);
     const timer = setInterval(() => { if (window.katex) { setReady(true); clearInterval(timer); } }, 200);
-    const stop = setTimeout(() => clearInterval(timer), 8000);
-    return () => { clearInterval(timer); clearTimeout(stop); };
+    const stop = setTimeout(() => clearInterval(timer), 30000);
+    return () => { window.removeEventListener('sim-katex-ready', done); clearInterval(timer); clearTimeout(stop); };
   }, [ready]);
   useEffect(() => {
     if (ready && ref.current) window.katex.render(tex, ref.current, { displayMode: block, throwOnError: false });
@@ -65,6 +100,7 @@ const SIM_METHOD_SECTIONS = [
 ];
 
 const GuidePage = () => {
+  useEffect(() => { simLoadKatex(); }, []);
   const d = VE2D.DEFAULTS;
   const rows = [
     ['Permeability', 'k', `${d.permMd} mD`, 'Homogeneous'],
@@ -225,7 +261,7 @@ const GuidePage = () => {
           micrometre do not move.
         </p>
 
-        <h2 id="m-verification">Verification</h2>
+        <h2 id="m-verification" tabIndex={-1}>Verification</h2>
         <p>The engine is tested in Node on every change. The current results:</p>
         <table>
           <thead><tr><th>Check</th><th>Result</th></tr></thead>
@@ -252,7 +288,7 @@ const GuidePage = () => {
 
         <h2 id="m-references">References</h2>
         <ul>
-          {SIM_REFERENCES.map(text => <li key={text}>{simEmphasis(text)}</li>)}
+          {SIM_REFERENCES.map((text, i) => <li key={text}>{simEmphasis(text)} <a href={`https://doi.org/${SIM_REFERENCE_DOIS[i]}`} rel="noopener">doi:{SIM_REFERENCE_DOIS[i]}</a></li>)}
         </ul>
       </article>
     </div>

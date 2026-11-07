@@ -160,7 +160,7 @@ ${simReportUq(data.uq)}
 <h2>Limitations</h2>
 <ul class="plain">${SIM_LIMITATIONS.map(text => `<li>${simReportEscape(text)}</li>`).join('')}</ul>
 <h2>References</h2>
-<ul class="plain refs">${SIM_REFERENCES.map(text => `<li>${simReportEm(text)}</li>`).join('')}</ul>
+<ul class="plain refs">${SIM_REFERENCES.map((text, i) => `<li>${simReportEm(text)}${SIM_REFERENCE_DOIS[i] ? ` doi:${simReportEscape(SIM_REFERENCE_DOIS[i])}` : ''}</li>`).join('')}</ul>
 <footer>Made with the VE simulator, <a href="${SIM_REPORT_URL}">${SIM_REPORT_URL}</a></footer>
 </body></html>`;
 };
