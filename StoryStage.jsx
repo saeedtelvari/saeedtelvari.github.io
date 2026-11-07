@@ -239,6 +239,11 @@ const storyCount = (ms, from, to) => {
 const STORY_MAX_DPR = 2;
 const STORY_REDUCED_QUERY = '(prefers-reduced-motion: reduce)';
 
+// The real bottom of the caption block of each chapter, in px from the top of the stage. The pinned stage measures it
+// (see measureCaptions). The art keeps its clear band below this line (StoryEarth.jsx). It is empty until the first
+// measure, and the art then uses its own estimate.
+const STORY_CAPTION_BOTTOM = {};
+
 // The renderers of the chapters. StoryChapters.jsx fills it with placeholders.
 const STORY_RENDERERS = {};
 
@@ -501,12 +506,27 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
       }
     };
 
+    // Measures the real bottom of each caption block. The art keeps its clear band below it.
+    // It returns true when a value changed, so the caller draws again.
+    const measureCaptions = () => {
+      if (!stage.querySelectorAll || !stage.getBoundingClientRect) return false;
+      const top = stage.getBoundingClientRect().top;
+      let changed = false;
+      stage.querySelectorAll('.story-chapter').forEach(node => {
+        const id = node.getAttribute('data-chapter');
+        const bottom = Math.round(node.getBoundingClientRect().bottom - top);
+        if (STORY_CAPTION_BOTTOM[id] !== bottom) { STORY_CAPTION_BOTTOM[id] = bottom; changed = true; }
+      });
+      return changed;
+    };
+
     const resize = () => {
       width = stage.clientWidth;
       height = stage.clientHeight;
       dpr = Math.min(window.devicePixelRatio || 1, STORY_MAX_DPR);
       canvas.width = Math.max(1, Math.round(width * dpr));
       canvas.height = Math.max(1, Math.round(height * dpr));
+      measureCaptions();
       dirty = true;
     };
 
@@ -683,7 +703,7 @@ const StoryPinned = ({ sectionRef, onNavigate }) => {
     window.addEventListener('wheel', onWheel, { passive: true });
     document.addEventListener('visibilitychange', onVisibility);
     // The canvas text changes when the web fonts arrive.
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { dirty = true; schedule(); });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measureCaptions(); dirty = true; schedule(); });
     resize();
     // The page can open in the middle of the story (a restored scroll). The stage under the viewport plays at once.
     director = storyPlay(nearest(section.getBoundingClientRect()));

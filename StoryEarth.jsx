@@ -307,6 +307,9 @@ const storyEarthLayout = (width, height, still = false) => {
   const W = width;
   const H = height;
   const compact = !still && (W <= 640 || W < 0.9 * H);
+  // The real bottom of each caption block, measured by the pinned stage. A chapter that is not measured yet has 0.
+  const seen = !still && typeof STORY_CAPTION_BOTTOM === 'object' ? STORY_CAPTION_BOTTOM : {};
+  const clear = id => (seen[id] > 0 ? seen[id] : 0);
   const skip = still ? 0 : 128;
   let globe;
   let keep;
@@ -320,20 +323,20 @@ const storyEarthLayout = (width, height, still = false) => {
     const R = 0.78 * W;
     // The bottom of the caption. In the band at the top (below 641 px) it depends on the number of lines.
     const room = W - 32;
-    const bottom = W <= 640 ? 128 + 36 + 11 + 25.5 * Math.ceil(1000 / room) + 11 + 21 * Math.ceil(302 / room) : 340;
+    const bottom = Math.max(W <= 640 ? 128 + 36 + 11 + 25.5 * Math.ceil(1000 / room) + 11 + 21 * Math.ceil(302 / room) : 340, clear('orbit') + 12);
     globe = { cx: 0.5 * W, cy: Math.max(0.46 * H, 360, bottom + 34 * R / 330 + 14) + R, R };
     keep = { x: 0.5 * W, y: bottom };
-    const y = Math.max(0.42 * H, 352);
+    const y = Math.max(0.42 * H, 352, bottom + 12);
     card = { x: 16, y, w: W - 32, h: H - 24 - y };
     // The caption of fields has 4 or 5 lines (143 characters, 1400 px at the most), and the button "Map data and sources" is under it.
     // Above 640 px the caption stands at the left, so the map starts lower.
-    const top = W <= 640 ? 128 + 25.5 * Math.ceil(1400 / room) + 12 + 44 + 14 : 360;
+    const top = Math.max(W <= 640 ? 128 + 25.5 * Math.ceil(1400 / room) + 12 + 44 + 14 : 360, clear('fields') + 14);
     fields = { x: 16, y: top, w: W - 32, h: H - 16 - top };
     const s = storyEarthClamp(W / 260, 1.2, 2);
     scene = { s, ox: 0.52 * W - 548 * s, oy: 0.52 * H - 232 * s };
     const iw = storyEarthClamp(0.29 * W, 112, 200);
     // The caption of descent: 25.5 px for each line, below 128 px.
-    const below = W <= 640 ? 128 + 25.5 * Math.ceil(640 / room) : 190;
+    const below = Math.max(W <= 640 ? 128 + 25.5 * Math.ceil(640 / room) : 190, clear('descent'));
     inset = { x: W - 16 - iw, y: Math.max(216, below + 12), w: iw, h: iw * 0.73 };
     const left = -scene.ox / s;
     sun = { x: 0.27 * W, y: Math.max(0.34 * H, below + 36), r: 20 };
