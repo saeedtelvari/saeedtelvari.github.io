@@ -203,6 +203,15 @@ const SubsurfaceHero = ({ onNavigate }) => {
   const [hidden, setHidden] = useState(() => document.hidden);
   const [exaggeration, setExaggeration] = useState(2);
   const [ship, setShip] = useState({ phase: 'away', p: 1 });
+  // Three steps. Step 0 draws the identity, the sky colour and the section. Step 1 adds the sky decoration and
+  // the sea. Step 2 adds the platform and the carrier. Each step runs as a transition, so React time-slices it
+  // and the main thread stays free for input and for the loader fade. Each step commits a small tree, so no
+  // commit is a long task.
+  const [step, setStep] = useState(0);
+  const late = step >= 2;
+  useEffect(() => {
+    if (step < 2) React.startTransition(() => setStep(step + 1));
+  }, [step]);
   // The first paint never waits for the network. The hero starts with the cache or the typical night, then applies the live weather.
   const [weather, setWeather] = useState(() => heroWeatherInitial(window));
   const moon = useMemo(() => {
@@ -252,8 +261,9 @@ const SubsurfaceHero = ({ onNavigate }) => {
   }, []);
 
   // One clock drives the carrier and the model: injection years wait until the carrier is moored and connected.
+  // The clock waits for the second step. A per-frame update would restart that transition at every frame.
   useEffect(() => {
-    if (!heroShouldTick({ playing, visible, hidden })) return undefined;
+    if (!late || !heroShouldTick({ playing, visible, hidden })) return undefined;
     let frameId = 0, last = 0;
     const tick = now => {
       const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
@@ -274,7 +284,7 @@ const SubsurfaceHero = ({ onNavigate }) => {
     };
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [run, playing, speed, visible, hidden, shipSeconds]);
+  }, [late, run, playing, speed, visible, hidden, shipSeconds]);
 
   const frame = useMemo(() => (run ? heroFrameAt(run, year) : null), [run, year]);
   // The strongest leak of this run sets the scale: its dots move about 40 px/s at full migration speed.
@@ -302,12 +312,12 @@ const SubsurfaceHero = ({ onNavigate }) => {
   return (
     <section id="home" ref={heroRef} className="hero-scene" aria-labelledby="hero-name" data-visible={visible && !hidden ? 'true' : 'false'}
       style={{ '--hero-swell': scene.swell, '--hero-foam': scene.foam }}>
-      <Sky weather={scene} />
+      <Sky weather={scene} late={step >= 1} />
       <HeroSection sectionRef={sectionRef} />
       <HeroPlume frame={frame} leakScale={leakScale} />
       <HeroOverlay />
       <HeroWell flow={flow} />
-      <SurfaceSite geology={heroGeology} flow={flow} ship={ship} />
+      {late && <SurfaceSite geology={heroGeology} flow={flow} ship={ship} />}
       <HeroLabels />
       <HeroLeakReadout frame={frame} year={year} injectionYears={injectionYears} />
       <Identity onNavigate={onNavigate} />
@@ -604,22 +614,76 @@ const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, ship, ex
 
 /* =====================================================
    Sky — moonlight and drifting clouds above a Highland field site.
+   The weather reaches the sky through CSS custom properties on one container, so the large static parts
+   are built once. Only the moon phase and the number of rain drops can build again, and they are small.
    ===================================================== */
-const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
-  const skyRef = useRef(null);
+const Sky = ({ weather = HERO_WEATHER_DEFAULT, late = true } = {}) => {
   // The weather sets the art. Cloud sets the cloud layer, the overcast deck and the stars. Fog sets the haze.
   // Rain sets the number of drops. The moon disc shows the real phase (moonPath is the lit part).
   const { cloud = 0.35, fog = 0, rain = 0.5, moonPath = null } = weather;
-  const starsOpacity = Math.max(0, (1 - 0.9 * cloud) * (1 - 0.6 * fog));
-  const cloudOpacity = Math.min(1, 0.2 + cloud);
-  const deckOpacity = cloud >= 0.7 ? 0.45 + 0.4 * Math.min(1, (cloud - 0.7) / 0.3) : 0;
-  const dropCount = Math.round(16 + 96 * rain);
-  const newMoon = moonPath === '';
+  const heroSkyRound = value => Math.round(value * 1000) / 1000;
+  const deck = cloud >= 0.7 ? 0.45 + 0.4 * Math.min(1, (cloud - 0.7) / 0.3) : 0;
+  const vars = {
+    '--wx-stars': heroSkyRound(Math.max(0, (1 - 0.9 * cloud) * (1 - 0.6 * fog))),
+    '--wx-cloud': heroSkyRound(Math.min(1, 0.2 + cloud)),
+    '--wx-deck': heroSkyRound(deck),
+    '--wx-fog': heroSkyRound(fog),
+    '--wx-horizon': fog > 0 ? heroSkyRound(1 - 0.85 * fog) : 1,
+    '--wx-moon-op': fog > 0 ? 0.5 : heroSkyRound(1 - 0.4 * cloud),
+    '--moon-glow': weather.moon,
+  };
+  return (
+  <div data-layer="sky" aria-hidden="true" style={{
+    position: 'absolute', inset: '0 0 auto', height: 'var(--hero-surface)',
+    overflow: 'hidden', pointerEvents: 'none',
+    background: 'linear-gradient(180deg, #070d1a 0%, #111e32 58%, #253449 100%)',
+    ...vars,
+  }}>
+    <div style={{
+      position: 'absolute', inset: 0,
+      background: 'radial-gradient(ellipse at 95.5% 28%, rgba(159,183,209,0.1), transparent 52%)',
+    }}/>
+    {late && <SkyBack moonPath={moonPath} />}
+    {/* A dark left veil protects the identity; a cool horizon ties into the blue reservoirs. */}
+    <div style={{
+      position: 'absolute', inset: 0,
+      background: 'linear-gradient(90deg, rgba(8,14,28,0.94) 0%, rgba(8,14,28,0.72) 29%, rgba(8,14,28,0.15) 58%, transparent 78%)',
+    }}/>
+    {late && <SkyFront weather={weather} rain={rain} />}
+  </div>
+  );
+};
+
+// Stars, moon, clouds, overcast deck and fog. They mount in the second step, after the first paint.
+const SkyBack = ({ moonPath }) => (
+  <>
+    <SkyStars />
+    <div className="hero-moon" style={{ opacity: 'var(--wx-moon-op)' }}><SkyMoon moonPath={moonPath} /></div>
+    <SkyClouds />
+    {/* A flat overcast deck covers the upper sky when cloud is 70 percent or more. Its lower edge is soft. */}
+    <div className="hero-deck" style={{ opacity: 'var(--wx-deck)' }} />
+    {/* Fog: a flat haze that rises from the horizon. */}
+    <div className="hero-fog" style={{ opacity: 'var(--wx-fog)' }} />
+  </>
+);
+
+// The horizon haze, the sea strip, the distant features and the rain.
+const SkyFront = ({ weather, rain }) => (
+  <>
+    <SkyHaze />
+    <HeroSea weather={weather} />
+    <SkyHorizon />
+    <SkyRain rain={rain} live={!!weather.live} />
+  </>
+);
+
+const SkyStars = React.memo(() => {
+  const layerRef = useRef(null);
   useEffect(() => {
-    const sky = skyRef.current;
-    const hero = sky.closest('#home');
-    const starsLayer = sky.querySelector('.hero-stars');
-    const stars = [...starsLayer.children];
+    const layer = layerRef.current;
+    const sky = layer.closest('[data-layer="sky"]');
+    const hero = layer.closest('#home');
+    const stars = [...layer.children];
     const motion = window.matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)');
     let frame;
     const reset = () => {
@@ -656,18 +720,8 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
       motion.removeEventListener('change', reset);
     };
   }, []);
-
-  return useMemo(() => (
-  <div ref={skyRef} data-layer="sky" aria-hidden="true" style={{
-    position: 'absolute', inset: '0 0 auto', height: 'var(--hero-surface)',
-    overflow: 'hidden', pointerEvents: 'none',
-    background: 'linear-gradient(180deg, #070d1a 0%, #111e32 58%, #253449 100%)',
-  }}>
-    <div style={{
-      position: 'absolute', inset: 0,
-      background: 'radial-gradient(ellipse at 95.5% 28%, rgba(159,183,209,0.1), transparent 52%)',
-    }}/>
-    <div className="hero-stars" style={{ opacity: starsOpacity }}>
+  return (
+    <div ref={layerRef} className="hero-stars" style={{ opacity: 'var(--wx-stars)' }}>
     {Array.from({ length: 108 }, (_, i) => <span key={i} className={`hero-star${i % 7 === 0 ? ' hero-star-twinkle' : ''}`} style={{
       left: `${(i * 61.803 + 3) % 100}%`, top: `${10 + (i * i * 17.31) % 67}%`,
       width: i % 11 === 0 ? 2 : 1.25, height: i % 11 === 0 ? 2 : 1.25,
@@ -675,9 +729,16 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
       '--star-period': `${6 + i % 5}s`, '--star-delay': `${-i * .73}s`,
       boxShadow: i % 11 === 0 ? '0 0 5px rgba(176,206,238,0.35)' : 'none',
     }}/>) }
+    
     </div>
-    <div className="hero-moon" style={{ '--moon-glow': weather.moon, opacity: fog > 0 ? 0.5 : 1 - 0.4 * cloud }}>
-      <svg viewBox="0 0 64 64" width="100%" height="100%">
+  );
+});
+
+// The moon disc. It builds again only when the phase path changes.
+const SkyMoon = React.memo(({ moonPath }) => {
+  const newMoon = moonPath === '';
+  return (
+    <svg viewBox="0 0 64 64" width="100%" height="100%">
         <defs>
           <radialGradient id="moon-disc" cx=".35" cy=".3" r=".75">
             <stop stopColor="#edf0e5" /><stop offset=".7" stopColor="#c8d1cf" /><stop offset="1" stopColor="#97a8b6" />
@@ -697,9 +758,12 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
           </g>}
         </g>
       </svg>
-    </div>
-    <div className="hero-night-clouds" style={{position: 'absolute', inset: 0, opacity: cloudOpacity}}>
-      <svg viewBox="0 0 1000 420" preserveAspectRatio="none" width="104%" height="100%" style={{marginLeft: '-2%'}}>
+  );
+});
+
+const SkyClouds = React.memo(() => (
+  <div className="hero-night-clouds" style={{position: 'absolute', inset: 0, opacity: 'var(--wx-cloud)'}}>
+    <svg viewBox="0 0 1000 420" preserveAspectRatio="none" width="104%" height="100%" style={{marginLeft: '-2%'}}>
         <defs>
           <linearGradient id="night-cloud-lit" x1="0" y1="0" x2="0.2" y2="1">
             <stop stopColor="#a1b6cd" stopOpacity="0.45"/>
@@ -735,18 +799,11 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
           </g>
         </g>
       </svg>
-    </div>
-    {/* A flat overcast deck covers the upper sky when cloud is 70 percent or more. Its lower edge is soft. */}
-    {deckOpacity > 0 && <div className="hero-deck" style={{ opacity: deckOpacity }} />}
-    {/* Fog: a flat haze that rises from the horizon. */}
-    {fog > 0 && <div className="hero-fog" style={{ opacity: fog }} />}
-    {/* A dark left veil protects the identity; a cool horizon ties into the blue reservoirs. */}
-    <div style={{
-      position: 'absolute', inset: 0,
-      background: 'linear-gradient(90deg, rgba(8,14,28,0.94) 0%, rgba(8,14,28,0.72) 29%, rgba(8,14,28,0.15) 58%, transparent 78%)',
-    }}/>
-    {/* The horizon haze, then the whole sea strip down to the cut line. */}
-    <svg className="hero-landscape" viewBox="0 0 1440 20" preserveAspectRatio="none">
+  </div>
+));
+
+const SkyHaze = React.memo(() => (
+  <svg className="hero-landscape" viewBox="0 0 1440 20" preserveAspectRatio="none">
       <defs>
         <linearGradient id="sea-haze" x1="0" y1="0" x2="0" y2="1">
           <stop stopColor="#a5bcd3" stopOpacity="0" /><stop offset="1" stopColor="#a5bcd3" stopOpacity=".14" />
@@ -754,9 +811,11 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
       </defs>
       <rect width="1440" height="20" fill="url(#sea-haze)" />
     </svg>
-    <HeroSea weather={weather} />
-    {/* Distant offshore features sit on the horizon at fixed size, so they never stretch. */}
-    <div className="hero-horizon" style={fog > 0 ? { opacity: 1 - 0.85 * fog } : undefined}>
+));
+
+// Distant offshore features sit on the horizon at fixed size, so they never stretch.
+const SkyHorizon = React.memo(() => (
+    <div className="hero-horizon" style={{ opacity: 'var(--wx-horizon)' }}>
       <svg className="hero-horizon__item" style={{ left: '33%' }} width="34" height="20" viewBox="0 0 34 20">
         <path d="M8 20V11h18v9M10 11V6h8v5M22 11V2" stroke="#2b3e57" strokeWidth="1.2" fill="none" />
         <ellipse cx="17" cy="16" rx="30" ry="10" fill="#e3c286" opacity=".07" />
@@ -779,7 +838,14 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
         <circle cx="12" cy="5" r=".9" fill="#f4f7fb" /><circle cx="6" cy="9" r=".7" fill="#e9c98f" opacity=".8" />
       </svg>
     </div>
-    {rain > 0 && <div className={`hero-rain${weather.live ? ' hero-rain--live' : ''}`}>
+));
+
+// The rain layer. The drop count follows the rain strength. Zero rain draws nothing.
+const SkyRain = React.memo(({ rain, live }) => {
+  if (!(rain > 0)) return null;
+  const dropCount = Math.round(16 + 96 * rain);
+  return (
+    <div className={`hero-rain${live ? ' hero-rain--live' : ''}`}>
       {Array.from({ length: dropCount }, (_, i) => <span key={i} className="hero-rain-drop" style={{
         left: `${(i * 61.803 + 9) % 100}%`,
         '--rain-speed': `${.8 + i % 5 * .12}s`,
@@ -787,69 +853,76 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
         '--rain-length': `${14 + i % 6 * 3}px`,
         '--rain-alpha': .13 + i % 4 * .04,
       }}/>) }
-    </div>}
-  </div>
-), [weather]);
-};
+    </div>
+  );
+});
 
 // Decorative equipment stays anchored to the same surface and well as the live model:
 // an offshore injection platform over the well, and a CO₂ carrier moored alongside while injecting.
+// The drawing of the carrier is static and builds once (HeroShipBody). The pose reaches it through three CSS
+// custom properties on the wrapper: --ship-wake, --ship-lights and --ship-engine. Between the manoeuvres
+// the wrapper is hidden, not removed, so the drawing never builds again.
 const HeroShip = ({ ship }) => {
   const pose = heroShipPose(ship);
-  if (!pose) return null;
-  const engine = 0.15 + 0.85 * pose.wake;
+  const engine = pose ? 0.15 + 0.85 * pose.wake : 0;
   return (
-    <g className="hero-ship" style={{ transform: `translateX(${heroFixed(pose.x)}px)`, opacity: heroFixed(pose.opacity * 100) / 100 }}>
-      {/* The hull floats on the waterline of the platform: the whole drawing sits 6 units higher. */}
-      <g transform="translate(0 -6)">
-        {/* Wake astern and the bow wave grow with the carrier's speed. */}
-        <g opacity={heroFixed(pose.wake)}>
-          <path d="M394 151q30 1 70 -1M392 153q50 2 120 0M396 155q30 3 80 3" stroke="#cfdbe8" strokeWidth="1" strokeDasharray="18 6 30 8" opacity=".75" />
-          <ellipse cx="400" cy="153" rx="12" ry="1.6" fill="#dfe7f0" opacity=".55" />
-          <path d="M152 151q-12 -4 -26 0M149 153q-18 -2 -36 4" stroke="#e7eef7" strokeWidth="1" opacity=".8" />
-        </g>
-        <g className="hero-ship__hull">
-          <path d="M150 154H392" stroke="#05090f" strokeWidth="3" opacity=".6" />
-          <path d="M144 126L166 133H394V146Q394 152 388 152H174Q158 152 152 141Z" fill="url(#ship-hull)" stroke="#7c94b3" strokeOpacity=".35" strokeWidth=".6" />
-          <path d="M156 147H392" stroke="#6b2f36" strokeWidth="2" opacity=".75" />
-          <path d="M144 126L166 133H394" stroke="#b7c9de" strokeOpacity=".55" strokeWidth=".7" />
-          <path d="M148 127H172V133H166Z" fill="#22344c" />
-          <path d="M162 127V107M158 111h8" stroke="#7d93ad" strokeWidth="1" />
-          <circle cx="162" cy="106" r="1.3" fill="#f4f7fb" />
-          {/* Insulated cargo tanks with a highlight, and the midship manifold the hose connects to. */}
-          {[205, 262, 319].map(x => <g key={x}>
-            <rect x={x - 26} y="118" width="52" height="15" rx="7.5" fill="url(#ship-tank)" stroke="#a9bfd8" strokeOpacity=".35" strokeWidth=".5" />
-            <path d={`M${x - 20} 120.5h40`} stroke="#dfe8f3" strokeOpacity=".35" strokeWidth=".7" />
-          </g>)}
-          <path d="M233 133V111h6" stroke="#7d93ad" strokeWidth="1" />
-          {/* Accommodation and bridge aft, funnel, mast. The right face catches the moon. */}
-          <path d="M350 133V97H390V133Z" fill="#3a4f6b" stroke="#89a0bd" strokeOpacity=".4" strokeWidth=".6" />
-          <path d="M390 97V133" stroke="#b5c8de" strokeOpacity=".45" strokeWidth=".7" />
-          <path d="M346 97H394V92H346Z" fill="#2f4462" />
-          {[103, 110, 117, 124].map((y, i) => <path key={y} d={`M354 ${y}h32`} stroke="#f0cd8e" strokeWidth="2" strokeDasharray="3 2" opacity={i ? .45 : .95} />)}
-          <path d="M374 92V80h9v12Z" fill="#1b2a3d" /><path d="M374 84h9" stroke="#6b2f36" strokeWidth="1.4" />
-          <path d="M362 92V76M358 80h8" stroke="#7d93ad" strokeWidth="1" />
-          <circle cx="362" cy="75" r="1.3" fill="#f4f7fb" />
-          <circle cx="347" cy="95" r="1.3" fill="#ff5a4f" /><circle cx="394" cy="136" r="1" fill="#f4f7fb" opacity=".8" />
-          {/* Deck floodlights come on alongside, for the transfer. */}
-          <g opacity={pose.lights}>
-            <ellipse cx="236" cy="124" rx="30" ry="10" fill="url(#site-flood)" />
-            <ellipse cx="368" cy="126" rx="24" ry="9" fill="url(#site-flood)" />
-          </g>
-          {/* Exhaust thickens while the engines work. */}
-          {[[386, 73, 4], [396, 67, 5.5], [409, 62, 7]].map(([x, y, r]) => <circle key={x} cx={x} cy={y} r={r} fill="#8b9bb0" opacity={heroFixed(engine * .22)} />)}
-          {/* Lamp reflections: short horizontal dashes that shimmer. Then the hull's dark reflection, broken up by the ripples. */}
-          {HERO_SHIP_LAMPS.map(([x, color], i) => <g key={x} className="refl" style={{ '--rd': `${(-i * .37).toFixed(2)}s` }}>
-            <path d={`M${x - 2.4} 153.6h4.8M${x - 1.5} 156.4h3M${x - 2} 159.2h4`} stroke={color} strokeOpacity=".55" strokeWidth="1" strokeLinecap="round" />
-          </g>)}
-          <path d="M172 153.6H388M184 156H378M196 158.4H362" stroke="#02060c" strokeWidth="1.5" strokeDasharray="22 3 40 4 16 3" opacity=".6" />
-        </g>
-      </g>
+    <g className="hero-ship" style={pose ? {
+      transform: `translateX(${heroFixed(pose.x)}px)`, opacity: heroFixed(pose.opacity * 100) / 100,
+      '--ship-wake': heroFixed(pose.wake), '--ship-lights': pose.lights, '--ship-engine': heroFixed(engine * .22),
+    } : { display: 'none' }}>
+      <HeroShipBody />
       {/* The transfer hose is lowered from the platform to the manifold. */}
-      {pose.hose > 0 && <use href="#site-feed-route" stroke="#0e1a28" strokeWidth="3.4" strokeDasharray="1 1" strokeDashoffset={(1 - pose.hose).toFixed(3)} />}
+      {pose && pose.hose > 0 && <use href="#site-feed-route" stroke="#0e1a28" strokeWidth="3.4" strokeDasharray="1 1" strokeDashoffset={(1 - pose.hose).toFixed(3)} />}
     </g>
   );
 };
+
+const HeroShipBody = React.memo(() => (
+  <g transform="translate(0 -6)">
+          {/* Wake astern and the bow wave grow with the carrier's speed. */}
+          <g style={{ opacity: 'var(--ship-wake)' }}>
+            <path d="M394 151q30 1 70 -1M392 153q50 2 120 0M396 155q30 3 80 3" stroke="#cfdbe8" strokeWidth="1" strokeDasharray="18 6 30 8" opacity=".75" />
+            <ellipse cx="400" cy="153" rx="12" ry="1.6" fill="#dfe7f0" opacity=".55" />
+            <path d="M152 151q-12 -4 -26 0M149 153q-18 -2 -36 4" stroke="#e7eef7" strokeWidth="1" opacity=".8" />
+          </g>
+          <g className="hero-ship__hull">
+            <path d="M150 154H392" stroke="#05090f" strokeWidth="3" opacity=".6" />
+            <path d="M144 126L166 133H394V146Q394 152 388 152H174Q158 152 152 141Z" fill="url(#ship-hull)" stroke="#7c94b3" strokeOpacity=".35" strokeWidth=".6" />
+            <path d="M156 147H392" stroke="#6b2f36" strokeWidth="2" opacity=".75" />
+            <path d="M144 126L166 133H394" stroke="#b7c9de" strokeOpacity=".55" strokeWidth=".7" />
+            <path d="M148 127H172V133H166Z" fill="#22344c" />
+            <path d="M162 127V107M158 111h8" stroke="#7d93ad" strokeWidth="1" />
+            <circle cx="162" cy="106" r="1.3" fill="#f4f7fb" />
+            {/* Insulated cargo tanks with a highlight, and the midship manifold the hose connects to. */}
+            {[205, 262, 319].map(x => <g key={x}>
+              <rect x={x - 26} y="118" width="52" height="15" rx="7.5" fill="url(#ship-tank)" stroke="#a9bfd8" strokeOpacity=".35" strokeWidth=".5" />
+              <path d={`M${x - 20} 120.5h40`} stroke="#dfe8f3" strokeOpacity=".35" strokeWidth=".7" />
+            </g>)}
+            <path d="M233 133V111h6" stroke="#7d93ad" strokeWidth="1" />
+            {/* Accommodation and bridge aft, funnel, mast. The right face catches the moon. */}
+            <path d="M350 133V97H390V133Z" fill="#3a4f6b" stroke="#89a0bd" strokeOpacity=".4" strokeWidth=".6" />
+            <path d="M390 97V133" stroke="#b5c8de" strokeOpacity=".45" strokeWidth=".7" />
+            <path d="M346 97H394V92H346Z" fill="#2f4462" />
+            {[103, 110, 117, 124].map((y, i) => <path key={y} d={`M354 ${y}h32`} stroke="#f0cd8e" strokeWidth="2" strokeDasharray="3 2" opacity={i ? .45 : .95} />)}
+            <path d="M374 92V80h9v12Z" fill="#1b2a3d" /><path d="M374 84h9" stroke="#6b2f36" strokeWidth="1.4" />
+            <path d="M362 92V76M358 80h8" stroke="#7d93ad" strokeWidth="1" />
+            <circle cx="362" cy="75" r="1.3" fill="#f4f7fb" />
+            <circle cx="347" cy="95" r="1.3" fill="#ff5a4f" /><circle cx="394" cy="136" r="1" fill="#f4f7fb" opacity=".8" />
+            {/* Deck floodlights come on alongside, for the transfer. */}
+            <g style={{ opacity: 'var(--ship-lights)' }}>
+              <ellipse cx="236" cy="124" rx="30" ry="10" fill="url(#site-flood)" />
+              <ellipse cx="368" cy="126" rx="24" ry="9" fill="url(#site-flood)" />
+            </g>
+            {/* Exhaust thickens while the engines work. */}
+            {[[386, 73, 4], [396, 67, 5.5], [409, 62, 7]].map(([x, y, r]) => <circle key={x} cx={x} cy={y} r={r} fill="#8b9bb0" style={{ opacity: 'var(--ship-engine)' }} />)}
+            {/* Lamp reflections: short horizontal dashes that shimmer. Then the hull's dark reflection, broken up by the ripples. */}
+            {HERO_SHIP_LAMPS.map(([x, color], i) => <g key={x} className="refl" style={{ '--rd': `${(-i * .37).toFixed(2)}s` }}>
+              <path d={`M${x - 2.4} 153.6h4.8M${x - 1.5} 156.4h3M${x - 2} 159.2h4`} stroke={color} strokeOpacity=".55" strokeWidth="1" strokeLinecap="round" />
+            </g>)}
+            <path d="M172 153.6H388M184 156H378M196 158.4H362" stroke="#02060c" strokeWidth="1.5" strokeDasharray="22 3 40 4 16 3" opacity=".6" />
+          </g>
+        </g>
+));
 
 // Both share the viewBox -140 0 540 160. The well is at x = 48. The cut line is at y = 160. The waterline is at y = 146.
 const HERO_SITE_WATERLINE = 146;
@@ -909,9 +982,13 @@ const HERO_PLATFORM_STEEL = (() => {
 // Floodlights on the decks: x, y. Each one has a soft glow.
 const HERO_PLATFORM_FLOODS = [[10, 99], [40, 99], [70, 99], [100, 99], [30, 62], [88, 52]];
 
-const SurfaceSite = ({ geology, flow, ship }) => (
+// The platform is split in three. SiteDefs, SitePlatformDeck and SitePlatformTop never build again: they are
+// static. SurfaceSite builds only the parts that move: the flow gradients, the status light, the flow
+// paths and the carrier wrapper. The order of the layers is the same as in one drawing.
+const SurfaceSite = React.memo(({ geology, flow, ship }) => (
   <div className="hero-surface-site" aria-hidden="true" style={{ left: `${geology.wellXPct}%` }}>
     <svg viewBox="-140 0 540 160" width="100%" height="100%" fill="none">
+      <SiteDefs />
       <defs>
         {/* The same pulses as in the well: leftwards along the hose and deck, then down the conductor. */}
         <linearGradient id="site-flow-x" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="24" y2="0" spreadMethod="repeat"
@@ -922,7 +999,27 @@ const SurfaceSite = ({ geology, flow, ship }) => (
           gradientTransform={`translate(0 ${flow || 0})`}>
           <stop stopColor="#fff" stopOpacity="0" /><stop offset=".5" stopColor="#fff" stopOpacity=".85" /><stop offset="1" stopColor="#fff" stopOpacity="0" />
         </linearGradient>
-        <linearGradient id="site-steel" x1="0" y1="0" x2="1" y2="0"><stop stopColor="#16222f" /><stop offset=".65" stopColor="#2b3d53" /><stop offset="1" stopColor="#6d86a4" /></linearGradient>
+      </defs>
+      {/* A faint warm bloom in the night air around the platform. */}
+      <ellipse cx="54" cy="78" rx="120" ry="64" fill="url(#site-bloom)" />
+      <HeroShip ship={ship} />
+      <SitePlatformDeck />
+      <circle data-site-status="true" cx="48" cy="95" r="1.5" fill={flow !== null ? 'var(--sim-glow-free)' : '#647b79'} style={{ fill: flow !== null ? 'var(--sim-glow-free)' : '#647b79' }} />
+      <SitePlatformTop />
+      {/* While connected, CO₂ runs from the carrier's manifold up the hose, across the deck to the well bay
+          and down the conductor; the section's well carries it on to the aquifer. */}
+      {flow !== null && <g className="hero-well__flow">
+        <path d={HERO_SITE_FLOW} className="hero-well__co2" strokeWidth="2" />
+        <path d="M236 108Q176 144 112 101H48" className="hero-well__pulse" strokeWidth="2" stroke="url(#site-flow-x)" />
+        <path d="M48 101V160" className="hero-well__pulse" strokeWidth="2" stroke="url(#site-flow-y)" />
+      </g>}
+    </svg>
+  </div>
+));
+
+const SiteDefs = React.memo(() => (
+  <defs>
+    <linearGradient id="site-steel" x1="0" y1="0" x2="1" y2="0"><stop stopColor="#16222f" /><stop offset=".65" stopColor="#2b3d53" /><stop offset="1" stopColor="#6d86a4" /></linearGradient>
         <linearGradient id="site-module" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#2c3f57" /><stop offset="1" stopColor="#172438" /></linearGradient>
         <linearGradient id="site-accom" x1="0" y1="0" x2="1" y2="0"><stop stopColor="#223349" /><stop offset=".8" stopColor="#2c4058" /><stop offset="1" stopColor="#3b5372" /></linearGradient>
         <radialGradient id="site-flood"><stop stopColor="#f6dca6" stopOpacity=".42" /><stop offset=".45" stopColor="#f0c987" stopOpacity=".12" /><stop offset="1" stopColor="#f0c987" stopOpacity="0" /></radialGradient>
@@ -930,11 +1027,13 @@ const SurfaceSite = ({ geology, flow, ship }) => (
         <linearGradient id="ship-hull" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#27394f" /><stop offset=".55" stopColor="#162334" /><stop offset="1" stopColor="#0d1622" /></linearGradient>
         <linearGradient id="ship-tank" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#8ea4bd" /><stop offset=".3" stopColor="#4b6180" /><stop offset="1" stopColor="#1c2a3e" /></linearGradient>
         <path id="site-feed-route" pathLength="1" d={HERO_SITE_HOSE} />
-      </defs>
-      {/* A faint warm bloom in the night air around the platform. */}
-      <ellipse cx="54" cy="78" rx="120" ry="64" fill="url(#site-bloom)" />
-      <HeroShip ship={ship} />
-      {/* Back legs and bracing, thinner and hazier with distance. */}
+  </defs>
+));
+
+// From the back legs to the derrick.
+const SitePlatformDeck = React.memo(() => (
+  <>
+    {/* Back legs and bracing, thinner and hazier with distance. */}
       <g opacity=".55" stroke="#2a3d56">
         <path d={`M32 101L24 ${HERO_SITE_WATERLINE + 14}M88 101L98 ${HERO_SITE_WATERLINE + 14}`} strokeWidth="3.6" />
         <path d={`M30 116H90M28 131H93M30 116L59 131L90 116M28 131L60 ${HERO_SITE_WATERLINE}L93 131`} strokeWidth="1.1" />
@@ -995,8 +1094,13 @@ const SurfaceSite = ({ geology, flow, ship }) => (
       <path d="M56 97L51 20" stroke="#a9bfd8" strokeOpacity=".4" strokeWidth=".6" />
       <path d="M44 20H52V16H44Z" fill="#2c4060" />
       <circle className="beacon slow" cx="48" cy="14" r="1.8" fill="#ff5a4f" />
-      <circle data-site-status="true" cx="48" cy="95" r="1.5" fill={flow !== null ? 'var(--sim-glow-free)' : '#647b79'} style={{ fill: flow !== null ? 'var(--sim-glow-free)' : '#647b79' }} />
-      {/* Pedestal crane: lattice boom resting over the water, a lit cab. */}
+  </>
+));
+
+// The crane, the floodlights and the corner lights.
+const SitePlatformTop = React.memo(() => (
+  <>
+    {/* Pedestal crane: lattice boom resting over the water, a lit cab. */}
       <path d="M6 66V58H14V66Z" fill="#22344b" />
       <path d="M2 50H16V58H2Z" fill="#2b3e57" stroke="#89a0bd" strokeOpacity=".35" strokeWidth=".5" />
       <rect x="4" y="52" width="5" height="3" fill="#f0cd8e" opacity=".85" />
@@ -1009,16 +1113,8 @@ const SurfaceSite = ({ geology, flow, ship }) => (
         <ellipse cx={x} cy={y + 5} rx="16" ry="9" fill="url(#site-flood)" />
       </g>)}
       <circle className="morse" cx="-7" cy="100" r="1.2" fill="#ffffff" /><circle className="morse" cx="117" cy="100" r="1.2" fill="#ffffff" />
-      {/* While connected, CO₂ runs from the carrier's manifold up the hose, across the deck to the well bay
-          and down the conductor; the section's well carries it on to the aquifer. */}
-      {flow !== null && <g className="hero-well__flow">
-        <path d={HERO_SITE_FLOW} className="hero-well__co2" strokeWidth="2" />
-        <path d="M236 108Q176 144 112 101H48" className="hero-well__pulse" strokeWidth="2" stroke="url(#site-flow-x)" />
-        <path d="M48 101V160" className="hero-well__pulse" strokeWidth="2" stroke="url(#site-flow-y)" />
-      </g>}
-    </svg>
-  </div>
-);
+  </>
+));
 
 const HeroName = ({ variant }) => {
   const titleRef = useRef(null);
