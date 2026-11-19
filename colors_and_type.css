@@ -777,7 +777,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 }
 
 @media (max-width: 860px) {
-  .hero-scene { --hero-surface: max(42vh, 430px); }
+  .hero-scene { --hero-surface: max(42vh, 450px); }
   .hero-scene { --hero-sea-h: 52px; }
   .hero-moon { left: auto; right: 24px; top: 26%; width: 28px; }
 }
@@ -1160,6 +1160,13 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 }
 .hero-doors a:hover { text-decoration-color: currentColor; }
 .hero-doors__short { display: none; }
+/* Up to 1180 px the full questions reach the platform deck, so the short labels show. The questions stay for screen readers. */
+@media (max-width: 1180px) {
+  .hero-doors a { text-shadow: 0 1px 3px rgba(4, 8, 16, 0.95), 0 0 8px rgba(4, 8, 16, 0.8); }
+  .hero-doors__long { display: none; }
+  .hero-doors__short { display: inline; }
+  .hero-doors__ask { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
 .hero-profiles { display: flex; gap: 2px; margin: 0 0 0 6px; padding: 0; list-style: none; }
 .hero-profiles a {
   display: inline-flex;
