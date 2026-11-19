@@ -734,7 +734,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 .hero-surface-site {
   position: absolute;
   bottom: calc(100% - var(--hero-surface));
-  width: min(540px, 42vw);
+  width: min(648px, 50.4vw);
   aspect-ratio: 540 / 160;
   /* The well is at x=48 in a viewBox starting at -140: 188/540. */
   transform: translateX(-34.814815%);
@@ -743,6 +743,38 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 }
 
 .hero-surface-site > svg { display: block; overflow: visible; } /* the carrier sails in and out past its edges */
+
+/* On phones the site is cropped closer: the platform stays readable and the carrier enters from the right edge. */
+@media (max-width: 600px) {
+  .hero-surface-site { width: 62vw; }
+}
+
+/* Platform lights. All of them are slow. The red lights blink, the white corner lights flash Morse U, the water shimmers. */
+.hero-surface-site .beacon { animation: hero-beacon 2s steps(1) infinite; }
+.hero-surface-site .beacon.slow { animation-duration: 3s; }
+@keyframes hero-beacon { 0% { opacity: 1; } 50% { opacity: .15; } }
+.hero-surface-site .morse { opacity: .15; animation: hero-morse 15s linear infinite; }
+@keyframes hero-morse {
+  0%, 2% { opacity: 1; } 2.1%, 4% { opacity: .15; } 4.1%, 6% { opacity: 1; }
+  6.1%, 8% { opacity: .15; } 8.1%, 14% { opacity: 1; } 14.1%, 100% { opacity: .15; }
+}
+/* Lamp reflections are short horizontal dashes. They pulse a little in size and strength. */
+.hero-surface-site .refl { animation: hero-refl 1.7s ease-in-out var(--rd, 0s) infinite alternate; transform-box: fill-box; transform-origin: 50% 0; }
+@keyframes hero-refl {
+  from { opacity: .45; transform: scaleY(.85) translateX(-.4px); }
+  to { opacity: 1; transform: scaleY(1.1) translateX(.4px); }
+}
+.hero-surface-site .foam { animation: hero-foam 3.2s ease-in-out infinite alternate; }
+@keyframes hero-foam { from { opacity: .45; } to { opacity: 1; } }
+
+/* Under reduced motion every light is steady. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-surface-site .beacon,
+  .hero-surface-site .morse,
+  .hero-surface-site .refl,
+  .hero-surface-site .foam,
+  .hero-ship__hull { animation: none !important; opacity: 1; transform: none; }
+}
 
 @media (max-width: 860px) {
   .hero-scene { --hero-surface: max(42vh, 430px); }
