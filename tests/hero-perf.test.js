@@ -166,7 +166,7 @@ test('the SVG sea is built only in svg mode', () => {
   assert.match(component, /if \(mode !== 'svg'\) return undefined;/, 'only svg mode measures the strip');
 });
 
-test('the hero mounts the heavy scenery in later steps, as transitions', () => {
+test('the hero mounts the heavy scenery in a second step, as a transition', () => {
   assert.match(hero, /React\.startTransition\(\(\) => setStep\(step \+ 1\)\)/);
   assert.match(hero, /<Sky weather=\{scene\} late=\{step >= 1\} \/>/);
   assert.match(hero, /\{late && <SurfaceSite /);

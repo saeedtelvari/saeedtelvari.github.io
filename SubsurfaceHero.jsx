@@ -203,14 +203,13 @@ const SubsurfaceHero = ({ onNavigate }) => {
   const [hidden, setHidden] = useState(() => document.hidden);
   const [exaggeration, setExaggeration] = useState(2);
   const [ship, setShip] = useState({ phase: 'away', p: 1 });
-  // Three steps. Step 0 draws the identity, the sky colour and the section. Step 1 adds the sky decoration and
-  // the sea. Step 2 adds the platform and the carrier. Each step runs as a transition, so React time-slices it
-  // and the main thread stays free for input and for the loader fade. Each step commits a small tree, so no
-  // commit is a long task.
+  // Two steps. Step 0 draws the identity, the sky colour and the section. Step 1 adds the sky decoration, the
+  // sea, the platform and the carrier. Step 1 runs as a transition, so React time-slices it and the main
+  // thread stays free for input and for the loader fade.
   const [step, setStep] = useState(0);
-  const late = step >= 2;
+  const late = step >= 1;
   useEffect(() => {
-    if (step < 2) React.startTransition(() => setStep(step + 1));
+    if (step < 1) React.startTransition(() => setStep(step + 1));
   }, [step]);
   // The first paint never waits for the network. The hero starts with the cache or the typical night, then applies the live weather.
   const [weather, setWeather] = useState(() => heroWeatherInitial(window));
