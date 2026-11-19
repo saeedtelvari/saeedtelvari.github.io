@@ -55,7 +55,7 @@ test('the default weather exists and reaches the uniforms', () => {
   const apply = sea.slice(sea.indexOf('const heroSeaApplyWeather'), sea.indexOf('// The centre of the moon'));
   const context = {};
   vm.runInNewContext(sea.slice(start, end) + '\nthis.weather = HERO_WEATHER_DEFAULT;\n' + apply + '\nthis.apply = heroSeaApplyWeather;', context);
-  assert.deepEqual({ ...context.weather }, { wind: 6, cloud: 0.35, fog: 0, moon: 1 });
+  assert.deepEqual({ ...context.weather }, { wind: 6, cloud: 0.35, fog: 0, moon: 1, rain: 0.5, waves: 1.2 });
   const sent = {};
   const gl = { uniform1f: (name, value) => { sent[name] = value; } };
   context.apply(gl, { uWind: 'wind', uMoon: 'moon', uFog: 'fog' }, context.weather);

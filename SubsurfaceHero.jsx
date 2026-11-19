@@ -203,6 +203,14 @@ const SubsurfaceHero = ({ onNavigate }) => {
   const [hidden, setHidden] = useState(() => document.hidden);
   const [exaggeration, setExaggeration] = useState(2);
   const [ship, setShip] = useState({ phase: 'away', p: 1 });
+  // The first paint never waits for the network. The hero starts with the cache or the typical night, then applies the live weather.
+  const [weather, setWeather] = useState(() => heroWeatherInitial(window));
+  const moon = useMemo(() => {
+    const override = heroWeatherOverride(window.location && window.location.hash);
+    return (override && override.moon) || heroMoonPhase(new Date());
+  }, []);
+  const scene = useMemo(() => heroWeatherScene(weather, moon), [weather, moon]);
+  useEffect(() => heroWeatherStart(setWeather), []);
   const shipRef = useRef(ship);
   // Under reduced motion the carrier's manoeuvres complete at once.
   const shipSeconds = useMemo(() => (siteReducedMotion() ? { arriving: 0, connecting: 0, disconnecting: 0, departing: 0 } : HERO_SHIP_SECONDS), []);
@@ -292,8 +300,9 @@ const SubsurfaceHero = ({ onNavigate }) => {
   };
 
   return (
-    <section id="home" ref={heroRef} className="hero-scene" aria-labelledby="hero-name" data-visible={visible && !hidden ? 'true' : 'false'}>
-      <Sky />
+    <section id="home" ref={heroRef} className="hero-scene" aria-labelledby="hero-name" data-visible={visible && !hidden ? 'true' : 'false'}
+      style={{ '--hero-swell': scene.swell, '--hero-foam': scene.foam }}>
+      <Sky weather={scene} />
       <HeroSection sectionRef={sectionRef} />
       <HeroPlume frame={frame} leakScale={leakScale} />
       <HeroOverlay />
@@ -303,7 +312,7 @@ const SubsurfaceHero = ({ onNavigate }) => {
       <HeroLeakReadout frame={frame} year={year} injectionYears={injectionYears} />
       <Identity onNavigate={onNavigate} />
       <HeroPlayer year={year} playing={playing} speed={speed} frame={frame} run={run} injectionYears={injectionYears}
-        ship={ship.phase} exaggeration={exaggeration} controls={controls} />
+        ship={ship.phase} exaggeration={exaggeration} controls={controls} weather={scene} />
     </section>
   );
 };
@@ -557,12 +566,13 @@ const HeroLeakReadout = ({ frame, year, injectionYears }) => {
 /* =====================================================
    Player — controls, the CO2 inventory and the scale note
    ===================================================== */
-const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, ship, exaggeration, controls }) => {
+const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, ship, exaggeration, controls, weather }) => {
   const phase = heroPhase(year, injectionYears, ship);
   const inventory = frame ? frame.inventory : { mobile: 0, residual: 0, leaked: 0, injected: 0 };
   const share = value => heroPercentText(value, inventory.injected);
   const classes = [['mobile', 'Mobile', inventory.mobile], ['residual', 'Residual', inventory.residual], ['leaked', 'Leaked', inventory.leaked]];
   const shownYear = Math.round(year);
+  const weatherNote = weather ? heroWeatherNote(weather) : null;
   return (
     <div className="hero-player" role="group" aria-label="Live model controls">
       <div className="hero-player__controls">
@@ -587,6 +597,7 @@ const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, ship, ex
       </ul>
       <p className="hero-player__note">Teaching model: a schematic saline aquifer, 10 km wide, vertical exaggeration ×{exaggeration}. The depleted-gas model is in the 2026 preprint.</p>
       {run && run.computeMs > 0 && <p className="hero-player__receipt">{heroReceiptText(run.years, run.computeMs)}</p>}
+      {weatherNote && <p className="hero-player__weather">{weatherNote.text}{weatherNote.credit && <> Weather by <a href={HERO_WEATHER_SOURCE_URL} target="_blank" rel="noopener noreferrer">Open-Meteo</a>.</>}</p>}
     </div>
   );
 };
@@ -596,6 +607,14 @@ const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, ship, ex
    ===================================================== */
 const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
   const skyRef = useRef(null);
+  // The weather sets the art. Cloud sets the cloud layer, the overcast deck and the stars. Fog sets the haze.
+  // Rain sets the number of drops. The moon disc shows the real phase (moonPath is the lit part).
+  const { cloud = 0.35, fog = 0, rain = 0.5, moonPath = null } = weather;
+  const starsOpacity = Math.max(0, (1 - 0.9 * cloud) * (1 - 0.6 * fog));
+  const cloudOpacity = Math.min(1, 0.2 + cloud);
+  const deckOpacity = cloud >= 0.7 ? 0.45 + 0.4 * Math.min(1, (cloud - 0.7) / 0.3) : 0;
+  const dropCount = Math.round(16 + 96 * rain);
+  const newMoon = moonPath === '';
   useEffect(() => {
     const sky = skyRef.current;
     const hero = sky.closest('#home');
@@ -648,7 +667,7 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
       position: 'absolute', inset: 0,
       background: 'radial-gradient(ellipse at 95.5% 28%, rgba(159,183,209,0.1), transparent 52%)',
     }}/>
-    <div className="hero-stars">
+    <div className="hero-stars" style={{ opacity: starsOpacity }}>
     {Array.from({ length: 108 }, (_, i) => <span key={i} className={`hero-star${i % 7 === 0 ? ' hero-star-twinkle' : ''}`} style={{
       left: `${(i * 61.803 + 3) % 100}%`, top: `${10 + (i * i * 17.31) % 67}%`,
       width: i % 11 === 0 ? 2 : 1.25, height: i % 11 === 0 ? 2 : 1.25,
@@ -657,7 +676,7 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
       boxShadow: i % 11 === 0 ? '0 0 5px rgba(176,206,238,0.35)' : 'none',
     }}/>) }
     </div>
-    <div className="hero-moon" style={{ opacity: weather.moon }}>
+    <div className="hero-moon" style={{ '--moon-glow': weather.moon, opacity: fog > 0 ? 0.5 : 1 - 0.4 * cloud }}>
       <svg viewBox="0 0 64 64" width="100%" height="100%">
         <defs>
           <radialGradient id="moon-disc" cx=".35" cy=".3" r=".75">
@@ -665,15 +684,21 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
           </radialGradient>
           <filter id="moon-soft"><feGaussianBlur stdDeviation=".6" /></filter>
         </defs>
-        <circle cx="32" cy="32" r="29" fill="url(#moon-disc)" filter="url(#moon-soft)" />
-        <g fill="#697f91" opacity=".15" filter="url(#moon-soft)">
-          <ellipse cx="22" cy="23" rx="7" ry="9" />
-          <ellipse cx="37" cy="41" rx="9" ry="7" />
-          <circle cx="43" cy="22" r="4" /><circle cx="20" cy="42" r="3" />
+        {moonPath !== null && <>
+          <circle cx="32" cy="32" r="29" fill="#0b1527" fillOpacity={newMoon ? 0.35 : 0.6} stroke="#8aa0ba" strokeOpacity={newMoon ? 0.5 : 0.22} strokeWidth="1" />
+          <clipPath id="moon-lit">{newMoon ? null : <path d={moonPath} />}</clipPath>
+        </>}
+        <g clipPath={moonPath ? 'url(#moon-lit)' : undefined}>
+          {!newMoon && <circle cx="32" cy="32" r="29" fill="url(#moon-disc)" filter="url(#moon-soft)" />}
+          {!newMoon && <g fill="#697f91" opacity=".15" filter="url(#moon-soft)">
+            <ellipse cx="22" cy="23" rx="7" ry="9" />
+            <ellipse cx="37" cy="41" rx="9" ry="7" />
+            <circle cx="43" cy="22" r="4" /><circle cx="20" cy="42" r="3" />
+          </g>}
         </g>
       </svg>
     </div>
-    <div className="hero-night-clouds" style={{position: 'absolute', inset: 0, opacity: .55}}>
+    <div className="hero-night-clouds" style={{position: 'absolute', inset: 0, opacity: cloudOpacity}}>
       <svg viewBox="0 0 1000 420" preserveAspectRatio="none" width="104%" height="100%" style={{marginLeft: '-2%'}}>
         <defs>
           <linearGradient id="night-cloud-lit" x1="0" y1="0" x2="0.2" y2="1">
@@ -711,6 +736,10 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
         </g>
       </svg>
     </div>
+    {/* A flat overcast deck covers the upper sky when cloud is 70 percent or more. Its lower edge is soft. */}
+    {deckOpacity > 0 && <div className="hero-deck" style={{ opacity: deckOpacity }} />}
+    {/* Fog: a flat haze that rises from the horizon. */}
+    {fog > 0 && <div className="hero-fog" style={{ opacity: fog }} />}
     {/* A dark left veil protects the identity; a cool horizon ties into the blue reservoirs. */}
     <div style={{
       position: 'absolute', inset: 0,
@@ -727,7 +756,7 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
     </svg>
     <HeroSea weather={weather} />
     {/* Distant offshore features sit on the horizon at fixed size, so they never stretch. */}
-    <div className="hero-horizon">
+    <div className="hero-horizon" style={fog > 0 ? { opacity: 1 - 0.85 * fog } : undefined}>
       <svg className="hero-horizon__item" style={{ left: '33%' }} width="34" height="20" viewBox="0 0 34 20">
         <path d="M8 20V11h18v9M10 11V6h8v5M22 11V2" stroke="#2b3e57" strokeWidth="1.2" fill="none" />
         <ellipse cx="17" cy="16" rx="30" ry="10" fill="#e3c286" opacity=".07" />
@@ -750,15 +779,15 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
         <circle cx="12" cy="5" r=".9" fill="#f4f7fb" /><circle cx="6" cy="9" r=".7" fill="#e9c98f" opacity=".8" />
       </svg>
     </div>
-    <div className="hero-rain">
-      {Array.from({ length: 64 }, (_, i) => <span key={i} className="hero-rain-drop" style={{
+    {rain > 0 && <div className={`hero-rain${weather.live ? ' hero-rain--live' : ''}`}>
+      {Array.from({ length: dropCount }, (_, i) => <span key={i} className="hero-rain-drop" style={{
         left: `${(i * 61.803 + 9) % 100}%`,
         '--rain-speed': `${.8 + i % 5 * .12}s`,
         '--rain-phase': `${-i * .13}s`,
         '--rain-length': `${14 + i % 6 * 3}px`,
         '--rain-alpha': .13 + i % 4 * .04,
       }}/>) }
-    </div>
+    </div>}
   </div>
 ), [weather]);
 };

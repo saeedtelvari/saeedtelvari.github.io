@@ -616,6 +616,8 @@ code, kbd, .mono {
   content: '';
   position: absolute;
   inset: -380%;
+  /* --moon-glow is the visible moon: the lit fraction, dimmed by cloud. It is 1 when it is not set. */
+  opacity: var(--moon-glow, 1);
   background: radial-gradient(circle, rgba(201, 216, 234, .3), rgba(159, 182, 208, .13) 14%, rgba(159, 182, 208, .04) 34%, transparent 62%);
 }
 
@@ -628,6 +630,21 @@ code, kbd, .mono {
   to { transform: translateX(16px); }
 }
 
+/* Overcast: one flat deck over the upper sky with a soft lower edge. Fog: a flat haze that rises from the horizon. */
+.hero-deck {
+  position: absolute;
+  inset: 0 0 var(--hero-sea-h);
+  background: linear-gradient(180deg, #131f33 0%, #1a2a43 68%, rgba(26, 42, 67, 0) 100%);
+}
+.hero-fog {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--hero-sea-h);
+  height: 62%;
+  background: linear-gradient(0deg, rgba(122, 142, 167, .6), rgba(122, 142, 167, .28) 45%, rgba(122, 142, 167, 0));
+}
+
 .hero-rain {
   position: absolute;
   inset: 0;
@@ -636,6 +653,9 @@ code, kbd, .mono {
   mask-image: linear-gradient(90deg, rgba(0, 0, 0, .2), #000 65%);
   animation: rainArrival 3s var(--ease-emil-out) 12s both;
 }
+
+/* Real rain does not wait for the slow arrival of the typical night. */
+.hero-rain--live { animation-delay: 1.5s; }
 
 body:has(#app-loader) .hero-rain,
 body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
@@ -727,8 +747,9 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 /* The carrier's position comes from the hero clock. A slow swell lifts and rolls the hull a little about its waterline. */
 .hero-ship__hull { transform-origin: 270px 152px; animation: hero-ship-bob 5.2s ease-in-out infinite alternate; }
 @keyframes hero-ship-bob {
-  from { transform: translateY(0) rotate(-0.35deg); }
-  to { transform: translateY(0.9px) rotate(0.35deg); }
+  /* --hero-swell is 1 for the approved look. A gale sets it higher, so the hull rocks more. */
+  from { transform: translateY(0) rotate(calc(-0.35deg * var(--hero-swell, 1))); }
+  to { transform: translateY(calc(0.9px * var(--hero-swell, 1))) rotate(calc(0.35deg * var(--hero-swell, 1))); }
 }
 
 .hero-surface-site {
@@ -764,7 +785,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   from { opacity: .45; transform: scaleY(.85) translateX(-.4px); }
   to { opacity: 1; transform: scaleY(1.1) translateX(.4px); }
 }
-.hero-surface-site .foam { animation: hero-foam 3.2s ease-in-out infinite alternate; }
+.hero-surface-site .foam { filter: brightness(var(--hero-foam, 1)); animation: hero-foam 3.2s ease-in-out infinite alternate; }
 @keyframes hero-foam { from { opacity: .45; } to { opacity: 1; } }
 
 /* Under reduced motion every light is steady. */
@@ -1242,6 +1263,9 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 .hero-player .is-residual { background: repeating-linear-gradient(135deg, var(--sim-glow-residual) 0 2px, var(--sim-c-residual) 2px 5px); }
 .hero-player .is-leaked { background: var(--sim-glow-leaked); }
 .hero-player__note { margin: 6px 0 0; color: var(--sim-ink-faint); font: 12px/1.45 var(--sim-font-ui); }
+.hero-player__weather { margin: 4px 0 0; color: var(--sim-ink-faint); font: 11.5px/1.4 var(--sim-font-ui); }
+.hero-player__weather a { color: var(--sim-ink-muted); text-underline-offset: 2px; }
+.hero-player__weather a:hover { color: var(--sim-ink); }
 .hero-player__receipt { margin: 4px 0 0; color: var(--sim-ink-muted); font: 12px/1.45 var(--sim-font-ui); font-variant-numeric: tabular-nums; }
 
 @media (max-width: 600px) {
@@ -1294,6 +1318,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   .hero-player__small { height: 28px; min-width: 30px; }
   .hero-player__bar,
   .hero-player__note,
+  .hero-player__weather,
   .hero-player__receipt { display: none; }
   .hero-player__title { margin: 0; font-size: 12.5px; }
   .hero-player__legend { gap: 4px 12px; font-size: 11.5px; }

@@ -10,7 +10,9 @@
 // cloud: 0..1, not used by the sea yet. The sky can read it later.
 // fog: 0..1, the haze on the horizon.
 // moon: 0..1, how visible the moon, its path and the horizon line are.
-const HERO_WEATHER_DEFAULT = { wind: 6, cloud: 0.35, fog: 0, moon: 1 };
+// rain: 0..1, how much rain the sky draws. waves: wave height in metres, for the swell of the carrier.
+// The sky and the carrier read rain and waves. The sea shader does not.
+const HERO_WEATHER_DEFAULT = { wind: 6, cloud: 0.35, fog: 0, moon: 1, rain: 0.5, waves: 1.2 };
 
 // The shader. Distances are in CSS pixels, so the sea looks the same on every screen width.
 const HERO_SEA_VERT = 'attribute vec2 a; void main(){ gl_Position = vec4(a, 0.0, 1.0); }';
