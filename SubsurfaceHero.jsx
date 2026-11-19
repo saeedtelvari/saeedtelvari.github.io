@@ -423,7 +423,7 @@ const SubsurfaceHero = ({ onNavigate }) => {
       <Sky weather={scene} late={step >= 1} />
       <HeroSection sectionRef={sectionRef} />
       <HeroPlume frame={frame} />
-      {leakScale.peak > 0 && <HeroLeakFlow frame={frame} yearRef={yearRef} run={run} speed={speed} playing={playing} visible={visible} hidden={hidden}
+      {leakScale.peak > 0 && <HeroLeakFlow sectionRef={sectionRef} frame={frame} yearRef={yearRef} run={run} speed={speed} playing={playing} visible={visible} hidden={hidden}
         injectionYears={injectionYears} peak={leakScale.peak} firstYears={firstLeakYears} />}
       <HeroOverlay />
       <HeroWell flow={flow} />
@@ -580,6 +580,7 @@ const HeroPlume = ({ frame }) => {
    Leak flow — CO2 droplets along each leaking fault, on one canvas at true pixel scale
    ===================================================== */
 const HERO_LEAK_JUMP = 30;        // a step of more than this many years is a jump (scrub, restart)
+const HERO_LEAK_FRAME_MS = 30;    // the loop skips a frame that comes sooner than this (about 30 fps at 60 Hz)
 const HERO_LEAK_WARM_STEP = 1 / 30;
 const HERO_LEAK_WARM_STEPS = 120; // 4 s of updates, so that a stream shows at once
 const HERO_LEAK_ONSET = 0.9;      // seconds: the band fills for 0.8 s, the ring fades for 0.9 s
@@ -611,7 +612,7 @@ const heroLeakDrawDrop = (ctx, q) => {
 // tick() moves them in real time x speed while the hero clock advances. paint() draws one still frame.
 const heroLeakEngine = canvas => {
   const ctx = canvas.getContext('2d');
-  const size = { w: 0, h: 0, sx: 1, sy: 1 };
+  const size = { w: 0, h: 0, sx: 1, sy: 1, ox: 0, oy: 0 };
   const faults = HERO_FAULTS.map(() => ({ rand: null, drops: [], carry: 0, on: false, done: false, onset: 0, geo: null, box: null }));
   let lastYear = -1, lastRun = null, boxes = [];
 
@@ -725,7 +726,7 @@ const heroLeakEngine = canvas => {
     const frame = L.frame;
     const live = frame ? faults.filter((f, i) => f.on && f.geo && (frame.faultFlow[i] || 0) > 0) : [];
     if (!live.length && !boxes.length) return;
-    ctx.setTransform(size.sx, 0, 0, size.sy, 0, 0);
+    ctx.setTransform(size.sx, 0, 0, size.sy, -size.ox * size.sx, -size.oy * size.sy);
     boxes.forEach(b => ctx.clearRect(b.x, b.y, b.w, b.h));
     boxes = live.map(f => f.box);
     boxes.forEach(b => ctx.clearRect(b.x, b.y, b.w, b.h));
@@ -761,11 +762,21 @@ const heroLeakEngine = canvas => {
   };
 
   return {
+    // width and height are the size of the section in CSS pixels. The canvas covers only the union of the boxes of the faults that leak in this run.
     resize(width, height, ratio, L) {
-      canvas.width = Math.max(1, Math.round(width * ratio));
-      canvas.height = Math.max(1, Math.round(height * ratio));
-      size.w = width; size.h = height; size.sx = canvas.width / width; size.sy = canvas.height / height;
+      size.w = width; size.h = height;
       geometry();
+      const used = faults.filter((f, i) => L && L.firstYears[i] >= 0).map(f => f.box);
+      const x0 = Math.max(0, Math.floor(Math.min(...used.map(b => b.x)))), y0 = Math.max(0, Math.floor(Math.min(...used.map(b => b.y))));
+      const x1 = Math.min(width, Math.ceil(Math.max(...used.map(b => b.x + b.w)))), y1 = Math.min(height, Math.ceil(Math.max(...used.map(b => b.y + b.h))));
+      const cw = Math.max(1, x1 - x0), ch = Math.max(1, y1 - y0);
+      canvas.width = Math.max(1, Math.round(cw * ratio));
+      canvas.height = Math.max(1, Math.round(ch * ratio));
+      canvas.style.left = `${x0}px`;
+      canvas.style.top = `calc(var(--hero-surface) + ${y0}px)`;
+      canvas.style.width = `${cw}px`;
+      canvas.style.height = `${ch}px`;
+      size.sx = canvas.width / cw; size.sy = canvas.height / ch; size.ox = x0; size.oy = y0;
       boxes = [];
       lastYear = -1;
       if (L) this.paint(L);
@@ -787,7 +798,7 @@ const heroLeakEngine = canvas => {
 
 // One canvas over the section. The loop runs only while a fault leaks, playback runs, the hero is in view and the tab is visible.
 // It reads the frame, the year, the speed and the run through refs, so React does not render for each droplet.
-const HeroLeakFlow = ({ frame, yearRef, run, speed, playing, visible, hidden, injectionYears, peak, firstYears }) => {
+const HeroLeakFlow = ({ sectionRef, frame, yearRef, run, speed, playing, visible, hidden, injectionYears, peak, firstYears }) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const reduced = useMemo(() => siteReducedMotion(), []);
@@ -800,14 +811,16 @@ const HeroLeakFlow = ({ frame, yearRef, run, speed, playing, visible, hidden, in
     const canvas = canvasRef.current;
     const engine = heroLeakEngine(canvas);
     engineRef.current = engine;
+    // The canvas box depends on the section size, so the observer watches the section.
+    const section = sectionRef.current;
     const fit = () => {
-      const { width, height } = canvas.getBoundingClientRect();
+      const { width, height } = section.getBoundingClientRect();
       if (width && height) engine.resize(width, height, Math.min(2, window.devicePixelRatio || 1), live.current);
     };
     fit();
     if (!('ResizeObserver' in window)) return () => { engineRef.current = null; };
     const sizes = new ResizeObserver(fit);
-    sizes.observe(canvas);
+    sizes.observe(section);
     return () => { sizes.disconnect(); engineRef.current = null; };
   }, []);
 
@@ -815,10 +828,12 @@ const HeroLeakFlow = ({ frame, yearRef, run, speed, playing, visible, hidden, in
     if (!running) return undefined;
     let frameId = 0, last = 0;
     const tick = now => {
+      frameId = requestAnimationFrame(tick);
+      // The loop draws at 30 fps at most: a smaller canvas upload for the same look.
+      if (last && now - last < HERO_LEAK_FRAME_MS) return;
       const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
       last = now;
       if (engineRef.current) engineRef.current.tick(live.current, dt);
-      frameId = requestAnimationFrame(tick);
     };
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
@@ -829,7 +844,7 @@ const HeroLeakFlow = ({ frame, yearRef, run, speed, playing, visible, hidden, in
     if (!running && engineRef.current) engineRef.current.paint(live.current);
   }, [frame, run, running]);
 
-  return <canvas ref={canvasRef} className="hero-svg hero-svg--flow" aria-hidden="true" />;
+  return <canvas ref={canvasRef} className="hero-leak-flow" aria-hidden="true" />;
 };
 
 /* =====================================================

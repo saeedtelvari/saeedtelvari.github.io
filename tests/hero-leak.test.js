@@ -141,3 +141,20 @@ test('the player names the leaking fault and shows the band', () => {
   assert.match(css, /\.hero-player__leaktick \{[^}]*width: 2px/);
   assert.match(css, /\.hero-leak-readout \{ display: none; \}/, 'the card stays hidden on phones');
 });
+
+test('the loop draws at 30 fps at most', () => {
+  assert.match(source, /HERO_LEAK_FRAME_MS = 30;/);
+  assert.match(source, /if \(last && now - last < HERO_LEAK_FRAME_MS\) return;/);
+  assert.match(source, /const dt = last \? Math\.min\(0\.1, \(now - last\) \/ 1000\) : 0;/, 'dt is the time since the last draw');
+});
+
+test('the canvas covers only the boxes of the faults that leak in this run', () => {
+  const resize = source.slice(source.indexOf('resize(width, height, ratio, L) {'), source.indexOf('tick(L, dt) {'));
+  assert.match(resize, /L\.firstYears\[i\] >= 0/);
+  assert.match(resize, /canvas\.style\.left = /);
+  assert.match(resize, /canvas\.style\.top = `calc\(var\(--hero-surface\) \+ \$\{y0\}px\)`/);
+  assert.match(resize, /canvas\.width = Math\.max\(1, Math\.round\(cw \* ratio\)\)/);
+  assert.match(source, /setTransform\(size\.sx, 0, 0, size\.sy, -size\.ox \* size\.sx, -size\.oy \* size\.sy\)/, 'the drawing moves by the box origin');
+  assert.match(source, /sizes\.observe\(section\)/, 'the observer watches the section');
+  assert.match(css, /\.hero-leak-flow \{ position: absolute; z-index: 2; pointer-events: none; \}/);
+});
