@@ -23,6 +23,7 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
       'Header.jsx',
       'Footer.jsx',
       'hero-geology.js',
+      'HeroWeather.js',
       'HeroSea.jsx',
       'SubsurfaceHero.jsx',
       'GeologicalDescent.jsx',
