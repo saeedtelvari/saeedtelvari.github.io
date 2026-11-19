@@ -782,6 +782,12 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   .hero-moon { left: auto; right: 24px; top: 26%; width: 28px; }
 }
 
+@media (max-width: 600px) {
+  /* On phones the name, the buttons and the row of links reach below 430 px. The cross-section
+     starts below them, so the links sit on the sea and not on the labels of the section. */
+  .hero-scene { --hero-surface: max(42vh, 492px); }
+}
+
 .hero-reveal {
   animation: heroTextReveal 700ms var(--ease-emil-out) both;
 }

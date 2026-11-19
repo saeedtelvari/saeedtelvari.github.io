@@ -58,7 +58,9 @@ const HERO_SEA_FRAG = `
     col += vec3(0.018, 0.028, 0.045) * band * (1.0 - 0.6 * v);
     // The moon path: a soft column. Inside it most cells hold a dash, and the dashes turn moon-white.
     float mw = 8.0 + 72.0 * v;
-    float mc = exp(-pow((X - uMoonX * cssW) / mw, 2.0)) * uMoon;
+    // The carrier stands under the moon. The path is weak far away, where it shows above the tanks,
+    // and strong on the near water in front of the ship.
+    float mc = exp(-pow((X - uMoonX * cssW) / mw, 2.0)) * uMoon * mix(0.25, 1.0, smoothstep(0.3, 0.75, v));
     col += vec3(0.79, 0.85, 0.93) * 0.08 * mc * (1.0 - 0.4 * v);
     float w = mix(0.35, 1.05, v);
     float s1 = px * 0.06, s2 = px * 0.045;
@@ -125,7 +127,8 @@ const heroSeaVector = (width, height, moonX) => {
       const off = (random() * 2 - 1) * half * (0.3 + 0.7 * random()), w = (1.2 + 10 * t) * (0.4 + random());
       sets[(j + k) % 4].push({
         d: `M${f(moonX + off - w / 2)} ${f(y)}q${f(w / 2)} ${f(-(0.25 + 1.1 * t))} ${f(w)} 0`,
-        w: f(0.45 + 0.9 * t), o: f(0.25 + 0.7 * (1 - Math.abs(off) / half)),
+        // Weak far away (above the carrier's tanks), strong on the near water, as in the shader.
+        w: f(0.45 + 0.9 * t), o: f((0.25 + 0.7 * (1 - Math.abs(off) / half)) * (0.3 + 0.7 * Math.min(1, Math.max(0, (t - 0.3) / 0.45)))),
       });
     }
   }
