@@ -17,26 +17,34 @@ test('sky interaction brightens fixed stars and resets on leave, reduced motion,
     removeEventListener: name => listeners.delete(name),
   };
   const star = { style: { left: '50%', top: '50%', setProperty(name, value) { this[name] = value; } } };
-  const layers = {
-    '.hero-stars': { style: {}, children: [star] },
+  const sky = { getBoundingClientRect: () => ({ left: 10, top: 20, width: 1000, height: 400 }) };
+  // The stars layer finds the sky and the hero by itself, because it mounts after the sky.
+  const layer = {
+    style: {},
+    children: [star],
+    closest: selector => (selector === '#home' ? events : sky),
   };
-  const sky = {
-    closest: () => events,
-    querySelector: selector => layers[selector],
-    getBoundingClientRect: () => ({ left: 10, top: 20, width: 1000, height: 400 }),
-  };
+  const layers = { '.hero-stars': layer };
   const motion = { matches: true, ...events };
   const rain = [];
-  let effect, frame;
-  vm.runInNewContext(bundle.slice(start, end) + '\nSky();', {
-    useRef: () => ({ current: sky }),
+  let effect, frame, skyStyle;
+  vm.runInNewContext(bundle.slice(start, end) + '\nSky({ weather: { cloud: 0.9, fog: 0.5, rain: 0, moon: 0.4, moonPath: "" } });\nSkyStars();\nSkyRain({ rain: 0.5, live: false });', {
+    useRef: () => ({ current: layer }),
     useEffect: fn => { effect = fn; },
     useMemo: fn => fn(),
     heroFixed: value => Math.round(value * 10) / 10,
-    React: { createElement: (type, props) => {
-      if (props?.className === 'hero-rain-drop') rain.push(props.style);
-      return {};
-    } },
+    // Sky mounts the sea component and reads the default weather. The stubs keep this test on the sky.
+    HeroSea: () => null,
+    HERO_WEATHER_DEFAULT: { wind: 6, cloud: 0.35, fog: 0, moon: 1 },
+    React: {
+      memo: component => component,
+      Fragment: 'fragment',
+      createElement: (type, props) => {
+        if (props?.className === 'hero-rain-drop') rain.push(props.style);
+        if (props && props['data-layer'] === 'sky') skyStyle = props.style;
+        return {};
+      },
+    },
     window: {
       ...events,
       matchMedia: () => motion,
@@ -44,6 +52,13 @@ test('sky interaction brightens fixed stars and resets on leave, reduced motion,
       cancelAnimationFrame: () => { frame = null; },
     },
   });
+  // The weather reaches the sky through custom properties on one container.
+  assert.equal(skyStyle['--wx-stars'], 0.133, 'stars fade with cloud and fog');
+  assert.equal(skyStyle['--wx-cloud'], 1);
+  assert.equal(skyStyle['--wx-deck'], 0.717);
+  assert.equal(skyStyle['--wx-fog'], 0.5);
+  assert.equal(skyStyle['--wx-moon-op'], 0.5, 'fog dims the moon');
+  assert.equal(skyStyle['--moon-glow'], 0.4);
   assert.ok(rain.length > 0 && rain.every(drop =>
     parseFloat(drop.left) >= 0 && parseFloat(drop.left) <= 100 &&
     parseFloat(drop['--rain-speed']) > 0 && parseFloat(drop['--rain-phase']) <= 0 &&
