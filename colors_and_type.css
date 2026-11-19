@@ -1022,7 +1022,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   pointer-events: none;
 }
 .hero-svg--rock { z-index: 1; }
-.hero-svg--flow { z-index: 2; }
+.hero-leak-flow { position: absolute; z-index: 2; pointer-events: none; }
 .hero-svg--plume { z-index: 2; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--sim-glow-free) 45%, transparent)); }
 .hero-svg--overlay { z-index: 3; }
 
