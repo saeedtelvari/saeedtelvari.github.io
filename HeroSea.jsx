@@ -89,6 +89,7 @@ const HERO_SEA_FRAG = `
 
 const HERO_SEA_FRAME_MS = 1000 / 30; // draw at most 30 frames per second
 const HERO_SEA_DPR_CAP = 2;
+const HERO_SEA_IDLE_MS = 2000; // the longest wait for an idle moment before the shader starts
 
 const heroSeaRandom = seed => () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
 const heroSeaRound = n => Math.round(n * 100) / 100;
@@ -192,41 +193,56 @@ const HeroSeaSvg = ({ width, height, moonX, weather }) => {
   );
 };
 
-// Compile the program. It throws when the extension or the program is not available.
-const heroSeaProgram = canvas => {
+// Start the program. It throws when WebGL or the extension is not available.
+// With KHR_parallel_shader_compile the browser compiles on another thread, so this call returns at once.
+// Without it, the compile and the link run here, and the first status call waits for them.
+const heroSeaBegin = canvas => {
   const gl = canvas.getContext('webgl', { antialias: false, alpha: false, powerPreference: 'low-power' });
   if (!gl || !gl.getExtension('OES_standard_derivatives')) throw new Error('WebGL is not available');
+  const parallel = gl.getExtension('KHR_parallel_shader_compile');
   const shader = (type, source) => {
     const object = gl.createShader(type);
     gl.shaderSource(object, source);
     gl.compileShader(object);
-    if (!gl.getShaderParameter(object, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(object));
     return object;
   };
-  const program = gl.createProgram();
-  const vertex = shader(gl.VERTEX_SHADER, HERO_SEA_VERT), fragment = shader(gl.FRAGMENT_SHADER, HERO_SEA_FRAG);
-  gl.attachShader(program, vertex);
-  gl.attachShader(program, fragment);
-  gl.linkProgram(program);
+  const state = { gl, parallel, program: gl.createProgram(), vertex: null, fragment: null, buffer: null };
+  state.vertex = shader(gl.VERTEX_SHADER, HERO_SEA_VERT);
+  state.fragment = shader(gl.FRAGMENT_SHADER, HERO_SEA_FRAG);
+  gl.attachShader(state.program, state.vertex);
+  gl.attachShader(state.program, state.fragment);
+  gl.linkProgram(state.program);
+  state.free = () => {
+    if (state.buffer) gl.deleteBuffer(state.buffer);
+    gl.deleteShader(state.vertex);
+    gl.deleteShader(state.fragment);
+    gl.deleteProgram(state.program);
+    const lose = gl.getExtension('WEBGL_lose_context');
+    if (lose) lose.loseContext();
+  };
+  return state;
+};
+
+// True when the browser has finished the program. Without the extension, the answer is always yes.
+const heroSeaDone = state => !state.parallel || state.gl.isContextLost() || !!state.gl.getProgramParameter(state.program, state.parallel.COMPLETION_STATUS_KHR);
+
+// Check the program and set up the buffer and the uniforms. It throws when the program failed.
+const heroSeaFinish = state => {
+  const { gl, program } = state;
+  if (gl.isContextLost()) throw new Error('The WebGL context is lost');
+  if (!gl.getShaderParameter(state.vertex, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(state.vertex));
+  if (!gl.getShaderParameter(state.fragment, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(state.fragment));
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
   gl.useProgram(program);
-  const buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  state.buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, state.buffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   const position = gl.getAttribLocation(program, 'a');
   gl.enableVertexAttribArray(position);
   gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
   const uniforms = {};
   ['uRes', 'uTime', 'uMoonX', 'uScale', 'uWind', 'uMoon', 'uFog'].forEach(name => { uniforms[name] = gl.getUniformLocation(program, name); });
-  const free = () => {
-    gl.deleteBuffer(buffer);
-    gl.deleteShader(vertex);
-    gl.deleteShader(fragment);
-    gl.deleteProgram(program);
-    const lose = gl.getExtension('WEBGL_lose_context');
-    if (lose) lose.loseContext();
-  };
-  return { gl, uniforms, free };
+  return { gl, uniforms, free: state.free };
 };
 
 // Send the weather to the shader.
@@ -246,10 +262,154 @@ const heroSeaMoonX = wrap => {
   return box.left + box.width / 2 - rect.left;
 };
 
+// Link the program on a canvas. The canvas is on the page or it is an OffscreenCanvas in a worker.
+// It calls ready(program) or fail(error). It returns a function that cancels the start.
+// With the parallel extension it asks on later animation frames if the browser has finished.
+const heroSeaStart = (canvas, ready, fail) => {
+  const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : fn => setTimeout(() => fn(0), 16);
+  const caf = typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame : clearTimeout;
+  let state = null, id = 0, cancelled = false;
+  const step = () => {
+    id = 0;
+    if (cancelled) return;
+    if (!heroSeaDone(state)) {
+      id = raf(step);
+      return;
+    }
+    let program;
+    try {
+      program = heroSeaFinish(state);
+    } catch (error) {
+      state.free();
+      state = null;
+      fail(error);
+      return;
+    }
+    state = null;
+    ready(program);
+  };
+  try {
+    state = heroSeaBegin(canvas);
+  } catch (error) {
+    fail(error);
+    return () => {};
+  }
+  step();
+  return () => {
+    cancelled = true;
+    if (id) caf(id);
+    if (state) state.free();
+    state = null;
+  };
+};
+
+// The draw loop of a ready program. params holds the size in device pixels, the scale, the moon position
+// (0..1 of the width) and the weather. set() changes them. run(true) draws at most 30 frames per second.
+// run(false) stops the loop and draws one frame.
+const heroSeaDriver = (program, canvas) => {
+  const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : fn => setTimeout(() => fn(performance.now()), 16);
+  const caf = typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame : clearTimeout;
+  const { gl, uniforms } = program;
+  const params = { width: 1, height: 1, scale: 1, moonX: 0.955, wind: 6, moon: 1, fog: 0 };
+  const start = performance.now();
+  let frame = 0, last = 0;
+  const draw = now => {
+    const width = Math.max(1, params.width), height = Math.max(1, params.height);
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+    gl.viewport(0, 0, width, height);
+    gl.uniform2f(uniforms.uRes, width, height);
+    gl.uniform1f(uniforms.uScale, params.scale);
+    gl.uniform1f(uniforms.uTime, (now - start) / 1000 + 20);
+    gl.uniform1f(uniforms.uMoonX, params.moonX);
+    heroSeaApplyWeather(gl, uniforms, params);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  };
+  const loop = now => {
+    frame = raf(loop);
+    if (now - last < HERO_SEA_FRAME_MS - 1) return;
+    last = now;
+    draw(now);
+  };
+  const stop = () => {
+    if (frame) caf(frame);
+    frame = 0;
+  };
+  return {
+    set: (next, redraw) => {
+      Object.assign(params, next);
+      if (redraw && !frame) draw(performance.now());
+    },
+    run: on => {
+      if (on && !frame) frame = raf(loop);
+      if (!on) {
+        stop();
+        draw(performance.now());
+      }
+    },
+    stop,
+  };
+};
+
+// The worker. It owns the context, so the page never waits for the GPU to make it. The page sends
+// init (the canvas, the first params, the run flag), set, run and free. The worker answers ready, fail or lost.
+const heroSeaWorkerMain = () => {
+  let stopStart = null, driver = null, program = null;
+  const pending = { params: {}, run: false };
+  self.onmessage = event => {
+    const message = event.data;
+    if (message.type === 'init') {
+      const canvas = message.canvas;
+      Object.assign(pending.params, message.params);
+      pending.run = message.run;
+      canvas.addEventListener('webglcontextlost', lost => {
+        lost.preventDefault();
+        self.postMessage({ type: 'lost' });
+      });
+      stopStart = heroSeaStart(canvas, ready => {
+        program = ready;
+        driver = heroSeaDriver(program, canvas);
+        driver.set(pending.params, true);
+        driver.run(pending.run);
+        self.postMessage({ type: 'ready' });
+      }, () => self.postMessage({ type: 'fail' }));
+    } else if (message.type === 'set') {
+      if (driver) driver.set(message.params, message.redraw);
+      else Object.assign(pending.params, message.params);
+    } else if (message.type === 'run') {
+      pending.run = message.on;
+      if (driver) driver.run(message.on);
+    } else if (message.type === 'free') {
+      if (stopStart) stopStart();
+      if (driver) driver.stop();
+      if (program) program.free();
+      self.close();
+    }
+  };
+};
+
+// The source of the worker: the shader, the constants and the functions above, then the worker itself.
+const heroSeaWorkerSource = () => [
+  `const HERO_SEA_VERT = ${JSON.stringify(HERO_SEA_VERT)};`,
+  `const HERO_SEA_FRAG = ${JSON.stringify(HERO_SEA_FRAG)};`,
+  `const HERO_SEA_FRAME_MS = ${HERO_SEA_FRAME_MS};`,
+  ...[['heroSeaBegin', heroSeaBegin], ['heroSeaDone', heroSeaDone], ['heroSeaFinish', heroSeaFinish],
+    ['heroSeaApplyWeather', heroSeaApplyWeather], ['heroSeaStart', heroSeaStart], ['heroSeaDriver', heroSeaDriver]]
+    .map(([name, fn]) => `const ${name} = ${fn.toString()};`),
+  `(${heroSeaWorkerMain.toString()})();`,
+].join('\n');
+
+// A worker that draws to an OffscreenCanvas is used when the browser has it. The context is made in the worker.
+const heroSeaCanUseWorker = canvas => typeof Worker === 'function' && typeof Blob === 'function' && typeof OffscreenCanvas === 'function'
+  && typeof canvas.transferControlToOffscreen === 'function' && !!window.URL && typeof URL.createObjectURL === 'function';
+
 const HeroSea = ({ weather = HERO_WEATHER_DEFAULT }) => {
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
   const weatherRef = useRef(weather);
+  const syncRef = useRef(null);
   weatherRef.current = weather;
   const [mode, setMode] = useState('gl');
   const [size, setSize] = useState({ width: 0, height: 0, moonX: 0 });
@@ -270,76 +430,143 @@ const HeroSea = ({ weather = HERO_WEATHER_DEFAULT }) => {
     return () => observer.disconnect();
   }, [mode]);
 
+  // A weather change goes to the shader at once. The strip does not build again.
+  useEffect(() => {
+    if (syncRef.current) syncRef.current(true);
+  }, [weather]);
+
+  // The shader starts after the page has loaded and the main thread is idle, so it is never on the critical path.
+  // The context is made in a worker when the browser can do it. Until the program is ready, the strip shows the
+  // flat tones of the sea (CSS). Then the canvas fades in.
   useEffect(() => {
     if (mode !== 'gl') return undefined;
     const wrap = wrapRef.current, canvas = canvasRef.current;
-    let program;
-    try {
-      program = heroSeaProgram(canvas);
-    } catch (error) {
-      setMode('svg');
-      return undefined;
-    }
-    const { gl, uniforms } = program;
     const reduceQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const start = performance.now();
-    let frame = 0, last = 0, onScreen = true, lost = false;
+    let target = null, teardown = null, workerUrl = null, waiting = null;
+    let cancelled = false, idleId = null, timerId = null, frameId = 0, onScreen = true;
 
-    const draw = now => {
+    // The size in device pixels, the moon position and the weather, for the shader.
+    const measure = () => {
       const scale = Math.min(HERO_SEA_DPR_CAP, window.devicePixelRatio || 1);
-      const width = Math.max(1, Math.round(wrap.clientWidth * scale)), height = Math.max(1, Math.round(wrap.clientHeight * scale));
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
-      }
-      gl.viewport(0, 0, width, height);
-      gl.uniform2f(uniforms.uRes, width, height);
-      gl.uniform1f(uniforms.uScale, scale);
-      gl.uniform1f(uniforms.uTime, (now - start) / 1000 + 20);
-      gl.uniform1f(uniforms.uMoonX, wrap.clientWidth ? heroSeaMoonX(wrap) / wrap.clientWidth : 0.955);
-      heroSeaApplyWeather(gl, uniforms, weatherRef.current);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      const width = wrap.clientWidth, height = wrap.clientHeight, now = weatherRef.current;
+      return {
+        scale, width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)),
+        moonX: width ? heroSeaMoonX(wrap) / width : 0.955, wind: now.wind, moon: now.moon, fog: now.fog,
+      };
     };
-    const loop = now => {
-      frame = window.requestAnimationFrame(loop);
-      if (now - last < HERO_SEA_FRAME_MS - 1) return;
-      last = now;
-      draw(now);
-    };
-    const stop = () => { window.cancelAnimationFrame(frame); frame = 0; };
     // The loop runs only while the hero is on screen, the tab is visible and motion is allowed.
-    const update = () => {
-      const run = onScreen && !document.hidden && !reduceQuery.matches && !lost;
-      if (run && !frame) frame = window.requestAnimationFrame(loop);
-      if (!run) stop();
-      if (!lost && !run) draw(performance.now());
-    };
-    const onLost = event => {
-      event.preventDefault();
-      lost = true;
-      stop();
-      setMode('svg');
-    };
-    canvas.addEventListener('webglcontextlost', onLost);
-    document.addEventListener('visibilitychange', update);
-    reduceQuery.addEventListener('change', update);
-    const observer = 'IntersectionObserver' in window ? new IntersectionObserver(([entry]) => {
-      onScreen = entry.isIntersecting;
+    const wantRun = () => onScreen && !document.hidden && !reduceQuery.matches;
+    const fail = () => { if (!cancelled) setMode('svg'); };
+
+    // The program is ready. Watch the page and fade the canvas in.
+    const attach = () => {
+      if (cancelled) return;
+      const update = () => target.run(wantRun());
+      document.addEventListener('visibilitychange', update);
+      reduceQuery.addEventListener('change', update);
+      const observer = 'IntersectionObserver' in window ? new IntersectionObserver(([entry]) => {
+        onScreen = entry.isIntersecting;
+        update();
+      }) : null;
+      if (observer) observer.observe(wrap);
+      // A resize draws one frame at once, also under reduced motion.
+      const sizes = 'ResizeObserver' in window ? new ResizeObserver(() => target.set(measure(), true)) : null;
+      if (sizes) sizes.observe(wrap);
+      syncRef.current = redraw => target.set(measure(), redraw);
+      wrap.setAttribute('data-ready', 'true');
       update();
-    }) : null;
-    if (observer) observer.observe(wrap);
-    // A resize draws one frame at once, also under reduced motion.
-    const sizes = 'ResizeObserver' in window ? new ResizeObserver(() => { if (!lost) draw(performance.now()); }) : null;
-    if (sizes) sizes.observe(wrap);
-    update();
+      const free = teardown;
+      teardown = () => {
+        document.removeEventListener('visibilitychange', update);
+        reduceQuery.removeEventListener('change', update);
+        if (observer) observer.disconnect();
+        if (sizes) sizes.disconnect();
+        free();
+      };
+    };
+
+    // The context is made on the page. It is the path for browsers without OffscreenCanvas.
+    const beginLocal = () => {
+      const cancelStart = heroSeaStart(canvas, program => {
+        // The first frame waits for the next animation frame, so the link check and the draw are two short tasks.
+        waiting = program;
+        frameId = window.requestAnimationFrame(() => {
+          frameId = 0;
+          waiting = null;
+          const driver = heroSeaDriver(program, canvas);
+          const onLost = event => {
+            event.preventDefault();
+            fail();
+          };
+          canvas.addEventListener('webglcontextlost', onLost);
+          target = driver;
+          teardown = () => {
+            canvas.removeEventListener('webglcontextlost', onLost);
+            driver.stop();
+            program.free();
+          };
+          driver.set(measure(), true);
+          attach();
+        });
+      }, fail);
+      teardown = cancelStart;
+    };
+
+    // The context is made in a worker. The page only sends small messages.
+    const beginWorker = () => {
+      let worker;
+      try {
+        workerUrl = URL.createObjectURL(new Blob([heroSeaWorkerSource()], { type: 'text/javascript' }));
+        worker = new Worker(workerUrl);
+      } catch (error) {
+        return false;
+      }
+      const offscreen = canvas.transferControlToOffscreen();
+      worker.onmessage = event => {
+        const type = event.data.type;
+        if (type === 'ready') {
+          target = {
+            set: (params, redraw) => worker.postMessage({ type: 'set', params, redraw }),
+            run: on => worker.postMessage({ type: 'run', on }),
+          };
+          attach();
+        } else if (type === 'fail' || type === 'lost') {
+          fail();
+        }
+      };
+      worker.onerror = fail;
+      teardown = () => {
+        worker.postMessage({ type: 'free' });
+        worker.terminate();
+      };
+      worker.postMessage({ type: 'init', canvas: offscreen, params: measure(), run: wantRun() }, [offscreen]);
+      return true;
+    };
+
+    const begin = () => {
+      idleId = null;
+      timerId = null;
+      if (cancelled) return;
+      if (!(heroSeaCanUseWorker(canvas) && beginWorker())) beginLocal();
+    };
+    const schedule = () => {
+      if (cancelled) return;
+      if (typeof window.requestIdleCallback === 'function') idleId = window.requestIdleCallback(begin, { timeout: HERO_SEA_IDLE_MS });
+      else timerId = window.setTimeout(begin, 200);
+    };
+    if (document.readyState === 'complete') schedule();
+    else window.addEventListener('load', schedule, { once: true });
+
     return () => {
-      stop();
-      canvas.removeEventListener('webglcontextlost', onLost);
-      document.removeEventListener('visibilitychange', update);
-      reduceQuery.removeEventListener('change', update);
-      if (observer) observer.disconnect();
-      if (sizes) sizes.disconnect();
-      program.free();
+      cancelled = true;
+      syncRef.current = null;
+      window.removeEventListener('load', schedule);
+      if (idleId !== null && window.cancelIdleCallback) window.cancelIdleCallback(idleId);
+      if (timerId !== null) window.clearTimeout(timerId);
+      if (frameId) window.cancelAnimationFrame(frameId);
+      if (waiting) waiting.free();
+      if (teardown) teardown();
+      if (workerUrl) URL.revokeObjectURL(workerUrl);
     };
   }, [mode]);
 

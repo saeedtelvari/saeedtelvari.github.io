@@ -718,8 +718,16 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   height: var(--hero-sea-h);
   overflow: hidden;
 }
+/* The flat tones of the shader base (horizon, middle, near water). They show until the shader is ready. */
+.hero-sea { background: linear-gradient(180deg, #2b4263 0%, #12223b 42%, #040a15 100%); }
 .hero-sea__canvas,
 .hero-sea__svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+/* The canvas fades in over the flat tones when the program is ready. */
+.hero-sea__canvas { opacity: 0; transition: opacity 400ms var(--ease-emil-out); }
+.hero-sea[data-ready="true"] .hero-sea__canvas { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .hero-sea__canvas { transition: none; }
+}
 /* SVG sea: each layer drifts one tile and starts again, so the loop has no seam. */
 .hero-sea__drift > g { animation: hero-sea-drift var(--sea-speed) linear infinite; }
 @keyframes hero-sea-drift { to { transform: translateX(-360px); } }
