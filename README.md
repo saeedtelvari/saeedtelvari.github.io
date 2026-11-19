@@ -14,7 +14,13 @@ React 18 (UMD) components. Babel precompiles them into three bundles. There are 
 1. **Homepage (`index.html`).** This is the restored earlier design. The tag `homepage-archive-2026-10` keeps the original.
    - **Hero (`SubsurfaceHero.jsx`).** A moonlit offshore platform above a live vertical-equilibrium (VE) section of CO₂ injected into a faulted saline aquifer. It has two buttons: "Open the VE simulator" (primary) and "How VE models work" (the story page).
      - **Source of the claim.** "Up to 100× faster" links to the preprint card (`#pub-ve-depleted-gas-2026`), as "(preprint, 2026)".
-     - **Three doors.** Under the buttons, one line for each kind of visitor: "Reviewing my work? Papers and BibTeX", "Hiring? CV (PDF)", "Working on CCS? The method and its checks". On phones the line is short ("Papers & BibTeX · CV (PDF) · Method"); the questions stay for screen readers.
+     - **Three doors.** Under the buttons, one line for each kind of visitor: "Reviewing my work? Papers and BibTeX", "Hiring? CV (PDF)", "Working on CCS? The method and its checks". Up to 1180 px the line is short ("Papers & BibTeX · CV (PDF) · Method"), so it stays clear of the platform; the questions stay for screen readers.
+     - **One art style.** The sky, the sea, the platform and the carrier follow the same rules: one navy palette; crisp man-made shapes and soft nature; three stroke weights; light on water is always short horizontal dashes; moonlight from the upper right; slow motion only, still under reduced motion.
+     - **Sea (`HeroSea.jsx`).** A WebGL shader draws the sea strip (`--hero-sea-h`, about 88 px at 1440 × 900, 52 px at 860 px and below) in true perspective, in the drawn style: rows of short ripple arcs come towards the viewer, flat tone bands, a moon path of white dashes that is strong on the near water, and a moonlit horizon line. It draws at most 30 frames per second, caps the pixel ratio at 2, stops off-screen, in a hidden tab and under reduced motion (one frame), and starts after the page is idle. Without WebGL (or its derivatives extension, or after a context loss) an SVG sea in three drifting layers takes its place.
+     - **Platform and carrier (in `SubsurfaceHero.jsx`).** A fixed four-leg steel jacket converted for CO₂ injection: X-bracing, yellow splash-zone bands, the legs darker below the waterline, foam, a truss cellar deck, a process module, lit accommodation, orange lifeboats, a helideck with green lights, a lattice crane, a workover derrick over the well, red obstruction lights and white lights that flash Morse U. There is no flare. The platform is 20 % larger than before (`min(648px, 50.4vw)`, 62vw on phones). The CO₂ carrier moors alongside, as before, with its deck lights and their reflections.
+     - **Live weather (`HeroWeather.js`).** After the page has loaded and is idle, the browser asks Open-Meteo (`api.open-meteo.com` and `marine-api.open-meteo.com`) once for the current weather and waves at 57.5° N, 2.5° E, the North Sea point of the story page. The request carries no personal data, but Open-Meteo sees the visitor's IP address. It is skipped when the browser asks to save data, times out after 4 s, and is kept for 30 minutes in localStorage (`hero-weather-v1`). The data maps to one of six drawn states (fog, rain, gale, overcast, partly cloudy, clear); the scene stays a night scene. Without data the hero shows "a typical North Sea night", the approved default look. The player names the source and links to open-meteo.com, as the CC BY 4.0 licence asks.
+     - **Moon.** The disc shows the real phase, computed in the browser (synodic month from the new moon of 2000-01-06 18:14 UTC). The strength of the moon path follows the lit fraction and the cloud cover; at a new moon the path is off.
+     - **Debug view.** `index.html#weather=clear|partly|overcast|rain|fog|gale`, optionally with `&moon=<phase 0..1>`, shows one state without a fetch.
      - **Fast first paint.** `#app-loader` in `index.html` holds a static copy of the role, the name and the summary, with the same classes as the React hero. The visitor reads them before React runs. The loader is `aria-hidden`, so screen readers hear the text once. The Google Fonts stylesheet loads without blocking the render.
    - **Hero model (`hero-geology.js`).** The page, `hero-simulation-worker.js` and the tests share it. It is a conservative sharp-interface VE model:
      - residual-trapping hysteresis;
@@ -66,7 +72,7 @@ The spec is `docs/superpowers/specs/2026-10-25-homepage-story-design.md`.
 
 | Bundle | Source files | Loaded by |
 | --- | --- | --- |
-| `bundle.js` | `Primitives.jsx`, `site-content.js`, `Header.jsx`, `Footer.jsx`, `hero-geology.js`, `SubsurfaceHero.jsx`, `GeologicalDescent.jsx`, `HomeSections.jsx`, `CVPage.jsx`, `App.jsx` | All four pages. It is last on each page. |
+| `bundle.js` | `Primitives.jsx`, `site-content.js`, `Header.jsx`, `Footer.jsx`, `hero-geology.js`, `HeroWeather.js`, `HeroSea.jsx`, `SubsurfaceHero.jsx`, `GeologicalDescent.jsx`, `HomeSections.jsx`, `CVPage.jsx`, `App.jsx` | All four pages. It is last on each page. |
 | `story-bundle.js` | `story-content.js`, `ve2d-model.js`, `story-geometry.js`, `StoryStage.jsx`, `StoryChapters.jsx`, `StoryEarth.jsx`, `StoryFields.jsx`, `StoryRock.jsx`, `StoryBlock.jsx`, `StoryPage.jsx` | `ve-story.html` only, before `bundle.js`. |
 | `simulator-bundle.js` | `ve2d-model.js`, `sim-block3d.js`, `GuidePage.jsx`, `SimCharts.jsx`, `SimViews.jsx`, `SimFirstRun.jsx`, `SimReport.jsx`, `SimulatorPage.jsx` | `simulator.html` only, before `bundle.js`. |
 
@@ -90,7 +96,9 @@ The spec is `docs/superpowers/specs/2026-10-25-homepage-story-design.md`.
 | `story-content.js` | The words and the ppm numbers of the story (`SITE_STORY`). |
 | `Primitives.jsx` | Inline SVG icon set (`Icon`). |
 | `Header.jsx`, `Footer.jsx` | Shared navigation. The site variant is transparent over the hero. On the story page (`story` prop) it is clear over the pinned story and a solid bar after it. The workbench variant is the simulator's bar. |
-| `hero-geology.js`, `hero-simulation-worker.js`, `SubsurfaceHero.jsx` | The hero's geometry, model and rendering. |
+| `hero-geology.js`, `hero-simulation-worker.js`, `SubsurfaceHero.jsx` | The hero's geometry, model and rendering, with the platform and the carrier. |
+| `HeroSea.jsx` | The hero sea: the WebGL shader and its SVG fallback. |
+| `HeroWeather.js` | Live North Sea weather (Open-Meteo), its six drawn states, and the moon phase. |
 | `GeologicalDescent.jsx` | The rock behind the homepage sections. |
 | `StoryPage.jsx` | The story page: the header, the stage, the end panel and the footer. |
 | `StoryStage.jsx` | The pinned stage. It has the `progress` value, the chapter map, the captions, the skip link, the rail and the reduced-motion frames. The renderer API is in the first lines of the file. |
