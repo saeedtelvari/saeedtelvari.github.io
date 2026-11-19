@@ -33,6 +33,9 @@ test('sky interaction brightens fixed stars and resets on leave, reduced motion,
     useEffect: fn => { effect = fn; },
     useMemo: fn => fn(),
     heroFixed: value => Math.round(value * 10) / 10,
+    // Sky mounts the sea component and reads the default weather. The stubs keep this test on the sky.
+    HeroSea: () => null,
+    HERO_WEATHER_DEFAULT: { wind: 6, cloud: 0.35, fog: 0, moon: 1 },
     React: { createElement: (type, props) => {
       if (props?.className === 'hero-rain-drop') rain.push(props.style);
       return {};

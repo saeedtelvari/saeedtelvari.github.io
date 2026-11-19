@@ -594,7 +594,7 @@ const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, ship, ex
 /* =====================================================
    Sky — moonlight and drifting clouds above a Highland field site.
    ===================================================== */
-const Sky = () => {
+const Sky = ({ weather = HERO_WEATHER_DEFAULT } = {}) => {
   const skyRef = useRef(null);
   useEffect(() => {
     const sky = skyRef.current;
@@ -646,7 +646,7 @@ const Sky = () => {
   }}>
     <div style={{
       position: 'absolute', inset: 0,
-      background: 'radial-gradient(ellipse at 82% 28%, rgba(159,183,209,0.1), transparent 52%)',
+      background: 'radial-gradient(ellipse at 95.5% 28%, rgba(159,183,209,0.1), transparent 52%)',
     }}/>
     <div className="hero-stars">
     {Array.from({ length: 108 }, (_, i) => <span key={i} className={`hero-star${i % 7 === 0 ? ' hero-star-twinkle' : ''}`} style={{
@@ -657,7 +657,7 @@ const Sky = () => {
       boxShadow: i % 11 === 0 ? '0 0 5px rgba(176,206,238,0.35)' : 'none',
     }}/>) }
     </div>
-    <div className="hero-moon">
+    <div className="hero-moon" style={{ opacity: weather.moon }}>
       <svg viewBox="0 0 64 64" width="100%" height="100%">
         <defs>
           <radialGradient id="moon-disc" cx=".35" cy=".3" r=".75">
@@ -716,53 +716,22 @@ const Sky = () => {
       position: 'absolute', inset: 0,
       background: 'linear-gradient(90deg, rgba(8,14,28,0.94) 0%, rgba(8,14,28,0.72) 29%, rgba(8,14,28,0.15) 58%, transparent 78%)',
     }}/>
-    {/* The North Sea at night: haze on the horizon, then the sea surface down to sea level at the section. */}
-    <svg className="hero-landscape" viewBox="0 0 1440 180" preserveAspectRatio="none">
+    {/* The horizon haze, then the whole sea strip down to the cut line. */}
+    <svg className="hero-landscape" viewBox="0 0 1440 20" preserveAspectRatio="none">
       <defs>
-        <linearGradient id="sea-surface" x1="0" y1="0" x2="0" y2="1">
-          <stop stopColor="#1d3150" /><stop offset=".3" stopColor="#11203a" /><stop offset="1" stopColor="#050c18" />
-        </linearGradient>
         <linearGradient id="sea-haze" x1="0" y1="0" x2="0" y2="1">
           <stop stopColor="#a5bcd3" stopOpacity="0" /><stop offset="1" stopColor="#a5bcd3" stopOpacity=".14" />
         </linearGradient>
       </defs>
-      <rect y="66" width="1440" height="24" fill="url(#sea-haze)" />
-      <rect y="90" width="1440" height="90" fill="url(#sea-surface)" />
-      <path d="M0 90.5H1440" stroke="#3a5577" strokeOpacity=".7" vectorEffect="non-scaling-stroke" />
+      <rect width="1440" height="20" fill="url(#sea-haze)" />
     </svg>
-    {/* Ripples drift slowly with the wind; the strip moves as one layer, so nothing repaints. */}
-    <div className="hero-sea">
-      <div className="hero-sea__drift">
-        <svg viewBox={`0 0 ${HERO_SEA_TILE * 10} 90`} preserveAspectRatio="xMinYMax meet">
-          <defs>
-            <g id="sea-tile" fill="none" strokeLinecap="round">
-              <path d={HERO_SEA_RIPPLES.troughs} stroke="#02060d" strokeWidth="1.1" strokeOpacity=".35" />
-              {HERO_SEA_RIPPLES.crests.map((d, band) => <path key={band} d={d} stroke="#86a6cc"
-                strokeWidth={[0.45, 0.6, 0.85, 1.2][band]} strokeOpacity={[0.13, 0.17, 0.21, 0.25][band]} />)}
-            </g>
-          </defs>
-          {Array.from({ length: 10 }, (_, i) => <use key={i} href="#sea-tile" x={i * HERO_SEA_TILE} />)}
-        </svg>
-      </div>
-    </div>
-    {/* The moon's path on the water: broken glints that widen towards the viewer and shimmer. */}
-    <svg className="hero-glitter" viewBox="0 0 120 90" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="glint-glow" x1="0" y1="0" x2="1" y2="0">
-          <stop stopColor="#c9d8ec" stopOpacity="0" /><stop offset=".5" stopColor="#c9d8ec" stopOpacity=".12" />
-          <stop offset="1" stopColor="#c9d8ec" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d="M56 0H64L104 90H16Z" fill="url(#glint-glow)" />
-      {HERO_SEA_GLINTS.map((set, i) => <g key={i} className="hero-glitter__set" fill="none" stroke="#e8f0fb" strokeLinecap="round">
-        {set.map((glint, k) => <path key={k} d={glint.d} strokeWidth={glint.w} strokeOpacity={glint.o} />)}
-      </g>)}
-    </svg>
+    <HeroSea weather={weather} />
     {/* Distant offshore features sit on the horizon at fixed size, so they never stretch. */}
     <div className="hero-horizon">
       <svg className="hero-horizon__item" style={{ left: '33%' }} width="34" height="20" viewBox="0 0 34 20">
         <path d="M8 20V11h18v9M10 11V6h8v5M22 11V2" stroke="#2b3e57" strokeWidth="1.2" fill="none" />
-        <circle cx="22" cy="2" r="1" fill="#ff5a4f" opacity=".8" /><circle cx="13" cy="8.5" r=".9" fill="#e9c98f" />
+        <ellipse cx="17" cy="16" rx="30" ry="10" fill="#e3c286" opacity=".07" />
+        <circle className="hero-beacon hero-beacon--slow" cx="22" cy="2" r="1" fill="#ff5a4f" /><circle cx="13" cy="8.5" r=".9" fill="#e9c98f" />
         <circle cx="19" cy="14" r=".9" fill="#e9c98f" opacity=".7" />
       </svg>
       <svg className="hero-horizon__item" style={{ left: '50%' }} width="200" height="32" viewBox="0 0 200 32">
@@ -771,9 +740,14 @@ const Sky = () => {
           const blade = k => { const t = (a + k * 120) * Math.PI / 180; return `M${x} ${top}l${heroFixed(r * Math.cos(t))} ${heroFixed(r * Math.sin(t))}`; };
           return <g key={x}>
             <path d={`M${x} 32V${top}${blade(0)}${blade(1)}${blade(2)}`} stroke="#3a5070" strokeWidth=".9" fill="none" />
-            <circle cx={x} cy={top} r="1.1" fill="#ff5a4f" opacity=".8" />
+            <circle className="hero-beacon" cx={x} cy={top} r="1.1" fill="#ff5a4f" />
           </g>;
         })}
+      </svg>
+      {/* A distant ship: a white masthead light and a warm deck light. */}
+      <svg className="hero-horizon__item" style={{ left: '72%' }} width="24" height="10" viewBox="0 0 24 10">
+        <path d="M3 10h18l-2 -2h-14z" fill="#1a2738" />
+        <circle cx="12" cy="5" r=".9" fill="#f4f7fb" /><circle cx="6" cy="9" r=".7" fill="#e9c98f" opacity=".8" />
       </svg>
     </div>
     <div className="hero-rain">
@@ -786,48 +760,8 @@ const Sky = () => {
       }}/>) }
     </div>
   </div>
-), []);
+), [weather]);
 };
-
-// Sea surface, built once. Rows of ripple crests crowd together and shrink towards the horizon
-// (y = 0) and open out towards the viewer (y = 90); a tile repeats seamlessly across the strip.
-const heroSeaRandom = seed => () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-const HERO_SEA_TILE = 360;
-const HERO_SEA_RIPPLES = (() => {
-  const random = heroSeaRandom(42);
-  const bands = [[], [], [], []], troughs = [];
-  for (let j = 0; j < 30; j++) {
-    const t = (j + 0.5) / 30, y = 1 + 88 * t ** 1.8, length = 2 + 24 * t * t, rise = 0.25 + 1.6 * t;
-    for (let x = random() * length * 2; x < HERO_SEA_TILE;) {
-      const w = length * (0.6 + 0.8 * random());
-      if (x + w < HERO_SEA_TILE) {
-        const crest = y + (random() - 0.5) * rise;
-        bands[Math.min(3, Math.floor(t * 4))].push(`M${heroFixed(x)} ${heroFixed(crest)}q${heroFixed(w / 2)} ${heroFixed(-rise)} ${heroFixed(w)} 0`);
-        // Nearer waves show the shaded trough below each crest.
-        if (t > 0.4) troughs.push(`M${heroFixed(x + w * 0.15)} ${heroFixed(crest + rise)}q${heroFixed(w * 0.35)} ${heroFixed(rise * 0.5)} ${heroFixed(w * 0.7)} 0`);
-      }
-      x += w * (1.6 + 2.2 * random());
-    }
-  }
-  return { crests: bands.map(band => band.join('')), troughs: troughs.join('') };
-})();
-// Glints in the moon's path: brightest on its centre line, the path widening towards the viewer.
-const HERO_SEA_GLINTS = (() => {
-  const random = heroSeaRandom(7);
-  const sets = [[], [], []];
-  for (let j = 0; j < 26; j++) {
-    const t = (j + 0.5) / 26, y = 1 + 88 * t ** 1.8, half = 5 + 50 * t;
-    for (let k = 0, n = 2 + Math.round(4 * t); k < n; k++) {
-      const offset = (random() * 2 - 1) * half * (0.35 + 0.65 * random());
-      const w = (1.5 + 9 * t) * (0.5 + random());
-      sets[(j + k) % 3].push({
-        d: `M${heroFixed(60 + offset - w / 2)} ${heroFixed(y)}q${heroFixed(w / 2)} ${heroFixed(-(0.3 + 1.2 * t))} ${heroFixed(w)} 0`,
-        w: heroFixed(0.5 + 0.8 * t), o: heroFixed(0.3 + 0.65 * (1 - Math.abs(offset) / half)),
-      });
-    }
-  }
-  return sets;
-})();
 
 // Decorative equipment stays anchored to the same surface and well as the live model:
 // an offshore injection platform over the well, and a CO₂ carrier moored alongside while injecting.
