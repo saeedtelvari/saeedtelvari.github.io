@@ -58,6 +58,108 @@ const heroWellLayout = (roofY, td) => {
 const heroFlowPhase = year => Math.round(year * 60) / 10;
 // ---- end hero playback helpers
 
+// ---- hero leak helpers (pure; tests/hero-leak.test.js evaluates this block)
+// A droplet is a fixed small volume of leaked CO2. The leak rate sets how many droplets leave per second.
+// Each droplet passes four stages: 0 gather (in the plume), 1 squeeze (damage zone), 2 rise (on the fault), 3 spread (under the roof).
+// Points are [x, y] in CSS pixels.
+const HERO_LEAK_PEAK_RATE = 5;   // droplets per second at the peak flow of the run, at full migration speed (1x)
+const HERO_LEAK_MAX_DROPS = 140; // live droplets per fault
+const heroLeakClamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const heroLeakLerp = (a, b, t) => a + (b - a) * t;
+const heroLeakEase = t => 1 - Math.pow(1 - heroLeakClamp(t), 3);
+// A small seeded generator, so that every replay draws the same droplets.
+const heroLeakRandom = seed => () => {
+  seed = (seed + 0x6D2B79F5) >>> 0;
+  let t = seed;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+// Droplets per real second for one fault. The flow is relative to the peak flow of the run.
+const heroLeakRate = (flow, peak, yearsPerSecond, speed) =>
+  flow > 0 && peak > 0 ? HERO_LEAK_PEAK_RATE * Math.min(1, flow / peak) * yearsPerSecond * speed / 60 : 0;
+// End of the rise: the fault line from -> to, continued up to the height riseY.
+const heroLeakRiseEnd = (from, to, riseY) => {
+  const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
+  const u = [(to[0] - from[0]) / length, (to[1] - from[1]) / length];
+  if (!(length > 0) || u[1] > -1e-6 || to[1] <= riseY) return [to[0], to[1]];
+  const t = (to[1] - riseY) / -u[1];
+  return [to[0] + u[0] * t, to[1] + u[1] * t];
+};
+// How far a droplet spreads under the roof. It never goes past the tip of the pool (reach plus 4 px).
+const heroLeakSpreadLength = (reach, random) => Math.min(Math.max(8, reach) + 4, 12 + 56 * Math.pow(random, 0.8));
+// Where a droplet is and how it looks. g holds the fault in pixels: from, to, u (up the fault), n (across it), capLen and roofAt(x).
+// The radius R and the alpha a follow the stage: small in the plume, smallest in the caprock, a little larger in the rise, smaller again at the pool.
+const heroLeakLook = (p, g) => {
+  const { from, to, u, n, capLen } = g;
+  const t = p.t;
+  if (p.st === 0) {
+    const ctrl = [heroLeakLerp(from[0], p.s0[0], 0.35), p.s0[1] - 0.5];
+    const e = heroLeakEase(t * 0.9 + 0.1 * t * t);
+    const q = (1 - e) * (1 - e), r = 2 * (1 - e) * e, s = e * e;
+    return { x: q * p.s0[0] + r * ctrl[0] + s * from[0], y: q * p.s0[1] + r * ctrl[1] + s * from[1],
+      c: t < 0.55 ? 'green' : 'mix', k: heroLeakClamp((t - 0.55) / 0.45), R: p.r * 0.7, a: 0.75 * heroLeakClamp(t / 0.3) };
+  }
+  if (p.st === 1) {
+    const e = heroLeakClamp(t + 0.07 * Math.sin(6.283 * (2.5 * t) + p.phi));
+    const off = 0.75 * Math.sin(6.283 * (1.6 * t) + p.phi2);
+    return { x: from[0] + u[0] * capLen * e + n[0] * off, y: from[1] + u[1] * capLen * e + n[1] * off, c: 'amber', k: 0, R: p.r * 0.74, a: 1 };
+  }
+  if (p.st === 2) {
+    const e = 0.55 * t + 0.45 * t * t;
+    const off = (0.6 + 1.4 * e) * Math.sin(6.283 * (1.3 * t) + p.phi);
+    return { x: heroLeakLerp(to[0], p.riseEnd[0], e) + n[0] * off, y: heroLeakLerp(to[1], p.riseEnd[1], e) + n[1] * off, c: 'cream', k: 0, R: p.r * 0.88, a: 1 };
+  }
+  const e = heroLeakEase(t);
+  const x = p.riseEnd[0] + p.side * p.spreadLen * e;
+  return { x, y: g.roofAt(x) + 1.6 + 0.3 * Math.sin(6.283 * t + p.phi), c: 'join', k: e,
+    R: p.r * 0.88 * (1 - 0.45 * e), a: 1 - heroLeakClamp((t - 0.2) / 0.8) };
+};
+const heroLeakHead = l => {
+  if (l.c === 'green') return '#7dffd2';
+  if (l.c === 'amber') return '#ffd9a2';
+  if (l.c === 'cream') return '#fff0d8';
+  if (l.c === 'mix') return `rgb(${Math.round(heroLeakLerp(61, 255, l.k))},${Math.round(heroLeakLerp(255, 207, l.k))},${Math.round(heroLeakLerp(192, 135, l.k))})`;
+  return `rgb(255,${Math.round(heroLeakLerp(230, 181, l.k))},${Math.round(heroLeakLerp(191, 71, l.k))})`;
+};
+const heroLeakTail = l => (l.c === 'green' || (l.c === 'mix' && l.k < 0.5) ? '61,255,192' : '255,181,71');
+// The buoyancy in the card. A value that rounds to 0 while the fault leaks reads "< 0.1".
+const heroLeakBuoyText = value => (value < 0.05 ? '< 0.1' : String(Math.round(value * 10) / 10));
+const heroLeakLine = leak => (leak.state === 'above'
+  ? `Buoyancy ${heroLeakBuoyText(leak.buoyancy)} bar${leak.overpressure > 0 ? ` + overpressure ${leak.overpressure} bar` : ''} > entry ${leak.entry} bar`
+  : `${leak.overpressure > 0 ? 'Buoyancy + overpressure' : 'Buoyancy'} held at the ${leak.entry} bar entry pressure`);
+// Full scale of the bar: the largest push of the run, rounded up to a whole bar.
+const heroLeakScaleBar = values => Math.max(1, Math.ceil(values.reduce((max, v) => Math.max(max, v), 0) - 1e-9));
+// Fractions of the full scale: buoyancy, buoyancy plus overpressure, and the entry pressure.
+const heroLeakGauge = (leak, scale) => ({
+  buoyancy: heroLeakClamp(leak.buoyancy / scale),
+  push: heroLeakClamp((leak.buoyancy + leak.overpressure) / scale),
+  entry: heroLeakClamp(leak.entry / scale),
+});
+// First year with flow for each fault, or -1.
+const heroLeakFirstYears = (faultFlow, faults, years) => {
+  const first = new Array(faults).fill(-1);
+  for (let y = 0; y <= years; y++) for (let i = 0; i < faults; i++) if (first[i] < 0 && faultFlow[y * faults + i] > 0) first[i] = y;
+  return first;
+};
+// Stops of the band under the scrubber: the strongest leak of any fault, about every 20 years.
+// at is the share of the band (0 to 100). alpha is the amber share (25 to 95), or 0 where nothing leaks.
+const heroLeakBandStops = (faultFlow, faults, years, peak, first, step = 20) => {
+  if (first < 0 || !(peak > 0)) return [];
+  const stops = [];
+  const add = y => {
+    let flow = 0;
+    for (let i = 0; i < faults; i++) flow = Math.max(flow, faultFlow[y * faults + i]);
+    stops.push({ at: Math.round(1000 * (y - first) / Math.max(1, years - first)) / 10,
+      alpha: flow > 0 ? Math.round(25 + 70 * Math.sqrt(Math.min(1, flow / peak))) : 0 });
+  };
+  add(first);
+  for (let y = Math.ceil((first + 1) / step) * step; y < years; y += step) add(y);
+  if (years > first) add(years);
+  return stops;
+};
+// ---- end hero leak helpers
+
 // Percent of injected CO2 for display: a trace that rounds to nothing still reads as "<0.1".
 const heroPercentText = (value, total) => {
   const share = HeroGeology.percent(value, total);
@@ -286,12 +388,19 @@ const SubsurfaceHero = ({ onNavigate }) => {
   }, [late, run, playing, speed, visible, hidden, shipSeconds]);
 
   const frame = useMemo(() => (run ? heroFrameAt(run, year) : null), [run, year]);
-  // The strongest leak of this run sets the scale: its dots move about 40 px/s at full migration speed.
-  const leakScale = useMemo(() => {
-    const peak = run ? run.faultFlow.reduce((max, v) => Math.max(max, v), 0) : 0;
-    return { peak, dots: peak > 0 ? 40 / (60 * peak * run.yearLength) : 0 };
-  }, [run]);
+  // The strongest leak of this run sets the scale of the droplet flow and of the band under the scrubber.
+  const leakScale = useMemo(() => ({ peak: run ? run.faultFlow.reduce((max, v) => Math.max(max, v), 0) : 0 }), [run]);
+  const firstLeakYears = useMemo(() => (run ? heroLeakFirstYears(run.faultFlow, run.faults, run.years) : []), [run]);
+  // Full scale of the push bar for each fault: its largest buoyancy plus overpressure while it leaks, rounded up to a whole bar.
+  const pushScale = useMemo(() => (run ? HERO_FAULTS.map((fault, i) => {
+    const cell = heroSection.faultCells[i][0], { distance } = heroSection.leak[i], sums = [];
+    for (let y = 0; y <= run.years; y++) {
+      if (run.faultFlow[y * run.faults + i] > 0) sums.push(run.h[0][y * run.nodes + cell] * HeroGeology.BAR_PER_HEAD + HeroGeology.overpressure(distance, y, run.injectionYears));
+    }
+    return heroLeakScaleBar(sums);
+  }) : []), [run]);
   const injectionYears = run ? run.injectionYears : 30;
+  const leak = useMemo(() => (frame ? HeroGeology.leakReadout(heroGeology, heroSection, frame, year, injectionYears) : null), [frame, year, injectionYears]);
   // CO2 is in the pipes while the carrier is connected during the injection years; its flow follows the clock.
   const flow = run && year < injectionYears && ship.phase === 'moored' ? heroFlowPhase(year) : null;
   const jumpShip = value => {
@@ -313,14 +422,16 @@ const SubsurfaceHero = ({ onNavigate }) => {
       style={{ '--hero-swell': scene.swell, '--hero-foam': scene.foam }}>
       <Sky weather={scene} late={step >= 1} />
       <HeroSection sectionRef={sectionRef} />
-      <HeroPlume frame={frame} leakScale={leakScale} />
+      <HeroPlume frame={frame} />
+      {leakScale.peak > 0 && <HeroLeakFlow sectionRef={sectionRef} frame={frame} yearRef={yearRef} run={run} speed={speed} playing={playing} visible={visible} hidden={hidden}
+        injectionYears={injectionYears} peak={leakScale.peak} firstYears={firstLeakYears} />}
       <HeroOverlay />
       <HeroWell flow={flow} />
       {late && <SurfaceSite geology={heroGeology} flow={flow} ship={ship} />}
       <HeroLabels />
-      <HeroLeakReadout frame={frame} year={year} injectionYears={injectionYears} />
+      <HeroLeakReadout frame={frame} leak={leak} pushScale={pushScale} />
       <Identity onNavigate={onNavigate} />
-      <HeroPlayer year={year} playing={playing} speed={speed} frame={frame} run={run} injectionYears={injectionYears}
+      <HeroPlayer year={year} playing={playing} speed={speed} frame={frame} run={run} injectionYears={injectionYears} leak={leak} peak={leakScale.peak}
         ship={ship.phase} exaggeration={exaggeration} controls={controls} weather={scene} />
     </section>
   );
@@ -429,7 +540,7 @@ const GeologyTexture = ({ faults, geology: g }) => useMemo(() => {
 /* =====================================================
    Plume — CO2 in the simulator's class colours, redrawn per frame
    ===================================================== */
-const HeroPlume = ({ frame, leakScale }) => {
+const HeroPlume = ({ frame }) => {
   if (!frame) return null;
   const storage = heroPlumePaths(heroStorage, frame.h, frame.hMax);
   const overlying = heroPlumePaths(heroOverlying, frame.h2, frame.h2Max);
@@ -459,26 +570,281 @@ const HeroPlume = ({ frame, leakScale }) => {
       {overlying && <g clipPath="url(#hero-in-overlying)" data-layer="leaked-plume">
         <path d={overlying.residual} fill="url(#hero-leaked-residual)" />
         <path d={overlying.mobile} fill="url(#hero-leaked)" />
+        <path d={overlying.contact} className="hero-contact hero-contact--leaked" fill="none" vectorEffect="non-scaling-stroke" />
       </g>}
-      {HERO_FAULTS.map((fault, i) => {
-        const flow = frame.faultFlow[i] || 0;
-        if (flow <= 0) return null;
-        const strength = Math.min(1, Math.sqrt(flow / leakScale.peak));
-        const conduit = `M${fault.from.x} ${fault.from.y}L${fault.to.x} ${fault.to.y}`;
-        const rise = `M${fault.to.x} ${fault.to.y}L${fault.rise.x} ${heroFixed(fault.rise.y)}`;
-        return (
-          <g key={i} data-layer="fault-leak" opacity={0.45 + 0.55 * strength}>
-            <path d={conduit} className="hero-leak-halo" vectorEffect="non-scaling-stroke" />
-            <path d={rise} className="hero-leak-halo hero-leak-halo--rise" vectorEffect="non-scaling-stroke" />
-            <path d={conduit} className="hero-leak" vectorEffect="non-scaling-stroke" />
-            {/* Dots advance with the volume this fault has passed: they move at the leak rate and stop when paused. */}
-            <path d={conduit + rise.replace('M', 'L')} className="hero-leak-dots" strokeDasharray="0 11"
-              strokeDashoffset={heroFixed(-frame.faultLeaked[i] * leakScale.dots)} vectorEffect="non-scaling-stroke" />
-          </g>
-        );
-      })}
     </svg>
   );
+};
+
+/* =====================================================
+   Leak flow — CO2 droplets along each leaking fault, on one canvas at true pixel scale
+   ===================================================== */
+const HERO_LEAK_JUMP = 30;        // a step of more than this many years is a jump (scrub, restart)
+const HERO_LEAK_FRAME_MS = 30;    // the loop skips a frame that comes sooner than this (about 30 fps at 60 Hz)
+const HERO_LEAK_WARM_STEP = 1 / 30;
+const HERO_LEAK_WARM_STEPS = 120; // 4 s of updates, so that a stream shows at once
+const HERO_LEAK_ONSET = 0.9;      // seconds: the band fills for 0.8 s, the ring fades for 0.9 s
+const HERO_LEAK_AMBER = '255,181,71';
+const heroLeakFx = v => Math.round(v * 100) / 100;
+
+// Paint one droplet: a soft round head, a faint halo and a tapered trail of the last positions.
+const heroLeakDrawDrop = (ctx, q) => {
+  const l = q.l;
+  if (l.a <= 0.01) return;
+  const rgb = heroLeakTail(l), h = q.h, n = h.length;
+  ctx.lineCap = 'round';
+  for (let i = 1; i < n; i++) {
+    const k = i / (n - 1);
+    ctx.strokeStyle = `rgba(${rgb},${heroLeakFx(l.a * 0.5 * k * k)})`;
+    ctx.lineWidth = l.R * 1.6 * k;
+    ctx.beginPath(); ctx.moveTo(h[i - 1][0], h[i - 1][1]); ctx.lineTo(h[i][0], h[i][1]); ctx.stroke();
+  }
+  ctx.globalAlpha = l.a * 0.16;
+  ctx.fillStyle = `rgb(${rgb})`;
+  ctx.beginPath(); ctx.arc(l.x, l.y, l.R * 2.6, 0, 6.2832); ctx.fill();
+  ctx.globalAlpha = l.a;
+  ctx.fillStyle = heroLeakHead(l);
+  ctx.beginPath(); ctx.arc(l.x, l.y, l.R, 0, 6.2832); ctx.fill();
+  ctx.globalAlpha = 1;
+};
+
+// The engine owns the droplets of each fault. React never sees them.
+// tick() moves them in real time x speed while the hero clock advances. paint() draws one still frame.
+const heroLeakEngine = canvas => {
+  const ctx = canvas.getContext('2d');
+  const size = { w: 0, h: 0, sx: 1, sy: 1, ox: 0, oy: 0 };
+  const faults = HERO_FAULTS.map(() => ({ rand: null, drops: [], carry: 0, on: false, done: false, onset: 0, geo: null, box: null }));
+  let lastYear = -1, lastRun = null, boxes = [];
+
+  const roofLine = layer => x => {
+    const k = heroLeakClamp(x / size.w * 200, 0, 200), a = Math.floor(k), b = Math.min(200, a + 1);
+    return heroLeakLerp(layer.roofR[a], layer.roofR[b], k - a) / 580 * size.h;
+  };
+  const storageRoof = roofLine(heroStorage), overlyingRoof = roofLine(heroOverlying);
+  const cellOf = x => Math.max(0, Math.min(200, Math.floor(x / size.w * 200)));
+
+  // Fault geometry in pixels: section units map to x = vx / 1000 * width and y = vy / 580 * height.
+  const geometry = () => faults.forEach((f, i) => {
+    const fault = HERO_FAULTS[i];
+    const pt = point => [point.x / 1000 * size.w, point.y / 580 * size.h];
+    const from = pt(fault.from), to = pt(fault.to);
+    const capLen = Math.max(1, Math.hypot(to[0] - from[0], to[1] - from[1]));
+    const u = [(to[0] - from[0]) / capLen, (to[1] - from[1]) / capLen];
+    const riseEnd = heroLeakRiseEnd(from, to, fault.rise.y / 580 * size.h);
+    const xs = [from[0], to[0], riseEnd[0]];
+    f.geo = { from, to, u, n: [-u[1], u[0]], capLen, riseEnd, roofAt: overlyingRoof };
+    f.box = { x: Math.min(...xs) - 84, y: Math.min(to[1], riseEnd[1]) - 18, w: Math.max(...xs) - Math.min(...xs) + 168, h: from[1] - Math.min(to[1], riseEnd[1]) + 56 };
+  });
+
+  // The storage plume beside the fault: the side with more mobile CO2, and its columns 4-28 px from the entry point.
+  const gatherOf = (i, frame) => {
+    const { from } = faults[i].geo, c = heroSection.faultCells[i][0];
+    let left = 0, right = 0;
+    for (let j = 1; j <= 4; j++) { left += frame.h[Math.max(0, c - j)]; right += frame.h[Math.min(200, c + j)]; }
+    const side = right >= left ? 1 : -1, cols = [];
+    for (let k = 4; k <= 28; k += 2) {
+      const x = from[0] + side * k, cell = cellOf(x);
+      if (frame.h[cell] > 0.002) cols.push([x, frame.h[cell] * HERO_UNIT / 580 * size.h]);
+    }
+    return { side, cols };
+  };
+  // The leaked pool: how far it reaches each way from the fault, in pixels, and the side that reaches further.
+  const poolOf = (i, frame) => {
+    const c = heroSection.faultCells[i][1], cell = size.w / 200, reach = [0, 0];
+    [-1, 1].forEach((dir, d) => {
+      for (let k = 0; k <= 100; k++) {
+        const j = c + dir * k;
+        if (j < 0 || j > 200 || frame.h2[j] <= 0.002) break;
+        reach[d]++;
+      }
+    });
+    return { side: reach[1] >= reach[0] ? 1 : -1, reach: Math.max(reach[0], reach[1]) * cell };
+  };
+
+  const spawn = (f, gather, pool) => {
+    const { rand, geo } = f, { from, to, capLen, riseEnd } = geo;
+    let s0;
+    if (gather.cols.length) {
+      const [x, hPx] = gather.cols[Math.floor(rand() * gather.cols.length)];
+      s0 = [x + (rand() - 0.5) * 1.6, storageRoof(x) + Math.min(1.2 + rand() * 3.8, Math.max(0.5, hPx))];
+    } else s0 = [from[0] + gather.side * 4, from[1] + 1 + rand() * 2];
+    const mul = 0.65 + 0.7 * rand();
+    const spreadLen = heroLeakSpreadLength(pool.reach, rand());
+    const p = { st: 0, t: 0, s0, mul, side: pool.side, spreadLen, riseEnd, h: [], l: null,
+      phi: rand() * 6.283, phi2: rand() * 6.283, r: 1.15 + 0.75 * rand() };
+    p.dur = [Math.max(0.35, Math.hypot(from[0] - s0[0], from[1] - s0[1]) / (16 * mul)), capLen / (26 * mul),
+      Math.max(0.3, Math.hypot(riseEnd[0] - to[0], riseEnd[1] - to[1]) / (24 * mul)), spreadLen / (17 * mul)];
+    f.drops.push(p);
+  };
+  // dt moves the droplets, dtEmit counts new ones. The history of a droplet grows only while it moves.
+  const update = (i, frame, dt, dtEmit, rate) => {
+    const f = faults[i];
+    f.carry += rate * dtEmit;
+    if (f.carry >= 1 && f.drops.length < HERO_LEAK_MAX_DROPS) {
+      const gather = gatherOf(i, frame), pool = poolOf(i, frame);
+      while (f.carry >= 1 && f.drops.length < HERO_LEAK_MAX_DROPS) { spawn(f, gather, pool); f.carry -= 1; }
+    }
+    if (f.carry > 1) f.carry = 1;
+    for (let n = f.drops.length - 1; n >= 0; n--) {
+      const p = f.drops[n];
+      p.t += dt / p.dur[p.st];
+      while (p.t >= 1 && p.st < 4) { p.t -= 1; p.st++; if (p.st < 4) p.t *= p.dur[p.st - 1] / p.dur[p.st]; }
+      if (p.st >= 4) { f.drops.splice(n, 1); continue; }
+      p.l = heroLeakLook(p, f.geo);
+      p.h.push([p.l.x, p.l.y]);
+      if (p.h.length > 7) p.h.shift();
+    }
+  };
+
+  // Bring the droplets of every fault in line with the frame. mode: 'jump' starts again, 'tick' moves, 'still' only keeps up.
+  const advance = (L, year, mode, dt) => {
+    const frame = L.frame;
+    if (!frame) return;
+    faults.forEach((f, i) => {
+      if (!(L.firstYears[i] >= 0 && year >= L.firstYears[i])) f.done = false;
+      const flow = frame.faultFlow[i] || 0;
+      if (mode === 'jump') { f.rand = heroLeakRandom(7 + i); f.drops.length = 0; f.carry = 0; f.on = false; }
+      if (flow <= 0) { f.drops.length = 0; f.carry = 0; f.on = false; return; }
+      const rate = heroLeakRate(flow, L.peak, HeroGeology.yearsPerSecond(year, L.injectionYears), L.speed);
+      if (!f.on) {
+        f.on = true;
+        if (mode === 'tick' && !f.done && !L.reduced) f.onset = 0;
+        else {
+          // A scrub, a restart or a reduced-motion view: no fill and no ring, and a steady stream at once.
+          f.done = true;
+          for (let n = 0; n < HERO_LEAK_WARM_STEPS; n++) update(i, frame, HERO_LEAK_WARM_STEP * L.speed, HERO_LEAK_WARM_STEP, rate);
+        }
+      }
+      if (mode !== 'tick') return;
+      if (!f.done) { f.onset += dt; if (f.onset >= HERO_LEAK_ONSET) f.done = true; }
+      update(i, frame, dt * L.speed, dt, f.done || f.onset > 0.45 ? rate : 0);
+    });
+  };
+
+  // Clear only the boxes round the fault paths, then draw the damage zones, the start marks and the droplets.
+  const draw = L => {
+    const frame = L.frame;
+    const live = frame ? faults.filter((f, i) => f.on && f.geo && (frame.faultFlow[i] || 0) > 0) : [];
+    if (!live.length && !boxes.length) return;
+    ctx.setTransform(size.sx, 0, 0, size.sy, -size.ox * size.sx, -size.oy * size.sy);
+    boxes.forEach(b => ctx.clearRect(b.x, b.y, b.w, b.h));
+    boxes = live.map(f => f.box);
+    boxes.forEach(b => ctx.clearRect(b.x, b.y, b.w, b.h));
+    live.forEach(f => {
+      const { from, to } = f.geo, i = faults.indexOf(f);
+      const strength = Math.sqrt(Math.min(1, (frame.faultFlow[i] || 0) / L.peak));
+      const e = f.done ? 1 : heroLeakEase(f.onset / 0.8);
+      const x = heroLeakLerp(from[0], to[0], e), y = heroLeakLerp(from[1], to[1], e);
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = `rgba(${HERO_LEAK_AMBER},${heroLeakFx(0.2 + 0.25 * strength)})`;
+      ctx.lineWidth = 4.5;
+      ctx.beginPath(); ctx.moveTo(from[0], from[1]); ctx.lineTo(x, y); ctx.stroke();
+      ctx.strokeStyle = `rgba(${HERO_LEAK_AMBER},0.9)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(from[0], from[1]); ctx.lineTo(x, y); ctx.stroke();
+      if (!f.done) {
+        const r = heroLeakClamp(f.onset / HERO_LEAK_ONSET);
+        ctx.strokeStyle = `rgba(${HERO_LEAK_AMBER},${heroLeakFx(0.9 * (1 - r))})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(from[0], from[1], 3 + 15 * heroLeakEase(r), 0, 6.2832); ctx.stroke();
+      }
+      f.drops.forEach(q => { if (q.l) heroLeakDrawDrop(ctx, q); });
+    });
+  };
+
+  // Classify a step of the year: a jump goes back or far forward, or follows a new run.
+  const classify = (L, year) => {
+    const dy = year - lastYear;
+    const jumped = lastYear < 0 || dy < 0 || dy > HERO_LEAK_JUMP || L.run !== lastRun;
+    lastYear = year;
+    lastRun = L.run;
+    return { jumped, moving: dy > 1e-9 };
+  };
+
+  return {
+    // width and height are the size of the section in CSS pixels. The canvas covers only the union of the boxes of the faults that leak in this run.
+    resize(width, height, ratio, L) {
+      size.w = width; size.h = height;
+      geometry();
+      const used = faults.filter((f, i) => L && L.firstYears[i] >= 0).map(f => f.box);
+      const x0 = Math.max(0, Math.floor(Math.min(...used.map(b => b.x)))), y0 = Math.max(0, Math.floor(Math.min(...used.map(b => b.y))));
+      const x1 = Math.min(width, Math.ceil(Math.max(...used.map(b => b.x + b.w)))), y1 = Math.min(height, Math.ceil(Math.max(...used.map(b => b.y + b.h))));
+      const cw = Math.max(1, x1 - x0), ch = Math.max(1, y1 - y0);
+      canvas.width = Math.max(1, Math.round(cw * ratio));
+      canvas.height = Math.max(1, Math.round(ch * ratio));
+      canvas.style.left = `${x0}px`;
+      canvas.style.top = `calc(var(--hero-surface) + ${y0}px)`;
+      canvas.style.width = `${cw}px`;
+      canvas.style.height = `${ch}px`;
+      size.sx = canvas.width / cw; size.sy = canvas.height / ch; size.ox = x0; size.oy = y0;
+      boxes = [];
+      lastYear = -1;
+      if (L) this.paint(L);
+    },
+    tick(L, dt) {
+      if (!size.w) return;
+      const year = L.yearRef.current, { jumped, moving } = classify(L, year);
+      advance(L, year, jumped ? 'jump' : moving ? 'tick' : 'still', dt);
+      draw(L);
+    },
+    paint(L) {
+      if (!size.w) return;
+      const year = L.yearRef.current, { jumped } = classify(L, year);
+      advance(L, year, jumped ? 'jump' : 'still', 0);
+      draw(L);
+    },
+  };
+};
+
+// One canvas over the section. The loop runs only while a fault leaks, playback runs, the hero is in view and the tab is visible.
+// It reads the frame, the year, the speed and the run through refs, so React does not render for each droplet.
+const HeroLeakFlow = ({ sectionRef, frame, yearRef, run, speed, playing, visible, hidden, injectionYears, peak, firstYears }) => {
+  const canvasRef = useRef(null);
+  const engineRef = useRef(null);
+  const reduced = useMemo(() => siteReducedMotion(), []);
+  const leaking = !!frame && frame.faultFlow.some(v => v > 0);
+  const running = !reduced && leaking && heroShouldTick({ playing, visible, hidden });
+  const live = useRef(null);
+  live.current = { frame, yearRef, run, speed, injectionYears, peak, firstYears, reduced };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const engine = heroLeakEngine(canvas);
+    engineRef.current = engine;
+    // The canvas box depends on the section size, so the observer watches the section.
+    const section = sectionRef.current;
+    const fit = () => {
+      const { width, height } = section.getBoundingClientRect();
+      if (width && height) engine.resize(width, height, Math.min(2, window.devicePixelRatio || 1), live.current);
+    };
+    fit();
+    if (!('ResizeObserver' in window)) return () => { engineRef.current = null; };
+    const sizes = new ResizeObserver(fit);
+    sizes.observe(section);
+    return () => { sizes.disconnect(); engineRef.current = null; };
+  }, []);
+
+  useEffect(() => {
+    if (!running) return undefined;
+    let frameId = 0, last = 0;
+    const tick = now => {
+      frameId = requestAnimationFrame(tick);
+      // The loop draws at 30 fps at most: a smaller canvas upload for the same look.
+      if (last && now - last < HERO_LEAK_FRAME_MS) return;
+      const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
+      last = now;
+      if (engineRef.current) engineRef.current.tick(live.current, dt);
+    };
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [running]);
+
+  // Pause, scrub and reduced motion: one still frame whenever the frame changes.
+  useEffect(() => {
+    if (!running && engineRef.current) engineRef.current.paint(live.current);
+  }, [frame, run, running]);
+
+  return <canvas ref={canvasRef} className="hero-leak-flow" aria-hidden="true" />;
 };
 
 /* =====================================================
@@ -554,20 +920,28 @@ const HeroLabels = React.memo(() => (
 /* =====================================================
    Leak readout — beside a leaking fault, from the model's own numbers
    ===================================================== */
-const HeroLeakReadout = ({ frame, year, injectionYears }) => {
-  const leak = frame && HeroGeology.leakReadout(heroGeology, heroSection, frame, year, injectionYears);
+const HERO_LEAK_BAR_WIDTH = 150; // px
+const HeroLeakReadout = ({ frame, leak, pushScale }) => {
   if (!leak) return null;
+  const gauge = heroLeakGauge(leak, pushScale[leak.fault] || 1);
+  const w = HERO_LEAK_BAR_WIDTH;
   const { to } = HERO_FAULTS[leak.fault];
   // Sit on the side of the fault away from the well, unless that side has no room for the label.
   const placeLeft = to.x < heroGeology.wellX ? to.x > 380 : to.x > 750;
   const side = placeLeft ? { right: `calc(${heroFixed(100 - to.x / 10)}% + 22px)` } : { left: `calc(${heroFixed(to.x / 10)}% + 22px)` };
   return (
     <div className="hero-leak-readout" aria-hidden="true" style={{ ...side, top: heroDepthTop(to.y) }}>
-      <strong>F{leak.fault + 1} leaking</strong>
-      <span>{leak.state === 'above'
-        ? `Buoyancy ${leak.buoyancy} bar${leak.overpressure > 0 ? ` + overpressure ${leak.overpressure} bar` : ''} > entry ${leak.entry} bar`
-        : `${leak.overpressure > 0 ? 'Buoyancy + overpressure' : 'Buoyancy'} held at the ${leak.entry} bar entry pressure`}</span>
-      <span className="hero-leak-readout__share">{heroPercentText(frame.inventory.leaked, frame.inventory.injected)}% of injected CO₂ has leaked</span>
+      <span className="hero-leak-readout__head">
+        <strong>F{leak.fault + 1} leaking</strong>
+        <span className="hero-leak-readout__share">{heroPercentText(frame.inventory.leaked, frame.inventory.injected)}% leaked</span>
+      </span>
+      {/* The push against the hold: buoyancy (solid), overpressure (striped) and the entry pressure (tick). */}
+      <span className="hero-leak-gauge" style={{ width: w }}>
+        <i className="hero-leak-gauge__b" style={{ width: heroFixed(gauge.buoyancy * w) }} />
+        <i className="hero-leak-gauge__o" style={{ left: heroFixed(gauge.buoyancy * w), width: heroFixed((gauge.push - gauge.buoyancy) * w) }} />
+        <i className="hero-leak-gauge__e" style={{ left: heroFixed(gauge.entry * w) }} />
+      </span>
+      <span>{heroLeakLine(leak)}</span>
     </div>
   );
 };
@@ -575,8 +949,17 @@ const HeroLeakReadout = ({ frame, year, injectionYears }) => {
 /* =====================================================
    Player — controls, the CO2 inventory and the scale note
    ===================================================== */
-const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, ship, exaggeration, controls, weather }) => {
+const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, leak, peak, ship, exaggeration, controls, weather }) => {
   const phase = heroPhase(year, injectionYears, ship);
+  // The band under the scrubber shows how strong the leak is over the run. It is built once per run.
+  const band = useMemo(() => {
+    if (!run || !(peak > 0)) return null;
+    const first = heroLeakFirstYears(run.faultFlow, run.faults, run.years).reduce((min, y) => (y >= 0 && (min < 0 || y < min) ? y : min), -1);
+    const stops = heroLeakBandStops(run.faultFlow, run.faults, run.years, peak, first);
+    if (!stops.length) return null;
+    const colors = stops.map(({ at, alpha }) => `color-mix(in srgb, var(--sim-glow-leaked) ${alpha}%, transparent) ${at}%`);
+    return { left: `${heroFixed(100 * first / run.years)}%`, background: `linear-gradient(90deg, ${colors.join(', ')})` };
+  }, [run, peak]);
   const inventory = frame ? frame.inventory : { mobile: 0, residual: 0, leaked: 0, injected: 0 };
   const share = value => heroPercentText(value, inventory.injected);
   const classes = [['mobile', 'Mobile', inventory.mobile], ['residual', 'Residual', inventory.residual], ['leaked', 'Leaked', inventory.leaked]];
@@ -588,15 +971,19 @@ const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, ship, ex
         <button type="button" className="hero-player__play" onClick={controls.toggle} aria-label={playing ? 'Pause simulation' : 'Play simulation'}>
           <Icon name={playing ? 'pause' : 'play'} size={14} />
         </button>
-        <input className="hero-player__scrub" type="range" min="0" max={HERO_YEARS} step="1" value={shownYear}
-          aria-label="Simulation year" aria-valuetext={`Year ${shownYear}, ${phase}`}
-          onChange={event => controls.scrub(parseFloat(event.target.value))} />
+        <span className="hero-player__track">
+          <input className="hero-player__scrub" type="range" min="0" max={HERO_YEARS} step="1" value={shownYear}
+            aria-label="Simulation year" aria-valuetext={`Year ${shownYear}, ${phase}${leak ? `, F${leak.fault + 1} leaking` : ''}`}
+            onChange={event => controls.scrub(parseFloat(event.target.value))} />
+          {band && <i className="hero-player__leakband" aria-hidden="true" style={band} />}
+          {band && <i className="hero-player__leaktick" aria-hidden="true" style={{ left: band.left }} />}
+        </span>
         <button type="button" className="hero-player__small" onClick={controls.restart} aria-label="Restart simulation">
           <Icon name="restart" size={15} />
         </button>
         <button type="button" className="hero-player__small hero-player__speed" onClick={controls.speed} aria-label={`${speed}× playback speed`}>{speed}×</button>
       </div>
-      <p className="hero-player__title">Live VE model, year <span className="hero-player__year">{shownYear}</span> <span className="hero-player__phase">{phase}</span></p>
+      <p className="hero-player__title">Live VE model, year <span className="hero-player__year">{shownYear}</span> <span className="hero-player__phase">{phase}</span>{leak && <span className="hero-player__leak"> · F{leak.fault + 1} leaking</span>}</p>
       <div className="hero-player__bar" role="img"
         aria-label={`Of the CO₂ injected so far: ${share(inventory.mobile)}% mobile, ${share(inventory.residual)}% residually trapped, ${share(inventory.leaked)}% leaked into the overlying aquifer.`}>
         {classes.map(([key, , value]) => <span key={key} className={`is-${key}`} style={{ width: `${inventory.injected > 0 ? 100 * value / inventory.injected : 0}%` }} />)}

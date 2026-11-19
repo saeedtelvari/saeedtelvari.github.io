@@ -1022,6 +1022,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   pointer-events: none;
 }
 .hero-svg--rock { z-index: 1; }
+.hero-leak-flow { position: absolute; z-index: 2; pointer-events: none; }
 .hero-svg--plume { z-index: 2; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--sim-glow-free) 45%, transparent)); }
 .hero-svg--overlay { z-index: 3; }
 
@@ -1040,10 +1041,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 
 .hero-contact { stroke: var(--sim-glow-free); stroke-width: 1; stroke-opacity: 0.9; }
 .hero-fault-zone { stroke: #9fb3c8; stroke-opacity: 0.22; stroke-width: 6; stroke-linecap: round; }
-.hero-leak-halo { fill: none; stroke: var(--sim-glow-leaked); stroke-opacity: 0.22; stroke-width: 11; stroke-linecap: round; }
-.hero-leak-halo--rise { stroke-opacity: 0.12; stroke-width: 7; }
-.hero-leak { fill: none; stroke: var(--sim-glow-leaked); stroke-width: 2.5; stroke-linecap: round; }
-.hero-leak-dots { fill: none; stroke: #fff3dc; stroke-width: 4; stroke-linecap: round; }
+.hero-contact--leaked { stroke: var(--sim-glow-leaked); }
 .hero-leak-readout {
   position: absolute;
   z-index: 6;
@@ -1060,7 +1058,14 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   pointer-events: none;
 }
 .hero-leak-readout strong { color: var(--sim-glow-leaked); font-weight: 600; }
+.hero-leak-readout__head { display: flex; justify-content: space-between; gap: 14px; }
 .hero-leak-readout__share { color: var(--sim-ink-muted); }
+/* The push against the hold: solid amber is buoyancy, striped amber is overpressure, the light tick is the entry pressure. */
+.hero-leak-gauge { position: relative; display: block; height: 6px; margin: 4px 0; border-radius: 3px; background: rgba(230, 237, 243, 0.14); }
+.hero-leak-gauge i { position: absolute; top: 0; bottom: 0; }
+.hero-leak-gauge__b { left: 0; border-radius: 3px 0 0 3px; background: var(--sim-glow-leaked); }
+.hero-leak-gauge__o { background: repeating-linear-gradient(135deg, var(--sim-glow-leaked) 0 2px, transparent 2px 4px); }
+.hero-leak-gauge .hero-leak-gauge__e { top: -3px; bottom: -3px; width: 2px; border-radius: 1px; background: var(--sim-ink); transform: translateX(-1px); }
 .hero-surface-line { stroke: var(--sim-ink); stroke-opacity: 0.28; stroke-width: 1; }
 .hero-fault { stroke: var(--sim-ink); stroke-opacity: 0.35; stroke-width: 1.2; }
 
@@ -1240,7 +1245,11 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   transition: transform 160ms var(--sim-ease);
 }
 .hero-player__play:active { transform: scale(0.95); }
-.hero-player__scrub { flex: 1; min-width: 0; height: 20px; margin: 0; accent-color: var(--hero-accent); cursor: pointer; }
+.hero-player__track { position: relative; display: block; flex: 1; min-width: 0; }
+.hero-player__scrub { display: block; width: 100%; height: 20px; margin: 0; accent-color: var(--hero-accent); cursor: pointer; }
+/* The leak over the run: a thin band at the foot of the track, and a tick at the first leak year. */
+.hero-player__leakband { position: absolute; right: 0; bottom: 0; height: 3px; border-radius: 2px; pointer-events: none; }
+.hero-player__leaktick { position: absolute; bottom: -1px; width: 2px; height: 7px; border-radius: 1px; background: var(--sim-glow-leaked); transform: translateX(-1px); pointer-events: none; }
 .hero-player__small {
   display: inline-flex;
   flex: none;
@@ -1262,6 +1271,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 .hero-player__title { margin: 10px 0 0; font: 600 13.5px/1.4 var(--sim-font-ui); }
 .hero-player__year { font-family: var(--sim-font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
 .hero-player__phase { margin-left: 4px; color: var(--sim-ink-muted); font-weight: 400; }
+.hero-player__leak { color: var(--sim-glow-leaked); font-weight: 600; }
 .hero-player__bar { display: flex; height: 8px; margin: 8px 0 6px; overflow: hidden; border-radius: 4px; background: var(--sim-rule); }
 .hero-player__legend {
   display: flex;
