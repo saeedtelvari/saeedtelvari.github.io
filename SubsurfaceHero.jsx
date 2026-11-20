@@ -1198,6 +1198,9 @@ const HeroLeakReadout = ({ frame, card, breachFault, pushScale }) => {
    Player — controls, the CO2 inventory and the scale note
    ===================================================== */
 const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, leak, peak, ship, exaggeration, controls, weather }) => {
+  // The run time is known once per run. toLocaleString is slow, so the badge text is not built on every frame.
+  const receipt = useMemo(() => (run && run.computeMs > 0
+    ? { badge: heroReceiptBadge(run.years, run.computeMs), text: heroReceiptText(run.years, run.computeMs) } : null), [run]);
   const done = year >= HERO_YEARS;
   const phase = done ? 'complete' : heroPhase(year, injectionYears, ship);
   // The band under the scrubber shows how strong the leak is over the run. It is built once per run.
@@ -1237,10 +1240,10 @@ const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, leak, pe
       </div>
       <div className="hero-player__head">
         <p className="hero-player__title">Live VE model, year <span className="hero-player__year">{shownYear}</span> <span className="hero-player__phase">{phase}</span>{leak && <span className="hero-player__leak"> · F{leak.fault + 1} leaking</span>}</p>
-        {run && run.computeMs > 0 && (
+        {receipt && (
           <span className="hero-player__badge">
-            <span aria-hidden="true">{heroReceiptBadge(run.years, run.computeMs)}</span>
-            <span className="visually-hidden">{heroReceiptText(run.years, run.computeMs)}</span>
+            <span aria-hidden="true">{receipt.badge}</span>
+            <span className="visually-hidden">{receipt.text}</span>
           </span>
         )}
       </div>

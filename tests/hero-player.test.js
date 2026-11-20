@@ -59,8 +59,10 @@ test('the badge reads the years and the time, and the sentence stays for screen 
   assert.equal(P.heroReceiptText(2000, 200), 'This model ran 2,000 years in 0.2 s in your browser.');
   assert.equal(P.heroReceiptText(2000, 10), 'This model ran 2,000 years in under 0.1 s in your browser.');
   assert.doesNotMatch(source.match(/const heroReceiptText = [\s\S]*?\n};/)[0], /100×/);
-  assert.match(source, /<span aria-hidden="true">\{heroReceiptBadge\(run\.years, run\.computeMs\)\}<\/span>/);
-  assert.match(source, /<span className="visually-hidden">\{heroReceiptText\(run\.years, run\.computeMs\)\}<\/span>/);
+  // The texts are built once per run (toLocaleString is slow), not on every frame.
+  assert.match(source, /badge: heroReceiptBadge\(run\.years, run\.computeMs\), text: heroReceiptText\(run\.years, run\.computeMs\) \} : null\), \[run\]\)/);
+  assert.match(source, /<span aria-hidden="true">\{receipt\.badge\}<\/span>/);
+  assert.match(source, /<span className="visually-hidden">\{receipt\.text\}<\/span>/);
   assert.doesNotMatch(source, /<p className="hero-player__receipt"/);
   assert.match(css, /\.hero-player__badge \{[^}]*var\(--sim-font-mono\)[^}]*\}/);
   assert.match(css, /\.hero-player__badge \{[^}]*color: var\(--hero-accent\)/);

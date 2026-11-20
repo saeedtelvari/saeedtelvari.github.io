@@ -667,6 +667,8 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   height: 100%;
   opacity: var(--rain-alpha);
   transform-origin: 50% 0;
+  /* The slant sits on the static rotate property. The keyframes hold no variable, so the compositor runs them. */
+  rotate: var(--rain-slant, 9deg);
   animation: rainFall var(--rain-speed) linear var(--rain-phase) infinite;
 }
 
@@ -691,10 +693,11 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   to { opacity: 1; }
 }
 
-/* The drop tilts by the slant of the wind and then falls along its own axis. */
+/* The drop tilts by the slant of the wind (the rotate property) and then falls along its own axis:
+   the transform applies before the rotation. A var() inside the keyframes would move the animation to the main thread. */
 @keyframes rainFall {
-  from { transform: rotate(var(--rain-slant, 9deg)) translateY(-6%); }
-  to { transform: rotate(var(--rain-slant, 9deg)) translateY(100%); }
+  from { transform: translateY(-6%); }
+  to { transform: translateY(100%); }
 }
 
 @media (max-width: 600px) {
@@ -748,12 +751,13 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   overflow: visible;
   transform: translateX(-50%);
 }
-/* Each rotor is a small box that the compositor turns. The period comes from the wind. */
-.hero-rotor { position: absolute; will-change: transform; animation: hero-rotor-turn var(--turbine-period, 8s) linear infinite; }
-.hero-farm--calm .hero-rotor { animation: none; will-change: auto; }
+/* Each rotor is a small box that the compositor turns. The period comes from the wind.
+   No will-change: eight permanent layers cost more main-thread time than the animation itself. */
+.hero-rotor { position: absolute; animation: hero-rotor-turn var(--turbine-period, 8s) linear infinite; }
+.hero-farm--calm .hero-rotor { animation: none; }
 @keyframes hero-rotor-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .hero-rotor { animation: none !important; will-change: auto; }
+  .hero-rotor { animation: none !important; }
 }
 /* The red lights of the wind farm blink together, as real wind farms do. */
 .hero-beacon { fill-opacity: .85; animation: hero-beacon 2s steps(1) infinite; }

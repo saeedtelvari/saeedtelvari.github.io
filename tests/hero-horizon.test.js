@@ -69,7 +69,11 @@ test('the rain slant follows the wind and each drop falls along its own axis', (
   assert.equal(slant(10), 13);
   assert.equal(slant(40), 18);
   assert.match(hero, /'--rain-slant'/);
-  assert.match(css, /@keyframes rainFall \{\s*from \{ transform: rotate\(var\(--rain-slant, 9deg\)\) translateY\(-6%\); \}\s*to \{ transform: rotate\(var\(--rain-slant, 9deg\)\) translateY\(100%\); \}/);
+  // The slant is a static rotate property; the keyframes hold no var(), so the compositor can run them.
+  assert.match(css, /\.hero-rain-drop \{[^}]*rotate: var\(--rain-slant, 9deg\);[^}]*animation: rainFall/);
+  assert.match(css, /@keyframes rainFall \{\s*from \{ transform: translateY\(-6%\); \}\s*to \{ transform: translateY\(100%\); \}/);
+  const keyframes = css.match(/@keyframes [\w-]+ \{(?:[^{}]*\{[^}]*\})*[^}]*\}/g) || [];
+  keyframes.filter(k => /rainFall|hero-rotor-turn/.test(k)).forEach(k => assert.doesNotMatch(k, /var\(/, `${k.slice(0, 30)} has no var()`));
   assert.ok(!/rotate\(9deg\)/.test(css));
 });
 
