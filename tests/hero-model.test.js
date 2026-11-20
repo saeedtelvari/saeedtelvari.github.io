@@ -198,7 +198,7 @@ test('the carrier berths before injection starts and sails once it ends', () => 
     return [ship, t];
   };
   let [ship, t] = until({ phase: 'away', p: 1 }, true, 'moored');
-  assert.ok(Math.abs(t - 4) < 0.2, `arrives in 3.2 s and connects in 0.8 s (took ${t.toFixed(2)} s)`);
+  assert.ok(Math.abs(t - 3) < 0.2, `arrives in 2.2 s and connects in 0.8 s (took ${t.toFixed(2)} s)`);
   assert.equal(h.heroCanAdvance(0, 30, 'connecting'), false, 'no injection before the hose is connected');
   assert.equal(h.heroCanAdvance(0, 30, 'moored'), true);
   assert.equal(h.heroCanAdvance(30, 30, 'departing'), true, 'migration never waits for the ship');

@@ -70,7 +70,9 @@ test('the badge reads the years and the time, and the sentence stays for screen 
 test('the end state reads "complete" and shows the simulator link only at the end', () => {
   assert.match(source, /const done = year >= HERO_YEARS;/);
   assert.match(source, /const phase = done \? 'complete' : heroPhase\(year, injectionYears, ship\);/);
-  assert.match(source, /\{done && <a className="hero-player__cta" href="\.\/simulator\.html">Run your own case in the VE simulator →<\/a>\}/);
+  // The link line exists only at the end, so the player has no empty line during the run.
+  assert.match(source, /\{done && <div className="hero-player__end"><a className="hero-player__cta" href="\.\/simulator\.html">Run your own case in the VE simulator →<\/a><\/div>\}/);
+  assert.doesNotMatch(css, /\.hero-player__end \{[^}]*min-height/);
   assert.match(css, /\.hero-player__cta \{[^}]*color: var\(--hero-accent\)/);
   assert.match(source, /Teaching model: a schematic saline aquifer, 10 km wide, vertical exaggeration ×\{exaggeration\}\. The depleted-gas model is in the 2026 preprint\./);
 });
@@ -80,15 +82,18 @@ const noOver = () => 0;
 test('a fault that holds shows the largest push against its seal limit', () => {
   const faults = [{ h: 0.5, distance: 100, entry: 3 }, { h: 0.3, distance: 200, entry: 0.5 }];
   const hold = L.heroLeakHold(faults, 100, 30, barPerHead, noOver);
-  assert.deepEqual(hold, { fault: 1, state: 'holding', buoyancy: 0.5, overpressure: 0, entry: 0.5 }, 'F2 has the larger push over its seal limit');
+  assert.deepEqual(hold, { fault: 1, state: 'holding', buoyancy: 0.5, overpressure: 0, entry: 0.5, push: 0.531, limit: 0.5 }, 'F2 has the larger push over its seal limit');
   assert.equal(L.heroLeakHold([{ h: 0.002, distance: 1, entry: 1 }, { h: 0, distance: 1, entry: 1 }], 100, 30, barPerHead, noOver), null, 'no CO2 at a fault, no card');
   const withOver = L.heroLeakHold([{ h: 1, distance: 50, entry: 3 }], 10, 30, barPerHead, (r, y, inj) => (r === 50 && y === 10 && inj === 30 ? 0.84 : 0));
-  assert.deepEqual(withOver, { fault: 0, state: 'holding', buoyancy: 1.8, overpressure: 0.8, entry: 3 });
+  assert.deepEqual(withOver, { fault: 0, state: 'holding', buoyancy: 1.8, overpressure: 0.8, entry: 3, push: 2.61, limit: 3 });
 });
 
 test('the card line uses "seal limit" in all three states', () => {
-  assert.equal(L.heroLeakLine({ state: 'holding', buoyancy: 0.2, overpressure: 0, entry: 0.3 }), 'Buoyancy 0.2 bar < seal limit 0.3 bar');
-  assert.equal(L.heroLeakLine({ state: 'holding', buoyancy: 0.2, overpressure: 0.4, entry: 1.3 }), 'Buoyancy 0.2 bar + overpressure 0.4 bar < seal limit 1.3 bar');
+  // Holding: the push and the seal limit with two decimals, so that rounding never shows a false inequality.
+  assert.equal(L.heroLeakLine({ state: 'holding', buoyancy: 0.2, overpressure: 0, entry: 0.3, push: 0.15, limit: 0.3 }), 'Push 0.15 bar < seal limit 0.30 bar');
+  assert.equal(L.heroLeakLine({ state: 'holding', buoyancy: 0.2, overpressure: 0.4, entry: 1.3, push: 0.62, limit: 1.27 }), 'Push 0.62 bar < seal limit 1.27 bar');
+  assert.equal(L.heroLeakLine({ state: 'holding', buoyancy: 0, overpressure: 0, entry: 0.1, push: 0.003, limit: 0.12 }), 'Push < 0.01 bar < seal limit 0.12 bar');
+  assert.equal(L.heroLeakLine({ state: 'holding', buoyancy: 0.5, overpressure: 0, entry: 0.5, push: 0.531, limit: 0.5 }), 'Push at the 0.50 bar seal limit');
   assert.equal(L.heroLeakLine({ state: 'above', buoyancy: 6.8, overpressure: 0, entry: 0.2 }), 'Buoyancy 6.8 bar > seal limit 0.2 bar');
   assert.equal(L.heroLeakLine({ state: 'above', buoyancy: 0.02, overpressure: 1, entry: 0.2 }), 'Buoyancy < 0.1 bar + overpressure 1 bar > seal limit 0.2 bar');
   assert.equal(L.heroLeakLine({ state: 'held', buoyancy: 0.2, overpressure: 0, entry: 0.2 }), 'Buoyancy held at the 0.2 bar seal limit');

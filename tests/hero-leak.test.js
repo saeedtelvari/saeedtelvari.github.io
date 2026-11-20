@@ -123,7 +123,9 @@ test('the engine moves droplets only while the year advances and clears only the
   assert.match(source, /moving: dy > 1e-9/);
   assert.match(source, /jumped \? 'jump' : moving \? 'tick' : 'still'/);
   assert.match(source, /clearRect\(b\.x, b\.y, b\.w, b\.h\)/);
-  assert.doesNotMatch(source, /clearRect\(0, 0/);
+  // The leak engine never clears its whole canvas. (The small injection canvas may.)
+  const engine = source.slice(source.indexOf('const heroLeakEngine'), source.indexOf('const HeroLeakFlow'));
+  assert.doesNotMatch(engine, /clearRect\(0, 0/);
 });
 
 test('the old leak marks are gone', () => {
