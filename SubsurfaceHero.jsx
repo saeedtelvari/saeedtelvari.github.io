@@ -397,6 +397,11 @@ const SubsurfaceHero = ({ onNavigate }) => {
   const scene = useMemo(() => heroWeatherScene(weather, moon), [weather, moon]);
   useEffect(() => heroWeatherStart(setWeather), []);
   const shipRef = useRef(ship);
+  // The 4D survey. The clock owns this ref: active, the pass time u, the clock factor, the survey year and the direction.
+  // The leak flow and the injection flow read the factor from it. The state holds only the mounted pass.
+  const surveyRef = useRef({ active: false, u: 0, factor: 1, year: 0, dir: 1 });
+  const surveyCount = useRef(0);
+  const [survey, setSurvey] = useState(null);
   // Real seconds since shut-in. The end state is the default: only a pass through year 30 during playback starts a fade.
   const shutRef = useRef(HERO_SHUTIN_SECONDS);
   const [shutSeconds, setShutSeconds] = useState(HERO_SHUTIN_SECONDS);
@@ -439,6 +444,15 @@ const SubsurfaceHero = ({ onNavigate }) => {
     return () => sizes.disconnect();
   }, []);
 
+  // A scrub, a restart or the end of the run cancels a pass at once.
+  const cancelSurvey = () => {
+    surveyRef.current = { active: false, u: 0, factor: 1, year: 0, dir: 1 };
+    setSurvey(null);
+  };
+  // The image of the next survey builds when the browser is idle. No build runs during a pass.
+  const nextSurvey = survey ? null : heroSurveyNext(year);
+  useEffect(() => heroSurveyPrepare(run, nextSurvey, sectionRef), [run, nextSurvey]);
+
   // A pause stops the shut-in fade at once.
   useEffect(() => {
     if (!(late && heroShouldTick({ playing, visible, hidden })) && shutRef.current < HERO_SHUTIN_SECONDS) {
@@ -463,11 +477,28 @@ const SubsurfaceHero = ({ onNavigate }) => {
         shipRef.current = nextShip;
         setShip(nextShip);
       }
+      let started = false;
       if (run && heroCanAdvance(yearRef.current, injectionEnd, nextShip.phase)) {
-        const next = Math.min(HERO_YEARS, yearRef.current + dt * HeroGeology.yearsPerSecond(yearRef.current, injectionEnd) * speed);
+        // The survey factor slows the model clock during a pass. A step that crosses a survey year ends at that year and starts a pass.
+        const pass = surveyRef.current;
+        let next = Math.min(HERO_YEARS, yearRef.current + dt * HeroGeology.yearsPerSecond(yearRef.current, injectionEnd) * speed * pass.factor);
+        const crossed = pass.active ? null : heroSurveyCrossing(yearRef.current, next);
+        if (crossed !== null) {
+          next = crossed;
+          started = true;
+          surveyRef.current = { active: true, u: 0, factor: 1, year: crossed, dir: heroSurveyDirection(surveyCount.current++) };
+          setSurvey({ year: crossed, id: surveyCount.current });
+        }
         yearRef.current = next;
         setYear(next);
-        if (next >= HERO_YEARS) { setPlaying(false); return; }
+        if (next >= HERO_YEARS) { surveyRef.current = { active: false, u: 0, factor: 1, year: 0, dir: 1 }; setSurvey(null); setPlaying(false); return; }
+      }
+      // The pass time runs with the clock, so a pause, a hidden tab and a hero out of view freeze the pass.
+      if (surveyRef.current.active && !started) {
+        const pass = surveyRef.current;
+        pass.u += dt * speed;
+        pass.factor = heroSurveyClock(pass.u);
+        if (pass.u >= HERO_SURVEY_TOTAL) { surveyRef.current = { active: false, u: 0, factor: 1, year: 0, dir: 1 }; setSurvey(null); }
       }
       if (injecting && yearRef.current >= injectionEnd) shutRef.current = shipSeconds.arriving > 0 ? 0 : HERO_SHUTIN_SECONDS;
       else if (shutRef.current < HERO_SHUTIN_SECONDS) shutRef.current = Math.min(HERO_SHUTIN_SECONDS, shutRef.current + dt);
@@ -528,11 +559,11 @@ const SubsurfaceHero = ({ onNavigate }) => {
   };
   const controls = {
     toggle: () => {
-      if (!playing && yearRef.current >= HERO_YEARS) setYear(0);
+      if (!playing && yearRef.current >= HERO_YEARS) { setYear(0); cancelSurvey(); }
       setPlaying(!playing);
     },
-    scrub: value => { setYear(value); setPlaying(false); jumpShip(value); clearBreach(); },
-    restart: () => { setYear(0); setPlaying(true); clearBreach(); shutRef.current = HERO_SHUTIN_SECONDS; setShutSeconds(HERO_SHUTIN_SECONDS); },
+    scrub: value => { setYear(value); setPlaying(false); jumpShip(value); clearBreach(); cancelSurvey(); },
+    restart: () => { setYear(0); setPlaying(true); clearBreach(); cancelSurvey(); surveyCount.current = 0; shutRef.current = HERO_SHUTIN_SECONDS; setShutSeconds(HERO_SHUTIN_SECONDS); },
     speed: () => setSpeed(s => (s === 1 ? 2 : s === 2 ? 4 : 1)),
   };
 
@@ -543,12 +574,13 @@ const SubsurfaceHero = ({ onNavigate }) => {
       <HeroSection sectionRef={sectionRef} />
       <HeroPlume frame={frame} />
       {leakScale.peak > 0 && <HeroLeakFlow sectionRef={sectionRef} frame={frame} yearRef={yearRef} run={run} speed={speed} playing={playing} visible={visible} hidden={hidden}
-        injectionYears={injectionYears} peak={leakScale.peak} firstYears={firstLeakYears} />}
+        injectionYears={injectionYears} peak={leakScale.peak} firstYears={firstLeakYears} surveyRef={surveyRef} />}
       <HeroWaterLive weather={scene} wellXPct={heroGeology.wellXPct} visible={visible} hidden={hidden} />
       <HeroOverlay />
       <HeroWell flow={flow} dim={shut.dim} />
       <HeroWater geology={heroGeology} faults={HERO_FAULTS} frame={frame} leak={leak} roofR={heroOverlying.roofR} flow={flow} dim={shut.dim} />
-      <HeroInjectionFlow sectionRef={sectionRef} injecting={!!run && year < injectionYears && ship.phase === 'moored'} speed={speed} playing={playing} visible={visible} hidden={hidden} />
+      <HeroInjectionFlow sectionRef={sectionRef} injecting={!!run && year < injectionYears && ship.phase === 'moored'} speed={speed} playing={playing} visible={visible} hidden={hidden} surveyRef={surveyRef} />
+      {survey && <HeroSurvey key={survey.id} sectionRef={sectionRef} run={run} surveyRef={surveyRef} year={survey.year} playing={playing} visible={visible} hidden={hidden} />}
       {late && <SurfaceSite geology={heroGeology} flow={flow} hose={shut.hose} dim={shut.dim} ship={ship} />}
       <HeroLabels />
       <HeroLeakReadout frame={frame} card={leak || hold} breachFault={breachFault} pushScale={pushScale} />
@@ -837,7 +869,8 @@ const heroLeakEngine = canvas => {
       }
       if (mode !== 'tick') return;
       if (!f.done) { f.onset += dt; if (f.onset >= HERO_LEAK_ONSET) f.done = true; }
-      update(i, frame, dt * L.speed, dt, f.done || f.onset > 0.45 ? rate : 0);
+      // The survey factor cuts the emission: one droplet is one fixed leaked volume, and a pass runs fewer model years per second.
+      update(i, frame, dt * L.speed, dt * L.surveyRef.current.factor, f.done || f.onset > 0.45 ? rate : 0);
     });
   };
 
@@ -918,14 +951,14 @@ const heroLeakEngine = canvas => {
 
 // One canvas over the section. The loop runs only while a fault leaks, playback runs, the hero is in view and the tab is visible.
 // It reads the frame, the year, the speed and the run through refs, so React does not render for each droplet.
-const HeroLeakFlow = ({ sectionRef, frame, yearRef, run, speed, playing, visible, hidden, injectionYears, peak, firstYears }) => {
+const HeroLeakFlow = ({ sectionRef, frame, yearRef, run, speed, playing, visible, hidden, injectionYears, peak, firstYears, surveyRef }) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const reduced = useMemo(() => siteReducedMotion(), []);
   const leaking = !!frame && frame.faultFlow.some(v => v > 0);
   const running = !reduced && leaking && heroShouldTick({ playing, visible, hidden });
   const live = useRef(null);
-  live.current = { frame, yearRef, run, speed, injectionYears, peak, firstYears, reduced };
+  live.current = { frame, yearRef, run, speed, injectionYears, peak, firstYears, reduced, surveyRef };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1057,9 +1090,10 @@ const heroInjectionEngine = canvas => {
       if (drawn) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); drawn = false; }
     },
     // emit is false after shut-in: no new droplets start and the live ones finish.
-    tick(dt, emit, speed) {
+    // emitScale is the survey factor. It cuts the emission only, and the droplets keep their speed.
+    tick(dt, emit, speed, emitScale = 1) {
       if (!geo) return;
-      if (emit) carry = Math.min(2, carry + HERO_INJ_RATE * speed * dt);
+      if (emit) carry = Math.min(2, carry + HERO_INJ_RATE * speed * dt * emitScale);
       while (emit && carry >= 1 && drops.length < HERO_INJ_MAX) { drops.push(heroInjSpawn(rand, geo.ys, geo.cx)); carry -= 1; }
       for (let n = drops.length - 1; n >= 0; n--) {
         const p = drops[n];
@@ -1081,7 +1115,7 @@ const heroInjectionEngine = canvas => {
 
 // The loop runs only while CO2 flows, playback runs, the hero is in view, the tab is visible and motion is allowed.
 // After shut-in it runs on until the live droplets have finished, and then it stops.
-const HeroInjectionFlow = ({ sectionRef, injecting, speed, playing, visible, hidden }) => {
+const HeroInjectionFlow = ({ sectionRef, injecting, speed, playing, visible, hidden, surveyRef }) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const reduced = useMemo(() => siteReducedMotion(), []);
@@ -1089,7 +1123,7 @@ const HeroInjectionFlow = ({ sectionRef, injecting, speed, playing, visible, hid
   const canRun = !reduced && heroShouldTick({ playing, visible, hidden });
   const go = canRun && (injecting || tail);
   const live = useRef(null);
-  live.current = { injecting, speed };
+  live.current = { injecting, speed, surveyRef };
 
   useEffect(() => {
     const engine = heroInjectionEngine(canvasRef.current);
@@ -1123,7 +1157,7 @@ const HeroInjectionFlow = ({ sectionRef, injecting, speed, playing, visible, hid
       last = now;
       const engine = engineRef.current;
       if (!engine) return;
-      engine.tick(dt, live.current.injecting, live.current.speed);
+      engine.tick(dt, live.current.injecting, live.current.speed, live.current.surveyRef.current.factor);
       if (!live.current.injecting && !engine.count()) { cancelAnimationFrame(frameId); setTail(false); }
     };
     frameId = requestAnimationFrame(tick);
@@ -1140,7 +1174,7 @@ const HeroLabels = React.memo(() => (
   <div className="hero-annotations">
     <p className="visually-hidden">
       Cross-section, from the sea surface down: 76 m of sea, the seabed, overburden, an overlying aquifer, a caprock, the storage aquifer the well injects into,
-      and underburden, cut by two faults.
+      and underburden, cut by two faults. Four-dimensional seismic surveys image the CO2 at years 5, 15, 25, 200 and 1000.
     </p>
     <div className="hero-axis" aria-hidden="true">
       <span className="hero-axis__rule hero-axis__rule--upper" />

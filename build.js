@@ -27,6 +27,7 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
       'HeroSea.jsx',
       'HeroWater.jsx',
       'HeroWaterLive.jsx',
+      'HeroSurvey.jsx',
       'SubsurfaceHero.jsx',
       'GeologicalDescent.jsx',
       'HomeSections.jsx',

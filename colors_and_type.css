@@ -1125,6 +1125,22 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 /* The droplets that leave the perforations: one small canvas over the perforated interval, on top of the well. */
 .hero-injection-flow { position: absolute; z-index: 3; pointer-events: none; }
 
+/* =====================================================
+   HERO 4D SURVEY
+   One canvas while a survey pass runs. It spans the full width, from 44 px above the sea level to the bottom of the section.
+   It sits above the rock, the plume, the faults, the well and the water front (z 3).
+   It sits below the annotations and the platform (z 5), the leak card (z 6) and the player (z 9).
+   ===================================================== */
+.hero-survey {
+  position: absolute;
+  left: 0;
+  top: calc(var(--hero-waterline) - 44px);
+  width: 100%;
+  height: calc(var(--hero-water) + var(--hero-depth) + 44px);
+  z-index: 4;
+  pointer-events: none;
+}
+
 .hero-annotations { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 
 .hero-axis {
