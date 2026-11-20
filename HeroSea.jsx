@@ -12,7 +12,7 @@
 // moon: 0..1, how visible the moon, its path and the horizon line are.
 // rain: 0..1, how much rain the sky draws. waves: wave height in metres, for the swell of the carrier.
 // The sky and the carrier read rain and waves. The sea reads rain only through the light on the water.
-const HERO_WEATHER_DEFAULT = { wind: 6, cloud: 0.35, fog: 0, moon: 1, rain: 0.5, waves: 1.2 };
+const HERO_WEATHER_DEFAULT = { wind: 6, cloud: 0.35, fog: 0, moon: 1, rain: 0.5, waves: 1.2, period: 6.25, current: 0.6, currentDir: 214 };
 
 // The light on the water, 0.4 to 1. The moon (it already holds cloud and fog) sets it and rain lowers it.
 // The ripple arcs and the flat-tone highlights scale with it. The moon path does not.

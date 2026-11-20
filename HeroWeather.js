@@ -11,7 +11,7 @@
 
 const HERO_WEATHER_PLACE = { lat: 57.5, lon: 2.5 };
 const HERO_WEATHER_FORECAST_URL = 'https://api.open-meteo.com/v1/forecast?latitude=57.5&longitude=2.5&current=temperature_2m,precipitation,rain,showers,cloud_cover,visibility,wind_speed_10m,wind_direction_10m,weather_code&wind_speed_unit=ms&timezone=UTC';
-const HERO_WEATHER_MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine?latitude=57.5&longitude=2.5&current=wave_height,wave_period,wave_direction';
+const HERO_WEATHER_MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine?latitude=57.5&longitude=2.5&current=wave_height,wave_period,wave_direction,ocean_current_velocity,ocean_current_direction';
 const HERO_WEATHER_TIMEOUT_MS = 4000;
 const HERO_WEATHER_IDLE_MS = 1500;
 const HERO_WEATHER_CACHE_KEY = 'hero-weather-v1';
@@ -68,6 +68,9 @@ const heroWeatherMap = (forecast, marine) => {
   const code = heroWeatherNumber(now.weather_code);
   const rainMm = Math.max(heroWeatherNumber(now.rain) || 0, heroWeatherNumber(now.showers) || 0);
   const waves = sea ? heroWeatherNumber(sea.wave_height) : null;
+  const period = sea ? heroWeatherNumber(sea.wave_period) : null;
+  const current = sea ? heroWeatherNumber(sea.ocean_current_velocity) : null;
+  const currentDir = sea ? heroWeatherNumber(sea.ocean_current_direction) : null;
   const isFog = (visibility !== null && visibility < 2000) || HERO_WEATHER_FOG_CODES.includes(code);
   const isRain = rainMm > 0.1 || heroWeatherRainCode(code);
   const isGale = wind >= 14 || (waves !== null && waves >= 3.5);
@@ -77,7 +80,7 @@ const heroWeatherMap = (forecast, marine) => {
   const rain = state === 'rain' ? heroWeatherClamp(rainMm / 4, 0.15, 1) : 0;
   return {
     state, live: true,
-    wind: state === 'gale' ? Math.max(wind, 14) : wind, cloud, fog, rain, waves,
+    wind: state === 'gale' ? Math.max(wind, 14) : wind, cloud, fog, rain, waves, period, current, currentDir,
     windMs: wind, rainMm, temperature: heroWeatherNumber(now.temperature_2m),
   };
 };
@@ -87,6 +90,9 @@ const heroWeatherFallback = () => ({ state: 'typical', live: false, ...HERO_WEAT
 
 // Waves in metres. The marine data can be missing, so the wind gives an estimate.
 const heroWeatherWaves = weather => (weather.waves !== null && weather.waves !== undefined ? weather.waves : 0.03 * (weather.windMs || weather.wind) ** 2);
+
+// Wave period in seconds. The marine data can be missing, so the wave height gives an estimate.
+const heroWeatherPeriod = weather => (weather.period !== null && weather.period !== undefined ? weather.period : heroWeatherClamp(4 + 1.2 * heroWeatherWaves(weather), 4, 12));
 
 // How strongly the carrier bobs. 1 is the approved look.
 const heroWeatherSwell = weather => heroWeatherClamp(heroWeatherWaves(weather) / 1.2, 0.6, 3.5);
@@ -136,12 +142,12 @@ const heroWeatherWriteCache = (storage, now, forecast, marine) => {
 
 // ---- the debug override
 const HERO_WEATHER_SAMPLES = {
-  clear: [{ cloud_cover: 8, wind_speed_10m: 5, visibility: 24000, weather_code: 0 }, { wave_height: 1 }],
-  partly: [{ cloud_cover: 45, wind_speed_10m: 7, visibility: 24000, weather_code: 2 }, { wave_height: 1.4 }],
-  overcast: [{ cloud_cover: 92, wind_speed_10m: 8, visibility: 18000, weather_code: 3 }, { wave_height: 1.8 }],
-  rain: [{ cloud_cover: 90, wind_speed_10m: 9, visibility: 9000, weather_code: 63, rain: 1.8, precipitation: 1.8 }, { wave_height: 1.8 }],
-  fog: [{ cloud_cover: 100, wind_speed_10m: 3, visibility: 600, weather_code: 45 }, { wave_height: 0.6 }],
-  gale: [{ cloud_cover: 80, wind_speed_10m: 17, visibility: 15000, weather_code: 3 }, { wave_height: 4.6 }],
+  clear: [{ cloud_cover: 8, wind_speed_10m: 5, visibility: 24000, weather_code: 0 }, { wave_height: 1, wave_period: 5.5, ocean_current_velocity: 0.4, ocean_current_direction: 214 }],
+  partly: [{ cloud_cover: 45, wind_speed_10m: 7, visibility: 24000, weather_code: 2 }, { wave_height: 1.4, wave_period: 6, ocean_current_velocity: 0.6, ocean_current_direction: 214 }],
+  overcast: [{ cloud_cover: 92, wind_speed_10m: 8, visibility: 18000, weather_code: 3 }, { wave_height: 1.8, wave_period: 6.5, ocean_current_velocity: 0.8, ocean_current_direction: 200 }],
+  rain: [{ cloud_cover: 90, wind_speed_10m: 9, visibility: 9000, weather_code: 63, rain: 1.8, precipitation: 1.8 }, { wave_height: 1.8, wave_period: 6.5, ocean_current_velocity: 0.7, ocean_current_direction: 190 }],
+  fog: [{ cloud_cover: 100, wind_speed_10m: 3, visibility: 600, weather_code: 45 }, { wave_height: 0.6, wave_period: 4.5, ocean_current_velocity: 0.3, ocean_current_direction: 214 }],
+  gale: [{ cloud_cover: 80, wind_speed_10m: 17, visibility: 15000, weather_code: 3 }, { wave_height: 4.6, wave_period: 9.5, ocean_current_velocity: 1.4, ocean_current_direction: 230 }],
 };
 const heroWeatherOverride = hash => {
   const query = String(hash || '').replace(/^#/, '');

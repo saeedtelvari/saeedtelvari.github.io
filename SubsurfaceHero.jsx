@@ -544,6 +544,7 @@ const SubsurfaceHero = ({ onNavigate }) => {
       <HeroPlume frame={frame} />
       {leakScale.peak > 0 && <HeroLeakFlow sectionRef={sectionRef} frame={frame} yearRef={yearRef} run={run} speed={speed} playing={playing} visible={visible} hidden={hidden}
         injectionYears={injectionYears} peak={leakScale.peak} firstYears={firstLeakYears} />}
+      <HeroWaterLive weather={scene} wellXPct={heroGeology.wellXPct} visible={visible} hidden={hidden} />
       <HeroOverlay />
       <HeroWell flow={flow} dim={shut.dim} />
       <HeroWater geology={heroGeology} faults={HERO_FAULTS} frame={frame} leak={leak} roofR={heroOverlying.roofR} />

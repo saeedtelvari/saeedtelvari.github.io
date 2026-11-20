@@ -1044,6 +1044,8 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 }
 .hero-svg--rock { z-index: 1; }
 .hero-leak-flow { position: absolute; z-index: 2; pointer-events: none; }
+/* The live water: the moving sea surface, marine snow and fish. It lies under the near legs of the jacket. */
+.hero-water__live { position: absolute; left: 0; width: 100%; top: var(--hero-waterline, var(--hero-surface)); height: var(--hero-water, 72px); z-index: 2; pointer-events: none; }
 .hero-svg--plume { z-index: 2; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--sim-glow-free) 45%, transparent)); }
 .hero-svg--overlay { z-index: 3; }
 
