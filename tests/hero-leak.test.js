@@ -67,10 +67,10 @@ test('the card reads "< 0.1" for a buoyancy that rounds to 0 while the fault lea
   assert.equal(H.heroLeakBuoyText(0), '< 0.1');
   assert.equal(H.heroLeakBuoyText(0.04), '< 0.1');
   assert.equal(H.heroLeakBuoyText(0.4), '0.4');
-  assert.equal(H.heroLeakLine({ state: 'above', buoyancy: 0, overpressure: 2.1, entry: 1.9 }), 'Buoyancy < 0.1 bar + overpressure 2.1 bar > entry 1.9 bar');
-  assert.equal(H.heroLeakLine({ state: 'above', buoyancy: 3.2, overpressure: 0, entry: 2.5 }), 'Buoyancy 3.2 bar > entry 2.5 bar');
-  assert.equal(H.heroLeakLine({ state: 'held', buoyancy: 1, overpressure: 0, entry: 2.5 }), 'Buoyancy held at the 2.5 bar entry pressure');
-  assert.equal(H.heroLeakLine({ state: 'held', buoyancy: 1, overpressure: 1, entry: 2.5 }), 'Buoyancy + overpressure held at the 2.5 bar entry pressure');
+  assert.equal(H.heroLeakLine({ state: 'above', buoyancy: 0, overpressure: 2.1, entry: 1.9 }), 'Buoyancy < 0.1 bar + overpressure 2.1 bar > seal limit 1.9 bar');
+  assert.equal(H.heroLeakLine({ state: 'above', buoyancy: 3.2, overpressure: 0, entry: 2.5 }), 'Buoyancy 3.2 bar > seal limit 2.5 bar');
+  assert.equal(H.heroLeakLine({ state: 'held', buoyancy: 1, overpressure: 0, entry: 2.5 }), 'Buoyancy held at the 2.5 bar seal limit');
+  assert.equal(H.heroLeakLine({ state: 'held', buoyancy: 1, overpressure: 1, entry: 2.5 }), 'Buoyancy + overpressure held at the 2.5 bar seal limit');
 });
 
 test('the push bar rounds its full scale up to a whole bar and places the parts as shares of it', () => {
@@ -123,7 +123,9 @@ test('the engine moves droplets only while the year advances and clears only the
   assert.match(source, /moving: dy > 1e-9/);
   assert.match(source, /jumped \? 'jump' : moving \? 'tick' : 'still'/);
   assert.match(source, /clearRect\(b\.x, b\.y, b\.w, b\.h\)/);
-  assert.doesNotMatch(source, /clearRect\(0, 0/);
+  // The leak engine never clears its whole canvas. (The small injection canvas may.)
+  const engine = source.slice(source.indexOf('const heroLeakEngine'), source.indexOf('const HeroLeakFlow'));
+  assert.doesNotMatch(engine, /clearRect\(0, 0/);
 });
 
 test('the old leak marks are gone', () => {

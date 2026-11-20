@@ -58,7 +58,7 @@ test('the default weather exists and reaches the uniforms', () => {
   assert.deepEqual({ ...context.weather }, { wind: 6, cloud: 0.35, fog: 0, moon: 1, rain: 0.5, waves: 1.2 });
   const sent = {};
   const gl = { uniform1f: (name, value) => { sent[name] = value; } };
-  context.apply(gl, { uWind: 'wind', uMoon: 'moon', uFog: 'fog' }, context.weather);
-  assert.deepEqual(sent, { wind: 6, moon: 1, fog: 0 });
+  context.apply(gl, { uWind: 'wind', uMoon: 'moon', uFog: 'fog', uLight: 'light' }, context.weather);
+  assert.deepEqual(sent, { wind: 6, moon: 1, fog: 0, light: 1 });
   assert.match(sea, /HeroSea = \(\{ weather = HERO_WEATHER_DEFAULT \}\)/);
 });

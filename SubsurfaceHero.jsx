@@ -14,7 +14,7 @@ const heroPhase = (year, injectionYears, ship = 'moored') => {
 };
 // The CO2 carrier: away -> arriving -> connecting -> moored (injection runs) -> disconnecting -> departing -> away.
 // Manoeuvres take real seconds; injection years only advance while the carrier is moored and connected.
-const HERO_SHIP_SECONDS = { arriving: 3.2, connecting: 0.8, disconnecting: 1, departing: 10 };
+const HERO_SHIP_SECONDS = { arriving: 2.2, connecting: 0.8, disconnecting: 1, departing: 10 };
 const HERO_SHIP_NEXT = { arriving: 'connecting', connecting: 'moored', disconnecting: 'departing', departing: 'away' };
 const heroShipStep = (ship, dt, wantMoored, seconds = HERO_SHIP_SECONDS) => {
   let { phase, p } = ship;
@@ -56,6 +56,21 @@ const heroWellLayout = (roofY, td) => {
 // Where the CO2 in the pipes has got to: 6 section units per injection year, so the pulses move at
 // about 35 px/s at normal speed, stand still when the hero is paused and stop with injection.
 const heroFlowPhase = year => Math.round(year * 60) / 10;
+// Shut-in at the end of injection. The pulses slow down and stop, and the hose empties, over 0.8 s of real time.
+// The tubing then stays filled with CO2 for the rest of the run: a dim green core, no pulses and no glow.
+// seconds is the real time since shut-in. Leave it out for the end state (a scrub, a restart or a pause).
+// speed is the factor on the pulse speed. travel is the distance of the pulses since shut-in, in seconds at full speed.
+// hose is the fill of the hose. dim is how far the tubing has gone to its dim end state.
+const HERO_SHUTIN_SECONDS = 0.8;
+const heroShutIn = (year, injectionYears, seconds = Infinity) => {
+  if (year < injectionYears) return { speed: 1, travel: 0, hose: 1, dim: 0, tubing: 'flowing' };
+  const t = seconds >= HERO_SHUTIN_SECONDS ? 1 : seconds > 0 ? seconds / HERO_SHUTIN_SECONDS : 0;
+  const u = 1 - t;
+  return { speed: u * u, travel: HERO_SHUTIN_SECONDS / 3 * (1 - u * u * u), hose: u, dim: t, tubing: t >= 1 ? 'dim' : 'settling' };
+};
+// How the filled tubing and hose look while they go to the shut-in state: a fading glow and a core that goes dim.
+const heroShutStyle = dim => (dim <= 0 ? undefined : { filter: dim >= 1 ? 'none' : `drop-shadow(0 0 4px color-mix(in srgb, var(--sim-glow-free) ${Math.round(60 * (1 - dim))}%, transparent))` });
+const heroShutCore = dim => (dim <= 0 ? undefined : { strokeOpacity: Math.round((0.85 - 0.5 * dim) * 100) / 100 });
 // ---- end hero playback helpers
 
 // ---- hero leak helpers (pure; tests/hero-leak.test.js evaluates this block)
@@ -125,9 +140,46 @@ const heroLeakHead = l => {
 const heroLeakTail = l => (l.c === 'green' || (l.c === 'mix' && l.k < 0.5) ? '61,255,192' : '255,181,71');
 // The buoyancy in the card. A value that rounds to 0 while the fault leaks reads "< 0.1".
 const heroLeakBuoyText = value => (value < 0.05 ? '< 0.1' : String(Math.round(value * 10) / 10));
-const heroLeakLine = leak => (leak.state === 'above'
-  ? `Buoyancy ${heroLeakBuoyText(leak.buoyancy)} bar${leak.overpressure > 0 ? ` + overpressure ${leak.overpressure} bar` : ''} > entry ${leak.entry} bar`
-  : `${leak.overpressure > 0 ? 'Buoyancy + overpressure' : 'Buoyancy'} held at the ${leak.entry} bar entry pressure`);
+const heroLeakLine = leak => {
+  const over = leak.overpressure > 0;
+  if (leak.state === 'above') return `Buoyancy ${heroLeakBuoyText(leak.buoyancy)} bar${over ? ` + overpressure ${leak.overpressure} bar` : ''} > seal limit ${leak.entry} bar`;
+  // A fault that holds: the push and the seal limit with two decimals, so that rounding never shows "0.2 < 0.2".
+  if (leak.state === 'holding') {
+    const limit = leak.limit === undefined ? leak.entry : leak.limit;
+    const push = leak.push === undefined ? leak.buoyancy + leak.overpressure : leak.push;
+    if (Math.round(push * 100) >= Math.round(limit * 100)) return `Push at the ${limit.toFixed(2)} bar seal limit`;
+    return `Push ${push < 0.005 ? '< 0.01' : push.toFixed(2)} bar < seal limit ${limit.toFixed(2)} bar`;
+  }
+  return `${over ? 'Buoyancy + overpressure' : 'Buoyancy'} held at the ${leak.entry} bar seal limit`;
+};
+// The fault that holds: CO2 touches it at the storage roof (h above 0.002) but it does not leak.
+// faults lists { h, distance, entry } for each fault. The fault with the largest push against its seal limit wins.
+// The terms are the same as in HeroGeology.leakReadout, rounded to 0.1 bar.
+const heroLeakHold = (faults, year, injectionYears, barPerHead, overpressure) => {
+  const tenth = v => Math.round(v * 10) / 10;
+  let best = null;
+  faults.forEach((f, i) => {
+    if (!(f.h > 0.002)) return;
+    const push = f.h * barPerHead + overpressure(f.distance, year, injectionYears);
+    const ratio = push / f.entry;
+    if (!best || ratio > best.ratio) best = { ratio, i, f, push };
+  });
+  if (!best) return null;
+  const { i, f } = best;
+  // push and limit keep more digits for the card line; the bar uses the values rounded to 0.1 bar.
+  return { fault: i, state: 'holding', buoyancy: tenth(f.h * barPerHead), overpressure: tenth(overpressure(f.distance, year, injectionYears)), entry: tenth(f.entry),
+    push: Math.round(best.push * 1000) / 1000, limit: f.entry };
+};
+// The mode of the card: holding, breaching (the first 1.2 s of a leak in playback) or leaking.
+const HERO_BREACH_MS = 1200;
+const heroLeakMode = (card, breachFault) => (card.state === 'holding' ? 'holding' : breachFault === card.fault ? 'breaching' : 'leaking');
+const heroLeakTitle = (card, mode) => `F${card.fault + 1} ${mode}`;
+// Which faults start to leak between two frames. flows are the fault flows of each frame (prev may be null).
+const heroLeakStarted = (prev, next) => {
+  const started = [];
+  next.forEach((v, i) => { if (v > 0 && !(prev && prev[i] > 0)) started.push(i); });
+  return started;
+};
 // Full scale of the bar: the largest push of the run, rounded up to a whole bar.
 const heroLeakScaleBar = values => Math.max(1, Math.ceil(values.reduce((max, v) => Math.max(max, v), 0) - 1e-9));
 // Fractions of the full scale: buoyancy, buoyancy plus overpressure, and the entry pressure.
@@ -143,14 +195,15 @@ const heroLeakFirstYears = (faultFlow, faults, years) => {
   return first;
 };
 // Stops of the band under the scrubber: the strongest leak of any fault, about every 20 years.
-// at is the share of the band (0 to 100). alpha is the amber share (25 to 95), or 0 where nothing leaks.
-const heroLeakBandStops = (faultFlow, faults, years, peak, first, step = 20) => {
+// toPos maps a year to a position, for a scrubber that is not linear. at is the share of the band (0 to 100). alpha is the amber share (25 to 95), or 0 where nothing leaks.
+const heroLeakBandStops = (faultFlow, faults, years, peak, first, step = 20, toPos = y => y) => {
   if (first < 0 || !(peak > 0)) return [];
   const stops = [];
+  const from = toPos(first), span = Math.max(1e-9, toPos(years) - from);
   const add = y => {
     let flow = 0;
     for (let i = 0; i < faults; i++) flow = Math.max(flow, faultFlow[y * faults + i]);
-    stops.push({ at: Math.round(1000 * (y - first) / Math.max(1, years - first)) / 10,
+    stops.push({ at: Math.round(1000 * (toPos(y) - from) / span) / 10,
       alpha: flow > 0 ? Math.round(25 + 70 * Math.sqrt(Math.min(1, flow / peak))) : 0 });
   };
   add(first);
@@ -176,12 +229,34 @@ const heroSimulateTimed = options => {
   return run;
 };
 
-// The one line under the player note. It states only the browser time of this hero model.
-const heroReceiptText = (years, milliseconds) => {
-  const seconds = milliseconds / 1000;
-  const time = seconds < 0.05 ? 'under 0.1 s' : `${seconds.toFixed(1)} s`;
-  return `This model ran ${years.toLocaleString('en-US')} years in ${time} in your browser.`;
+// ---- hero player helpers (pure; tests/hero-player.test.js evaluates this block)
+// The scrubber runs 0 to 1000. The injection years take the first fifth, so the short injection is easy to hit.
+const HERO_SCRUB_MAX = 1000;
+const HERO_SCRUB_BREAK = 200;
+const heroYearToScrub = (year, injectionYears, years) => {
+  const y = Math.max(0, Math.min(years, year));
+  if (!(injectionYears > 0) || !(injectionYears < years)) return HERO_SCRUB_MAX * y / years;
+  if (y <= injectionYears) return HERO_SCRUB_BREAK * y / injectionYears;
+  return HERO_SCRUB_BREAK + (HERO_SCRUB_MAX - HERO_SCRUB_BREAK) * (y - injectionYears) / (years - injectionYears);
 };
+const heroScrubToYear = (value, injectionYears, years) => {
+  const v = Math.max(0, Math.min(HERO_SCRUB_MAX, value));
+  if (!(injectionYears > 0) || !(injectionYears < years)) return years * v / HERO_SCRUB_MAX;
+  if (v <= HERO_SCRUB_BREAK) return injectionYears * v / HERO_SCRUB_BREAK;
+  return injectionYears + (years - injectionYears) * (v - HERO_SCRUB_BREAK) / (HERO_SCRUB_MAX - HERO_SCRUB_BREAK);
+};
+// The run time of this hero model, in browser seconds. A very short run reads "under 0.1 s".
+const heroReceiptTime = milliseconds => {
+  const seconds = milliseconds / 1000;
+  return seconds < 0.05 ? 'under 0.1 s' : `${seconds.toFixed(1)} s`;
+};
+// The sentence is for screen readers. It states only the browser time of this hero model.
+const heroReceiptText = (years, milliseconds) => {
+  return `This model ran ${years.toLocaleString('en-US')} years in ${heroReceiptTime(milliseconds)} in your browser.`;
+};
+// The small badge in the title row of the player.
+const heroReceiptBadge = (years, milliseconds) => `${years.toLocaleString('en-US')} yr · ${heroReceiptTime(milliseconds)}`;
+// ---- end hero player helpers
 const HERO_UNIT = 15; // SVG units per solver unit of height
 // One random section per page load; the worker simulates it.
 const heroGeology = HeroGeology.randomGeology();
@@ -322,6 +397,9 @@ const SubsurfaceHero = ({ onNavigate }) => {
   const scene = useMemo(() => heroWeatherScene(weather, moon), [weather, moon]);
   useEffect(() => heroWeatherStart(setWeather), []);
   const shipRef = useRef(ship);
+  // Real seconds since shut-in. The end state is the default: only a pass through year 30 during playback starts a fade.
+  const shutRef = useRef(HERO_SHUTIN_SECONDS);
+  const [shutSeconds, setShutSeconds] = useState(HERO_SHUTIN_SECONDS);
   // Under reduced motion the carrier's manoeuvres complete at once.
   const shipSeconds = useMemo(() => (siteReducedMotion() ? { arriving: 0, connecting: 0, disconnecting: 0, departing: 0 } : HERO_SHIP_SECONDS), []);
   yearRef.current = year;
@@ -361,6 +439,14 @@ const SubsurfaceHero = ({ onNavigate }) => {
     return () => sizes.disconnect();
   }, []);
 
+  // A pause stops the shut-in fade at once.
+  useEffect(() => {
+    if (!(late && heroShouldTick({ playing, visible, hidden })) && shutRef.current < HERO_SHUTIN_SECONDS) {
+      shutRef.current = HERO_SHUTIN_SECONDS;
+      setShutSeconds(HERO_SHUTIN_SECONDS);
+    }
+  }, [late, playing, visible, hidden]);
+
   // One clock drives the carrier and the model: injection years wait until the carrier is moored and connected.
   // The clock waits for the second step. A per-frame update would restart that transition at every frame.
   useEffect(() => {
@@ -370,7 +456,9 @@ const SubsurfaceHero = ({ onNavigate }) => {
       const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
       last = now;
       const injectionEnd = run ? run.injectionYears : 30;
-      const nextShip = heroShipStep(shipRef.current, dt, yearRef.current < injectionEnd, shipSeconds);
+      const injecting = yearRef.current < injectionEnd;
+      // The carrier stays connected until the hose is empty.
+      const nextShip = heroShipStep(shipRef.current, dt, injecting || shutRef.current < HERO_SHUTIN_SECONDS, shipSeconds);
       if (nextShip.phase !== shipRef.current.phase || nextShip.p !== shipRef.current.p) {
         shipRef.current = nextShip;
         setShip(nextShip);
@@ -381,6 +469,9 @@ const SubsurfaceHero = ({ onNavigate }) => {
         setYear(next);
         if (next >= HERO_YEARS) { setPlaying(false); return; }
       }
+      if (injecting && yearRef.current >= injectionEnd) shutRef.current = shipSeconds.arriving > 0 ? 0 : HERO_SHUTIN_SECONDS;
+      else if (shutRef.current < HERO_SHUTIN_SECONDS) shutRef.current = Math.min(HERO_SHUTIN_SECONDS, shutRef.current + dt);
+      setShutSeconds(shutRef.current);
       frameId = requestAnimationFrame(tick);
     };
     frameId = requestAnimationFrame(tick);
@@ -392,28 +483,56 @@ const SubsurfaceHero = ({ onNavigate }) => {
   const leakScale = useMemo(() => ({ peak: run ? run.faultFlow.reduce((max, v) => Math.max(max, v), 0) : 0 }), [run]);
   const firstLeakYears = useMemo(() => (run ? heroLeakFirstYears(run.faultFlow, run.faults, run.years) : []), [run]);
   // Full scale of the push bar for each fault: its largest buoyancy plus overpressure while it leaks, rounded up to a whole bar.
+  // A fault that never leaks uses all years, and its seal limit, so that the whole bar stays in view.
   const pushScale = useMemo(() => (run ? HERO_FAULTS.map((fault, i) => {
     const cell = heroSection.faultCells[i][0], { distance } = heroSection.leak[i], sums = [];
+    const leaks = firstLeakYears[i] >= 0;
     for (let y = 0; y <= run.years; y++) {
-      if (run.faultFlow[y * run.faults + i] > 0) sums.push(run.h[0][y * run.nodes + cell] * HeroGeology.BAR_PER_HEAD + HeroGeology.overpressure(distance, y, run.injectionYears));
+      if (!leaks || run.faultFlow[y * run.faults + i] > 0) sums.push(run.h[0][y * run.nodes + cell] * HeroGeology.BAR_PER_HEAD + HeroGeology.overpressure(distance, y, run.injectionYears));
     }
+    if (!leaks) sums.push(heroGeology.faults[i].entryPressure);
     return heroLeakScaleBar(sums);
-  }) : []), [run]);
+  }) : []), [run, firstLeakYears]);
   const injectionYears = run ? run.injectionYears : 30;
   const leak = useMemo(() => (frame ? HeroGeology.leakReadout(heroGeology, heroSection, frame, year, injectionYears) : null), [frame, year, injectionYears]);
+  // No fault leaks, but the mobile CO2 touches one at the storage roof: the card shows the fault that holds.
+  const hold = useMemo(() => (frame && !leak ? heroLeakHold(HERO_FAULTS.map((fault, i) => ({
+    h: frame.h[heroSection.faultCells[i][0]], distance: heroSection.leak[i].distance, entry: heroGeology.faults[i].entryPressure,
+  })), year, injectionYears, HeroGeology.BAR_PER_HEAD, HeroGeology.overpressure) : null), [frame, leak, year, injectionYears]);
+  // A fault that starts to leak in playback reads "breaching" for 1.2 s. A scrub or a restart never starts it.
+  const [breachFault, setBreachFault] = useState(-1);
+  const flowsRef = useRef(null);
+  const breachTimer = useRef(0);
+  useEffect(() => {
+    const flows = frame ? frame.faultFlow : null;
+    const started = flows && playing ? heroLeakStarted(flowsRef.current, flows) : [];
+    flowsRef.current = flows;
+    if (!started.length) return;
+    setBreachFault(started[0]);
+    clearTimeout(breachTimer.current);
+    breachTimer.current = setTimeout(() => setBreachFault(-1), HERO_BREACH_MS);
+  }, [frame, playing]);
+  useEffect(() => () => clearTimeout(breachTimer.current), []);
+  const clearBreach = () => { clearTimeout(breachTimer.current); setBreachFault(-1); };
   // CO2 is in the pipes while the carrier is connected during the injection years; its flow follows the clock.
-  const flow = run && year < injectionYears && ship.phase === 'moored' ? heroFlowPhase(year) : null;
+  // After shut-in the tubing stays filled: the pulses ease to a stop, then the core goes dim.
+  const shut = heroShutIn(year, injectionYears, shutSeconds);
+  const shutRate = 6 * HeroGeology.yearsPerSecond(injectionYears - 0.001, injectionYears) * speed;
+  const flow = !run ? null : year < injectionYears ? (ship.phase === 'moored' ? heroFlowPhase(year) : null) : heroFlowPhase(injectionYears) + shut.travel * shutRate;
   const jumpShip = value => {
     shipRef.current = heroShipFor(value, injectionYears);
     setShip(shipRef.current);
+    // A scrub sets the end state at once.
+    shutRef.current = HERO_SHUTIN_SECONDS;
+    setShutSeconds(HERO_SHUTIN_SECONDS);
   };
   const controls = {
     toggle: () => {
       if (!playing && yearRef.current >= HERO_YEARS) setYear(0);
       setPlaying(!playing);
     },
-    scrub: value => { setYear(value); setPlaying(false); jumpShip(value); },
-    restart: () => { setYear(0); setPlaying(true); },
+    scrub: value => { setYear(value); setPlaying(false); jumpShip(value); clearBreach(); },
+    restart: () => { setYear(0); setPlaying(true); clearBreach(); shutRef.current = HERO_SHUTIN_SECONDS; setShutSeconds(HERO_SHUTIN_SECONDS); },
     speed: () => setSpeed(s => (s === 1 ? 2 : s === 2 ? 4 : 1)),
   };
 
@@ -426,10 +545,11 @@ const SubsurfaceHero = ({ onNavigate }) => {
       {leakScale.peak > 0 && <HeroLeakFlow sectionRef={sectionRef} frame={frame} yearRef={yearRef} run={run} speed={speed} playing={playing} visible={visible} hidden={hidden}
         injectionYears={injectionYears} peak={leakScale.peak} firstYears={firstLeakYears} />}
       <HeroOverlay />
-      <HeroWell flow={flow} />
-      {late && <SurfaceSite geology={heroGeology} flow={flow} ship={ship} />}
+      <HeroWell flow={flow} dim={shut.dim} />
+      <HeroInjectionFlow sectionRef={sectionRef} injecting={!!run && year < injectionYears && ship.phase === 'moored'} speed={speed} playing={playing} visible={visible} hidden={hidden} />
+      {late && <SurfaceSite geology={heroGeology} flow={flow} hose={shut.hose} dim={shut.dim} ship={ship} />}
       <HeroLabels />
-      <HeroLeakReadout frame={frame} leak={leak} pushScale={pushScale} />
+      <HeroLeakReadout frame={frame} card={leak || hold} breachFault={breachFault} pushScale={pushScale} />
       <Identity onNavigate={onNavigate} />
       <HeroPlayer year={year} playing={playing} speed={speed} frame={frame} run={run} injectionYears={injectionYears} leak={leak} peak={leakScale.peak}
         ship={ship.phase} exaggeration={exaggeration} controls={controls} weather={scene} />
@@ -863,7 +983,7 @@ const HeroOverlay = React.memo(() => (
    Well — a pixel-true strip over the section: x in px about the well, y in section units
    ===================================================== */
 const HERO_WELL = heroWellLayout(heroStorage.roofR[heroSection.wellCell], heroSection.wellBottom);
-const HeroWell = React.memo(({ flow }) => {
+const HeroWell = React.memo(({ flow, dim = 0 }) => {
   const { packer, perforations, td } = HERO_WELL;
   const bore = `M0 0V${heroFixed(td)}`;
   return (
@@ -882,13 +1002,136 @@ const HeroWell = React.memo(({ flow }) => {
       <path d="M0 0V28" className="hero-well__bore hero-well__bore--surface" vectorEffect="non-scaling-stroke" />
       <path d={`M-5 ${heroFixed(packer)}H5`} className="hero-well__packer" vectorEffect="non-scaling-stroke" />
       <path d={perforations.map(y => `M-3.5 ${y}h-3M3.5 ${y}h3`).join('')} className="hero-well__perforations" vectorEffect="non-scaling-stroke" />
-      {flow !== null && <g className="hero-well__flow">
-        <path d={bore} className="hero-well__co2" vectorEffect="non-scaling-stroke" />
-        <path d={bore} className="hero-well__pulse" stroke="url(#hero-well-flow)" vectorEffect="non-scaling-stroke" />
+      {flow !== null && <g className="hero-well__flow" style={heroShutStyle(dim)}>
+        <path d={bore} className="hero-well__co2" vectorEffect="non-scaling-stroke" style={heroShutCore(dim)} />
+        {dim < 1 && <path d={bore} className="hero-well__pulse" stroke="url(#hero-well-flow)" vectorEffect="non-scaling-stroke" opacity={heroSiteRound(1 - dim)} />}
       </g>}
     </svg>
   );
 });
+
+/* =====================================================
+   Injection flow — CO2 droplets that leave the perforations, on one small canvas at true pixel scale
+   ===================================================== */
+const HERO_INJ_RATE = 8;       // droplets per second at 1x
+const HERO_INJ_MAX = 60;       // live droplets
+const HERO_INJ_BOX = 80;       // the canvas is as wide as the well strip
+const HERO_INJ_SEED = 11;
+// One droplet leaves a perforation, rises 6 to 16 px into the aquifer and fades into the plume.
+const heroInjSpawn = (rand, perforations, cx) => {
+  const side = rand() < 0.5 ? -1 : 1, length = 6 + 10 * rand();
+  const dx = side * length * (0.35 + 0.3 * rand());
+  return { x0: cx + side * 6.5, y0: perforations[Math.floor(rand() * perforations.length)], dx, dy: -Math.sqrt(length * length - dx * dx),
+    t: 0, dur: 0.7 + 0.7 * rand(), r: 1.15 + 0.75 * rand(), h: [], l: null };
+};
+const heroInjLook = p => {
+  const e = heroLeakEase(p.t);
+  return { x: p.x0 + p.dx * e, y: p.y0 + p.dy * e, c: 'green', k: 0, R: p.r * (1 - 0.3 * p.t),
+    a: 0.9 * heroLeakClamp(p.t / 0.12) * (1 - heroLeakClamp((p.t - 0.4) / 0.6)) };
+};
+const heroInjectionEngine = canvas => {
+  const ctx = canvas.getContext('2d');
+  let drops = [], carry = 0, geo = null, drawn = false;
+  const rand = heroLeakRandom(HERO_INJ_SEED);
+  const size = { sx: 1, sy: 1 };
+  return {
+    // width and height are the size of the section in CSS pixels. The canvas covers the perforated interval only.
+    resize(width, height, ratio) {
+      const { perforations, td } = HERO_WELL, unit = height / 580;
+      const x0 = Math.round(width * heroGeology.wellXPct / 100 - HERO_INJ_BOX / 2);
+      const y0 = Math.max(0, Math.floor(perforations[0] * unit - 22)), y1 = Math.ceil(td * unit + 6);
+      const ch = Math.max(1, y1 - y0);
+      canvas.width = Math.round(HERO_INJ_BOX * ratio);
+      canvas.height = Math.max(1, Math.round(ch * ratio));
+      canvas.style.left = `${x0}px`;
+      canvas.style.top = `calc(var(--hero-surface) + ${y0}px)`;
+      canvas.style.width = `${HERO_INJ_BOX}px`;
+      canvas.style.height = `${ch}px`;
+      size.sx = canvas.width / HERO_INJ_BOX; size.sy = canvas.height / ch;
+      geo = { cx: HERO_INJ_BOX / 2, ys: perforations.map(y => y * unit - y0) };
+      drops = []; carry = 0; drawn = false;
+    },
+    count: () => drops.length,
+    clear() {
+      drops = []; carry = 0;
+      if (drawn) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); drawn = false; }
+    },
+    // emit is false after shut-in: no new droplets start and the live ones finish.
+    tick(dt, emit, speed) {
+      if (!geo) return;
+      if (emit) carry = Math.min(2, carry + HERO_INJ_RATE * speed * dt);
+      while (emit && carry >= 1 && drops.length < HERO_INJ_MAX) { drops.push(heroInjSpawn(rand, geo.ys, geo.cx)); carry -= 1; }
+      for (let n = drops.length - 1; n >= 0; n--) {
+        const p = drops[n];
+        p.t += dt / p.dur;
+        if (p.t >= 1) { drops.splice(n, 1); continue; }
+        p.l = heroInjLook(p);
+        p.h.push([p.l.x, p.l.y]);
+        if (p.h.length > 6) p.h.shift();
+      }
+      if (!drops.length && !drawn) return;
+      ctx.setTransform(size.sx, 0, 0, size.sy, 0, 0);
+      // The canvas is small (the perforated interval only), so one full clear is cheap.
+      ctx.clearRect(0, 0, HERO_INJ_BOX, canvas.height / size.sy);
+      drops.forEach(q => { if (q.l) heroLeakDrawDrop(ctx, q); });
+      drawn = drops.length > 0;
+    },
+  };
+};
+
+// The loop runs only while CO2 flows, playback runs, the hero is in view, the tab is visible and motion is allowed.
+// After shut-in it runs on until the live droplets have finished, and then it stops.
+const HeroInjectionFlow = ({ sectionRef, injecting, speed, playing, visible, hidden }) => {
+  const canvasRef = useRef(null);
+  const engineRef = useRef(null);
+  const reduced = useMemo(() => siteReducedMotion(), []);
+  const [tail, setTail] = useState(false);
+  const canRun = !reduced && heroShouldTick({ playing, visible, hidden });
+  const go = canRun && (injecting || tail);
+  const live = useRef(null);
+  live.current = { injecting, speed };
+
+  useEffect(() => {
+    const engine = heroInjectionEngine(canvasRef.current);
+    engineRef.current = engine;
+    const section = sectionRef.current;
+    const fit = () => {
+      const { width, height } = section.getBoundingClientRect();
+      if (width && height) engine.resize(width, height, Math.min(2, window.devicePixelRatio || 1));
+    };
+    fit();
+    if (!('ResizeObserver' in window)) return () => { engineRef.current = null; };
+    const sizes = new ResizeObserver(fit);
+    sizes.observe(section);
+    return () => { sizes.disconnect(); engineRef.current = null; };
+  }, []);
+
+  useEffect(() => { if (injecting && !reduced) setTail(true); }, [injecting, reduced]);
+  // No flow and no loop: a scrub, a restart or a pause after shut-in leaves no stale droplets.
+  useEffect(() => {
+    if (!go && !injecting && engineRef.current) { engineRef.current.clear(); setTail(false); }
+  }, [go, injecting]);
+
+  useEffect(() => {
+    if (!go) return undefined;
+    let frameId = 0, last = 0;
+    const tick = now => {
+      frameId = requestAnimationFrame(tick);
+      // The loop draws at 30 fps at most.
+      if (last && now - last < HERO_LEAK_FRAME_MS) return;
+      const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
+      last = now;
+      const engine = engineRef.current;
+      if (!engine) return;
+      engine.tick(dt, live.current.injecting, live.current.speed);
+      if (!live.current.injecting && !engine.count()) { cancelAnimationFrame(frameId); setTail(false); }
+    };
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [go]);
+
+  return <canvas ref={canvasRef} className="hero-injection-flow" aria-hidden="true" />;
+};
 
 /* =====================================================
    Labels and the depth axis (HTML, so text is not stretched)
@@ -921,27 +1164,32 @@ const HeroLabels = React.memo(() => (
    Leak readout — beside a leaking fault, from the model's own numbers
    ===================================================== */
 const HERO_LEAK_BAR_WIDTH = 150; // px
-const HeroLeakReadout = ({ frame, leak, pushScale }) => {
-  if (!leak) return null;
-  const gauge = heroLeakGauge(leak, pushScale[leak.fault] || 1);
+const HeroLeakReadout = ({ frame, card, breachFault, pushScale }) => {
+  if (!card) return null;
+  const mode = heroLeakMode(card, breachFault);
+  const gauge = heroLeakGauge(card, pushScale[card.fault] || 1);
   const w = HERO_LEAK_BAR_WIDTH;
-  const { to } = HERO_FAULTS[leak.fault];
+  const { to } = HERO_FAULTS[card.fault];
   // Sit on the side of the fault away from the well, unless that side has no room for the label.
   const placeLeft = to.x < heroGeology.wellX ? to.x > 380 : to.x > 750;
   const side = placeLeft ? { right: `calc(${heroFixed(100 - to.x / 10)}% + 22px)` } : { left: `calc(${heroFixed(to.x / 10)}% + 22px)` };
+  // The seal limit label sits over its tick. It stays clear of the push label and inside the bar.
+  const sealLeft = heroLeakClamp(gauge.entry * w - 4, 30, w - 64);
   return (
-    <div className="hero-leak-readout" aria-hidden="true" style={{ ...side, top: heroDepthTop(to.y) }}>
+    <div className={`hero-leak-readout hero-leak-readout--${mode}`} aria-hidden="true" style={{ ...side, top: heroDepthTop(to.y) }}>
       <span className="hero-leak-readout__head">
-        <strong>F{leak.fault + 1} leaking</strong>
+        <strong>{heroLeakTitle(card, mode)}</strong>
         <span className="hero-leak-readout__share">{heroPercentText(frame.inventory.leaked, frame.inventory.injected)}% leaked</span>
       </span>
-      {/* The push against the hold: buoyancy (solid), overpressure (striped) and the entry pressure (tick). */}
+      {/* The push against the hold: buoyancy (solid), overpressure (striped) and the seal limit (tick). */}
       <span className="hero-leak-gauge" style={{ width: w }}>
+        <b className="hero-leak-gauge__label hero-leak-gauge__push">push</b>
+        <b className="hero-leak-gauge__label hero-leak-gauge__seal" style={{ left: sealLeft }}>▼ seal limit</b>
         <i className="hero-leak-gauge__b" style={{ width: heroFixed(gauge.buoyancy * w) }} />
         <i className="hero-leak-gauge__o" style={{ left: heroFixed(gauge.buoyancy * w), width: heroFixed((gauge.push - gauge.buoyancy) * w) }} />
         <i className="hero-leak-gauge__e" style={{ left: heroFixed(gauge.entry * w) }} />
       </span>
-      <span>{heroLeakLine(leak)}</span>
+      <span>{heroLeakLine(card)}</span>
     </div>
   );
 };
@@ -950,16 +1198,21 @@ const HeroLeakReadout = ({ frame, leak, pushScale }) => {
    Player — controls, the CO2 inventory and the scale note
    ===================================================== */
 const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, leak, peak, ship, exaggeration, controls, weather }) => {
-  const phase = heroPhase(year, injectionYears, ship);
+  // The run time is known once per run. toLocaleString is slow, so the badge text is not built on every frame.
+  const receipt = useMemo(() => (run && run.computeMs > 0
+    ? { badge: heroReceiptBadge(run.years, run.computeMs), text: heroReceiptText(run.years, run.computeMs) } : null), [run]);
+  const done = year >= HERO_YEARS;
+  const phase = done ? 'complete' : heroPhase(year, injectionYears, ship);
   // The band under the scrubber shows how strong the leak is over the run. It is built once per run.
   const band = useMemo(() => {
     if (!run || !(peak > 0)) return null;
     const first = heroLeakFirstYears(run.faultFlow, run.faults, run.years).reduce((min, y) => (y >= 0 && (min < 0 || y < min) ? y : min), -1);
-    const stops = heroLeakBandStops(run.faultFlow, run.faults, run.years, peak, first);
+    const toScrub = y => heroYearToScrub(y, injectionYears, run.years);
+    const stops = heroLeakBandStops(run.faultFlow, run.faults, run.years, peak, first, 20, toScrub);
     if (!stops.length) return null;
     const colors = stops.map(({ at, alpha }) => `color-mix(in srgb, var(--sim-glow-leaked) ${alpha}%, transparent) ${at}%`);
-    return { left: `${heroFixed(100 * first / run.years)}%`, background: `linear-gradient(90deg, ${colors.join(', ')})` };
-  }, [run, peak]);
+    return { left: `${heroFixed(100 * toScrub(first) / HERO_SCRUB_MAX)}%`, background: `linear-gradient(90deg, ${colors.join(', ')})` };
+  }, [run, peak, injectionYears]);
   const inventory = frame ? frame.inventory : { mobile: 0, residual: 0, leaked: 0, injected: 0 };
   const share = value => heroPercentText(value, inventory.injected);
   const classes = [['mobile', 'Mobile', inventory.mobile], ['residual', 'Residual', inventory.residual], ['leaked', 'Leaked', inventory.leaked]];
@@ -972,9 +1225,11 @@ const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, leak, pe
           <Icon name={playing ? 'pause' : 'play'} size={14} />
         </button>
         <span className="hero-player__track">
-          <input className="hero-player__scrub" type="range" min="0" max={HERO_YEARS} step="1" value={shownYear}
+          <input className="hero-player__scrub" type="range" min="0" max={HERO_SCRUB_MAX} step="1" value={Math.round(heroYearToScrub(year, injectionYears, HERO_YEARS))}
             aria-label="Simulation year" aria-valuetext={`Year ${shownYear}, ${phase}${leak ? `, F${leak.fault + 1} leaking` : ''}`}
-            onChange={event => controls.scrub(parseFloat(event.target.value))} />
+            onChange={event => controls.scrub(heroScrubToYear(parseFloat(event.target.value), injectionYears, HERO_YEARS))} />
+          <i className="hero-player__injtick" aria-hidden="true" />
+          <span className="hero-player__injlabel" aria-hidden="true">{Math.round(injectionYears)} yr</span>
           {band && <i className="hero-player__leakband" aria-hidden="true" style={band} />}
           {band && <i className="hero-player__leaktick" aria-hidden="true" style={{ left: band.left }} />}
         </span>
@@ -983,7 +1238,15 @@ const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, leak, pe
         </button>
         <button type="button" className="hero-player__small hero-player__speed" onClick={controls.speed} aria-label={`${speed}× playback speed`}>{speed}×</button>
       </div>
-      <p className="hero-player__title">Live VE model, year <span className="hero-player__year">{shownYear}</span> <span className="hero-player__phase">{phase}</span>{leak && <span className="hero-player__leak"> · F{leak.fault + 1} leaking</span>}</p>
+      <div className="hero-player__head">
+        <p className="hero-player__title">Live VE model, year <span className="hero-player__year">{shownYear}</span> <span className="hero-player__phase">{phase}</span>{leak && <span className="hero-player__leak"> · F{leak.fault + 1} leaking</span>}</p>
+        {receipt && (
+          <span className="hero-player__badge">
+            <span aria-hidden="true">{receipt.badge}</span>
+            <span className="visually-hidden">{receipt.text}</span>
+          </span>
+        )}
+      </div>
       <div className="hero-player__bar" role="img"
         aria-label={`Of the CO₂ injected so far: ${share(inventory.mobile)}% mobile, ${share(inventory.residual)}% residually trapped, ${share(inventory.leaked)}% leaked into the overlying aquifer.`}>
         {classes.map(([key, , value]) => <span key={key} className={`is-${key}`} style={{ width: `${inventory.injected > 0 ? 100 * value / inventory.injected : 0}%` }} />)}
@@ -992,7 +1255,7 @@ const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, leak, pe
         {classes.map(([key, label, value]) => <li key={key}><i className={`is-${key}`} />{label} {share(value)}%</li>)}
       </ul>
       <p className="hero-player__note">Teaching model: a schematic saline aquifer, 10 km wide, vertical exaggeration ×{exaggeration}. The depleted-gas model is in the 2026 preprint.</p>
-      {run && run.computeMs > 0 && <p className="hero-player__receipt">{heroReceiptText(run.years, run.computeMs)}</p>}
+      {done && <div className="hero-player__end"><a className="hero-player__cta" href="./simulator.html">Run your own case in the VE simulator →</a></div>}
       {weatherNote && <p className="hero-player__weather">{weatherNote.text}{weatherNote.credit && <> Weather by <a href={HERO_WEATHER_SOURCE_URL} target="_blank" rel="noopener noreferrer">Open-Meteo</a>.</>}</p>}
     </div>
   );
@@ -1058,8 +1321,8 @@ const SkyFront = ({ weather, rain }) => (
   <>
     <SkyHaze />
     <HeroSea weather={weather} />
-    <SkyHorizon />
-    <SkyRain rain={rain} live={!!weather.live} />
+    <SkyHorizon wind={weather.wind} />
+    <SkyRain rain={rain} live={!!weather.live} wind={weather.wind} />
   </>
 );
 
@@ -1199,39 +1462,72 @@ const SkyHaze = React.memo(() => (
     </svg>
 ));
 
+// The rotor period in seconds follows the wind in m/s. It is 0 below 1 m/s: the rotors stand still.
+const heroTurbinePeriod = wind => {
+  if (!(wind >= 1)) return 0;
+  return Math.min(14, Math.max(2.5, 48 / Math.max(wind, 0.5)));
+};
+
+// The slant of the rain in degrees from the vertical. It follows the wind in m/s.
+const heroRainSlant = wind => Math.min(18, Math.max(6, 4 + 0.9 * (wind >= 0 ? wind : 0)));
+
+// The far ship stands at this share of the width. The main platform covers 68 to 72 percent,
+// the far platform stands at 33 percent and the wind farm covers about 43 to 57 percent.
+const HERO_FAR_SHIP_LEFT = 38;
+
+// One turbine of the far wind farm: x and the tower height in the 200 x 32 box, and the start angle of the blades.
+const HERO_FARM = [[14, 26, 0], [44, 24, 40], [72, 22, 75], [98, 20, 20], [122, 18, 95], [144, 17, 55], [164, 15, 10], [182, 14, 80]];
+
 // Distant offshore features sit on the horizon at fixed size, so they never stretch.
-const SkyHorizon = React.memo(() => (
-    <div className="hero-horizon" style={{ opacity: 'var(--wx-horizon)' }}>
+// The towers and the red hub lights are one static SVG. Each rotor is a small HTML box with its own SVG,
+// so the compositor turns it and the main thread does not paint it again.
+const SkyHorizon = React.memo(({ wind = 6 }) => {
+  const period = heroTurbinePeriod(wind);
+  return (
+    <div className="hero-horizon" style={{ opacity: 'var(--wx-horizon)', '--turbine-period': `${Math.round(period * 100) / 100}s` }}>
       <svg className="hero-horizon__item" style={{ left: '33%' }} width="34" height="20" viewBox="0 0 34 20">
+        <defs>
+          <radialGradient id="far-platform-glow">
+            <stop stopColor="#e3c286" stopOpacity=".09" /><stop offset="1" stopColor="#e3c286" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <ellipse cx="17" cy="10" rx="17" ry="10" fill="url(#far-platform-glow)" />
         <path d="M8 20V11h18v9M10 11V6h8v5M22 11V2" stroke="#2b3e57" strokeWidth="1.2" fill="none" />
-        <ellipse cx="17" cy="16" rx="30" ry="10" fill="#e3c286" opacity=".07" />
         <circle className="hero-beacon hero-beacon--slow" cx="22" cy="2" r="1" fill="#ff5a4f" /><circle cx="13" cy="8.5" r=".9" fill="#e9c98f" />
         <circle cx="19" cy="14" r=".9" fill="#e9c98f" opacity=".7" />
       </svg>
-      <svg className="hero-horizon__item" style={{ left: '50%' }} width="200" height="32" viewBox="0 0 200 32">
-        {[[14, 26, 0], [44, 24, 40], [72, 22, 75], [98, 20, 20], [122, 18, 95], [144, 17, 55], [164, 15, 10], [182, 14, 80]].map(([x, h, a]) => {
-          const top = 32 - h, r = h * .42;
-          const blade = k => { const t = (a + k * 120) * Math.PI / 180; return `M${x} ${top}l${heroFixed(r * Math.cos(t))} ${heroFixed(r * Math.sin(t))}`; };
-          return <g key={x}>
-            <path d={`M${x} 32V${top}${blade(0)}${blade(1)}${blade(2)}`} stroke="#3a5070" strokeWidth=".9" fill="none" />
-            <circle className="hero-beacon" cx={x} cy={top} r="1.1" fill="#ff5a4f" />
-          </g>;
+      <div className={`hero-horizon__item hero-farm${period ? '' : ' hero-farm--calm'}`} style={{ left: '50%', width: 200, height: 32 }}>
+        <svg width="200" height="32" viewBox="0 0 200 32" style={{ position: 'absolute', left: 0, top: 0 }}>
+          {HERO_FARM.map(([x, h]) => <g key={x}>
+            <path d={`M${x} 32V${32 - h}`} stroke="#3a5070" strokeWidth=".9" fill="none" />
+            <circle className="hero-beacon" cx={x} cy={32 - h} r="1.1" fill="#ff5a4f" />
+          </g>)}
+        </svg>
+        {HERO_FARM.map(([x, h, a]) => {
+          const r = h * .42, blade = k => { const t = (a + k * 120) * Math.PI / 180; return `M${heroFixed(r)} ${heroFixed(r)}l${heroFixed(r * Math.cos(t))} ${heroFixed(r * Math.sin(t))}`; };
+          return <div key={x} className="hero-rotor" style={{ left: heroFixed(x - r), top: heroFixed(32 - h - r), width: heroFixed(2 * r), height: heroFixed(2 * r) }}>
+            <svg width={heroFixed(2 * r)} height={heroFixed(2 * r)} viewBox={`0 0 ${heroFixed(2 * r)} ${heroFixed(2 * r)}`} style={{ display: 'block', overflow: 'visible' }}>
+              <path d={`${blade(0)}${blade(1)}${blade(2)}`} stroke="#3a5070" strokeWidth=".9" fill="none" />
+            </svg>
+          </div>;
         })}
-      </svg>
+      </div>
       {/* A distant ship: a white masthead light and a warm deck light. */}
-      <svg className="hero-horizon__item" style={{ left: '72%' }} width="24" height="10" viewBox="0 0 24 10">
+      <svg className="hero-horizon__item hero-horizon__ship" style={{ left: `${HERO_FAR_SHIP_LEFT}%` }} width="24" height="10" viewBox="0 0 24 10">
         <path d="M3 10h18l-2 -2h-14z" fill="#1a2738" />
         <circle cx="12" cy="5" r=".9" fill="#f4f7fb" /><circle cx="6" cy="9" r=".7" fill="#e9c98f" opacity=".8" />
       </svg>
     </div>
-));
+  );
+});
 
 // The rain layer. The drop count follows the rain strength. Zero rain draws nothing.
-const SkyRain = React.memo(({ rain, live }) => {
+// The slant follows the wind. Each drop falls along its own tilted axis.
+const SkyRain = React.memo(({ rain, live, wind = 6 }) => {
   if (!(rain > 0)) return null;
   const dropCount = Math.round(16 + 96 * rain);
   return (
-    <div className={`hero-rain${live ? ' hero-rain--live' : ''}`}>
+    <div className={`hero-rain${live ? ' hero-rain--live' : ''}`} style={{ '--rain-slant': `${heroFixed(heroRainSlant(wind))}deg` }}>
       {Array.from({ length: dropCount }, (_, i) => <span key={i} className="hero-rain-drop" style={{
         left: `${(i * 61.803 + 9) % 100}%`,
         '--rain-speed': `${.8 + i % 5 * .12}s`,
@@ -1258,6 +1554,8 @@ const HeroShip = ({ ship }) => {
     } : { display: 'none' }}>
       <HeroShipBody />
       {/* The transfer hose is lowered from the platform to the manifold. */}
+      {/* A decorative label above the tanks. It moves and fades with the carrier. */}
+      <text className="hero-ship__label" x="304" y="109" textAnchor="middle" aria-hidden="true">CO₂ carrier</text>
       {pose && pose.hose > 0 && <use href="#site-feed-route" stroke="#0e1a28" strokeWidth="3.4" strokeDasharray="1 1" strokeDashoffset={(1 - pose.hose).toFixed(3)} />}
     </g>
   );
@@ -1315,6 +1613,8 @@ const HERO_SITE_WATERLINE = 146;
 // The hose runs from the carrier's manifold to the deck. The flow then goes left along the deck and down the conductor.
 const HERO_SITE_HOSE = 'M112 101Q176 144 236 108';
 const HERO_SITE_FLOW = 'M236 108Q176 144 112 101H48V160';
+const HERO_SITE_HOSE_FLOW = 'M236 108Q176 144 112 101';
+const HERO_SITE_PIPE_FLOW = 'M112 101H48V160';
 const heroSiteRound = value => Math.round(value * 100) / 100;
 // Lamp colours of the carrier's reflections: x position and colour.
 const HERO_SHIP_LAMPS = [[180, '#f0cd8e'], [236, '#f6e3b8'], [356, '#f0cd8e'], [372, '#f0cd8e'], [347, '#ff6a5c']];
@@ -1371,7 +1671,7 @@ const HERO_PLATFORM_FLOODS = [[10, 99], [40, 99], [70, 99], [100, 99], [30, 62],
 // The platform is split in three. SiteDefs, SitePlatformDeck and SitePlatformTop never build again: they are
 // static. SurfaceSite builds only the parts that move: the flow gradients, the status light, the flow
 // paths and the carrier wrapper. The order of the layers is the same as in one drawing.
-const SurfaceSite = React.memo(({ geology, flow, ship }) => (
+const SurfaceSite = React.memo(({ geology, flow, hose = 1, dim = 0, ship }) => (
   <div className="hero-surface-site" aria-hidden="true" style={{ left: `${geology.wellXPct}%` }}>
     <svg viewBox="-140 0 540 160" width="100%" height="100%" fill="none">
       <SiteDefs />
@@ -1390,15 +1690,25 @@ const SurfaceSite = React.memo(({ geology, flow, ship }) => (
       <ellipse cx="54" cy="78" rx="120" ry="64" fill="url(#site-bloom)" />
       <HeroShip ship={ship} />
       <SitePlatformDeck />
-      <circle data-site-status="true" cx="48" cy="95" r="1.5" fill={flow !== null ? 'var(--sim-glow-free)' : '#647b79'} style={{ fill: flow !== null ? 'var(--sim-glow-free)' : '#647b79' }} />
+      <circle data-site-status="true" cx="48" cy="95" r="1.5" fill={flow !== null && dim < 1 ? 'var(--sim-glow-free)' : '#647b79'} style={{ fill: flow !== null && dim < 1 ? 'var(--sim-glow-free)' : '#647b79' }} />
       <SitePlatformTop />
       {/* While connected, CO₂ runs from the carrier's manifold up the hose, across the deck to the well bay
           and down the conductor; the section's well carries it on to the aquifer. */}
-      {flow !== null && <g className="hero-well__flow">
-        <path d={HERO_SITE_FLOW} className="hero-well__co2" strokeWidth="2" />
-        <path d="M236 108Q176 144 112 101H48" className="hero-well__pulse" strokeWidth="2" stroke="url(#site-flow-x)" />
-        <path d="M48 101V160" className="hero-well__pulse" strokeWidth="2" stroke="url(#site-flow-y)" />
-      </g>}
+      {flow !== null && <>
+        {/* HERO_SITE_FLOW is drawn in two parts, so that the hose can empty first: its green fades with the hose fill. */}
+        {hose > 0 && <g className="hero-well__flow" opacity={heroSiteRound(hose)}>
+          <path d={HERO_SITE_HOSE_FLOW} className="hero-well__co2" strokeWidth="2" />
+          {dim < 1 && <path d={HERO_SITE_HOSE_FLOW} className="hero-well__pulse" strokeWidth="2" stroke="url(#site-flow-x)" />}
+        </g>}
+        {/* The deck pipe and the conductor stay filled after shut-in: dim, with no pulses and no glow. */}
+        <g className="hero-well__flow" style={heroShutStyle(dim)}>
+          <path d={HERO_SITE_PIPE_FLOW} className="hero-well__co2" strokeWidth="2" style={heroShutCore(dim)} />
+          {dim < 1 && <g opacity={heroSiteRound(1 - dim)}>
+            <path d="M112 101H48" className="hero-well__pulse" strokeWidth="2" stroke="url(#site-flow-x)" />
+            <path d="M48 101V160" className="hero-well__pulse" strokeWidth="2" stroke="url(#site-flow-y)" />
+          </g>}
+        </g>
+      </>}
     </svg>
   </div>
 ));
