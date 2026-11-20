@@ -112,7 +112,7 @@ test('the legs match the platform at the sea level and spread to the seabed', ()
 });
 
 test('the layers have the contract z-indexes and no surface line', () => {
-  const shared = rule('.hero-water__back,\r\n.hero-water__front'.replace(/\r\n/g, css.includes('\r\n') ? '\r\n' : '\n'));
+  const shared = rule('.hero-water__back,\r\n.hero-water__front,\r\n.hero-water__pipe'.replace(/\r\n/g, css.includes('\r\n') ? '\r\n' : '\n'));
   assert.match(shared, /position: absolute;/);
   assert.match(shared, /top: var\(--hero-waterline\);/);
   assert.match(shared, /height: var\(--hero-water\);/);
@@ -142,4 +142,15 @@ test('HeroWater.jsx is built before SubsurfaceHero.jsx and the hero renders it',
   assert.ok(a > 0 && a < b);
   assert.match(hero, /<HeroWater geology=\{heroGeology\} faults=\{HERO_FAULTS\} frame=\{frame\} leak=\{leak\}/);
   assert.ok(!/requestAnimationFrame/.test(water), 'the band adds no animation loop');
+});
+
+test('the CO2 flow goes on down the conductor through the water, with the same phase and shut-in dim', () => {
+  assert.match(hero, /<HeroWater [^>]*flow=\{flow\} dim=\{shut\.dim\}/);
+  assert.match(water, /\{flow !== null && <HeroWaterPipe wellXPct=\{geology\.wellXPct\} flow=\{flow\} dim=\{dim\} \/>\}/);
+  const pipe = water.slice(water.indexOf('const HeroWaterPipe'), water.indexOf('// The viewport width'));
+  assert.match(pipe, /gradientTransform=\{`translate\(0 \$\{flow \|\| 0\}\)`\}/);
+  assert.match(pipe, /style=\{heroShutStyle\(dim\)\}/);
+  assert.match(pipe, /style=\{heroShutCore\(dim\)\}/);
+  assert.match(pipe, /M48 0V\$\{HERO_SEA_DEPTH\}/);
+  assert.match(css, /\.hero-water__pipe \{ z-index: 3; \}/);
 });

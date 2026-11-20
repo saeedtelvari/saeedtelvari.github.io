@@ -547,7 +547,7 @@ const SubsurfaceHero = ({ onNavigate }) => {
       <HeroWaterLive weather={scene} wellXPct={heroGeology.wellXPct} visible={visible} hidden={hidden} />
       <HeroOverlay />
       <HeroWell flow={flow} dim={shut.dim} />
-      <HeroWater geology={heroGeology} faults={HERO_FAULTS} frame={frame} leak={leak} roofR={heroOverlying.roofR} />
+      <HeroWater geology={heroGeology} faults={HERO_FAULTS} frame={frame} leak={leak} roofR={heroOverlying.roofR} flow={flow} dim={shut.dim} />
       <HeroInjectionFlow sectionRef={sectionRef} injecting={!!run && year < injectionYears && ship.phase === 'moored'} speed={speed} playing={playing} visible={visible} hidden={hidden} />
       {late && <SurfaceSite geology={heroGeology} flow={flow} hose={shut.hose} dim={shut.dim} ship={ship} />}
       <HeroLabels />

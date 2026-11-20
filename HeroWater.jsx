@@ -216,6 +216,28 @@ const HeroWaterFront = React.memo(({ wellXPct, f1, f2, storageL, storageR, leake
   );
 });
 
+// The CO₂ in the conductor between the sea level and the seabed. The platform pipe ends at the sea level and the well
+// starts at the seabed, so this part closes the gap. It follows the same flow phase and the same shut-in dim as both.
+const HeroWaterPipe = ({ wellXPct, flow, dim }) => (
+  <div className="hero-water__pipe" aria-hidden="true">
+    <div className="hero-water__site" style={{ left: `${wellXPct}%` }}>
+      <svg viewBox={`-140 0 540 ${HERO_SEA_DEPTH}`} preserveAspectRatio="none" fill="none">
+        <defs>
+          <linearGradient id="hero-water-flow" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="31" spreadMethod="repeat"
+            gradientTransform={`translate(0 ${flow || 0})`}>
+            <stop stopColor="#fff" stopOpacity="0" /><stop offset=".5" stopColor="#fff" stopOpacity=".85" /><stop offset="1" stopColor="#fff" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <g className="hero-well__flow" style={heroShutStyle(dim)}>
+          <path d={`M48 0V${HERO_SEA_DEPTH}`} className="hero-well__co2" strokeWidth="2.4" vectorEffect="non-scaling-stroke" style={heroShutCore(dim)} />
+          {dim < 1 && <path d={`M48 0V${HERO_SEA_DEPTH}`} className="hero-well__pulse" strokeWidth="2.4" stroke="url(#hero-water-flow)"
+            vectorEffect="non-scaling-stroke" opacity={Math.round((1 - dim) * 100) / 100} />}
+        </g>
+      </svg>
+    </div>
+  </div>
+);
+
 // The viewport width. A resize can move the label to the other side of the fault.
 const useHeroWaterViewport = () => {
   const [width, setWidth] = useState(() => (typeof window !== 'undefined' && window.innerWidth) || 1200);
@@ -228,7 +250,7 @@ const useHeroWaterViewport = () => {
 };
 
 // The band draws from the current model frame. Only the footprints and the label change between frames.
-const HeroWater = ({ geology, faults, frame, leak, roofR }) => {
+const HeroWater = ({ geology, faults, frame, leak, roofR, flow = null, dim = 0 }) => {
   const viewport = useHeroWaterViewport();
   const { storage, leaked } = heroWaterFootprints(frame);
   const label = heroWaterLabel(!!leak, heroWaterLeakTop(frame, roofR));
@@ -254,6 +276,7 @@ const HeroWater = ({ geology, faults, frame, leak, roofR }) => {
       <HeroWaterBack wellXPct={geology.wellXPct} />
       <HeroWaterFront wellXPct={geology.wellXPct} f1={faultsPct[0]} f2={faultsPct[1]} storageL={near(storage, 0)} storageR={near(storage, 1)}
         leakedL={near(leaked, 0)} leakedR={near(leaked, 1)} label={label} labelLeft={labelLeft} labelRight={labelRight} />
+      {flow !== null && <HeroWaterPipe wellXPct={geology.wellXPct} flow={flow} dim={dim} />}
     </>
   );
 };

@@ -1178,7 +1178,8 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
    A live canvas at z 2 sits between them. The band does not overlap the rock section.
    ===================================================== */
 .hero-water__back,
-.hero-water__front {
+.hero-water__front,
+.hero-water__pipe {
   position: absolute;
   left: 0;
   right: 0;
@@ -1198,6 +1199,8 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   background: linear-gradient(180deg, rgba(7, 20, 36, 0), rgba(7, 20, 36, 0.5));
 }
 .hero-water__front { z-index: 3; font: 500 12px/1 var(--sim-font-mono); }
+/* The CO₂ in the conductor through the water, over the steel of the conductor. */
+.hero-water__pipe { z-index: 3; }
 .hero-water__moon { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 /* The jacket has the same place and width as the platform above it. */
 .hero-water__site {
