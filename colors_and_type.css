@@ -752,6 +752,11 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 .hero-beacon--slow { animation-duration: 3s; }
 @keyframes hero-beacon { 50% { fill-opacity: .15; } }
 
+/* The label above the carrier's tanks: 11 px on screen at 1440 px wide (the site is 648 px for 540 units, so 9.17 units).
+   Below 932 px the site is under 470 px wide and the label would render under 8 px, so it is hidden. */
+.hero-ship__label { fill: var(--sim-ink-muted, #9fb0c0); font: 9.17px var(--sim-font-ui); letter-spacing: .02em; pointer-events: none; }
+@media (max-width: 931px) { .hero-ship__label { display: none; } }
+
 /* The carrier's position comes from the hero clock. A slow swell lifts and rolls the hull a little about its waterline. */
 .hero-ship__hull { transform-origin: 270px 152px; animation: hero-ship-bob 5.2s ease-in-out infinite alternate; }
 @keyframes hero-ship-bob {
@@ -1090,6 +1095,8 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 .hero-well__flow { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--sim-glow-free) 60%, transparent)); }
 .hero-well__co2 { fill: none; stroke: var(--sim-glow-free); stroke-opacity: .85; stroke-width: 2.6; stroke-linecap: round; }
 .hero-well__pulse { fill: none; stroke-width: 2.6; stroke-linecap: round; }
+/* The droplets that leave the perforations: one small canvas over the perforated interval, on top of the well. */
+.hero-injection-flow { position: absolute; z-index: 3; pointer-events: none; }
 
 .hero-annotations { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 
