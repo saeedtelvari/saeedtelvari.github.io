@@ -1058,13 +1058,22 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   pointer-events: none;
 }
 .hero-leak-readout strong { color: var(--sim-glow-leaked); font-weight: 600; }
+/* Holding: the card is teal. Breaching: the first 1.2 s of a leak in playback, amber with a brighter edge. */
+.hero-leak-readout--holding { border-color: color-mix(in srgb, var(--hero-accent) 45%, transparent); }
+.hero-leak-readout--holding strong { color: var(--hero-accent); }
+.hero-leak-readout--breaching { border-color: color-mix(in srgb, var(--sim-glow-leaked) 80%, transparent); box-shadow: 0 0 12px color-mix(in srgb, var(--sim-glow-leaked) 35%, transparent); }
 .hero-leak-readout__head { display: flex; justify-content: space-between; gap: 14px; }
 .hero-leak-readout__share { color: var(--sim-ink-muted); }
 /* The push against the hold: solid amber is buoyancy, striped amber is overpressure, the light tick is the entry pressure. */
-.hero-leak-gauge { position: relative; display: block; height: 6px; margin: 4px 0; border-radius: 3px; background: rgba(230, 237, 243, 0.14); }
+.hero-leak-gauge { position: relative; display: block; height: 6px; margin: 15px 0 4px; border-radius: 3px; background: rgba(230, 237, 243, 0.14); }
 .hero-leak-gauge i { position: absolute; top: 0; bottom: 0; }
 .hero-leak-gauge__b { left: 0; border-radius: 3px 0 0 3px; background: var(--sim-glow-leaked); }
 .hero-leak-gauge__o { background: repeating-linear-gradient(135deg, var(--sim-glow-leaked) 0 2px, transparent 2px 4px); }
+/* Small labels above the bar: "push" at the left end and "seal limit" over its tick. */
+.hero-leak-gauge .hero-leak-gauge__label { position: absolute; top: -14px; color: var(--sim-ink-muted); font: 400 10px/1 var(--sim-font-ui); letter-spacing: 0.02em; }
+.hero-leak-gauge .hero-leak-gauge__push { left: 0; }
+.hero-leak-readout--holding .hero-leak-gauge__b { background: var(--hero-accent); }
+.hero-leak-readout--holding .hero-leak-gauge__o { background: repeating-linear-gradient(135deg, var(--hero-accent) 0 2px, transparent 2px 4px); }
 .hero-leak-gauge .hero-leak-gauge__e { top: -3px; bottom: -3px; width: 2px; border-radius: 1px; background: var(--sim-ink); transform: translateX(-1px); }
 .hero-surface-line { stroke: var(--sim-ink); stroke-opacity: 0.28; stroke-width: 1; }
 .hero-fault { stroke: var(--sim-ink); stroke-opacity: 0.35; stroke-width: 1.2; }
@@ -1246,6 +1255,9 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 }
 .hero-player__play:active { transform: scale(0.95); }
 .hero-player__track { position: relative; display: block; flex: 1; min-width: 0; }
+/* The tick and the label mark the end of injection at 20 % of the track. */
+.hero-player__injtick { position: absolute; left: 20%; top: 5px; bottom: 5px; width: 2px; border-radius: 1px; background: var(--sim-ink-faint); transform: translateX(-1px); pointer-events: none; }
+.hero-player__injlabel { position: absolute; left: 20%; top: -9px; transform: translateX(-50%); color: var(--sim-ink-muted); font: 500 9px/1 var(--sim-font-mono); pointer-events: none; }
 .hero-player__scrub { display: block; width: 100%; height: 20px; margin: 0; accent-color: var(--hero-accent); cursor: pointer; }
 /* The leak over the run: a thin band at the foot of the track, and a tick at the first leak year. */
 .hero-player__leakband { position: absolute; right: 0; bottom: 0; height: 3px; border-radius: 2px; pointer-events: none; }
@@ -1268,7 +1280,10 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 }
 .hero-player__small:hover { color: var(--sim-ink); border-color: var(--sim-ink-faint); }
 .hero-player__small:active { transform: scale(0.96); }
-.hero-player__title { margin: 10px 0 0; font: 600 13.5px/1.4 var(--sim-font-ui); }
+.hero-player__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; margin-top: 10px; }
+.hero-player__title { margin: 0; font: 600 13.5px/1.4 var(--sim-font-ui); }
+/* The run time of the model, as a small badge at the right of the title row. */
+.hero-player__badge { flex: none; padding: 3px 7px; border: 1px solid color-mix(in srgb, var(--hero-accent) 32%, transparent); border-radius: 5px; background: color-mix(in srgb, var(--hero-accent) 8%, transparent); color: var(--hero-accent); font: 600 10.5px/1 var(--sim-font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hero-player__year { font-family: var(--sim-font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
 .hero-player__phase { margin-left: 4px; color: var(--sim-ink-muted); font-weight: 400; }
 .hero-player__leak { color: var(--sim-glow-leaked); font-weight: 600; }
@@ -1291,7 +1306,10 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 .hero-player__weather { margin: 4px 0 0; color: var(--sim-ink-faint); font: 11.5px/1.4 var(--sim-font-ui); }
 .hero-player__weather a { color: var(--sim-ink-muted); text-underline-offset: 2px; }
 .hero-player__weather a:hover { color: var(--sim-ink); }
-.hero-player__receipt { margin: 4px 0 0; color: var(--sim-ink-muted); font: 12px/1.45 var(--sim-font-ui); font-variant-numeric: tabular-nums; }
+/* The end state: the line keeps its height, so the player does not resize when the link appears. */
+.hero-player__end { min-height: 20px; margin-top: 4px; }
+.hero-player__cta { color: var(--hero-accent); font: 600 12px/1.45 var(--sim-font-ui); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--hero-accent) 40%, transparent); text-underline-offset: 3px; }
+.hero-player__cta:hover { text-decoration-color: currentColor; }
 
 @media (max-width: 600px) {
   .hero-axis { width: 58px; font-size: 10.5px; }
@@ -1345,6 +1363,11 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   .hero-player__note,
   .hero-player__weather,
   .hero-player__receipt { display: none; }
+  .hero-player__head { margin: 0; }
+  /* The visible badge needs a line of its own on phones. The sentence stays for screen readers. */
+  .hero-player__badge { padding: 0; border: 0; background: none; }
+  .hero-player__badge > [aria-hidden="true"] { display: none; }
+  .hero-player__end { min-height: 0; margin: 0; }
   .hero-player__title { margin: 0; font-size: 12.5px; }
   .hero-player__legend { gap: 4px 12px; font-size: 11.5px; }
 }
