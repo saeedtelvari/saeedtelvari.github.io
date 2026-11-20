@@ -15,7 +15,7 @@ const block = survey.slice(survey.indexOf('// ---- hero survey helpers'), survey
 const S = new Function(`${block}
 return { HERO_SURVEY_YEARS, HERO_SURVEY_CROSS, HERO_SURVEY_HOLD, HERO_SURVEY_FADE, HERO_SURVEY_TOTAL, HERO_SURVEY_SHOT, HERO_SURVEY_SLOW, HERO_SURVEY_JUMP, HERO_SURVEY_UNIT,
   HERO_SURVEY_FRAME_MS, heroSurveyClock, heroSurveyCrossing, heroSurveyNext, heroSurveyDirection, heroSurveyFade, heroSurveyShipX, heroSurveyLeft, heroSurveyStrips,
-  heroSurveyRevealed, heroSurveyAmplitude, heroSurveyNoise, heroSurveyPalette };`)();
+  heroSurveyRevealed, heroSurveyChipShown, heroSurveyAmplitude, heroSurveyNoise, heroSurveyPalette };`)();
 
 const rule = selector => {
   const at = css.indexOf(`${selector} {`);
@@ -39,18 +39,25 @@ test('the pass has a cross, a hold and a fade, and a shot every 0.45 s', () => {
   assert.equal(S.HERO_SURVEY_SHOT, 0.45);
 });
 
-test('the clock factor is 1 when idle, eases to 0.06 in 0.3 s, holds, and eases back during the fade', () => {
+test('the clock factor is 1 when idle, eases to 0.03 in 0.2 s, holds, and eases back in the last 0.3 s of the fade', () => {
   assert.equal(S.heroSurveyClock(0), 1);
   assert.equal(S.heroSurveyClock(-1), 1);
-  near(S.heroSurveyClock(0.15), 1 - 0.94 * 0.5);
-  near(S.heroSurveyClock(0.3), 0.06);
-  assert.equal(S.heroSurveyClock(2), 0.06);
-  near(S.heroSurveyClock(5.9), 0.06);
-  near(S.heroSurveyClock(5.9 + 0.4), 0.06 + 0.94 * 0.5);
+  near(S.heroSurveyClock(0.1), 1 - 0.97 * 0.5);
+  near(S.heroSurveyClock(0.2), 0.03);
+  assert.equal(S.heroSurveyClock(2), 0.03);
+  near(S.heroSurveyClock(6.4), 0.03);
+  near(S.heroSurveyClock(6.4 + 0.15), 0.03 + 0.97 * 0.5);
   assert.equal(S.heroSurveyClock(6.7), 1);
   assert.equal(S.heroSurveyClock(20), 1);
   let last = 1;
-  for (let u = 0; u <= 0.3; u += 0.03) { const f = S.heroSurveyClock(u); assert.ok(f <= last + 1e-12); last = f; }
+  for (let u = 0; u <= 0.2; u += 0.02) { const f = S.heroSurveyClock(u); assert.ok(f <= last + 1e-12); last = f; }
+});
+
+test('a pass during injection moves the year by less than 5 years, so the pass at year 25 ends before the shut-in at year 30', () => {
+  let year = 25;
+  for (let u = 0; u < S.HERO_SURVEY_TOTAL; u += 0.001) year += 0.001 * 8 * S.heroSurveyClock(u);
+  assert.ok(year < 30, `the pass ends at year ${year.toFixed(2)}`);
+  assert.ok(year - 25 < 5);
 });
 
 test('playback that crosses a survey year starts a pass, and the step ends at that year', () => {
@@ -128,6 +135,12 @@ test('the reveal has a solid block and four soft strips behind the gun point', (
   assert.equal(S.heroSurveyLeft(390), 62);
   assert.equal(S.heroSurveyRevealed(340, 1, 100, 1000), 240);
   assert.equal(S.heroSurveyRevealed(760, -1, 100, 1000), 240);
+  // The chip is at the left of the image, so it waits for the image under it.
+  assert.equal(S.heroSurveyChipShown(340, 1, 100, 1000), true);
+  assert.equal(S.heroSurveyChipShown(300, 1, 100, 1000), false);
+  assert.equal(S.heroSurveyChipShown(760, -1, 100, 1000), false, 'a right-to-left pass with 240 px of image on the right');
+  assert.equal(S.heroSurveyChipShown(86, -1, 100, 1000), true);
+  assert.equal(S.heroSurveyChipShown(-24, -1, 100, 1000), true, 'a finished right-to-left pass');
 });
 
 // A layer with a flat roof and a flat floor, in section units.
@@ -213,7 +226,7 @@ test('the hero mounts the canvas only while a pass runs', () => {
 test('a scrub, a restart and a replay from the end cancel the pass, and the next survey builds only when no pass runs', () => {
   assert.match(hero, /scrub: value => \{[^}]*cancelSurvey\(\);/);
   assert.match(hero, /restart: \(\) => \{[^}]*cancelSurvey\(\);[^}]*surveyCount\.current = 0;/);
-  assert.match(hero, /if \(!playing && yearRef\.current >= HERO_YEARS\) \{ setYear\(0\); cancelSurvey\(\); \}/);
+  assert.match(hero, /if \(!playing && yearRef\.current >= HERO_YEARS\) \{ setYear\(0\); cancelSurvey\(\); surveyCount\.current = 0; \}/, 'a replay from the end starts the passes again left to right');
   assert.match(hero, /const nextSurvey = survey \? null : heroSurveyNext\(year\);/);
   assert.match(hero, /useEffect\(\(\) => heroSurveyPrepare\(run, nextSurvey, sectionRef\), \[run, nextSurvey\]\);/);
 });
@@ -262,7 +275,7 @@ test('the image build is capped at 1600 px, and the store holds one image that t
 test('the only text is the chip, and reduced motion shows the image with no ship and no shots', () => {
   assert.match(survey, /const label = `4D survey · year \$\{year\}`;/);
   assert.equal((survey.match(/fillText\(/g) || []).length, 1);
-  assert.match(survey, /if \(reduced \|\| heroSurveyRevealed\(edge, dir, left, w\) >= 240\) chip\(/);
+  assert.match(survey, /if \(reduced \|\| heroSurveyChipShown\(edge, dir, left, w\)\) chip\(/);
   assert.match(survey, /if \(reduced\) return;\s*\/\/ Shots/);
   assert.match(survey, /const edge = reduced \?/);
 });

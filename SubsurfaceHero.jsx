@@ -559,7 +559,7 @@ const SubsurfaceHero = ({ onNavigate }) => {
   };
   const controls = {
     toggle: () => {
-      if (!playing && yearRef.current >= HERO_YEARS) { setYear(0); cancelSurvey(); }
+      if (!playing && yearRef.current >= HERO_YEARS) { setYear(0); cancelSurvey(); surveyCount.current = 0; }
       setPlaying(!playing);
     },
     scrub: value => { setYear(value); setPlaying(false); jumpShip(value); clearBreach(); cancelSurvey(); },

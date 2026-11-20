@@ -12,8 +12,9 @@ const HERO_SURVEY_HOLD = 1.4;    // pass seconds: the image stays
 const HERO_SURVEY_FADE = 0.8;    // pass seconds: the image fades
 const HERO_SURVEY_TOTAL = HERO_SURVEY_CROSS + HERO_SURVEY_HOLD + HERO_SURVEY_FADE;
 const HERO_SURVEY_SHOT = 0.45;   // seconds between two shots
-const HERO_SURVEY_SLOW = 0.06;   // the model clock factor during the cross and the hold
-const HERO_SURVEY_EASE = 0.3;    // pass seconds to ease the clock factor down
+const HERO_SURVEY_SLOW = 0.03;   // the model clock factor during the cross, the hold and most of the fade
+const HERO_SURVEY_EASE = 0.2;    // pass seconds to ease the clock factor down
+const HERO_SURVEY_RISE = 0.3;    // pass seconds at the end of the fade to ease the clock factor back up
 const HERO_SURVEY_JUMP = 30;     // a step of more than this many years is a jump (the same value as HERO_LEAK_JUMP)
 const HERO_SURVEY_UNIT = 15;     // section units per solver unit of height (the same value as HERO_UNIT)
 const HERO_SURVEY_FRAME_MS = 30; // the loop skips a frame that comes sooner than this (about 30 fps)
@@ -24,12 +25,14 @@ const HERO_SURVEY_RING_MAX = 560; // px, where a shot has faded out
 const heroSurveySmooth = t => { const v = Math.max(0, Math.min(1, t)); return v * v * (3 - 2 * v); };
 
 // The factor for the model clock at the pass time u (in pass seconds). It is 1 when idle.
+// The clock stays slow until the image has almost gone. Thus a pass moves the year by only about 3.5 years during
+// injection, and the pass at year 25 ends before the shut-in at year 30.
 const heroSurveyClock = u => {
   if (!(u > 0) || u >= HERO_SURVEY_TOTAL) return 1;
   if (u < HERO_SURVEY_EASE) return 1 - (1 - HERO_SURVEY_SLOW) * heroSurveySmooth(u / HERO_SURVEY_EASE);
-  const slowEnd = HERO_SURVEY_CROSS + HERO_SURVEY_HOLD;
-  if (u <= slowEnd) return HERO_SURVEY_SLOW;
-  return HERO_SURVEY_SLOW + (1 - HERO_SURVEY_SLOW) * heroSurveySmooth((u - slowEnd) / HERO_SURVEY_FADE);
+  const rise = HERO_SURVEY_TOTAL - HERO_SURVEY_RISE;
+  if (u <= rise) return HERO_SURVEY_SLOW;
+  return HERO_SURVEY_SLOW + (1 - HERO_SURVEY_SLOW) * heroSurveySmooth((u - rise) / HERO_SURVEY_RISE);
 };
 
 // The survey year that playback crosses in one step, or null. A jump (a scrub or a restart) never starts a pass.
@@ -82,8 +85,12 @@ const heroSurveyStrips = (edge, dir, left, width) => {
   }).filter(s => s.w > 0);
 };
 
-// The revealed width of the image at the gun point x. The chip shows when this is at least 240 px.
+// The revealed width of the image at the gun point x.
 const heroSurveyRevealed = (edge, dir, left, width) => (dir > 0 ? Math.max(0, Math.min(width, edge) - left) : Math.max(0, width - Math.max(left, edge)));
+
+// The chip sits at the top left of the image. It shows only when the image is under it:
+// on a left-to-right pass once 240 px of image show, on a right-to-left pass once the solid image reaches the chip.
+const heroSurveyChipShown = (edge, dir, left, width) => (dir > 0 ? heroSurveyRevealed(edge, dir, left, width) >= 240 : edge + 24 <= left + 10);
 
 // The Ricker wavelet, 17 samples from -8 px to +8 px, at 0.11 cycles per px.
 const heroSurveyWavelet = (() => {
@@ -341,7 +348,7 @@ const heroSurveyEngine = (canvas, sectionRef, run, year, reduced) => {
         }
         ctx.restore();
         ctx.globalAlpha = 1;
-        if (reduced || heroSurveyRevealed(edge, dir, left, w) >= 240) chip(left + 10, secTop + 8, fade);
+        if (reduced || heroSurveyChipShown(edge, dir, left, w)) chip(left + 10, secTop + 8, fade);
       }
       if (reduced) return;
       // Shots: the wavefronts go down through the sea and the rock from the gun point at the sea level.
