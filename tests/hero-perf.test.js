@@ -200,7 +200,7 @@ test('the weather reaches the sky through custom properties, so the big sky part
   assert.match(hero, /className="hero-deck" style=\{\{ opacity: 'var\(--wx-deck\)' \}\}/);
   assert.match(hero, /className="hero-fog" style=\{\{ opacity: 'var\(--wx-fog\)' \}\}/);
   assert.match(hero, /<SkyMoon moonPath=\{moonPath\} \/>/, 'only the moon phase path builds the moon again');
-  assert.match(hero, /<SkyRain rain=\{rain\} live=\{!!weather\.live\} \/>/);
+  assert.match(hero, /<SkyRain rain=\{rain\} live=\{!!weather\.live\} wind=\{weather\.wind\} \/>/);
 });
 
 test('the platform and the carrier are static memo parts, and only the moving parts are in the frame', () => {

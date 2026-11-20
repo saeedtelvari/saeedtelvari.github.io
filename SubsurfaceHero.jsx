@@ -1058,8 +1058,8 @@ const SkyFront = ({ weather, rain }) => (
   <>
     <SkyHaze />
     <HeroSea weather={weather} />
-    <SkyHorizon />
-    <SkyRain rain={rain} live={!!weather.live} />
+    <SkyHorizon wind={weather.wind} />
+    <SkyRain rain={rain} live={!!weather.live} wind={weather.wind} />
   </>
 );
 
@@ -1199,39 +1199,72 @@ const SkyHaze = React.memo(() => (
     </svg>
 ));
 
+// The rotor period in seconds follows the wind in m/s. It is 0 below 1 m/s: the rotors stand still.
+const heroTurbinePeriod = wind => {
+  if (!(wind >= 1)) return 0;
+  return Math.min(14, Math.max(2.5, 48 / Math.max(wind, 0.5)));
+};
+
+// The slant of the rain in degrees from the vertical. It follows the wind in m/s.
+const heroRainSlant = wind => Math.min(18, Math.max(6, 4 + 0.9 * (wind >= 0 ? wind : 0)));
+
+// The far ship stands at this share of the width. The main platform covers 68 to 72 percent,
+// the far platform stands at 33 percent and the wind farm covers about 43 to 57 percent.
+const HERO_FAR_SHIP_LEFT = 38;
+
+// One turbine of the far wind farm: x and the tower height in the 200 x 32 box, and the start angle of the blades.
+const HERO_FARM = [[14, 26, 0], [44, 24, 40], [72, 22, 75], [98, 20, 20], [122, 18, 95], [144, 17, 55], [164, 15, 10], [182, 14, 80]];
+
 // Distant offshore features sit on the horizon at fixed size, so they never stretch.
-const SkyHorizon = React.memo(() => (
-    <div className="hero-horizon" style={{ opacity: 'var(--wx-horizon)' }}>
+// The towers and the red hub lights are one static SVG. Each rotor is a small HTML box with its own SVG,
+// so the compositor turns it and the main thread does not paint it again.
+const SkyHorizon = React.memo(({ wind = 6 }) => {
+  const period = heroTurbinePeriod(wind);
+  return (
+    <div className="hero-horizon" style={{ opacity: 'var(--wx-horizon)', '--turbine-period': `${Math.round(period * 100) / 100}s` }}>
       <svg className="hero-horizon__item" style={{ left: '33%' }} width="34" height="20" viewBox="0 0 34 20">
+        <defs>
+          <radialGradient id="far-platform-glow">
+            <stop stopColor="#e3c286" stopOpacity=".09" /><stop offset="1" stopColor="#e3c286" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <ellipse cx="17" cy="10" rx="17" ry="10" fill="url(#far-platform-glow)" />
         <path d="M8 20V11h18v9M10 11V6h8v5M22 11V2" stroke="#2b3e57" strokeWidth="1.2" fill="none" />
-        <ellipse cx="17" cy="16" rx="30" ry="10" fill="#e3c286" opacity=".07" />
         <circle className="hero-beacon hero-beacon--slow" cx="22" cy="2" r="1" fill="#ff5a4f" /><circle cx="13" cy="8.5" r=".9" fill="#e9c98f" />
         <circle cx="19" cy="14" r=".9" fill="#e9c98f" opacity=".7" />
       </svg>
-      <svg className="hero-horizon__item" style={{ left: '50%' }} width="200" height="32" viewBox="0 0 200 32">
-        {[[14, 26, 0], [44, 24, 40], [72, 22, 75], [98, 20, 20], [122, 18, 95], [144, 17, 55], [164, 15, 10], [182, 14, 80]].map(([x, h, a]) => {
-          const top = 32 - h, r = h * .42;
-          const blade = k => { const t = (a + k * 120) * Math.PI / 180; return `M${x} ${top}l${heroFixed(r * Math.cos(t))} ${heroFixed(r * Math.sin(t))}`; };
-          return <g key={x}>
-            <path d={`M${x} 32V${top}${blade(0)}${blade(1)}${blade(2)}`} stroke="#3a5070" strokeWidth=".9" fill="none" />
-            <circle className="hero-beacon" cx={x} cy={top} r="1.1" fill="#ff5a4f" />
-          </g>;
+      <div className={`hero-horizon__item hero-farm${period ? '' : ' hero-farm--calm'}`} style={{ left: '50%', width: 200, height: 32 }}>
+        <svg width="200" height="32" viewBox="0 0 200 32" style={{ position: 'absolute', left: 0, top: 0 }}>
+          {HERO_FARM.map(([x, h]) => <g key={x}>
+            <path d={`M${x} 32V${32 - h}`} stroke="#3a5070" strokeWidth=".9" fill="none" />
+            <circle className="hero-beacon" cx={x} cy={32 - h} r="1.1" fill="#ff5a4f" />
+          </g>)}
+        </svg>
+        {HERO_FARM.map(([x, h, a]) => {
+          const r = h * .42, blade = k => { const t = (a + k * 120) * Math.PI / 180; return `M${heroFixed(r)} ${heroFixed(r)}l${heroFixed(r * Math.cos(t))} ${heroFixed(r * Math.sin(t))}`; };
+          return <div key={x} className="hero-rotor" style={{ left: heroFixed(x - r), top: heroFixed(32 - h - r), width: heroFixed(2 * r), height: heroFixed(2 * r) }}>
+            <svg width={heroFixed(2 * r)} height={heroFixed(2 * r)} viewBox={`0 0 ${heroFixed(2 * r)} ${heroFixed(2 * r)}`} style={{ display: 'block', overflow: 'visible' }}>
+              <path d={`${blade(0)}${blade(1)}${blade(2)}`} stroke="#3a5070" strokeWidth=".9" fill="none" />
+            </svg>
+          </div>;
         })}
-      </svg>
+      </div>
       {/* A distant ship: a white masthead light and a warm deck light. */}
-      <svg className="hero-horizon__item" style={{ left: '72%' }} width="24" height="10" viewBox="0 0 24 10">
+      <svg className="hero-horizon__item hero-horizon__ship" style={{ left: `${HERO_FAR_SHIP_LEFT}%` }} width="24" height="10" viewBox="0 0 24 10">
         <path d="M3 10h18l-2 -2h-14z" fill="#1a2738" />
         <circle cx="12" cy="5" r=".9" fill="#f4f7fb" /><circle cx="6" cy="9" r=".7" fill="#e9c98f" opacity=".8" />
       </svg>
     </div>
-));
+  );
+});
 
 // The rain layer. The drop count follows the rain strength. Zero rain draws nothing.
-const SkyRain = React.memo(({ rain, live }) => {
+// The slant follows the wind. Each drop falls along its own tilted axis.
+const SkyRain = React.memo(({ rain, live, wind = 6 }) => {
   if (!(rain > 0)) return null;
   const dropCount = Math.round(16 + 96 * rain);
   return (
-    <div className={`hero-rain${live ? ' hero-rain--live' : ''}`}>
+    <div className={`hero-rain${live ? ' hero-rain--live' : ''}`} style={{ '--rain-slant': `${heroFixed(heroRainSlant(wind))}deg` }}>
       {Array.from({ length: dropCount }, (_, i) => <span key={i} className="hero-rain-drop" style={{
         left: `${(i * 61.803 + 9) % 100}%`,
         '--rain-speed': `${.8 + i % 5 * .12}s`,

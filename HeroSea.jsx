@@ -11,8 +11,15 @@
 // fog: 0..1, the haze on the horizon.
 // moon: 0..1, how visible the moon, its path and the horizon line are.
 // rain: 0..1, how much rain the sky draws. waves: wave height in metres, for the swell of the carrier.
-// The sky and the carrier read rain and waves. The sea shader does not.
+// The sky and the carrier read rain and waves. The sea reads rain only through the light on the water.
 const HERO_WEATHER_DEFAULT = { wind: 6, cloud: 0.35, fog: 0, moon: 1, rain: 0.5, waves: 1.2 };
+
+// The light on the water, 0.4 to 1. The moon (it already holds cloud and fog) sets it and rain lowers it.
+// The ripple arcs and the flat-tone highlights scale with it. The moon path does not.
+const heroSeaLight = weather => {
+  const moon = weather.moon >= 0 ? weather.moon : 1, rain = weather.rain >= 0 ? weather.rain : 0;
+  return Math.min(1, Math.max(0.4, 0.5 + 0.5 * moon - 0.15 * rain));
+};
 
 // The shader. Distances are in CSS pixels, so the sea looks the same on every screen width.
 const HERO_SEA_VERT = 'attribute vec2 a; void main(){ gl_Position = vec4(a, 0.0, 1.0); }';
@@ -20,7 +27,7 @@ const HERO_SEA_FRAG = `
   #extension GL_OES_standard_derivatives : enable
   precision highp float;
   uniform vec2 uRes; uniform float uTime; uniform float uMoonX; uniform float uScale;
-  uniform float uWind; uniform float uMoon; uniform float uFog;
+  uniform float uWind; uniform float uMoon; uniform float uFog; uniform float uLight;
   const float CAM_H = 30.0, TAN_X = 0.58, TAN_BOTTOM = 0.064;
   float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float noise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0-2.0*f);
@@ -57,7 +64,7 @@ const HERO_SEA_FRAG = `
     float r1 = 30.0 * pow(v, 0.556) - uTime * 0.28 * wind;
     float r2 = 19.0 * pow(v, 0.6) - uTime * 0.19 * wind + 0.5;
     float band = step(0.56, noise(vec2(px * 0.0012, r2 * 0.22)));
-    col += vec3(0.018, 0.028, 0.045) * band * (1.0 - 0.6 * v);
+    col += vec3(0.018, 0.028, 0.045) * band * (1.0 - 0.6 * v) * uLight;
     // The moon path: a soft column. Inside it most cells hold a dash, and the dashes turn moon-white.
     float mw = 8.0 + 72.0 * v;
     // The carrier stands under the moon. The path is weak far away, where it shows above the tanks,
@@ -73,7 +80,7 @@ const HERO_SEA_FRAG = `
     float tr = arcs(r1 + 0.2, s1, on1, w * 1.25, 1.0) * smoothstep(0.4, 0.75, v);
     // Ripples catch more light on the moon side. Wind raises the contrast of the strokes.
     float side = mix(0.45, 1.0, smoothstep(0.2, 0.8, uv.x));
-    float a = (0.14 + 0.24 * v) * side * (0.7 + 0.3 * wind);
+    float a = (0.14 + 0.24 * v) * side * (0.7 + 0.3 * wind) * uLight;   // uLight dims the arcs on dark, rainy nights
     vec3 rip = vec3(0.525, 0.651, 0.8);             // #86a6cc
     vec3 cc = mix(rip, vec3(0.93, 0.96, 0.99), mc);
     float ca = mix(a, 0.95, mc * 0.9);
@@ -142,6 +149,7 @@ const HeroSeaSvg = ({ width, height, moonX, weather }) => {
   const sea = useMemo(() => heroSeaVector(width, height, moonX), [width, height, moonX]);
   const glintTimes = [[2.6, 0], [3.4, -1.3], [2.1, -0.7], [2.9, -2]];
   const wind = Math.max(0.1, weather.wind / 6);
+  const light = heroSeaLight(weather);
   return (
     <svg className="hero-sea__svg" viewBox={`0 0 ${width} ${height}`} width={width} height={height}>
       <defs>
@@ -171,7 +179,7 @@ const HeroSeaSvg = ({ width, height, moonX, weather }) => {
               {Array.from({ length: sea.tiles }, (_, k) => (
                 <g key={k} transform={`translate(${k * sea.tile} 0)`} fill="none" strokeLinecap="round">
                   <path d={layer.trough} stroke="#02060d" strokeOpacity=".45" strokeWidth={heroSeaRound(layer.strokeW * 1.4)} />
-                  <path d={layer.crest} stroke="#9cb9dd" strokeOpacity={heroSeaRound(layer.opacity * (0.7 + 0.3 * wind))} strokeWidth={layer.strokeW} />
+                  <path d={layer.crest} stroke="#9cb9dd" strokeOpacity={heroSeaRound(layer.opacity * (0.7 + 0.3 * wind) * light)} strokeWidth={layer.strokeW} />
                 </g>
               ))}
             </g>
@@ -241,7 +249,7 @@ const heroSeaFinish = state => {
   gl.enableVertexAttribArray(position);
   gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
   const uniforms = {};
-  ['uRes', 'uTime', 'uMoonX', 'uScale', 'uWind', 'uMoon', 'uFog'].forEach(name => { uniforms[name] = gl.getUniformLocation(program, name); });
+  ['uRes', 'uTime', 'uMoonX', 'uScale', 'uWind', 'uMoon', 'uFog', 'uLight'].forEach(name => { uniforms[name] = gl.getUniformLocation(program, name); });
   return { gl, uniforms, free: state.free };
 };
 
@@ -250,6 +258,7 @@ const heroSeaApplyWeather = (gl, uniforms, weather) => {
   gl.uniform1f(uniforms.uWind, weather.wind);
   gl.uniform1f(uniforms.uMoon, weather.moon);
   gl.uniform1f(uniforms.uFog, weather.fog);
+  gl.uniform1f(uniforms.uLight, weather.light === undefined ? 1 : weather.light);
 };
 
 // The centre of the moon, in CSS pixels from the left edge of the strip.
@@ -310,7 +319,7 @@ const heroSeaDriver = (program, canvas) => {
   const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : fn => setTimeout(() => fn(performance.now()), 16);
   const caf = typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame : clearTimeout;
   const { gl, uniforms } = program;
-  const params = { width: 1, height: 1, scale: 1, moonX: 0.955, wind: 6, moon: 1, fog: 0 };
+  const params = { width: 1, height: 1, scale: 1, moonX: 0.955, wind: 6, moon: 1, fog: 0, light: 1 };
   const start = performance.now();
   let frame = 0, last = 0;
   const draw = now => {
@@ -451,7 +460,7 @@ const HeroSea = ({ weather = HERO_WEATHER_DEFAULT }) => {
       const width = wrap.clientWidth, height = wrap.clientHeight, now = weatherRef.current;
       return {
         scale, width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)),
-        moonX: width ? heroSeaMoonX(wrap) / width : 0.955, wind: now.wind, moon: now.moon, fog: now.fog,
+        moonX: width ? heroSeaMoonX(wrap) / width : 0.955, wind: now.wind, moon: now.moon, fog: now.fog, light: heroSeaLight(now),
       };
     };
     // The loop runs only while the hero is on screen, the tab is visible and motion is allowed.
