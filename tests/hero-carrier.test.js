@@ -81,16 +81,16 @@ test('the injection droplets run only while CO2 flows, playback runs, the hero i
   assert.match(comp, /const go = canRun && \(injecting \|\| tail\);/);
   assert.match(comp, /if \(!go\) return undefined;/);
   assert.match(comp, /now - last < HERO_LEAK_FRAME_MS/, 'at most 30 fps');
-  assert.match(comp, /engine\.tick\(dt, live\.current\.injecting, live\.current\.speed\)/);
+  assert.match(comp, /engine\.tick\(dt, live\.current\.injecting, live\.current\.speed, live\.current\.surveyRef\.current\.factor\)/);
   assert.match(comp, /!live\.current\.injecting && !engine\.count\(\)/, 'the loop ends when the live droplets have finished');
   assert.match(comp, /Math\.min\(2, window\.devicePixelRatio \|\| 1\)/);
   assert.match(source, /<HeroInjectionFlow [^>]*injecting=\{!!run && year < injectionYears && ship\.phase === 'moored'\}/);
   assert.match(source, /heroLeakRandom\(HERO_INJ_SEED\)/);
   assert.match(source, /heroLeakDrawDrop\(ctx, q\)/, 'the droplets share the look of the leak droplets');
   const engine = source.slice(source.indexOf('const heroInjectionEngine'), source.indexOf('const HeroInjectionFlow ='));
-  assert.match(engine, /tick\(dt, emit, speed\)/);
+  assert.match(engine, /tick\(dt, emit, speed, emitScale = 1\)/);
   assert.match(engine, /while \(emit && carry >= 1/, 'no new droplets start without emit');
-  assert.match(engine, /HERO_INJ_RATE \* speed \* dt/, 'the rate follows the playback speed');
+  assert.match(engine, /HERO_INJ_RATE \* speed \* dt \* emitScale/, 'the rate follows the playback speed and the survey factor');
 });
 
 test('a droplet is green, travels 6 to 16 px and fades out', () => {
