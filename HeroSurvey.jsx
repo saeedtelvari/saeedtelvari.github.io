@@ -31,7 +31,8 @@ const HERO_SURVEY_DI_MOBILE = -0.12;   // the fractional impedance change of mob
 const HERO_SURVEY_DI_RESIDUAL = -0.07; // the same for residual CO2
 const HERO_SURVEY_DI_BAR = -0.004;     // the same for each bar of overpressure in the storage aquifer
 const HERO_SURVEY_BAR_MIN = 0.3;       // bar, the pressure signal below this value does not show
-const HERO_SURVEY_R_FLOOR = 0.05;      // the reflection coefficient of the base of an aquifer
+const HERO_SURVEY_R_FLOOR = 0.025;     // the reflection coefficient of the base of an aquifer (a weak sand to shale step,
+                                       // so the push-down below the plume stays weaker than the top of the CO2)
 const HERO_SURVEY_PUSH = 0.176;        // push-down in metres for each metre of CO2 (CO2 sand is 15 % slower)
 const HERO_SURVEY_RESIDUAL_T = 0.6;    // the residual zone counts as 0.6 of mobile CO2 for the push-down
 const HERO_SURVEY_FRESNEL = 25;        // m, the sigma of the lateral blur (Fresnel zone after migration)
@@ -131,20 +132,23 @@ const heroSurveyHit = (a, b) => a.left < b.right && a.right > b.left && a.top < 
 
 // The place of the chip. A rect is { left, top, right, bottom } in one frame. The chip is { w, h }.
 // Candidates, in order: the top left of the image, just right of the player card at the section top,
-// just below the player card. The first one that fits in the section and misses both cards wins.
-// player and leak can be null. The result is { x, y } for the top left of the chip.
-const heroSurveyChipPlace = (chip, section, imageLeft, player, leak) => {
+// the same place one row lower (below the fault labels), just below the player card.
+// The first one that fits in the section and misses the player card and the other rects wins.
+// player can be null. others is one rect, a list of rects (the leak card, the fault labels) or null.
+// The result is { x, y } for the top left of the chip.
+const heroSurveyChipPlace = (chip, section, imageLeft, player, others) => {
   const gap = 8, spots = [{ x: imageLeft + 10, y: section.top + 8 }];
   if (player) {
     spots.push({ x: player.right + gap, y: section.top + 8 });
+    spots.push({ x: player.right + gap, y: section.top + 8 + chip.h + 10 });
     spots.push({ x: player.left, y: player.bottom + gap });
   }
+  const blocks = [player].concat(others || []).filter(Boolean);
   for (const s of spots) {
     const r = { left: s.x, top: s.y, right: s.x + chip.w, bottom: s.y + chip.h };
     const pad = { left: r.left - 4, top: r.top - 4, right: r.right + 4, bottom: r.bottom + 4 };
     if (r.right > section.right || r.bottom > section.bottom) continue;
-    if (player && heroSurveyHit(pad, player)) continue;
-    if (leak && heroSurveyHit(pad, leak)) continue;
+    if (blocks.some(b => heroSurveyHit(pad, b))) continue;
     return s;
   }
   return spots[0];
@@ -514,14 +518,17 @@ const heroSurveyEngine = (canvas, sectionRef, run, year, reduced) => {
     else if (need.width && need.height) image = heroSurveyBuild(run, year, need.width, need.height, heroSurveyLeft(need.width));
   };
 
-  // The chip moves to the first free place. The rects of the two cards are read here, at most every 500 ms and on a resize.
+  // The chip moves to the first free place. The rects of the cards and the fault labels are read here,
+  // at most every 500 ms and on a resize. The fault labels are above the canvas, so the chip must not go under them.
   const placeChip = () => {
     const section = sectionRef.current;
     if (!section) return;
     const box = canvas.getBoundingClientRect(), sr = section.getBoundingClientRect();
+    const others = [heroSurveyRectOf(document.querySelector('.hero-leak-readout'))];
+    document.querySelectorAll('.hero-fault-label').forEach(el => others.push(heroSurveyRectOf(el)));
     const pos = heroSurveyChipPlace({ w: size.chipW, h: size.chipH },
       { left: sr.left, top: sr.top, right: sr.right, bottom: sr.bottom }, box.left + size.left,
-      heroSurveyRectOf(document.querySelector('.hero-player')), heroSurveyRectOf(document.querySelector('.hero-leak-readout')));
+      heroSurveyRectOf(document.querySelector('.hero-player')), others);
     size.chipX = pos.x - box.left; size.chipY = pos.y - box.top;
   };
 

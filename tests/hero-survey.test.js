@@ -187,6 +187,8 @@ test('the chip takes the first free place: the image corner, right of the player
   assert.deepEqual(S.heroSurveyChipPlace(chip, section, 100, null, { left: 90, top: 0, right: 300, bottom: 40 }), { x: 110, y: 8 }, 'with no player card, the first place is the only one');
   const tall = { left: 104, top: 0, right: 444, bottom: 490 };
   assert.deepEqual(S.heroSurveyChipPlace(chip, section, 100, tall, { left: 440, top: 0, right: 700, bottom: 60 }), { x: 110, y: 8 }, 'no place is free: the first place stays');
+  const f1 = { left: 455, top: 6, right: 480, bottom: 22 };
+  assert.deepEqual(S.heroSurveyChipPlace(chip, section, 100, player, [null, f1]), { x: 452, y: 38 }, 'a fault label blocks the second place: the chip goes one row lower');
   const narrow = { left: 0, top: 0, right: 500, bottom: 500 };
   assert.deepEqual(S.heroSurveyChipPlace(chip, narrow, 100, { left: 104, top: 0, right: 444, bottom: 90 }, null), { x: 104, y: 98 }, 'the second place does not fit in the width');
 });
