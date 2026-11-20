@@ -13,7 +13,7 @@ const heroSource = read('SubsurfaceHero.jsx');
 const defaultSource = seaSource.slice(seaSource.indexOf('const HERO_WEATHER_DEFAULT'), seaSource.indexOf('// The shader.'));
 const names = ['HERO_WEATHER_DEFAULT', 'HERO_WEATHER_TIMEOUT_MS', 'HERO_WEATHER_CACHE_KEY', 'HERO_WEATHER_CACHE_MS', 'HERO_WEATHER_SOURCE_URL',
   'heroMoonPhase', 'heroMoonPath', 'heroWeatherMoonSetting', 'heroWeatherMap', 'heroWeatherFallback', 'heroWeatherScene', 'heroWeatherNote',
-  'heroWeatherReadCache', 'heroWeatherWriteCache', 'heroWeatherOverride', 'heroWeatherInitial', 'heroWeatherFetch', 'heroWeatherStart', 'heroWeatherSwell'];
+  'heroWeatherReadCache', 'heroWeatherWriteCache', 'heroWeatherOverride', 'heroWeatherInitial', 'heroWeatherFetch', 'heroWeatherStart', 'heroWeatherSwell', 'heroWeatherPeriod', 'heroWeatherWaves', 'HERO_WEATHER_MARINE_URL'];
 const load = () => {
   const context = { Date, Promise, JSON, Math, isFinite, Number, String, Array, Error };
   vm.runInNewContext(`${defaultSource}\n${weatherSource}\nthis.api = { ${names.join(', ')} };`, context);
@@ -23,7 +23,7 @@ const W = load();
 
 // A sample of the API answers. Each case changes only the fields that it needs.
 const forecast = fields => ({ current: { temperature_2m: 9, precipitation: 0, rain: 0, showers: 0, cloud_cover: 10, visibility: 24000, wind_speed_10m: 6, wind_direction_10m: 250, weather_code: 0, ...fields } });
-const marine = (height = 1.4) => ({ current: { wave_height: height, wave_period: 6, wave_direction: 260 } });
+const marine = (height = 1.4) => ({ current: { wave_height: height, wave_period: 6, wave_direction: 260, ocean_current_velocity: 0.6, ocean_current_direction: 214 } });
 const stateOf = (fields, height) => W.heroWeatherMap(forecast(fields), marine(height)).state;
 
 test('build.js lists HeroWeather.js before HeroSea.jsx', () => {
@@ -292,4 +292,43 @@ test('the hero starts with the fallback, then applies the live result', () => {
   assert.match(heroSource, /useState\(\(\) => heroWeatherInitial\(window\)\)/);
   assert.match(heroSource, /useEffect\(\(\) => heroWeatherStart\(setWeather\), \[\]\)/);
   assert.match(heroSource, /<Sky weather=\{scene\}/);
+});
+
+test('the marine request asks for the wave period and the ocean current', () => {
+  const query = W.HERO_WEATHER_MARINE_URL.split('current=')[1].split('&')[0].split(',');
+  ['wave_height', 'wave_period', 'wave_direction', 'ocean_current_velocity', 'ocean_current_direction'].forEach(name => assert.ok(query.includes(name), name));
+});
+
+test('the mapping carries the period and the current, and each is null when missing', () => {
+  const full = W.heroWeatherMap(forecast({}), marine(1.4));
+  assert.equal(full.period, 6);
+  assert.equal(full.current, 0.6);
+  assert.equal(full.currentDir, 214);
+  const none = W.heroWeatherMap(forecast({}), null);
+  assert.equal(none.period, null);
+  assert.equal(none.current, null);
+  assert.equal(none.currentDir, null);
+  assert.equal(W.heroWeatherMap(forecast({}), { current: { wave_height: 1, wave_period: null } }).period, null);
+});
+
+test('every preset and the fallback have a period and a current', () => {
+  ['clear', 'partly', 'overcast', 'rain', 'fog', 'gale'].forEach(name => {
+    const weather = W.heroWeatherOverride('#weather=' + name).weather;
+    assert.ok(weather.period >= 4 && weather.period <= 10, name + ' period');
+    assert.ok(weather.current >= 0.3 && weather.current <= 1.4, name + ' current');
+    assert.ok(weather.currentDir >= 0 && weather.currentDir <= 360, name + ' direction');
+  });
+  assert.equal(W.heroWeatherOverride('#weather=gale').weather.period, 9.5);
+  assert.equal(W.heroWeatherOverride('#weather=clear').weather.period, 5.5);
+  const fallback = W.heroWeatherFallback();
+  assert.equal(typeof fallback.period, 'number');
+  assert.equal(typeof fallback.current, 'number');
+});
+
+test('the period falls back to an estimate from the wave height, between 4 s and 12 s', () => {
+  assert.equal(W.heroWeatherPeriod({ period: 6.25, waves: 1 }), 6.25);
+  assert.ok(Math.abs(W.heroWeatherPeriod({ period: null, waves: 1 }) - 5.2) < 1e-9);
+  assert.equal(W.heroWeatherPeriod({ period: null, waves: 0 }), 4);
+  assert.equal(W.heroWeatherPeriod({ period: null, waves: 20 }), 12);
+  assert.ok(Math.abs(W.heroWeatherPeriod({ waves: null, windMs: 10 }) - 7.6) < 1e-9, 'the wind gives the waves when the data is missing');
 });
