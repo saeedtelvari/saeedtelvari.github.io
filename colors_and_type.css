@@ -666,6 +666,7 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   width: 1px;
   height: 100%;
   opacity: var(--rain-alpha);
+  transform-origin: 50% 0;
   animation: rainFall var(--rain-speed) linear var(--rain-phase) infinite;
 }
 
@@ -675,7 +676,6 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   width: 1px;
   height: var(--rain-length);
   background: linear-gradient(transparent, #abc9df 75%, transparent);
-  transform: rotate(9deg);
 }
 
 .hero-rain::after {
@@ -691,9 +691,10 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   to { opacity: 1; }
 }
 
+/* The drop tilts by the slant of the wind and then falls along its own axis. */
 @keyframes rainFall {
-  from { transform: translate(16px, -6%); }
-  to { transform: translate(-72px, 100%); }
+  from { transform: rotate(var(--rain-slant, 9deg)) translateY(-6%); }
+  to { transform: rotate(var(--rain-slant, 9deg)) translateY(100%); }
 }
 
 @media (max-width: 600px) {
@@ -746,6 +747,13 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   bottom: 0;
   overflow: visible;
   transform: translateX(-50%);
+}
+/* Each rotor is a small box that the compositor turns. The period comes from the wind. */
+.hero-rotor { position: absolute; will-change: transform; animation: hero-rotor-turn var(--turbine-period, 8s) linear infinite; }
+.hero-farm--calm .hero-rotor { animation: none; will-change: auto; }
+@keyframes hero-rotor-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .hero-rotor { animation: none !important; will-change: auto; }
 }
 /* The red lights of the wind farm blink together, as real wind farms do. */
 .hero-beacon { fill-opacity: .85; animation: hero-beacon 2s steps(1) infinite; }
@@ -1323,6 +1331,8 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
   /* Keep the horizon distant on narrow screens: a smaller wind farm and no second platform. */
   .hero-horizon__item { transform: translateX(-50%) scale(.55); transform-origin: 50% 100%; }
   .hero-horizon__item:first-child { display: none; }
+  /* The far ship would sit on the links row on a phone, so it is hidden there. */
+  .hero-horizon__ship { display: none; }
   .hero-label--narrow { display: block; }
   .hero-moon { right: 22px; top: 20%; width: 26px; }
   .hero-identity { top: calc(var(--site-header-h) + 16px); left: 20px; right: 20px; }
