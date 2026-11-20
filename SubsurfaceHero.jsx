@@ -544,8 +544,10 @@ const SubsurfaceHero = ({ onNavigate }) => {
       <HeroPlume frame={frame} />
       {leakScale.peak > 0 && <HeroLeakFlow sectionRef={sectionRef} frame={frame} yearRef={yearRef} run={run} speed={speed} playing={playing} visible={visible} hidden={hidden}
         injectionYears={injectionYears} peak={leakScale.peak} firstYears={firstLeakYears} />}
+      <HeroWaterLive weather={scene} wellXPct={heroGeology.wellXPct} visible={visible} hidden={hidden} />
       <HeroOverlay />
       <HeroWell flow={flow} dim={shut.dim} />
+      <HeroWater geology={heroGeology} faults={HERO_FAULTS} frame={frame} leak={leak} roofR={heroOverlying.roofR} flow={flow} dim={shut.dim} />
       <HeroInjectionFlow sectionRef={sectionRef} injecting={!!run && year < injectionYears && ship.phase === 'moored'} speed={speed} playing={playing} visible={visible} hidden={hidden} />
       {late && <SurfaceSite geology={heroGeology} flow={flow} hose={shut.hose} dim={shut.dim} ship={ship} />}
       <HeroLabels />
@@ -589,8 +591,6 @@ const HeroSection = React.memo(({ sectionRef }) => {
         </linearGradient>
       </defs>
       <rect width="1000" height="580" className="hero-rock--over" />
-      {/* Sea water above the seabed: about 90 m, a hairline at this depth scale. */}
-      <rect width="1000" height="3" fill="#0b1a2c" />
       <path d={HERO_PATHS.caprock} fill="url(#hero-shale)" />
       <path d={HERO_PATHS.overlying} className="hero-rock--sand" />
       <path d={HERO_PATHS.storage} className="hero-rock--sand" />
@@ -1139,14 +1139,14 @@ const HeroInjectionFlow = ({ sectionRef, injecting, speed, playing, visible, hid
 const HeroLabels = React.memo(() => (
   <div className="hero-annotations">
     <p className="visually-hidden">
-      Cross-section, from the surface down: overburden, an overlying aquifer, a caprock, the storage aquifer the well injects into,
+      Cross-section, from the sea surface down: 76 m of sea, the seabed, overburden, an overlying aquifer, a caprock, the storage aquifer the well injects into,
       and underburden, cut by two faults.
     </p>
     <div className="hero-axis" aria-hidden="true">
       <span className="hero-axis__rule hero-axis__rule--upper" />
       <span className="hero-axis__break" style={{ top: `${heroFixed(100 * 14 / 580)}%` }} />
       <span className="hero-axis__rule hero-axis__rule--lower" style={{ top: `${heroFixed(100 * 21 / 580)}%` }} />
-      {[[0, '0 m'], ...HeroGeology.depthTicks().map(depth => [HeroGeology.depthToY(depth), `${depth} m`])].map(([y, label]) => (
+      {[[0, 'seabed'], ...HeroGeology.depthTicks().map(depth => [HeroGeology.depthToY(depth), `${depth} m`])].map(([y, label]) => (
         <span key={label} className="hero-axis__tick" style={{ top: `${heroFixed(100 * y / 580)}%` }}>{label}</span>
       ))}
     </div>
@@ -1283,7 +1283,7 @@ const Sky = ({ weather = HERO_WEATHER_DEFAULT, late = true } = {}) => {
   };
   return (
   <div data-layer="sky" aria-hidden="true" style={{
-    position: 'absolute', inset: '0 0 auto', height: 'var(--hero-surface)',
+    position: 'absolute', inset: '0 0 auto', height: 'var(--hero-waterline)',
     overflow: 'hidden', pointerEvents: 'none',
     background: 'linear-gradient(180deg, #070d1a 0%, #111e32 58%, #253449 100%)',
     ...vars,
