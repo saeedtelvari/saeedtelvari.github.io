@@ -1174,7 +1174,7 @@ const HeroLabels = React.memo(() => (
   <div className="hero-annotations">
     <p className="visually-hidden">
       Cross-section, from the sea surface down: 76 m of sea, the seabed, overburden, an overlying aquifer, a caprock, the storage aquifer the well injects into,
-      and underburden, cut by two faults. Four-dimensional seismic surveys image the CO2 at years 5, 15, 25, 200 and 1000.
+      and underburden, cut by two faults. Four-dimensional seismic surveys image the CO2 at years 10, 25 and 1000.
     </p>
     <div className="hero-axis" aria-hidden="true">
       <span className="hero-axis__rule hero-axis__rule--upper" />
