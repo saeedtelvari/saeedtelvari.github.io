@@ -55,6 +55,11 @@ React 18 (UMD) components. Babel precompiles them into three bundles. There are 
    - **Screening report (`SimReport.jsx`).** Export → "Screening report" opens a two-page A4 report to print or save as PDF: inputs, results at the final and current year, mass balance, figures, uncertainty, limitations and references with DOIs. The report and the Method tab share their text through constants in `GuidePage.jsx`.
    - **Method guide.** `simulator.html#method` opens the Method guide directly. KaTeX loads only when the Method tab opens.
    - **Icons.** The simulator uses the site's inline SVG icons (`Icon` in `Primitives.jsx`), not Font Awesome.
+5. **GeoHackathon showcase (`geohackathon.html`, `HackathonPage.jsx`, `hackathon-data.js`, `hackathon.css`).** The SPE GeoHackathon 2026 entry (joint third place): an LLM agent on GEMINI designs a deep-geothermal heating and cooling plant.
+   - **Sections.** A hero with the plant in section, then the brief (daily demand), the 720-design screen, the simulated year (scrubber and play), the agent and its physics gate, two live agent runs replayed, the model benchmark, the stress tests and uncertainty, the model picks, the economics and the GEMINI pull request. A sticky chapter bar links the sections.
+   - **Data.** `hackathon-data.js` is generated from the committed study results of the private design repository (demand, daily dispatch, full screen, stress tests, Monte Carlo, weather years, tornado, model picks, the agent run ledgers). Do not edit it by hand. The benchmark grid, the CAPEX split and the pull-request figures are typed in `HackathonPage.jsx` from the submitted slides.
+   - **Names.** Every top-level name in `HackathonPage.jsx` starts with `hk` or `Hk`, and every class with `hk-`, because the page shares the global scope and the dark stylesheet with `bundle.js`.
+   - **Motion.** Sections reveal once on scroll; the year and the agent replays play once when they come into view. Under reduced motion everything shows at once and nothing plays.
 
 ## The seven stages of the story page
 
@@ -72,12 +77,13 @@ The spec is `docs/superpowers/specs/2026-10-25-homepage-story-design.md`.
 
 ## Bundles and page load
 
-`node build.js` makes three bundles. A page loads only the bundles that it needs.
+`node build.js` makes four bundles. A page loads only the bundles that it needs.
 
 | Bundle | Source files | Loaded by |
 | --- | --- | --- |
 | `bundle.js` | `Primitives.jsx`, `site-content.js`, `Header.jsx`, `Footer.jsx`, `hero-geology.js`, `HeroWeather.js`, `HeroSea.jsx`, `SubsurfaceHero.jsx`, `GeologicalDescent.jsx`, `HomeSections.jsx`, `CVPage.jsx`, `App.jsx` | All four pages. It is last on each page. |
 | `story-bundle.js` | `story-content.js`, `ve2d-model.js`, `story-geometry.js`, `StoryStage.jsx`, `StoryChapters.jsx`, `StoryEarth.jsx`, `StoryFields.jsx`, `StoryRock.jsx`, `StoryBlock.jsx`, `StoryPage.jsx` | `ve-story.html` only, before `bundle.js`. |
+| `hackathon-bundle.js` | `hackathon-data.js`, `HackathonPage.jsx` | `geohackathon.html` only, before `bundle.js`. |
 | `simulator-bundle.js` | `ve2d-model.js`, `sim-block3d.js`, `GuidePage.jsx`, `SimCharts.jsx`, `SimViews.jsx`, `SimFirstRun.jsx`, `SimReport.jsx`, `SimulatorPage.jsx` | `simulator.html` only, before `bundle.js`. |
 
 `bundle.js` and `story-bundle.js` have no comments and no extra white space. `index.html` does not load `story-bundle.js`, `story.css`, the story JSON files or `land-110m.json`. `App.jsx` works on a page where `story-bundle.js` is absent.
@@ -86,6 +92,7 @@ The spec is `docs/superpowers/specs/2026-10-25-homepage-story-design.md`.
 
 - `colors_and_type.css` is the dark look. The homepage, the CV, the simulator and the shared header and footer use it.
 - `story.css` is style C. Only `ve-story.html` loads it, after `colors_and_type.css`, and only that page has the class `site-c` on `<html>`. Rules that change a shared part (body, buttons, skip link, header, footer) start with `.site-c`, so they override the dark rules on that page only. The story rules have names that no other page uses.
+- `hackathon.css` is the GeoHackathon page only. It loads after `colors_and_type.css`, uses the dark tokens and has only `hk-` classes.
 - `tests/site-style.test.js` pins the border between the two files and keeps the shared rules unchanged.
 
 ## Repository structure

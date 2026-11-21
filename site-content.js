@@ -98,6 +98,8 @@ const SITE_PUBLICATIONS = [
 ];
 
 const SITE_ACTIVITY = [
+  { month: '2026-11', date: 'Nov 2026', title: 'Joint third place, SPE GeoHackathon 2026',
+    body: 'As the solo team Single Core, built an LLM agent on the open-source GEMINI geothermal suite. It designs a deep-geothermal plant that heats and cools a district, and a physics gate checks every number.' },
   { month: '2026-09', date: 'Sep 2026', title: 'Talk and session co-chair, InterPore UK',
     body: 'Presented “A Compositional Vertical Equilibrium Model for CO₂ Storage in Depleted Gas Reservoirs” at the 9th InterPore UK Chapter Conference in Edinburgh, and co-chaired the Multiphase Phenomena session.' },
   { month: '2026-09', date: 'Sep 2026', title: 'Approved as MSc demonstrator',
@@ -127,6 +129,18 @@ const SITE_PROJECTS = [
     ],
     image: { src: './assets/project-simulator.webp', width: 640, height: 360,
       alt: 'Map view of the VE simulator: a plume under a faulted dome, coloured by trapping class.' },
+  },
+  {
+    id: 'geohackathon',
+    title: 'GeoHackathon 2026: an AI agent for geothermal design',
+    meta: 'Joint third place',
+    body: 'An LLM agent on top of GEMINI, the open-source geothermal suite of TNO, designs a deep-geothermal plant that heats and cools a district on every day of the year. A deterministic simulator supplies every number, and a physics gate checks every run. The submitted plant: 2 doublets at 3.2 km, €36.35/MWh and 84 % less CO₂ than gas.',
+    links: [
+      { label: 'See the showcase', href: './geohackathon.html' },
+      { label: 'Read the GEMINI pull request', href: 'https://github.com/GEMINI-Digital-Twin/gemini-geothermal-suite-open/pull/68' },
+    ],
+    image: { src: './assets/project-geohackathon.webp', width: 640, height: 360,
+      alt: 'The submitted geothermal plant in section: two doublets from a district down to a reservoir at 3.2 km.' },
   },
   {
     id: 'mupsi',
@@ -200,6 +214,7 @@ const SITE_CV = {
   recognition: [
     { date: '2024 – present', title: 'James Watt Scholarship', place: 'Full PhD funding, Heriot-Watt University' },
     { date: '2026', title: 'Runner-up, SPE Aberdeen Section Student Bursary', place: '£1,000 awarded' },
+    { date: '2026', title: 'Joint third place, SPE GeoHackathon 2026 (solo team)', place: 'LLM agent for geothermal heating and cooling design on GEMINI' },
     { date: '2026', title: 'Team runner-up, EAGE “The Energy–AI Nexus” Hackathon', place: 'EAGE Annual 2026, Aberdeen' },
     { date: '', title: 'National undergraduate scholarship', place: 'Full tuition waiver' },
   ],

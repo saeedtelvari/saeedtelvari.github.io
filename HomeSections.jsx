@@ -103,7 +103,10 @@ const ResearchSection = () => (
 );
 
 const ProjectsSection = () => {
-  const [feature, ...others] = SITE_PROJECTS;
+  // The first project is the main feature. Other projects with an image are features too; the rest are cards.
+  const [feature, ...rest] = SITE_PROJECTS;
+  const extras = rest.filter(project => project.image);
+  const others = rest.filter(project => !project.image);
   return (
     <SiteSection id="projects" title="Projects">
       <article className="project-feature">
@@ -121,6 +124,24 @@ const ProjectsSection = () => {
             alt={feature.image.alt} loading="lazy" decoding="async" />
         </a>
       </article>
+      {extras.map(project => (
+        <article key={project.id} className="project-feature project-feature--more">
+          <div className="project-feature__text">
+            <h3>{project.title}{project.meta && <span className="project__meta">{project.meta}</span>}</h3>
+            <p>{project.body}</p>
+            <p className="project-links">
+              {project.links.map((link, index) => (
+                <a key={link.href} className={`btn ${index === 0 ? 'btn--primary' : 'btn--quiet'} btn--small`} href={link.href}
+                  {...(/^https?:/.test(link.href) ? { target: '_blank', rel: 'noreferrer' } : {})}>{link.label}</a>
+              ))}
+            </p>
+          </div>
+          <a className="project-feature__media" href={project.links[0].href} aria-label={project.links[0].label}>
+            <img className="project-feature__shot" src={project.image.src} width={project.image.width} height={project.image.height}
+              alt={project.image.alt} loading="lazy" decoding="async" />
+          </a>
+        </article>
+      ))}
       <div className="project-list">
         {others.map(project => (
           <article key={project.id} className="project">
