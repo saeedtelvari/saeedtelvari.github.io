@@ -646,43 +646,59 @@ const HK_COST_PERF = [
   { name: 'GPT-6 Luna', runs: 33, score: 0.763, lo: 0.678, hi: 0.841, pass: 0.636, usd: 0.0103, basis: 'API-equivalent' },
 ];
 
-// How long the heavy design runs of the newer models take, as ranges over their runs (from the benchmark study).
-// PROVISIONAL: some runs are still finishing; replace the ranges with the final numbers.
+// How long the heavy design runs take (B1, B3, B4, B5a, B5b; runs lost to API quota left out), from the benchmark study.
+// Each metric is [shortest, median, longest] over a model's valid runs; n is the number of runs.
+// Wall time: first to last transcript event. Model time: the sum of the LLM call latencies. Output tokens include thinking.
+// The 21 Nov rows are provisional: replace them with the final numbers when those runs finish.
 const HK_RUNTIME_COLS = [
-  ['wall', 'Wall time', 'min', 140], ['model', 'Model time', 'min', 140], ['tools', 'Tool calls', '', 250], ['out', 'Output tokens', 'k', 500],
+  ['wall', 'Wall time', 'min', 140], ['model', 'Model time', 'min', 50], ['tools', 'Tool calls', '', 460], ['out', 'Output tokens', 'k', 480],
 ];
 const HK_RUNTIME = [
-  { name: 'Gemini 4 Hydrogen', wall: [48, 137], model: [5, 34], tools: [54, 238], out: [53, 474], note: 'Most of its wall time is our simulator: it screens large grids of plants. The model itself is fast.' },
-  { name: 'GPT-6.2 Sol', wall: [20, 110], model: [7, 28], tools: [16, 101], out: [18, 73], note: 'The fewest output tokens: short, direct answers between tool calls.' },
-  { name: 'Claude Sonnet 5.5', wall: [40, 67], model: [21, 48], tools: [27, 96], out: [170, 400], note: 'The most time in the model, and many output tokens.' },
+  { name: 'GPT-6.2 Sol', date: '21 Nov', live: true, n: 8, wall: [20, 51, 108], model: [9, 15, 25], tools: [19, 33, 58], out: [24, 40, 67] },
+  { name: 'Claude Sonnet 5.5', date: '21 Nov', live: true, n: 12, wall: [1, 52, 67], model: [1, 33, 48], tools: [3, 54, 96], out: [6, 275, 403],
+    note: 'The 1-minute run is a question where it correctly asked the user straight away.' },
+  { name: 'Gemini 4 Hydrogen', date: '21 Nov', live: true, n: 3, wall: [110, 116, 137], model: [13, 22, 34], tools: [94, 161, 238], out: [154, 275, 474],
+    note: 'Most of its wall time is our simulator: it screens large grids of plants.' },
+  { name: 'GPT-6.1 Sol', date: '4 Nov', n: 15, wall: [21, 44, 106], model: [11, 19, 32], tools: [25, 45, 452], out: [19, 36, 63] },
+  { name: 'GPT-6.1 Terra', date: '4 Nov', n: 2, wall: [61, 66, 66], model: [21, 23, 23], tools: [130, 134, 134], out: [64, 69, 69], note: 'Only 2 valid runs.' },
+  { name: 'GLM 5.3', date: '4 Nov', n: 9, wall: [8, 13, 29], model: [3, 7, 15], tools: [2, 31, 65], out: [3, 36, 73] },
+  { name: 'DeepSeek V4.1 Flash', date: '4 Nov', n: 15, ours: true, wall: [8, 21, 40], model: [1, 4, 17], tools: [28, 70, 215], out: [19, 38, 99] },
+  { name: 'Qwen 3.8 27B', date: '4 Nov', n: 14, wall: [2, 10, 13], model: [1, 4, 6], tools: [7, 19, 185], out: [7, 30, 64] },
+  { name: 'GPT-6 Luna', date: '4 Nov', n: 15, wall: [1, 6, 28], model: [1, 2, 4], tools: [1, 5, 11], out: [1, 5, 11] },
 ];
 
 const HkRuntime = () => {
-  const [ref, seen] = useHkSeen(0.25);
-  const fmt = (v, unit) => (unit === 'k' ? `${v}k` : unit === 'min' ? `${v} min` : `${v}`);
+  const [ref, seen] = useHkSeen(0.15);
+  const unitOf = (v, unit) => (unit === 'k' ? `${v}k` : `${v}`);
   return (
     <figure ref={ref} className={`hk-figure hk-runtime${seen ? ' is-in' : ''}`}>
       <div className="hk-costplot__head">
         <h3 className="hk-h3">How long a heavy design run takes</h3>
-        <span className="hk-pill hk-pill--quiet">provisional · runs still finishing</span>
+        <span className="hk-pill hk-pill--quiet">21 Nov rows provisional · runs still finishing</span>
       </div>
       <div className="hk-runtime__scroll">
         <table className="hk-runtime__table">
           <thead>
-            <tr><th scope="col">Model</th>{HK_RUNTIME_COLS.map(([k, label]) => <th key={k} scope="col">{label}</th>)}</tr>
+            <tr><th scope="col">Model</th>{HK_RUNTIME_COLS.map(([k, label, unit]) => <th key={k} scope="col">{label}{unit === 'min' ? ', min' : ''}</th>)}</tr>
           </thead>
           <tbody>
             {HK_RUNTIME.map((m, r) => (
-              <tr key={m.name}>
-                <th scope="row"><strong>{m.name}</strong><small>{m.note}</small></th>
+              <tr key={m.name} className={`${m.ours ? 'is-ours' : ''}${m.live ? ' is-live' : ''}`}>
+                <th scope="row">
+                  <strong>{m.name}</strong>
+                  <small className="hk-runtime__meta">{m.date}{m.live ? ', in progress' : ''} · {m.n} run{m.n > 1 ? 's' : ''}</small>
+                  {m.note && <small>{m.note}</small>}
+                </th>
                 {HK_RUNTIME_COLS.map(([k, , unit, max], c) => {
-                  const [lo, hi] = m[k];
+                  const [lo, med, hi] = m[k];
+                  const pc = v => `${Math.min(100, v / max * 100)}%`;
                   return (
                     <td key={k}>
                       <span className="hk-range2" aria-hidden="true">
-                        <i style={{ left: `${lo / max * 100}%`, width: `${Math.max(1.5, (hi - lo) / max * 100)}%`, transitionDelay: `${(r * 4 + c) * 60}ms` }} />
+                        <i style={{ left: pc(lo), width: `max(4px, calc(${pc(hi)} - ${pc(lo)}))`, transitionDelay: `${(r * 4 + c) * 40}ms` }} />
+                        <em style={{ left: pc(med) }} />
                       </span>
-                      <b>{unit === 'k' ? `${lo}k–${hi}k` : `${lo}–${fmt(hi, unit)}`}</b>
+                      <b>{unitOf(med, unit)}</b><span className="hk-runtime__rng">{unitOf(lo, unit)}–{unitOf(hi, unit)}</span>
                     </td>
                   );
                 })}
@@ -691,9 +707,14 @@ const HkRuntime = () => {
           </tbody>
         </table>
       </div>
-      <figcaption>Each bar spans the shortest to the longest of a model’s heavy design runs. Wall time is the whole session, including our simulations; model time is the time spent waiting for the model.</figcaption>
+      <figcaption>
+        The bold number is the median of a model’s valid heavy design runs; each bar spans its shortest to its longest run, and the white tick marks the median.
+        Wall time is the whole session, our simulations included, so it depends on the load on the PC. Model time is the sum of the time spent waiting for the model.
+        Output tokens include thinking. Runs lost to API quota are left out.
+      </figcaption>
     </figure>
   );
+
 };
 
 const HkCostPlot = () => {
