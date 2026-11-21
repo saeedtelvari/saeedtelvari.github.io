@@ -646,6 +646,56 @@ const HK_COST_PERF = [
   { name: 'GPT-6 Luna', runs: 33, score: 0.763, lo: 0.678, hi: 0.841, pass: 0.636, usd: 0.0103, basis: 'API-equivalent' },
 ];
 
+// How long the heavy design runs of the newer models take, as ranges over their runs (from the benchmark study).
+// PROVISIONAL: some runs are still finishing; replace the ranges with the final numbers.
+const HK_RUNTIME_COLS = [
+  ['wall', 'Wall time', 'min', 140], ['model', 'Model time', 'min', 140], ['tools', 'Tool calls', '', 250], ['out', 'Output tokens', 'k', 500],
+];
+const HK_RUNTIME = [
+  { name: 'Gemini 4 Hydrogen', wall: [48, 137], model: [5, 34], tools: [54, 238], out: [53, 474], note: 'Most of its wall time is our simulator: it screens large grids of plants. The model itself is fast.' },
+  { name: 'GPT-6.2 Sol', wall: [20, 110], model: [7, 28], tools: [16, 101], out: [18, 73], note: 'The fewest output tokens: short, direct answers between tool calls.' },
+  { name: 'Claude Sonnet 5.5', wall: [40, 67], model: [21, 48], tools: [27, 96], out: [170, 400], note: 'The most time in the model, and many output tokens.' },
+];
+
+const HkRuntime = () => {
+  const [ref, seen] = useHkSeen(0.25);
+  const fmt = (v, unit) => (unit === 'k' ? `${v}k` : unit === 'min' ? `${v} min` : `${v}`);
+  return (
+    <figure ref={ref} className={`hk-figure hk-runtime${seen ? ' is-in' : ''}`}>
+      <div className="hk-costplot__head">
+        <h3 className="hk-h3">How long a heavy design run takes</h3>
+        <span className="hk-pill hk-pill--quiet">provisional · runs still finishing</span>
+      </div>
+      <div className="hk-runtime__scroll">
+        <table className="hk-runtime__table">
+          <thead>
+            <tr><th scope="col">Model</th>{HK_RUNTIME_COLS.map(([k, label]) => <th key={k} scope="col">{label}</th>)}</tr>
+          </thead>
+          <tbody>
+            {HK_RUNTIME.map((m, r) => (
+              <tr key={m.name}>
+                <th scope="row"><strong>{m.name}</strong><small>{m.note}</small></th>
+                {HK_RUNTIME_COLS.map(([k, , unit, max], c) => {
+                  const [lo, hi] = m[k];
+                  return (
+                    <td key={k}>
+                      <span className="hk-range2" aria-hidden="true">
+                        <i style={{ left: `${lo / max * 100}%`, width: `${Math.max(1.5, (hi - lo) / max * 100)}%`, transitionDelay: `${(r * 4 + c) * 60}ms` }} />
+                      </span>
+                      <b>{unit === 'k' ? `${lo}k–${hi}k` : `${lo}–${fmt(hi, unit)}`}</b>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <figcaption>Each bar spans the shortest to the longest of a model’s heavy design runs. Wall time is the whole session, including our simulations; model time is the time spent waiting for the model.</figcaption>
+    </figure>
+  );
+};
+
 const HkCostPlot = () => {
   const [metric, setMetric] = useState('score');
   const [hover, setHover] = useState(null);
@@ -756,6 +806,7 @@ const HkBench = () => {
           <span className="hk-key hk-key--wait">{HK_BENCH_PENDING.slice(0, -1).join(', ')} and {HK_BENCH_PENDING[HK_BENCH_PENDING.length - 1]}: same eleven tests, running now</span>
         </div>
         <HkCostPlot />
+        <HkRuntime />
         <div className="hk-split">
           <div className="hk-rulecard">
             <h3>How each run is scored</h3>
