@@ -634,6 +634,83 @@ const HK_BENCH = [
   ['B13', 'Code review', 'models', 'Review a model with a planted bug, and fix it for real.', 'ppp ppp ppp ppp ppf'],
 ];
 
+// Cost against performance, from docs/figures/fig_agent_benchmark.csv of the design repository (4 Nov, max thinking).
+// score: mean run score with its 95 % CI; pass: share of scored runs that passed; usd: dollars a question
+// (billed, or API-equivalent for models run on a subscription).
+const HK_COST_PERF = [
+  { name: 'GPT-6.1 Terra', runs: 8, score: 0.965, lo: 0.932, hi: 0.994, pass: 1.0, usd: 0.3337, basis: 'API-equivalent', note: '8 of 11 tests' },
+  { name: 'GPT-6.1 Sol', runs: 33, score: 0.953, lo: 0.936, hi: 0.969, pass: 1.0, usd: 0.8295, basis: 'API-equivalent' },
+  { name: 'GLM 5.3', runs: 26, score: 0.887, lo: 0.838, hi: 0.929, pass: 0.846, usd: 0.0718, basis: 'billed' },
+  { name: 'DeepSeek V4.1 Flash', runs: 33, score: 0.864, lo: 0.795, hi: 0.917, pass: 0.879, usd: 0.0429, basis: 'billed', ours: true, side: 'below' },
+  { name: 'Qwen 3.8 27B', runs: 33, score: 0.815, lo: 0.727, hi: 0.89, pass: 0.788, usd: 0.0792, basis: 'billed' },
+  { name: 'GPT-6 Luna', runs: 33, score: 0.763, lo: 0.678, hi: 0.841, pass: 0.636, usd: 0.0103, basis: 'API-equivalent' },
+];
+
+const HkCostPlot = () => {
+  const [metric, setMetric] = useState('score');
+  const [hover, setHover] = useState(null);
+  const [ref, seen] = useHkSeen(0.25);
+  const W = 900, H = 400, L = 64, R = 24, T = 20, B = 50;
+  const lx = hkScale(Math.log10(0.005), Math.log10(2), L, W - R);
+  const x = usd => lx(Math.log10(usd));
+  const yr = metric === 'score' ? [0.6, 1.0] : [0.5, 1.0];
+  const y = hkScale(yr[0], yr[1], H - B, T);
+  const val = m => (metric === 'score' ? m.score : m.pass);
+  // The Pareto front: no other model is both cheaper and better.
+  const front = HK_COST_PERF.filter(m => !HK_COST_PERF.some(o => o !== m && o.usd <= m.usd && val(o) >= val(m) && (o.usd < m.usd || val(o) > val(m))))
+    .sort((a, b) => a.usd - b.usd);
+  const ticksY = metric === 'score' ? [0.6, 0.7, 0.8, 0.9, 1.0] : [0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+  return (
+    <figure ref={ref} className={`hk-figure hk-costplot${seen ? ' is-in' : ''}`}>
+      <div className="hk-costplot__head">
+        <h3 className="hk-h3">Cost against performance</h3>
+        <div className="hk-chips" role="group" aria-label="Performance measure">
+          <button type="button" className={`hk-chip${metric === 'score' ? ' is-on' : ''}`} aria-pressed={metric === 'score'} onClick={() => setMetric('score')}>Mean score</button>
+          <button type="button" className={`hk-chip${metric === 'pass' ? ' is-on' : ''}`} aria-pressed={metric === 'pass'} onClick={() => setMetric('pass')}>Runs passed</button>
+        </div>
+      </div>
+      <div className="hk-chart-wrap">
+        <svg viewBox={`0 0 ${W} ${H}`} className="hk-chart" role="img"
+          aria-label="Each model's benchmark score against its cost per question, on a log scale. DeepSeek V4.1 Flash scores 0.86 for 4 cents; GPT-6.1 Sol scores 0.95 for 83 cents.">
+          {ticksY.map(v => <g key={v} className="hk-grid"><line x1={L} x2={W - R} y1={y(v)} y2={y(v)} /><text x={L - 10} y={y(v) + 4} textAnchor="end">{metric === 'score' ? v.toFixed(1) : `${Math.round(v * 100)} %`}</text></g>)}
+          {[0.01, 0.03, 0.1, 0.3, 1].map(v => <g key={v} className="hk-grid"><line x1={x(v)} x2={x(v)} y1={T} y2={H - B} /><text x={x(v)} y={H - B + 20} textAnchor="middle">{v < 0.1 ? `${Math.round(v * 100)}¢` : `$${v}`}</text></g>)}
+          <text className="hk-axis-title" x={(L + W) / 2} y={H - 8} textAnchor="middle">$ a question, log scale →  cheaper to the left</text>
+          <text className="hk-axis-title" x="16" y={(T + H - B) / 2} textAnchor="middle" transform={`rotate(-90 16 ${(T + H - B) / 2})`}>{metric === 'score' ? 'mean run score (95 % CI)' : 'share of runs that passed'}</text>
+          {metric === 'score' && <g className="hk-costplot__pass"><line x1={L} x2={W - R} y1={y(0.7)} y2={y(0.7)} /><text x={W - R - 4} y={y(0.7) - 6} textAnchor="end">a run passes at 0.7</text></g>}
+          <text className="hk-costplot__corner" x={L + 10} y={T + 18}>↖ cheap and good</text>
+          {front.length > 1 && <polyline className="hk-costplot__front" points={front.map(m => `${x(m.usd)},${y(val(m))}`).join(' ')} />}
+          {HK_COST_PERF.map((m, i) => {
+            const cx = x(m.usd), cy = y(val(m));
+            const right = m.usd < 0.3 && m.side !== 'below';
+            const dy = m.side === 'below' ? -22 : 0;
+            return (
+              <g key={m.name} className={`hk-costplot__pt${m.ours ? ' is-ours' : ''}${hover === i ? ' is-hover' : ''}`} style={{ transitionDelay: `${i * 90}ms` }}
+                onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)}>
+                {metric === 'score' && <line x1={cx} x2={cx} y1={y(m.lo)} y2={y(m.hi)} className="hk-costplot__ci" />}
+                <circle cx={cx} cy={cy} r={m.ours ? 10 : 7.5} className={m.basis === 'billed' ? 'is-billed' : 'is-equiv'} />
+                <text x={right ? cx + 15 : cx - 15} y={cy - 8 + dy} textAnchor={right ? 'start' : 'end'} className="hk-costplot__name">{m.name}</text>
+                <text x={right ? cx + 15 : cx - 15} y={cy + 8 + dy} textAnchor={right ? 'start' : 'end'} className="hk-costplot__val">
+                  {metric === 'score' ? m.score.toFixed(2) : `${Math.round(m.pass * 100)} %`} · ${m.usd < 0.1 ? m.usd.toFixed(3) : m.usd.toFixed(2)}{m.note ? ` · ${m.note}` : ''}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      <div className="hk-legend hk-legend--small">
+        <span className="hk-key hk-key--billed">billed by the API</span>
+        <span className="hk-key hk-key--equiv">API-equivalent (run on a subscription)</span>
+        <span className="hk-key hk-key--front">best trade-off: nothing is both cheaper and better</span>
+        <span className="hk-key hk-key--ours">our pick</span>
+      </div>
+      <figcaption>
+        DeepSeek V4.1 Flash gives 91 % of Sol’s score for 5 % of its cost, with open weights. Each dot is one model over its scored runs of the eleven tests (3 runs each).
+        {' '}{HK_BENCH_PENDING.join(', ').replace(/, ([^,]*)$/, ' and $1')} join this chart when their runs are scored.
+      </figcaption>
+    </figure>
+  );
+};
+
 const HkBench = () => {
   const [ref, seen] = useHkSeen(0.2);
   const [row, setRow] = useState(null);
@@ -678,6 +755,7 @@ const HkBench = () => {
           <span className="hk-key hk-key--lost">lost to API credit or rate limits</span><span className="hk-key hk-key--ours">our pick, open weights</span>
           <span className="hk-key hk-key--wait">{HK_BENCH_PENDING.slice(0, -1).join(', ')} and {HK_BENCH_PENDING[HK_BENCH_PENDING.length - 1]}: same eleven tests, running now</span>
         </div>
+        <HkCostPlot />
         <div className="hk-split">
           <div className="hk-rulecard">
             <h3>How each run is scored</h3>

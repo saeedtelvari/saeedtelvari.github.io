@@ -705,6 +705,30 @@ html:has(.hk-page) { scroll-behavior: smooth; }
   .hk-board__clock { margin-left: 0; }
 }
 
+/* ---------- cost against performance */
+.hk-costplot { margin-top: 16px; }
+.hk-costplot__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.hk-costplot__head .hk-h3 { margin: 0 !important; }
+.hk-costplot__pass line { stroke: rgba(255, 139, 107, 0.6); stroke-dasharray: 5 5; }
+.hk-costplot__pass text { fill: rgba(255, 139, 107, 0.85); font: 600 11.5px var(--sim-font-ui); }
+.hk-costplot__corner { fill: rgba(100, 255, 218, 0.75); font: 600 12px var(--sim-font-ui); }
+.hk-costplot__front { fill: none; stroke: rgba(100, 255, 218, 0.55); stroke-width: 2; stroke-dasharray: 6 5; }
+.hk-costplot__pt { opacity: 0; transform: translateY(8px); transition: opacity 600ms var(--sim-ease), transform 600ms var(--sim-ease); cursor: default; }
+.hk-costplot.is-in .hk-costplot__pt { opacity: 1; transform: none; }
+.hk-costplot__pt circle { stroke-width: 2; transition: r 200ms var(--sim-ease), cx 600ms var(--sim-ease), cy 600ms var(--sim-ease); }
+.hk-costplot__pt circle.is-billed { fill: #4aa8e8; stroke: #cfe9fb; }
+.hk-costplot__pt circle.is-equiv { fill: rgba(74, 168, 232, 0.15); stroke: #4aa8e8; }
+.hk-costplot__pt.is-ours circle { fill: var(--hk-heat); stroke: #fff; filter: drop-shadow(0 0 8px rgba(240, 136, 74, 0.8)); }
+.hk-costplot__ci { stroke: rgba(232, 237, 242, 0.45); stroke-width: 2; stroke-linecap: round; }
+.hk-costplot__pt text { transition: x 600ms var(--sim-ease), y 600ms var(--sim-ease); }
+.hk-costplot__name { fill: #fff; font: 700 13px var(--sim-font-head); }
+.hk-costplot__pt.is-ours .hk-costplot__name { fill: #ffb98a; }
+.hk-costplot__val { fill: var(--hk-muted); font: 500 11.5px var(--sim-font-mono); }
+.hk-costplot__pt.is-hover .hk-costplot__name { text-decoration: underline; }
+.hk-key--billed::before { border-radius: 50%; background: #4aa8e8; }
+.hk-key--equiv::before { border-radius: 50%; background: none; border: 2px solid #4aa8e8; }
+.hk-key--front::before { height: 2px; border-radius: 0; background: rgba(100, 255, 218, 0.7); }
+
 /* ---------- narrow screens */
 @media (max-width: 1080px) {
   .hk-hero { grid-template-columns: 1fr; grid-template-areas: "text" "art" "stats"; }
