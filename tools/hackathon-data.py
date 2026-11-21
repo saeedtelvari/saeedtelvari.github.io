@@ -9,6 +9,7 @@ Author: Sa'eed Telvari
 """
 import csv
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -98,25 +99,193 @@ for i, r in enumerate(rows("mp_picks.csv")):
 
 
 # Agent paths from the run ledgers (full design brief, max reasoning)
-def ledger(run):
-    txt = subprocess.run(["git", "-C", REPO, "show",
-                          f"origin/development:simulator_examples/agent_compare_results/2026-11-04-objective-newdefaults/{run}/run_ledger.jsonl"],
-                         capture_output=True, text=True, encoding="utf-8").stdout
-    recs = [json.loads(l) for l in txt.splitlines() if l.strip()]
-    t0 = datetime.fromisoformat(recs[0]["time"])
+BASE = "origin/development:simulator_examples/agent_compare_results/2026-11-04-objective-newdefaults/"
+CALL_KIND = {"describe_inputs": "setup", "list_models": "setup", "reservoir_simulation": "setup", "screen": "screen",
+             "run_design": "design", "get_run": "inspect", "compare_runs": "inspect", "log_option": "inspect",
+             "stress_test": "stress", "cross_check": "check", "sensitivity": "check",
+             "ask_user": "talk", "memory_write": "talk", "memory_read": "talk", "write_model": "design"}
+
+# The live sessions on the page. Add a model here when its run ledger and transcript are committed:
+# key: (folder under BASE, transcript name, continued folder or None).
+RUNS = {
+    "deepseek": ("r1", "transcripts/10_design_with_objective.jsonl", None),
+    "sol": ("sol_r1", "transcripts/10_design_with_objective.jsonl",
+            ("sol_r1_continued", "10_design_with_objective_continued.jsonl")),
+}
+
+
+def git_text(path):
+    return subprocess.run(["git", "-C", REPO, "show", BASE + path], capture_output=True, text=True, encoding="utf-8").stdout
+
+
+def clock(stamp):
+    """Seconds since midnight of an ISO time stamp or a bare HH:MM:SS."""
+    h, m, sec = stamp[-8:].split(":")
+    return int(h) * 3600 + int(m) * 60 + int(float(sec))
+
+
+def clip(text, n):
+    text = " ".join(str(text).split())
+    return text if len(text) <= n else text[: n - 1].rsplit(" ", 1)[0] + "…"
+
+
+def grab(pattern, text, cast=str):
+    m = re.search(pattern, text)
+    return cast(m.group(1)) if m else None
+
+
+def eur(v):
+    return f"€{v:.2f}/MWh" if v is not None else ""
+
+
+def summarise(name, args, res):
+    """A short, plain line for one tool call and one for its result (from the truncated result preview)."""
+    a = ""
+    if name == "screen":
+        parts = []
+        for k, label in (("n_doublets", "doublets"), ("depths_m", "depths")):
+            if k in args:
+                parts.append(f"{label} {args[k]}")
+        if "vary" in args:
+            parts.append("vary " + ", ".join(args["vary"].keys()))
+        a = "; ".join(parts)
+    elif name in ("run_design",):
+        a = f"{args.get('n_doublets', '?')} doublets at {args.get('depth_m', '?')} m, {args.get('upgrade', '')}, {args.get('cooling', '')}"
+    elif name in ("get_run", "stress_test", "cross_check", "compare_runs"):
+        a = " ".join(str(args.get(k)) for k in ("run_id", "day", "baseline_run_id", "cases") if args.get(k))
+    elif name == "sensitivity":
+        a = f"{args.get('run_id')}: {args.get('parameter')} = {args.get('values')}"
+    elif name == "reservoir_simulation":
+        a = f"{args.get('depth_m')} m, {args.get('flow_m3h')} m³/h"
+    elif name in ("ask_user",):
+        a = args.get("question", "")
+    elif name in ("memory_write", "log_option"):
+        a = args.get("text") or args.get("option") or ""
+    a = clip(a, 150)
+
+    ok = None
+    if res.lstrip().startswith('{"error"'):
+        return a, "Gate 1 rejected the call: " + clip(grab(r'"error":"([^"]*)', res) or "invalid arguments", 120), False
+    if name == "screen":
+        n = grab(r'"designs_run":(\d+)', res, int)
+        m = grab(r'"meet_all_rules":(\d+)', res, int)
+        best = grab(r'"best_by_lcoe":\[\{"run_id":"(R\d+)"', res)
+        lc = grab(r'"best_by_lcoe":\[\{[^}]*?"lcoe_eur_per_mwh":([\d.]+)', res, float)
+        r = f"{n} plants run, {m} meet every rule" + (f"; best {best} at {eur(lc)}" if best else "")
+    elif name == "run_design":
+        rid = grab(r'"run_id":"(R\d+)"', res)
+        lc = grab(r'"lcoe_eur_per_mwh":([\d.]+)', res, float)
+        co2 = grab(r'"co2_t_per_year":([\d.]+)', res, float)
+        okr = grab(r'"meets_all_hard_rules":(true|false)', res)
+        ok = okr == "true" if okr else None
+        reused = '"reused_earlier_run":true' in res
+        r = f"{rid}" + (" (reused)" if reused else "") + (f": {eur(lc)}" if lc else "") + (f", {co2 / 1000:.2f} kt CO₂" if co2 else "") + (", every rule met" if ok else ", breaks a rule" if ok is False else "")
+    elif name == "stress_test":
+        cases = re.findall(r'"case":"(\w+)","run_id":"R\d+","meets_all_hard_rules":(true|false),"unmet_heating_mwh":([\d.]+),"unmet_cooling_mwh":([\d.]+)', res)
+        bits = []
+        for c, m, uh, uc in cases:
+            unmet = float(uh) + float(uc)
+            bits.append(f"{c.replace('_', ' ')} {'✓' if m == 'true' else '✗'}" + (f" ({unmet:.0f} MWh short)" if unmet > 0.5 else ""))
+        expected = len(args.get("cases") or []) or 5  # without a list the tool runs all five cases
+        ok = all(m == "true" for _, m, _, _ in cases) if cases else None
+        if len(cases) < expected:
+            ok = False if ok is False else None  # the log keeps only the start of the result
+            bits.append(f"{expected - len(cases)} more case{'s' if expected - len(cases) > 1 else ''} in the full result")
+        r = "; ".join(bits) or "cases run"
+    elif name == "cross_check":
+        agrees = grab(r'"agrees":(true|false|null)', res)
+        date = grab(r'"date":"([\d-]+)"', res)
+        ok = agrees == "true" if agrees in ("true", "false") else None
+        r = f"peak day {date}: GEMINI’s solver " + ("agrees" if agrees == "true" else "disagrees" if agrees == "false" else "has no doublet running")
+    elif name == "sensitivity":
+        vals = re.findall(r'"lcoe_eur_per_mwh":([\d.]+)', res)
+        r = "LCOE " + " → ".join(f"€{float(v):.2f}" for v in vals[:4])
+    elif name == "reservoir_simulation":
+        t = grab(r'"reservoir_temperature_c":([\d.]+)', res, float)
+        r = f"reservoir at {t:.0f} °C" if t else "reservoir model run"
+    elif name == "describe_inputs":
+        r = "brief: 30 MW heat peak, 10 MW cooling peak, hard rules"
+    elif name == "list_models":
+        r = "GEMINI component models and our new ones"
+    elif name in ("get_run", "compare_runs"):
+        rid = grab(r'"run_id":"(R\d+)"', res)
+        design = grab(r'"design":"([^"]+)"', res)
+        r = f"{rid}: {design}" if design else "run read"
+    elif name == "log_option":
+        r = "logged: " + (grab(r'"verdict":"([^"]+)"', res) or "") + ("; " + grab(r'"pareto":"([^"]+)"', res) if grab(r'"pareto":"([^"]+)"', res) else "")
+    elif name == "memory_write":
+        r = "saved to project notes"
+    elif name == "ask_user":
+        r = "waits for the engineer"
+    else:
+        r = clip(res, 100)
+    return a, clip(r, 160), ok
+
+
+def plain(md):
+    """The first real paragraph of a Markdown answer, as plain text."""
+    md = re.sub(r"\[(R\d+)\]", r"\1", md)
+    blocks = [re.sub(r"[*#`]", "", b).strip() for b in md.split("\n\n")]
+    blocks = [b for b in blocks if len(b) > 40 and not b.startswith("|")]
+    return clip(blocks[0] if blocks else md, 420)
+
+
+def session_events(events, t0, offset=0):
+    out = []
+    for e in events:
+        if "t" not in e:
+            continue
+        t = clock(e["t"]) - t0 + offset
+        k = e.get("kind")
+        if "name" in e and "arguments" in e:
+            a, r, ok = summarise(e["name"], e["arguments"], str(e.get("result_preview", "")))
+            ev = {"t": t, "k": "tool", "name": e["name"], "cat": CALL_KIND.get(e["name"], "inspect"), "a": a, "r": r,
+                  "ok": ok, "s": round(e.get("seconds") or 0, 1)}
+            if e["name"] == "stress_test":
+                ev["cases"] = len(e["arguments"].get("cases") or []) or 5
+            out.append(ev)
+        elif k == "llm":
+            think = e.get("reasoning") or ""  # the content of the last call is the answer, shown on its own
+            out.append({"t": t, "k": "llm", "pt": e.get("prompt_tokens") or 0, "ct": e.get("completion_tokens") or 0,
+                        "rt": e.get("reasoning_tokens") or 0, "lat": round(e.get("latency_s") or 0, 1),
+                        "usd": round(e.get("billed_usd") or 0, 5), "think": clip(think, 260) if think else "",
+                        "n": len(e.get("tool_calls") or [])})
+        elif k == "user":
+            out.append({"t": t, "k": "user", "text": clip(e.get("text", ""), 420)})
+        elif k == "reply":
+            out.append({"t": t, "k": "ask" if e.get("reply_kind") == "question" else "answer", "text": plain(e.get("text", ""))})
+    return out
+
+
+def ledger(key):
+    """One live session: its designs, its event log and its length, timed from the start of the session."""
+    folder, transcript, cont = RUNS[key]
+    events = [json.loads(l) for l in git_text(f"{folder}/{transcript}").splitlines() if l.strip()]
+    t0 = clock(events[0]["t"])
+    log = session_events(events, t0)
+    recs = [json.loads(l) for l in git_text(f"{folder}/run_ledger.jsonl").splitlines() if l.strip()]
     pts = []
     for rec in recs:
         if rec["kind"] != "design":
             continue
         h = rec["headline"]
-        t = (datetime.fromisoformat(rec["time"]) - t0).total_seconds()
-        pts.append([int(t), r1(h["co2_t_per_year"] / 1000, 2), r1(h["lcoe_eur_per_mwh"], 2),
+        pts.append([clock(rec["time"]) - t0, r1(h["co2_t_per_year"] / 1000, 2), r1(h["lcoe_eur_per_mwh"], 2),
                     rec["request"]["n_doublets"], 1 if h.get("physics_gate") == "pass" else 0,
                     1 if h.get("meets_all_hard_rules") else 0, int(rec["run_id"][1:])])
-    return pts
+    end = max([e["t"] for e in log] + [p[0] for p in pts])
+    if cont:
+        # The engineer answered a question later; the continued session follows after a short gap on this timeline.
+        cevents = [json.loads(l) for l in git_text(f"{cont[0]}/{cont[1]}").splitlines() if l.strip()]
+        start = end + 40
+        log.append({"t": start - 20, "k": "gap", "text": "The session waits for the engineer’s answer."})
+        t0c = clock(next(e["t"] for e in cevents if e.get("kind") == "user"))  # the start record has another clock
+        log += session_events([e for e in cevents if clock(e["t"]) >= t0c], t0c, offset=start)
+        end = max(e["t"] for e in log)
+    calls = [[e["t"], e["cat"]] for e in log if e["k"] == "tool"]
+    return {"pts": pts, "calls": calls, "log": log, "end": end + 20}
 
 
-agents = {"deepseek": ledger("r1"), "sol": ledger("sol_r1")}
+agents = {key: ledger(key) for key in RUNS}
 
 data = {
     "heat": heat, "cool": cool, "disp": disp, "coolOptions": COOL, "screen": screen,

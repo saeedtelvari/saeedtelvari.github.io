@@ -319,10 +319,10 @@ const HkDemandChart = () => {
 };
 
 const HK_FACTS = [
-  ['heat', '100 °C needs ~3 km', 'At the given 2.5 km the brine is only 87 °C. Drill deeper, or top up the heat.'],
-  ['heat', '14.4 MW < 30 MW', 'One doublet at its flow and temperature caps gives under half of the peak.'],
-  ['cool', '20 °C cooling', 'Hot brine is the wrong tool for cold water. Cooling needs its own plan.'],
-  ['grey', '35 days off', 'Each doublet must stop for 35 days a year. The demand never stops.'],
+  ['heat', '100 °C needs ~3 km', 'At the given 2.5 km the brine is only 87 °C. Drill deeper, or top up the heat.', 'drill'],
+  ['heat', '14.4 MW < 30 MW', 'One doublet at its flow and temperature caps gives under half of the peak.', 'doublet'],
+  ['cool', '20 °C cooling', 'Hot brine is the wrong tool for cold water. Cooling needs its own plan.', 'snow'],
+  ['grey', '35 days off', 'Each doublet must stop for 35 days a year. The demand never stops.', 'calendar'],
 ];
 const HK_RULES = ['1 to 3 doublets', '50–300 m³/h per running doublet', 'Brine cooled by at most 40 K', 'Production equals injection', 'Each doublet up at most 330 days; demand met on all 365'];
 
@@ -332,8 +332,9 @@ const HkBrief = () => (
     intro="The GEMINI challenge asks for one plant that heats a district at 100 °C and cools it at 20 °C, every day of 2027, from one geothermal reservoir that also gives up associated gas. Lowest cost wins, and CO₂ counts.">
     <HkDemandChart />
     <div className="hk-facts">
-      {HK_FACTS.map(([tone, head, body], i) => (
+      {HK_FACTS.map(([tone, head, body, icon], i) => (
         <HkReveal key={head} delay={i * 80} className={`hk-fact hk-fact--${tone}`}>
+          <HkGlyph name={icon} size={30} className="hk-fact__icon" />
           <h3>{head}</h3><p>{body}</p>
         </HkReveal>
       ))}
@@ -440,11 +441,11 @@ const HkScreen = () => {
 };
 
 const HK_DECISIONS = [
-  ['heat', 'Wells to 3.2 km', '108 °C gives margin over the 100 °C supply. A heat pump on shallower wells costs €4.8/MWh more.'],
-  ['heat', 'Two doublets', 'As cheap as one, with half the CO₂. One doublet covers the other during its 35-day stop.'],
-  ['grey', 'CHP on the gas', 'The co-produced gas runs a 1.1 MWe engine. It saves €3.5/MWh and makes most of the power.'],
-  ['cool', 'Air and aquifer', 'Free cooling and a winter-charged aquifer store cut CO₂ at €149/t. Absorption costs €38.5/MWh.'],
-  ['grey', '33 MW boiler', 'It covers both doublets tripping on the coldest day. The backup is what the stress tests need.'],
+  ['heat', 'Wells to 3.2 km', '108 °C gives margin over the 100 °C supply. A heat pump on shallower wells costs €4.8/MWh more.', 'drill'],
+  ['heat', 'Two doublets', 'As cheap as one, with half the CO₂. One doublet covers the other during its 35-day stop.', 'doublet'],
+  ['grey', 'CHP on the gas', 'The co-produced gas runs a 1.1 MWe engine. It saves €3.5/MWh and makes most of the power.', 'gas'],
+  ['cool', 'Air and aquifer', 'Free cooling and a winter-charged aquifer store cut CO₂ at €149/t. Absorption costs €38.5/MWh.', 'wind'],
+  ['grey', '33 MW boiler', 'It covers both doublets tripping on the coldest day. The backup is what the stress tests need.', 'flame'],
 ];
 
 const HkDesign = () => (
@@ -452,9 +453,9 @@ const HkDesign = () => (
     intro="Before any agent ran, I screened the whole design space with the same simulator the agent uses. Every plant goes through the same daily dispatch and the same rule checks.">
     <HkScreen />
     <ol className="hk-decisions">
-      {HK_DECISIONS.map(([tone, head, body], i) => (
+      {HK_DECISIONS.map(([tone, head, body, icon], i) => (
         <HkReveal as="li" key={head} delay={i * 70} className={`hk-decision hk-fact--${tone}`}>
-          <span className="hk-decision__n">{i + 1}</span>
+          <span className="hk-decision__top"><span className="hk-decision__n">{i + 1}</span><HkGlyph name={icon} size={26} className="hk-fact__icon" /></span>
           <h3>{head}</h3><p>{body}</p>
         </HkReveal>
       ))}
@@ -606,218 +607,7 @@ const HkYearSection = () => (
   </HkSection>
 );
 
-// ---- 4. the agent: how it works
-const HK_FLOW = [
-  { id: 'ask', title: 'Engineer', sub: '“Which design meets demand at the lowest cost and CO₂?”', tone: 'ink' },
-  { id: 'llm', title: 'LLM agent', sub: 'DeepSeek V4.1 Flash, open weights. Plans, calls tools, explains.', tone: 'llm' },
-  { id: 'tools', title: '15 tools', sub: 'run_design · screen · stress_test · cross_check · write_model · ask_user …', tone: 'tool' },
-  { id: 'sim', title: 'Deterministic simulation', sub: 'Doublet hydraulics, daily flowsheet, 365-day dispatch, economics, on GEMINI models.', tone: 'sim' },
-  { id: 'gate', title: 'Physics gate', sub: 'Six checks the LLM cannot skip.', tone: 'gate' },
-  { id: 'answer', title: 'Answer', sub: 'Only gated runs can be cited.', tone: 'ok' },
-];
-const HK_CHECKS = ['Valid inputs', 'Every hard rule, every day', 'Energy balance to 0.1 %', 'Peak day re-solved in GEMINI’s solver', 'Sanity bounds: COP below Carnot', 'Every number in the answer traced to a run'];
-const HK_SCRIPT = [
-  { at: 'ask', say: 'The engineer asks one question in plain words.' },
-  { at: 'llm', say: 'The LLM plans the study. It never writes a number itself.' },
-  { at: 'tools', say: 'It calls run_design: 2 doublets at 3.2 km, CHP, 33 MW boiler. Gate 1 checks the arguments.', check: 0 },
-  { at: 'sim', say: 'The simulator runs all 365 days of the plant on GEMINI component models.' },
-  { at: 'gate', say: 'Gates 2 to 5 check the run. Here the energy balance does not close.', check: 2, fail: true },
-  { at: 'llm', say: 'The failure goes back to the LLM with the reason. It changes the design and tries again.', back: true },
-  { at: 'tools', say: 'run_design again, with the change.', check: 0 },
-  { at: 'sim', say: 'A full year again, day by day.' },
-  { at: 'gate', say: 'Rules, energy balance, the second solver and the sanity bounds all pass.', check: 4 },
-  { at: 'answer', say: 'Gate 6 traces every number in the answer to a run, with its unit. Then the engineer sees it.', check: 5 },
-];
-
-const HkAgentFlow = () => {
-  const [ref, seen] = useHkSeen(0.3);
-  const [step, setStep] = useState(0);
-  const [paused, setPaused] = useState(false);
-  useEffect(() => {
-    if (!seen || paused || hkReduced()) return undefined;
-    const t = setInterval(() => setStep(s => (s + 1) % HK_SCRIPT.length), 2400);
-    return () => clearInterval(t);
-  }, [seen, paused]);
-  const cur = HK_SCRIPT[step];
-  const activeIdx = HK_FLOW.findIndex(f => f.id === cur.at);
-  // Gate checks lit so far in this pass.
-  const lit = useMemo(() => {
-    let passStart = 0;
-    for (let i = 0; i <= step; i++) if (HK_SCRIPT[i].back) passStart = i;
-    const marks = {};
-    for (let i = passStart; i <= step; i++) {
-      const s = HK_SCRIPT[i];
-      if (s.check === undefined) continue;
-      for (let c = 0; c <= s.check; c++) marks[c] = 'ok';
-      if (s.fail) marks[s.check] = 'fail';
-    }
-    return marks;
-  }, [step]);
-  return (
-    <div ref={ref} className="hk-flow" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-      <ol className="hk-flow__cards">
-        {HK_FLOW.map((f, i) => (
-          <li key={f.id} className={`hk-node hk-node--${f.tone}${i === activeIdx ? ' is-active' : ''}${cur.fail && f.id === 'gate' ? ' is-fail' : ''}${cur.back && f.id === 'llm' ? ' is-back' : ''}`}>
-            <button type="button" className="hk-node__btn" onClick={() => setStep(HK_SCRIPT.findIndex(s => s.at === f.id))}>
-              <span className="hk-node__n" aria-hidden="true">{i + 1}</span>
-              <strong>{f.title}</strong>
-              <span>{f.sub}</span>
-              {f.id === 'gate' && (
-                <ul className="hk-checks">
-                  {HK_CHECKS.map((c, j) => <li key={c} className={lit[j] ? `is-${lit[j]}` : ''}><span aria-hidden="true">{lit[j] === 'fail' ? '✕' : lit[j] ? '✓' : '·'}</span>{c}</li>)}
-                </ul>
-              )}
-            </button>
-          </li>
-        ))}
-      </ol>
-      <div className="hk-flow__rail" aria-hidden="true">
-        <span className={`hk-flow__packet${cur.fail ? ' is-fail' : ''}${cur.back ? ' is-back' : ''}`} style={{ '--pos': activeIdx / (HK_FLOW.length - 1) }} />
-      </div>
-      <p className="hk-flow__say" aria-live="polite"><span>{step + 1}/{HK_SCRIPT.length}</span>{cur.say}</p>
-    </div>
-  );
-};
-
-const HK_AGENT_STATS = [
-  { value: 4100, label: 'faults planted in runs and answers', note: '98 % caught by the gate; 0 of 200 correct answers rejected' },
-  { value: 22, label: 'bugs planted in agent-written models', note: 'our acceptance tests catch 21; the agent’s own tests catch 13' },
-  { value: 3, label: 'memory layers', note: 'a scratchpad per question, a ledger of reused runs, project notes' },
-];
-
-const HkAgent = () => (
-  <HkSection id="agent" kicker="04 · The agent" title="An agent that plans, but never invents a number"
-    intro="The LLM is swappable and non-deterministic. Everything around it is not. It sees the brief and the weather, calls deterministic tools, and gets an error back each time a run fails a check. It can also write a missing model in a sandbox, which our acceptance tests then judge.">
-    <HkAgentFlow />
-    <div className="hk-agentstats">
-      {HK_AGENT_STATS.map((s, i) => (
-        <HkReveal key={s.label} delay={i * 80} className="hk-agentstat">
-          <strong><HkCount value={s.value} /></strong><span>{s.label}</span><small>{s.note}</small>
-        </HkReveal>
-      ))}
-    </div>
-  </HkSection>
-);
-
-// ---- 5. the agent at work: two live runs replayed from their run ledgers
-const HK_RUNS = {
-  deepseek: {
-    label: 'DeepSeek V4.1 Flash', answer: 418, calls: '87 LLM calls · 133 tool calls',
-    text: '2 doublets at 3.0 km · CHP · 15 MW gas boiler · free cooling and a 10 MW screw chiller.',
-    note: 'It tested the one-doublet trip on the coldest day that the brief asks for. It passed.',
-  },
-  sol: {
-    label: 'GPT-6.1 Sol', answer: 514, calls: '15 LLM calls · 40 tool calls',
-    text: '2 doublets at 3.075 km · 30 MW gas boiler · CHP and a 0.05 MW ORC · screw chiller, dry cooler and free cooling.',
-    note: 'It stopped once to ask the engineer about grid capacity, then went on with the answer.',
-  },
-};
-
-const HkReplay = () => {
-  const [which, setWhich] = useState('deepseek');
-  const run = HK_RUNS[which];
-  const pts = HACK_DATA.agents[which];
-  const tEnd = pts[pts.length - 1][0];
-  const answer = pts.find(p => p[6] === run.answer);
-  const W = 640, H = 400, L = 50, R = 14, T = 14, B = 42;
-  const x = hkScale(3.5, 14.5, L, W - R);
-  const y = hkScale(34, 72, H - B, T);
-  const [clock, setClock] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [ref, seen] = useHkSeen(0.3);
-  const startedFor = useRef('');
-  useEffect(() => {
-    if (!seen) return;
-    if (hkReduced()) { setClock(tEnd); return; }
-    if (startedFor.current !== which) { startedFor.current = which; setClock(0); setPlaying(true); }
-  }, [seen, which, tEnd]);
-  useEffect(() => {
-    if (!playing) return undefined;
-    let frame = 0, last = performance.now();
-    const rate = tEnd / 16; // the whole session in 16 s
-    const tick = now => {
-      const dt = (now - last) / 1000; last = now;
-      setClock(c => { const n = c + dt * rate; if (n >= tEnd) { setPlaying(false); return tEnd; } return n; });
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [playing, tEnd]);
-  const shown = pts.filter(p => p[0] <= clock);
-  const latest = shown.slice(-6);
-  const done = clock >= tEnd;
-  const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-  const nColor = n => (n === 1 ? '#8796aa' : n === 2 ? '#4aa8e8' : '#b48cf0');
-  return (
-    <div ref={ref} className="hk-replay">
-      <div className="hk-tabs" role="tablist" aria-label="Choose a live run">
-        {Object.entries(HK_RUNS).map(([key, r]) => (
-          <button key={key} type="button" role="tab" aria-selected={which === key} className={`hk-tab${which === key ? ' is-on' : ''}`}
-            onClick={() => { startedFor.current = ''; setWhich(key); setPlaying(false); }}>{r.label}</button>
-        ))}
-        <button type="button" className="btn btn--quiet btn--small hk-replay__play" onClick={() => { if (done) setClock(0); setPlaying(p => !p); }}>
-          <Icon name={playing ? 'pause' : done ? 'restart' : 'play'} size={15} />{playing ? 'Pause' : done ? 'Replay' : 'Play'}
-        </button>
-      </div>
-      <div className="hk-replay__body">
-        <figure className="hk-figure">
-          <div className="hk-replay__hud">
-            <span>session clock <strong>{mmss(clock)}</strong></span>
-            <span>plants simulated, each a full year <strong>{shown.length}</strong></span>
-            <span>model <strong>{run.label}</strong></span>
-            <span hidden>simulated years <strong>{shown.length}</strong></span>
-          </div>
-          <svg viewBox={`0 0 ${W} ${H}`} className="hk-chart" role="img"
-            aria-label={`Replay of the ${run.label} session: each design it simulated, in order, on cost against CO2.`}>
-            {[35, 40, 45, 50, 55, 60, 65, 70].map(v => <g key={v} className="hk-grid"><line x1={L} x2={W - R} y1={y(v)} y2={y(v)} /><text x={L - 8} y={y(v) + 4} textAnchor="end">{v}</text></g>)}
-            {[4, 6, 8, 10, 12, 14].map(v => <g key={v} className="hk-grid"><text x={x(v)} y={H - B + 18} textAnchor="middle">{v}</text></g>)}
-            <text className="hk-axis-title" x={(L + W) / 2} y={H - 6} textAnchor="middle">CO₂, kt a year</text>
-            <text className="hk-axis-title" x="13" y={(T + H - B) / 2} textAnchor="middle" transform={`rotate(-90 13 ${(T + H - B) / 2})`}>€/MWh, CO₂ at €180/t</text>
-            {shown.map(p => (p[2] <= 72 && p[1] <= 14.5 ? (
-              p[4] ? <circle key={p[6]} cx={x(p[1])} cy={y(p[2])} r="3" fill={nColor(p[3])} className="hk-rp" />
-                : <path key={p[6]} d={`M${x(p[1]) - 3.5} ${y(p[2]) - 3.5} l7 7 m0 -7 l-7 7`} className="hk-rp hk-rp--rej" />
-            ) : null))}
-            {latest.length > 1 && <polyline className="hk-rp__trail" points={latest.map(p => `${x(p[1])},${y(Math.min(72, p[2]))}`).join(' ')} />}
-            {latest.length > 0 && <circle cx={x(latest[latest.length - 1][1])} cy={y(Math.min(72, latest[latest.length - 1][2]))} r="7" className="hk-rp__head" />}
-            {done && answer && (
-              <g className="hk-star">
-                <path transform={`translate(${x(answer[1])} ${y(answer[2])})`} d="M0 -13 L3.8 -4.2 L12.4 -4 L5.6 1.8 L7.9 10.6 L0 5.6 L-7.9 10.6 L-5.6 1.8 L-12.4 -4 L-3.8 -4.2 Z" />
-              </g>
-            )}
-          </svg>
-          <div className="hk-legend hk-legend--small">
-            <span className="hk-key" style={{ '--key': '#8796aa' }}>1 doublet</span>
-            <span className="hk-key" style={{ '--key': '#4aa8e8' }}>2 doublets</span>
-            <span className="hk-key" style={{ '--key': '#b48cf0' }}>3 doublets</span>
-            <span className="hk-key hk-key--x">rejected by the gate</span>
-            <span className="hk-key hk-key--star">the agent’s answer</span>
-          </div>
-        </figure>
-        <aside className={`hk-answer${done ? ' is-done' : ''}`}>
-          <p className="hk-answer__k">{done ? `Answer · run R${String(run.answer).padStart(4, '0')}` : 'Working…'}</p>
-          {done && answer ? (
-            <React.Fragment>
-              <p className="hk-answer__big">€{hkFmt(answer[2], 2)}<small>/MWh</small> · {hkFmt(answer[1], 2)}<small> kt CO₂/yr</small></p>
-              <p>{run.text}</p>
-              <p className="hk-muted">{run.note}</p>
-              <p className="hk-muted">{pts.length} plants simulated · {run.calls}</p>
-              <span className="hk-pill">passed the physics gate</span>
-            </React.Fragment>
-          ) : (
-            <p className="hk-muted">Each dot is one plant that the agent chose to simulate for a full year, in the order it ran them. Broad screens come first, then probes, stress tests and checks.</p>
-          )}
-        </aside>
-      </div>
-    </div>
-  );
-};
-
-const HkAtWork = () => (
-  <HkSection id="replay" kicker="04b · The agent at work" title="Two live runs, replayed"
-    intro="Same question, two models, maximum reasoning. The replay draws every plant each agent simulated, from its run ledger, on the agent’s own terms: CO₂ priced at the €180/t it chose. The numbers come from the simulator.">
-    <HkReplay />
-  </HkSection>
-);
+// ---- 4 and 4b, the agent and its live runs, are in HackathonAgent.jsx.
 
 // ---- 6. benchmark: which model runs it
 const HK_BENCH_MODELS = [
@@ -827,6 +617,9 @@ const HK_BENCH_MODELS = [
   { name: 'Qwen 3.8 27B', passed: '26/33', score: 0.81, cost: '0.08' },
   { name: 'GPT-6 Luna', passed: '21/33', score: 0.76, cost: '≈0.01' },
 ];
+// Models that run the same eleven tests now. Move a model into HK_BENCH_MODELS (and add its column to each row) when its runs are scored.
+const HK_BENCH_PENDING = ['GPT-6.2 Sol', 'Gemini 4 Neon', 'Gemini 4 Hydrogen', 'Claude Sonnet 5.5'];
+
 const HK_BENCH = [
   ['B0', 'Off-topic', 'control', 'A question about the weather in Delft. Decline, without tools.', 'ppp ppp ppp ppp ppp'],
   ['B1', 'Cheapest design', 'design', 'Which design meets demand at the lowest cost?', 'ppp ppp pff pff ppf'],
@@ -852,7 +645,8 @@ const HkBench = () => {
           <table className="hk-bench__table">
             <thead>
               <tr><th scope="col">Test</th><th scope="col" className="hk-bench__cat">Kind</th>
-                {HK_BENCH_MODELS.map(m => <th key={m.name} scope="col" className={m.ours ? 'is-ours' : ''}>{m.name.replace(' V4.1 Flash', '').replace('GPT-6.1 ', '').replace('GPT-6 ', '')}</th>)}</tr>
+                {HK_BENCH_MODELS.map(m => <th key={m.name} scope="col" className={m.ours ? 'is-ours' : ''}>{m.name.replace(' V4.1 Flash', '').replace('GPT-6.1 ', '').replace('GPT-6 ', '')}</th>)}
+                {HK_BENCH_PENDING.map(name => <th key={name} scope="col" className="is-pending">{name}<small>running</small></th>)}</tr>
             </thead>
             <tbody>
               {HK_BENCH.map(([id, name, cat, prompt, res], r) => (
@@ -866,14 +660,15 @@ const HkBench = () => {
                       </span>
                     </td>
                   ))}
+                  {HK_BENCH_PENDING.map(name => <td key={name} className="is-pending"><span className="hk-dots">{[0, 1, 2].map(k => <i key={k} className="hk-dot hk-dot--wait" style={{ animationDelay: `${(r * 3 + k) * 120}ms` }} />)}</span></td>)}
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr><th scope="row">Passed</th><td />{HK_BENCH_MODELS.map(m => <td key={m.name} className={m.ours ? 'is-ours' : ''}>{m.passed}</td>)}</tr>
+              <tr><th scope="row">Passed</th><td />{HK_BENCH_MODELS.map(m => <td key={m.name} className={m.ours ? 'is-ours' : ''}>{m.passed}</td>)}{HK_BENCH_PENDING.map(n => <td key={n} className="is-pending">soon</td>)}</tr>
               <tr><th scope="row">Score</th><td />{HK_BENCH_MODELS.map(m => <td key={m.name} className={m.ours ? 'is-ours' : ''}>
-                <span className="hk-scorebar" style={{ '--v': m.score }} /><b>{m.score.toFixed(2)}</b></td>)}</tr>
-              <tr><th scope="row">$ a question</th><td />{HK_BENCH_MODELS.map(m => <td key={m.name} className={m.ours ? 'is-ours' : ''}>{m.cost}</td>)}</tr>
+                <span className="hk-scorebar" style={{ '--v': m.score }} /><b>{m.score.toFixed(2)}</b></td>)}{HK_BENCH_PENDING.map(n => <td key={n} className="is-pending">–</td>)}</tr>
+              <tr><th scope="row">$ a question</th><td />{HK_BENCH_MODELS.map(m => <td key={m.name} className={m.ours ? 'is-ours' : ''}>{m.cost}</td>)}{HK_BENCH_PENDING.map(n => <td key={n} className="is-pending">–</td>)}</tr>
             </tfoot>
           </table>
         </div>
@@ -881,6 +676,7 @@ const HkBench = () => {
         <div className="hk-legend hk-legend--small">
           <span className="hk-key hk-key--pass">pass</span><span className="hk-key hk-key--fail">fail</span>
           <span className="hk-key hk-key--lost">lost to API credit or rate limits</span><span className="hk-key hk-key--ours">our pick, open weights</span>
+          <span className="hk-key hk-key--wait">{HK_BENCH_PENDING.slice(0, -1).join(', ')} and {HK_BENCH_PENDING[HK_BENCH_PENDING.length - 1]}: same eleven tests, running now</span>
         </div>
         <div className="hk-split">
           <div className="hk-rulecard">
@@ -1131,10 +927,56 @@ const HkEconomics = () => {
             </div>
           </div>
         </div>
+        <HkWhyLow />
       </div>
     </HkSection>
   );
 };
+
+// Why the cost is low, and the sourced prices behind it. Values from gemini_design.challenge (headline)
+// and gemini_uncertainty.parameters (sources); the links are the sources cited there.
+const HK_WHY_LOW = [
+  ['gas', 'Free fuel', 'The reservoir gives up gas with the brine. A 1.1 MWe engine burns it, so the plant buys 0 MWh of gas and sells power.'],
+  ['wind', 'Cold from air and the ground', 'Outdoor air and a winter-charged aquifer store give 70 % of the cooling. The chiller only covers the hottest weeks.'],
+  ['doublet', 'Wells that work all year', 'Two doublets at 108 °C give 92 % of the heat. The staggered stops mean the expensive wells never stand idle together.'],
+  ['scale', 'Heat and cooling both count', 'The €/MWh divides the annual cost by all 135.4 GWh delivered, heat and cooling 1:1. Per MWh of heat only, it is €44.1.'],
+];
+const HK_PRICES = [
+  ['Electricity bought', '€120/MWh', '2025 NL day-ahead mean was €87/MWh; we add grid fees and tax, on the 2025 daily price shape', 'TenneT 2025', 'https://www.tennet.eu/nl-en/news/rising-electricity-prices-increased-electricity-exports-and-stable-congestion-management-costs'],
+  ['Electricity sold', '€60/MWh', 'CHP surplus, half the bought price', 'assumption', null],
+  ['Gas bought', '€40/MWh', '2027 TTF base case €42/MWh (we buy none)', 'Rabobank outlook', 'https://www.tradingpedia.com/2026/09/08/geopolitical-tensions-anchor-elevated-ttf-natural-gas-prices/'],
+  ['CO₂', '€80/t', 'EU ETS averaged ~€75/t in 2025; the Monte Carlo samples €60–140/t', 'IEA Electricity 2026', 'https://www.iea.org/reports/electricity-2026/prices'],
+  ['Discount rate', '6 % real, 30 yr', 'above the 5.1 % real geothermal WACC of SDE++ 2025', 'PBL', 'https://www.pbl.nl/publicaties/eindadvies-basisbedragen-sde-2025'],
+  ['Well cost', '€6.6 M a well', '12 % above the ThermoGIS cost curve at 3.2 km, plus a lined casing against corrosion', 'TNO ThermoGIS', 'https://pythermogis-15909e.ci.tno.nl/theory/economicmodel/cost_model/'],
+  ['Subsidy', 'none', 'no SDE++ or other support in the cost', '', null],
+];
+
+const HkWhyLow = () => (
+  <div className="hk-why">
+    <HkReveal className="hk-why__col">
+      <h3 className="hk-h3">Why the cost is low</h3>
+      <ul className="hk-why__list">
+        {HK_WHY_LOW.map(([icon, head, body]) => (
+          <li key={head}><HkGlyph name={icon} size={28} className="hk-why__icon" /><div><strong>{head}</strong><p>{body}</p></div></li>
+        ))}
+      </ul>
+    </HkReveal>
+    <HkReveal className="hk-why__col" delay={100}>
+      <h3 className="hk-h3">Why the prices are real</h3>
+      <table className="hk-prices">
+        <tbody>
+          {HK_PRICES.map(([item, value, note, source, url]) => (
+            <tr key={item}>
+              <th scope="row">{item}</th>
+              <td><b>{value}</b><span>{note}{source && <React.Fragment> · {url ? <a href={url} target="_blank" rel="noreferrer">{source}</a> : source}</React.Fragment>}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="hk-muted hk-small">Under the same prices, a gas boiler with electric chillers costs €60.43/MWh. Even the P90 of 400 sampled futures, €44.7/MWh, stays well below it.</p>
+    </HkReveal>
+  </div>
+);
 
 // ---- 10. what goes back to GEMINI
 const HK_PACKAGES = [
