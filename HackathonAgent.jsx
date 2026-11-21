@@ -389,7 +389,7 @@ const HK_RUNS = {
 // The roster: sessions with data first, then models whose runs are on the way.
 const HK_ROSTER = [
   { key: 'deepseek' }, { key: 'sol' },
-  { key: 'sol62', label: 'GPT-6.2 Sol' }, { key: 'neon', label: 'Gemini 4 Neon' },
+  { key: 'sol62', label: 'GPT-6.2 Sol' },
   { key: 'hydrogen', label: 'Gemini 4 Hydrogen' }, { key: 'sonnet55', label: 'Claude Sonnet 5.5' },
 ];
 const HK_VIEWS = { all: { x: [3.5, 14.5], y: [34, 72], label: 'Whole design space' }, zoom: { x: [3.9, 8.2], y: [35, 50], label: 'Zoom on the answer' } };

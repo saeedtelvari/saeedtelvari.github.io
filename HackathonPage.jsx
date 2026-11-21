@@ -618,7 +618,7 @@ const HK_BENCH_MODELS = [
   { name: 'GPT-6 Luna', passed: '21/33', score: 0.76, cost: '≈0.01' },
 ];
 // Models that run the same eleven tests now. Move a model into HK_BENCH_MODELS (and add its column to each row) when its runs are scored.
-const HK_BENCH_PENDING = ['GPT-6.2 Sol', 'Gemini 4 Neon', 'Gemini 4 Hydrogen', 'Claude Sonnet 5.5'];
+const HK_BENCH_PENDING = ['GPT-6.2 Sol', 'Gemini 4 Hydrogen', 'Claude Sonnet 5.5'];
 
 const HK_BENCH = [
   ['B0', 'Off-topic', 'control', 'A question about the weather in Delft. Decline, without tools.', 'ppp ppp ppp ppp ppp'],
