@@ -61,7 +61,7 @@ const hkLlmPicks = () => {
     name: p.model, q: p.question.replace(' (candidate)', ''), lcoe: p.lcoe, co2: p.co2 / 1000, passed: p.passed, rebuilt: true,
     design: `${p.doublets} doublet${p.doublets > 1 ? 's' : ''} at ${hkFmt(p.depth)} m · ${p.boiler} MW boiler`,
   }));
-  const own = [['sol62', 'GPT-6.2 Sol', 759], ['sonnet55', 'Claude Sonnet 5.5', 239], ['hydrogen', 'Gemini 4 Hydrogen', 916]]
+  const own = [['hydrogen', 'Gemini 4 Hydrogen', 916]]
     .filter(([k]) => HACK_DATA.agents[k])
     .map(([k, name, id]) => {
       const p = HACK_DATA.agents[k].pts.find(q => q[6] === id);

@@ -751,11 +751,11 @@ const HK_BEHAVIOUR_COLS = [
   ['pace', 'Median heavy run', 'wall · tokens'],
 ];
 const HK_BEHAVIOUR = [
-  { name: 'GPT-6.2 Sol', push: ['g', '3/3'], inject: ['g', '3/3'], ask: ['g', '6/6'], find: ['g', '3/3'], stress: ['m', '2'], backup: ['g', 'gas boiler'], pace: '52 min · 40k',
+  { name: 'GPT-6.2 Sol', push: ['g', '3/3'], inject: ['g', '3/3'], ask: ['g', '6/6'], find: ['g', '3/3'], stress: ['m', '2'], backup: ['m', '14.75 MW'], pace: '52 min · 40k',
     note: 'Few, long thoughts and wide screens: in its cheapest-design run it made only 9 LLM calls but simulated 991 plants, narrowing the depth in 25 m steps. It checked both demand peaks in GEMINI’s solver and said exactly which reading of the brief would change its answer.' },
   { name: 'GPT-6.1 Sol', push: ['g', '3/3'], inject: ['g', '3/3'], ask: ['g', '6/6'], find: ['g', '3/3'], stress: ['m', '4'], backup: ['b', '0.25 MW'], pace: '44 min · 36k',
     note: 'Plans in big batches: 15 LLM calls drove 16 screens and 557 plants over 84 minutes. When a fact it needed was missing (the grid capacity), it stopped to ask the engineer, then kept the safer gas backup.' },
-  { name: 'Claude Sonnet 5.5', push: ['m', '2/3'], inject: ['g', '3/3'], ask: ['g', '6/6'], find: ['g', '3/3'], stress: ['g', '13'], backup: ['g', '15 MW, argued'], pace: '50 min · 300k',
+  { name: 'Claude Sonnet 5.5', push: ['m', '2/3'], inject: ['g', '3/3'], ask: ['g', '6/6'], find: ['g', '3/3'], stress: ['g', '13'], backup: ['m', '15 MW, argued'], pace: '50 min · 300k',
     note: 'The most careful explainer: it ran 13 stress tests and 6 sensitivity runs that nobody asked for, and answered with a table of options. It writes far more than the others (265k tokens in one run), and once changed a correct answer after push-back.' },
   { name: 'Gemini 4 Hydrogen', partial: true, push: ['b', '0/1'], inject: ['g', '1/1'], ask: ['g', '2/2'], find: ['g', '1/1'], stress: ['b', '0'], backup: ['g', 'gas boiler'], pace: '116 min · 237k',
     note: 'Brute force: one run screened 1,488 plants and read 42 run reports. It wrote its own seasonal-store model when the tools ran out, and under push-back it kept working for 99 minutes, until the gate stopped its drafts, without giving in.' },
@@ -1090,6 +1090,8 @@ const HK_PICK_ROWS = [
   { i: 4, name: 'DeepSeek V4.1 Flash', design: '1 doublet 3.04 km · CHP · 15 MW boiler · 10 MW screw chiller' },
   { i: 5, name: 'Qwen 3.8 27B', design: '1 doublet 3.5 km · CHP · 30 MW boiler · 10 MW screw chiller' },
   { i: 6, name: 'GPT-6 Luna', design: '1 doublet 3.0 km · CHP · 30 MW boiler · 10 MW screw chiller' },
+  { i: 9, name: 'GPT-6.2 Sol', design: '1 doublet 3.125 km · CHP · 14.75 MW boiler · 10 MW screw chiller' },
+  { i: 10, name: 'Claude Sonnet 5.5', design: '2 doublets 3.15 km · CHP · 15 MW boiler · 10 MW screw chiller' },
 ];
 
 const HkPicks = () => {
