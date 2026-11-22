@@ -297,7 +297,7 @@ const HkLlmVsScreen = () => {
               <span className="hk-vs__tests">{p.rebuilt ? <React.Fragment><i style={{ width: `${p.passed / 13 * 100}%` }} /><em>{p.passed}/13</em></React.Fragment> : <em className="hk-muted">not run</em>}</span>
             </li>
           ))}
-          <li className="hk-vs__ref"><span className="hk-vs__n is-star">★</span><div><strong>Our pick</strong><small>the margin is in the question</small></div><b>€{ours[6].toFixed(2)}</b><span className="hk-vs__tests"><i style={{ width: '100%' }} /><em>13/13</em></span></li>
+          <li className="hk-vs__ref"><span className="hk-vs__n is-star">★</span><div><strong>Our pick</strong><small>€{ours[6].toFixed(2)} in this screen run, €36.35 in its final run</small></div><b>€{ours[6].toFixed(2)}</b><span className="hk-vs__tests"><i style={{ width: '100%' }} /><em>13/13</em></span></li>
         </ol>
       </div>
     </HkSection>
