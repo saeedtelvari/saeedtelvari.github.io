@@ -887,8 +887,8 @@ const HkBench = () => {
   const [ref, seen] = useHkSeen(0.2);
   const [row, setRow] = useState(null);
   return (
-    <HkSection id="benchmark" kicker="05 · Which model runs it" title="Eleven tests, three runs each, eight models"
-      intro="The same tools, gate and checkers for every model. Design answers are scored against an oracle that simulated every design; the checkers were frozen before the runs.">
+    <HkSection id="benchmark" kicker="05 · Which model runs it" title="Nine models, eleven tests, the same tools"
+      intro="The same tools, gate and checkers for every model, three runs of each test (Gemini 4 Hydrogen ran one). Design answers are scored against an oracle that simulated every design; the checkers were frozen before the runs. The grid shows eight models: the ninth, GPT-6.1 Terra, finished only 8 of the 11 tests, so it is in the plot and the tables below.">
       <div ref={ref} className={`hk-bench${seen ? ' is-in' : ''}`}>
         <div className="hk-bench__scroll">
           <table className="hk-bench__table">
