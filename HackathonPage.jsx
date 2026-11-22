@@ -221,10 +221,28 @@ const HkHero = () => (
 // ---- chapter bar
 const HK_CHAPTERS = [
   // [section id, label, number as in the section kicker, icon]
-  ['brief', 'Brief', '01', 'brief'], ['design', 'Design', '02', 'sim'], ['build', 'Build', '02b', 'tools'],
-  ['year', 'The year', '03', 'calendar'], ['stress', 'Stress tests', '04', 'shield'], ['economics', 'Economics', '05', 'coin'],
-  ['agent', 'Agent', '06', 'chip'], ['benchmark', 'Models', '07', 'scale'], ['gemini', 'Give-back', '08', 'sandbox'],
+  ['brief', 'Brief', '01', 'brief'], ['design', 'Design', '02', 'sim'], ['year', 'The year', '03', 'calendar'],
+  ['agent', 'Agent', '04', 'chip'], ['benchmark', 'Models', '05', 'scale'], ['vsscreen', 'Agents vs screen', '05c', 'curve'],
+  ['stress', 'Stress tests', '06', 'shield'], ['economics', 'Economics', '07', 'coin'], ['build', 'Build your own', '08', 'tools'],
+  ['gemini', 'Give-back', '09', 'sandbox'],
 ];
+
+// Dark is the default. The choice is kept in this browser (localStorage), and read before React paints
+// (see the inline script in geohackathon.html), so the page does not flash.
+const HkThemeToggle = () => {
+  const [light, setLight] = useState(() => document.documentElement.classList.contains('hk-light'));
+  const flip = () => {
+    const next = !light;
+    document.documentElement.classList.toggle('hk-light', next);
+    try { localStorage.setItem('hk-theme', next ? 'light' : 'dark'); } catch (e) { /* storage blocked: the switch still works for this visit */ }
+    setLight(next);
+  };
+  return (
+    <button type="button" className="hk-theme" onClick={flip} aria-pressed={light} aria-label={light ? 'Switch to the dark theme' : 'Switch to the light theme'}>
+      <span aria-hidden="true">{light ? '☾' : '☀'}</span>{light ? 'Dark' : 'Light'}
+    </button>
+  );
+};
 
 const HkChapters = () => {
   const [active, setActive] = useState('');
@@ -258,6 +276,7 @@ const HkChapters = () => {
             </a>
           </li>
         ))}
+        <li className="hk-chapters__theme"><HkThemeToggle /></li>
       </ol>
       <span className="hk-chapters__progress" aria-hidden="true"><i style={{ transform: `scaleX(${progress})` }} /></span>
     </nav>
@@ -884,7 +903,7 @@ const HkBench = () => {
   const [ref, seen] = useHkSeen(0.2);
   const [row, setRow] = useState(null);
   return (
-    <HkSection id="benchmark" kicker="07 · Which model runs it" title="Eleven tests, three runs each, seven models"
+    <HkSection id="benchmark" kicker="05 · Which model runs it" title="Eleven tests, three runs each, seven models"
       intro="The same tools, gate and checkers for every model. Design answers are scored against an oracle that simulated every design; the checkers were frozen before the runs.">
       <div ref={ref} className={`hk-bench${seen ? ' is-in' : ''}`}>
         <div className="hk-bench__scroll">
@@ -1053,8 +1072,8 @@ const HkYearsStrip = () => {
 };
 
 const HkStress = () => (
-  <HkSection id="stress" kicker="04 · Stress tests and uncertainty · our pick" title="I tried to make our pick fail"
-    intro="Before any agent comes in, I tested our own pick: thirteen stress tests, each a full simulated year. Then 400 sampled futures and 35 real weather years. The extra 1 MW of chiller and 100 m of well are what turn 10 of 13 into 13 of 13.">
+  <HkSection id="stress" kicker="06 · Stress tests and uncertainty · back to our pick" title="I tried to make our pick fail"
+    intro="Back to our own pick, the plant at the top of this page: thirteen stress tests, each a full simulated year. Then 400 sampled futures and 35 real weather years. The extra 1 MW of chiller and 100 m of well are what turn 10 of 13 into 13 of 13.">
     <div className="hk-stressgrid">
       <HkDumbbell />
       <div className="hk-stack-col">
@@ -1086,7 +1105,7 @@ const HkPicks = () => {
   const { picks } = HACK_DATA;
   const [ref, seen] = useHkSeen(0.15);
   return (
-    <HkSection id="asked" kicker="07b · What you ask is what you get" title="The margin has to be in the question"
+    <HkSection id="asked" kicker="05b · What you ask is what you get" title="The margin has to be in the question"
       intro="I rebuilt each model’s picked plant from its own tool calls and ran it through my 13 tests. Given my brief, DeepSeek and Sol land close to my plant. Asked only for the cheapest plant, they fairly cut the margin, and the two cheapest drop the backup boiler.">
       <div ref={ref} className={`hk-picks${seen ? ' is-in' : ''}`}>
         <div className="hk-picks__head" aria-hidden="true"><span /><span>€/MWh</span><span>CO₂, kt/yr</span><span>Stress tests met</span></div>
@@ -1123,7 +1142,7 @@ const HkEconomics = () => {
   const [ref, seen] = useHkSeen(0.2);
   const total = HK_CAPEX.reduce((a, c) => a + c[1], 0);
   return (
-    <HkSection id="economics" kicker="05 · Techno-economics · our pick" title="€47.6 M to build, paid back in 6.7 years"
+    <HkSection id="economics" kicker="07 · Techno-economics · our pick" title="€47.6 M to build, paid back in 6.7 years"
       intro="LCOE = (CAPEX × capital recovery + O&M + energy + CO₂) ÷ 135.4 GWh delivered a year, at 6 % real over 30 years. Wells and their liner are two thirds of the cost.">
       <div ref={ref} className={`hk-econ${seen ? ' is-in' : ''}`}>
         <div className="hk-capex" role="img" aria-label={`Investment of ${total.toFixed(1)} million euro by item`}>
@@ -1240,7 +1259,7 @@ const HK_PACKAGES = [
 ];
 
 const HkGemini = () => (
-  <HkSection id="gemini" kicker="08 · Give-back" title="What goes back to GEMINI: one pull request"
+  <HkSection id="gemini" kicker="09 · Give-back" title="What goes back to GEMINI: one pull request"
     intro="All of the work is open as one pull request to the GEMINI Geothermal Suite (TNO / WEP, Apache-2.0), with every run behind the results and every agent transcript.">
     <div className="hk-give">
       <div className="hk-give__main">
@@ -1317,14 +1336,15 @@ const HackathonPage = () => (
     <div className="hk-body">
       <HkBrief />
       <HkDesign />
-      <HkBuild />
       <HkYearSection />
-      <HkStress />
-      <HkEconomics />
       <HkAgent />
       <HkAtWork />
       <HkBench />
       <HkPicks />
+      <HkLlmVsScreen />
+      <HkStress />
+      <HkEconomics />
+      <HkBuild />
       <HkGemini />
       <HkOutro />
     </div>
