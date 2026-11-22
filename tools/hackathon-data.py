@@ -107,15 +107,21 @@ CALL_KIND = {"describe_inputs": "setup", "list_models": "setup", "reservoir_simu
 
 # The live sessions on the page. Add a model here when its run ledger and transcript are committed:
 # key: (folder under BASE, transcript name, continued folder or None).
+NEW = "8607d12:simulator_examples/agent_bench_results/2026-11-21-max/"
 RUNS = {
     "deepseek": ("r1", "transcripts/10_design_with_objective.jsonl", None),
     "sol": ("sol_r1", "transcripts/10_design_with_objective.jsonl",
             ("sol_r1_continued", "10_design_with_objective_continued.jsonl")),
+    # 21 Nov benchmark, case B1 ("find the cheapest design"), commit 8607d12 on the benchmark branch.
+    "sol62": (NEW + "gpt-6.2-sol_fill_B1_r2/gpt-6.2-sol/B1/r2", "transcripts/B1.jsonl", None),
+    "sonnet55": (NEW + "claude-sonnet-5.5_A/claude-sonnet-5.5/B1/r1", "transcripts/B1.jsonl", None),
 }
 
 
 def git_text(path):
-    return subprocess.run(["git", "-C", REPO, "show", BASE + path], capture_output=True, text=True, encoding="utf-8").stdout
+    """A file of the design repository. A path with its own "ref:" is read as it is; other paths are under BASE."""
+    spec = path if ":" in path else BASE + path
+    return subprocess.run(["git", "-C", REPO, "show", spec], capture_output=True, text=True, encoding="utf-8").stdout
 
 
 def clock(stamp):

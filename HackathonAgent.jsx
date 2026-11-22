@@ -385,14 +385,59 @@ const HK_RUNS = {
       { t: 4836, phase: 5, run: 514, text: 'The engineer does not know. So the agent keeps gas backup and answers: R0514.' },
     ],
   },
+  // 21 Nov benchmark, case B1: "Find the cheapest design that meets every day of heating and cooling demand."
+  sol62: {
+    label: 'GPT-6.2 Sol', tag: 'B1 · cheapest design', answer: 759, b1: true,
+    answerText: '1 doublet at 3,125 m · gas backup boiler · CHP on the co-produced gas · screw chiller with dry cooler · 44/29 °C returns',
+    answerNote: 'It reads the 330-day limit as one for the whole plant. If the limit is per doublet, it names R0985: 2 doublets, €32.63/MWh.',
+    views: { all: { x: [3.5, 30], y: [25, 85], label: 'Whole design space' }, zoom: { x: [4.2, 12], y: [31.5, 40], label: 'Zoom on the answer' } },
+    steps: [
+      { t: 11, phase: 0, text: 'Reads the brief: find the cheapest plant that meets every day. CO₂ costs the brief’s €80/t.' },
+      { t: 508, phase: 1, text: 'Starts shallow: 48 plants at 1 and 2 km. The brine is too cold, and 20 of them fail the physics gate.' },
+      { t: 1006, phase: 1, run: 59, text: 'Two more screens of 48 cover 2.5 to 4.5 km. One doublet at 3 km with CHP leads: R0059.' },
+      { t: 1296, phase: 2, text: 'Narrows the depth step by step around 3.1 km, for 1 and 2 doublets, and tries absorption, chiller types and boiler units.' },
+      { t: 1635, phase: 2, run: 371, text: 'Two doublets at 3.15 km with CHP and a screw chiller, R0371, now beat one doublet.' },
+      { t: 3183, phase: 2, text: 'Tests heat pumps, pump sizes and return temperatures in long fine screens.' },
+      { t: 3420, phase: 2, run: 759, text: 'Finds R0759: one doublet at 3,125 m with 44/29 °C returns, at €33.46/MWh.' },
+      { t: 4005, phase: 2, run: 985, text: 'Finds R0985: two doublets with tuned pumps, at €32.63/MWh. It runs on all 365 days.' },
+      { t: 4126, phase: 4, run: 985, text: 'Cross-checks R0985 and R0759 at the heating and cooling peaks in GEMINI’s solver, then stress-tests both.' },
+      { t: 4298, phase: 5, run: 759, text: 'Answers R0759. It explains the one reading of the brief that would make R0985 the answer.' },
+    ],
+  },
+  sonnet55: {
+    label: 'Claude Sonnet 5.5', tag: 'B1 · cheapest design', answer: 239, b1: true,
+    answerText: '2 doublets at 3,150 m · CHP on the co-produced gas · 15 MW backup gas boiler · 10 MW screw chiller with dry cooler',
+    answerNote: 'The literal cheapest, R0218 at €32.95/MWh, has no backup boiler and fails a doublet trip in winter. It keeps the boiler for €1.03/MWh.',
+    views: { all: { x: [3.5, 24], y: [30, 76], label: 'Whole design space' }, zoom: { x: [4.2, 11], y: [32, 40], label: 'Zoom on the answer' } },
+    steps: [
+      { t: 11, phase: 0, text: 'Reads the brief and the list of models.' },
+      { t: 39, phase: 2, run: 1, text: 'Runs one baseline first: 2 doublets at 2.5 km with a boiler and absorption cooling, R0001, at €47.09/MWh.' },
+      { t: 578, phase: 1, text: 'Screens 48, then 36 plants: 1–3 doublets from 1.5 to 4.5 km, boiler or heat pump, absorption or electric cooling.' },
+      { t: 888, phase: 2, text: 'Tries chiller types, a heat-recovery heat pump and a pit store on one doublet at 3 km. An aquifer store needs weather data, and the tool rejects it.' },
+      { t: 1179, phase: 2, run: 164, text: 'Moves to 2 doublets at 3,250 m with CHP and a screw chiller: R0164.' },
+      { t: 1363, phase: 3, run: 164, text: 'Stress-tests five variants of R0164, one after another.' },
+      { t: 1684, phase: 2, run: 218, text: 'Finds R0218 at €32.95/MWh, the literal cheapest. It has no backup boiler.' },
+      { t: 1886, phase: 3, run: 239, text: 'Trip at peak: R0218 leaves 6,527 MWh of heat unmet. R0239, with a 15 MW backup boiler, passes.' },
+      { t: 2249, phase: 4, run: 239, text: 'Cross-checks R0239 at both peaks in GEMINI’s solver and runs the other stress cases.' },
+      { t: 2584, phase: 4, text: 'Runs sensitivities on gas price, CO₂ price and well cost: 2 against 1 doublet is the weakest point.' },
+      { t: 3012, phase: 5, run: 239, text: 'Answers R0239 at €33.98/MWh, and names R0218 as the pick if planned summer stops are guaranteed.' },
+    ],
+  },
 };
 // The roster: sessions with data first, then models whose runs are on the way.
 const HK_ROSTER = [
-  { key: 'deepseek' }, { key: 'sol' },
-  { key: 'sol62', label: 'GPT-6.2 Sol' },
-  { key: 'hydrogen', label: 'Gemini 4 Hydrogen' }, { key: 'sonnet55', label: 'Claude Sonnet 5.5' },
+  { key: 'deepseek' }, { key: 'sol' }, { key: 'sol62' }, { key: 'sonnet55' },
+  { key: 'hydrogen', label: 'Gemini 4 Hydrogen' },
 ];
 const HK_VIEWS = { all: { x: [3.5, 14.5], y: [34, 72], label: 'Whole design space' }, zoom: { x: [3.9, 8.2], y: [35, 50], label: 'Zoom on the answer' } };
+// Round grid steps for any axis range.
+const hkTicks = (lo, hi) => {
+  const span = hi - lo;
+  const step = span > 40 ? 10 : span > 16 ? 5 : span > 7 ? 2 : 1;
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(v);
+  return out;
+};
 const HK_SPEEDS = [0.5, 1, 2, 4];
 const HK_PLAY_SECONDS = 100; // one session at 1× speed
 const HK_GAP_CAP = 40; // a quiet stretch longer than this (seconds of agent time) is shortened on the timeline
@@ -542,7 +587,8 @@ const HkBoard = () => {
   const answer = byId[run.answer];
   const shown = pts.filter(p => p[0] <= t);
   const view = picked[which] || (stepIdx >= 2 ? 'zoom' : 'all');
-  const v = HK_VIEWS[view];
+  const views = run.views || HK_VIEWS;
+  const v = views[view];
   const W = 660, H = 420, L = 54, R = 14, T = 14, B = 42;
   const x = hkScale(v.x[0], v.x[1], L, W - R);
   const y = hkScale(v.y[0], v.y[1], H - B, T);
@@ -655,17 +701,17 @@ const HkBoard = () => {
               <span>plants simulated <strong>{shown.length}</strong></span>
               {latest && <span className="hk-board__now">now: <code>{latest.name}</code></span>}
               <span className="hk-views" role="group" aria-label="Chart view">
-                {Object.entries(HK_VIEWS).map(([k, vv]) => (
+                {Object.entries(views).map(([k, vv]) => (
                   <button key={k} type="button" className={`hk-chip${view === k ? ' is-on' : ''}`} aria-pressed={view === k} onClick={() => setPicked(pk => ({ ...pk, [which]: k }))}>{vv.label}</button>
                 ))}
               </span>
             </div>
             <svg viewBox={`0 0 ${W} ${H}`} className="hk-chart" role="img" aria-label={`Each plant the ${run.label} session simulated, on cost against CO2.`}>
               <defs><clipPath id="hk-bd-clip"><rect x={L} y={T} width={W - L - R} height={H - T - B} /></clipPath></defs>
-              {(view === 'all' ? [35, 40, 45, 50, 55, 60, 65, 70] : [36, 38, 40, 42, 44, 46, 48, 50]).map(g => <g key={g} className="hk-grid"><line x1={L} x2={W - R} y1={y(g)} y2={y(g)} /><text x={L - 8} y={y(g) + 4} textAnchor="end">{g}</text></g>)}
-              {(view === 'all' ? [4, 6, 8, 10, 12, 14] : [4, 5, 6, 7, 8]).map(g => <g key={g} className="hk-grid"><text x={x(g)} y={H - B + 18} textAnchor="middle">{g}</text></g>)}
+              {hkTicks(v.y[0], v.y[1]).map(g => <g key={g} className="hk-grid"><line x1={L} x2={W - R} y1={y(g)} y2={y(g)} /><text x={L - 8} y={y(g) + 4} textAnchor="end">{g}</text></g>)}
+              {hkTicks(v.x[0], v.x[1]).map(g => <g key={g} className="hk-grid"><text x={x(g)} y={H - B + 18} textAnchor="middle">{g}</text></g>)}
               <text className="hk-axis-title" x={(L + W) / 2} y={H - 6} textAnchor="middle">CO₂, kt a year</text>
-              <text className="hk-axis-title" x="13" y={(T + H - B) / 2} textAnchor="middle" transform={`rotate(-90 13 ${(T + H - B) / 2})`}>€/MWh with CO₂ at €180/t</text>
+              <text className="hk-axis-title" x="13" y={(T + H - B) / 2} textAnchor="middle" transform={`rotate(-90 13 ${(T + H - B) / 2})`}>{run.b1 ? '€/MWh, CO₂ at the brief’s €80/t' : '€/MWh with CO₂ at €180/t'}</text>
               <text className="hk-rp__better" x={L + 8} y={H - B - 8}>↙ cheaper and cleaner</text>
               <g clipPath="url(#hk-bd-clip)">
                 {shown.map(p => {
@@ -723,7 +769,7 @@ const HkBoard = () => {
 
 const HkAtWork = () => (
   <HkSection id="replay" kicker="04b · The agent at work" title="Watch each model work, call by call"
-    intro="Each tab replays a real session from its transcript and run ledger: the same question, at maximum reasoning. Every LLM call, every tool call and every plant it simulated appears at the moment it happened. CO₂ is priced at the €180/t the question asked for. More models join as their runs finish.">
+    intro="Each tab replays a real session from its transcript and run ledger, at maximum reasoning. Every LLM call, every tool call and every plant it simulated appears at the moment it happened. DeepSeek and GPT-6.1 Sol answer the full brief, with CO₂ priced at €180/t. GPT-6.2 Sol and Claude Sonnet 5.5 answer benchmark case B1: find the cheapest design. Gemini 4 Hydrogen joins when its runs finish.">
     <HkBoard />
   </HkSection>
 );

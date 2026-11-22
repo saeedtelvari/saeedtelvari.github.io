@@ -724,6 +724,8 @@ html:has(.hk-page) { scroll-behavior: smooth; }
 .hk-costplot__name { fill: #fff; font: 700 13px var(--sim-font-head); }
 .hk-costplot__pt.is-ours .hk-costplot__name { fill: #ffb98a; }
 .hk-costplot__val { fill: var(--hk-muted); font: 500 11.5px var(--sim-font-mono); }
+.hk-costplot__new { fill: var(--hk-warn); font: 700 10px var(--sim-font-mono); }
+.hk-bench__new { display: block; margin-top: 3px; color: var(--hk-warn); font: 600 10px var(--sim-font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
 .hk-costplot__pt.is-hover .hk-costplot__name { text-decoration: underline; }
 .hk-key--billed::before { border-radius: 50%; background: #4aa8e8; }
 .hk-key--equiv::before { border-radius: 50%; background: none; border: 2px solid #4aa8e8; }
