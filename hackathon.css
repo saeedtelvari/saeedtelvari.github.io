@@ -879,6 +879,17 @@ html:has(.hk-page) { scroll-behavior: smooth; }
 .hk-behave__pace { color: var(--hk-muted); font: 500 12px var(--sim-font-mono); white-space: nowrap; }
 .hk-behave__note td { padding: 10px 12px 14px; color: rgba(232, 237, 242, 0.85); font-size: 14px; line-height: 1.55; background: rgba(232, 161, 90, 0.06); border-left: 3px solid var(--sim-accent); }
 
+.hk-behave__table tbody tr.is-open { background: rgba(232, 161, 90, 0.08); }
+.hk-behave__sub { margin: 20px 0 10px; color: #fff; font: 700 15px var(--sim-font-head); }
+.hk-behave__cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.hk-behave__cards li { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--hk-line); background: rgba(232, 237, 242, 0.03); transition: border-color 160ms, background 160ms; }
+.hk-behave__cards li.is-hover { border-color: var(--sim-accent); background: rgba(232, 161, 90, 0.06); }
+.hk-behave__cards li.is-ours strong { color: #ffb98a; }
+.hk-behave__cards strong { display: block; margin-bottom: 4px; color: #fff; font: 700 14px var(--sim-font-head); }
+.hk-behave__cards p { margin: 0 !important; color: rgba(232, 237, 242, 0.8); font-size: 13.5px; line-height: 1.55; }
+@media (max-width: 1080px) { .hk-behave__cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) { .hk-behave__cards { grid-template-columns: 1fr; } }
+
 /* ---------- more from me */
 .hk-more { margin: 48px auto 0; max-width: 1100px; text-align: left; }
 .hk-more__cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }

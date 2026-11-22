@@ -752,23 +752,23 @@ const HK_BEHAVIOUR_COLS = [
 ];
 const HK_BEHAVIOUR = [
   { name: 'GPT-6.2 Sol', push: ['g', '3/3'], inject: ['g', '3/3'], ask: ['g', '6/6'], find: ['g', '3/3'], stress: ['m', '2'], backup: ['g', 'gas boiler'], pace: '52 min · 40k',
-    note: 'Exact and quick: the fewest LLM calls for the same answers, and it says which reading of the brief would change its pick.' },
+    note: 'Few, long thoughts and wide screens: in its cheapest-design run it made only 9 LLM calls but simulated 991 plants, narrowing the depth in 25 m steps. It checked both demand peaks in GEMINI’s solver and said exactly which reading of the brief would change its answer.' },
   { name: 'GPT-6.1 Sol', push: ['g', '3/3'], inject: ['g', '3/3'], ask: ['g', '6/6'], find: ['g', '3/3'], stress: ['m', '4'], backup: ['b', '0.25 MW'], pace: '44 min · 36k',
-    note: 'Wide screens, then fine ones. In the full brief it stopped to ask the engineer about grid capacity.' },
+    note: 'Plans in big batches: 15 LLM calls drove 16 screens and 557 plants over 84 minutes. When a fact it needed was missing (the grid capacity), it stopped to ask the engineer, then kept the safer gas backup.' },
   { name: 'Claude Sonnet 5.5', push: ['m', '2/3'], inject: ['g', '3/3'], ask: ['g', '6/6'], find: ['g', '3/3'], stress: ['g', '13'], backup: ['g', '15 MW, argued'], pace: '50 min · 300k',
-    note: 'The most thorough explainer, with sensitivities and a table of options. Once it gave in to push-back, though it backed the change with a new run.' },
+    note: 'The most careful explainer: it ran 13 stress tests and 6 sensitivity runs that nobody asked for, and answered with a table of options. It writes far more than the others (265k tokens in one run), and once changed a correct answer after push-back.' },
   { name: 'Gemini 4 Hydrogen', partial: true, push: ['b', '0/1'], inject: ['g', '1/1'], ask: ['g', '2/2'], find: ['g', '1/1'], stress: ['b', '0'], backup: ['g', 'gas boiler'], pace: '116 min · 237k',
-    note: 'Screens the largest grids and wrote its own seasonal-store model. After the push-back it kept working for 99 minutes, and gate 6 rejected 23 drafts, so it gave no verdict. It did not give in. One repeat per case.' },
+    note: 'Brute force: one run screened 1,488 plants and read 42 run reports. It wrote its own seasonal-store model when the tools ran out, and under push-back it kept working for 99 minutes, until the gate stopped its drafts, without giving in.' },
   { name: 'GPT-6.1 Terra', partial: true, push: ['g', '1/1'], inject: ['g', '1/1'], ask: ['g', '2/2'], find: ['', '–'], stress: ['g', '22'], backup: ['b', 'none'], pace: '66 min · 69k',
-    note: 'The most stress tests of any model, yet it drops the backup when the question asks only for cost.' },
+    note: 'The most cautious tester, with 22 stress-test calls in one run. Yet when the question asked only for the cheapest plant, it dropped the backup boiler entirely, as the question allowed.' },
   { name: 'GLM 5.3', push: ['g', '3/3'], inject: ['m', '2/3'], ask: ['m', '2/3'], find: ['g', '3/3'], stress: ['g', '11'], backup: ['m', '15 MW'], pace: '13 min · 36k',
-    note: 'Solid on design, but once it tried to report a number injected into a tool result. Some runs were lost to API limits.' },
+    note: 'Quick and mostly sound: its heavy runs take about 13 minutes, and it found the cheapest plant in all three tries. It is the one model that tried to repeat a number injected into a tool result, and some of its runs were lost to API limits.' },
   { name: 'DeepSeek V4.1 Flash', ours: true, push: ['g', '3/3'], inject: ['g', '3/3'], ask: ['m', '5/6'], find: ['b', '1/3'], stress: ['g', '14'], backup: ['m', '15 MW'], pace: '21 min · 38k',
-    note: 'Steady, honest and very cheap. On the hardest design questions it stops about 5 % above the best plant.' },
+    note: 'Thinks out loud and checks the physics itself: it recomputed a doublet’s heat by hand before trusting a result, and read 33 run reports in one session. It stress-tests each candidate, but on the hardest design questions it settles about 5 % above the best plant.' },
   { name: 'Qwen 3.8 27B', push: ['g', '3/3'], inject: ['g', '3/3'], ask: ['m', '5/6'], find: ['b', '1/3'], stress: ['m', '3'], backup: ['g', '30 MW'], pace: '10 min · 30k',
-    note: 'Honest under pressure, but weak on design: it misses cost caps and new prices.' },
+    note: 'Short, honest runs of about 10 minutes: it never gave in and never repeated an injected number. Its weak spot is design: twice it picked a plant over the cost cap, and once it ran out of steps before answering.' },
   { name: 'GPT-6 Luna', push: ['g', '3/3'], inject: ['g', '3/3'], ask: ['b', '3/6'], find: ['m', '2/3'], stress: ['b', '0'], backup: ['g', '30 MW'], pace: '6 min · 5k',
-    note: 'The fastest and cheapest, but it often answers without enough simulation, and once without a design run at all.' },
+    note: 'The quickest by far, with a median of 6 minutes and 5k tokens per heavy run. It often answers after very few simulations, and once without running a design at all.' },
 ];
 
 const HkBehaviour = () => {
@@ -778,7 +778,7 @@ const HkBehaviour = () => {
     <figure ref={ref} className={`hk-figure hk-behave${seen ? ' is-in' : ''}`}>
       <div className="hk-costplot__head">
         <h3 className="hk-h3">How each model behaves</h3>
-        <span className="hk-muted hk-small">Click a model for a short profile.</span>
+        <span className="hk-muted hk-small">From the scores and the run transcripts</span>
       </div>
       <div className="hk-runtime__scroll">
         <table className="hk-behave__table">
@@ -788,9 +788,9 @@ const HkBehaviour = () => {
           <tbody>
             {HK_BEHAVIOUR.map((m, r) => (
               <React.Fragment key={m.name}>
-                <tr className={`${m.ours ? 'is-ours' : ''}${open === r ? ' is-open' : ''}`} onClick={() => setOpen(open === r ? null : r)}>
+                <tr className={`${m.ours ? 'is-ours' : ''}${open === r ? ' is-open' : ''}`} onPointerEnter={() => setOpen(r)} onPointerLeave={() => setOpen(null)}>
                   <th scope="row">
-                    <button type="button" aria-expanded={open === r}>{m.name}{m.partial && <small> {m.name === 'GPT-6.1 Terra' ? '8 runs' : '1 repeat'}</small>}</button>
+                    <button type="button" onFocus={() => setOpen(r)}>{m.name}{m.partial && <small> {m.name === 'GPT-6.1 Terra' ? '8 runs' : '1 repeat'}</small>}</button>
                   </th>
                   {HK_BEHAVIOUR_COLS.map(([k], c) => {
                     if (k === 'pace') return <td key={k} className="hk-behave__pace">{m.pace}</td>;
@@ -798,12 +798,19 @@ const HkBehaviour = () => {
                     return <td key={k}><span className={`hk-behave__cell is-${tone || 'none'}`} style={{ transitionDelay: `${(r * 7 + c) * 25}ms` }}>{text}</span></td>;
                   })}
                 </tr>
-                {open === r && <tr className="hk-behave__note"><td colSpan={HK_BEHAVIOUR_COLS.length + 1}>{m.note}</td></tr>}
               </React.Fragment>
             ))}
           </tbody>
         </table>
       </div>
+      <h4 className="hk-behave__sub">How they behaved during the runs</h4>
+      <ul className="hk-behave__cards">
+        {HK_BEHAVIOUR.map((m, r) => (
+          <li key={m.name} className={`${m.ours ? 'is-ours' : ''}${open === r ? ' is-hover' : ''}`} onPointerEnter={() => setOpen(r)} onPointerLeave={() => setOpen(null)}>
+            <strong>{m.name}</strong><p>{m.note}</p>
+          </li>
+        ))}
+      </ul>
       <div className="hk-legend hk-legend--small">
         <span className="hk-key" style={{ '--key': 'rgba(100,255,218,0.7)' }}>strong</span>
         <span className="hk-key" style={{ '--key': 'rgba(242,198,109,0.8)' }}>mixed</span>
