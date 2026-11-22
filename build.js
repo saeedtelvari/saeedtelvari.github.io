@@ -47,7 +47,7 @@ https.get('https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.
       'StoryPage.jsx'
     ];
     // hackathon-bundle.js  The GeoHackathon page. Only geohackathon.html loads it, before bundle.js.
-    const hackathonFiles = ['hackathon-data.js', 'HackathonPage.jsx', 'HackathonAgent.jsx'];
+    const hackathonFiles = ['hackathon-data.js', 'HackathonPage.jsx', 'HackathonAgent.jsx', 'HackathonBuilder.jsx'];
     const simulatorFiles = ['ve2d-model.js', 'sim-block3d.js', 'GuidePage.jsx', 'SimCharts.jsx', 'SimViews.jsx', 'SimFirstRun.jsx', 'SimReport.jsx', 'SimulatorPage.jsx'];
 
     // The site bundle and the story bundle drop the comments and the extra white space. The sources keep both.

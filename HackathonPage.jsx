@@ -219,7 +219,7 @@ const HkHero = () => (
 
 // ---- chapter bar
 const HK_CHAPTERS = [
-  ['brief', 'Brief'], ['design', 'Design'], ['year', 'The year'], ['agent', 'Agent'],
+  ['brief', 'Brief'], ['design', 'Design'], ['build', 'Build'], ['year', 'The year'], ['agent', 'Agent'],
   ['benchmark', 'Models'], ['stress', 'Stress tests'], ['economics', 'Economics'], ['gemini', 'Give-back'],
 ];
 
@@ -1216,6 +1216,7 @@ const HackathonPage = () => (
     <div className="hk-body">
       <HkBrief />
       <HkDesign />
+      <HkBuild />
       <HkYearSection />
       <HkAgent />
       <HkAtWork />

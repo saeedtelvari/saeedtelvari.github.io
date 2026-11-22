@@ -61,6 +61,8 @@ for r in rows(MP + "full_screen__results.csv"):
         1 if r["chp"] == "True" else 0, COOL.index(r["cooling_option"]),
         1 if r["meets_all_hard_rules"] == "True" else 0,
         r1(r["lcoe_eur_per_mwh"], 2), r1(float(r["co2_t_per_year"]) / 1000, 2), r1(r["capex_meur"], 1),
+        # for the plant builder: unmet cooling (MWh), bought gas (MWh) and electricity (MWh)
+        r1(r["unmet_cooling_mwh"], 1), int(float(r["purchased_gas_mwh"])), int(float(r["electricity_mwh"])),
     ])
 
 # Stress tests: our pick (3.2 km, 10 MW) and the earlier 3.1 km, 9 MW pick
