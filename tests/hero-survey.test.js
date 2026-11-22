@@ -15,7 +15,7 @@ const readme = read('README.md');
 const block = survey.slice(survey.indexOf('// ---- hero survey helpers'), survey.indexOf('// ---- end hero survey helpers'));
 const S = new Function(`${block}
 return { HERO_SURVEY_YEARS, HERO_SURVEY_CROSS, HERO_SURVEY_HOLD, HERO_SURVEY_FADE, HERO_SURVEY_TOTAL, HERO_SURVEY_SHOT, HERO_SURVEY_SLOW, HERO_SURVEY_JUMP, HERO_SURVEY_UNIT,
-  HERO_SURVEY_FRAME_MS, HERO_SURVEY_FREQ, HERO_SURVEY_VEL, heroSurveyClock, heroSurveyCrossing, heroSurveyNext, heroSurveyDirection, heroSurveyFade, heroSurveyShipX,
+  HERO_SURVEY_FRAME_MS, HERO_SURVEY_FREQ, HERO_SURVEY_VEL, heroSurveyClock, heroSurveyCrossing, heroSurveyNext, heroSurveyDirection, heroSurveyHoldEnd, heroSurveyPausedTime, heroSurveyFade, heroSurveyShipX,
   heroSurveyStreamer, heroSurveyLeft, heroSurveyFold, heroSurveyChipShown, heroSurveyEchoPoint, heroSurveyChipPlace, heroSurveyPlumeExtent, heroSurveyRicker,
   heroSurveyWavelet, heroSurveyScales, heroSurveyColumns, heroSurveyAmplitude, heroSurveyTile, heroSurveyPalette, heroSurveySeed, heroSurveyRandom };`)();
 
@@ -27,9 +27,9 @@ const rule = selector => {
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} is close to ${b}`);
 const same = (a, b) => Buffer.from(a.buffer, a.byteOffset, a.byteLength).equals(Buffer.from(b.buffer, b.byteOffset, b.byteLength));
 
-test('the schedule has two surveys during injection and one long after', () => {
-  assert.deepEqual(S.HERO_SURVEY_YEARS, [10, 25, 1000]);
-  assert.equal(S.HERO_SURVEY_YEARS.filter(y => y <= 30).length, 2);
+test('the schedule has one automatic pass at year 25, during injection', () => {
+  assert.deepEqual(S.HERO_SURVEY_YEARS, [25]);
+  assert.ok(S.HERO_SURVEY_YEARS[0] < 30);
 });
 
 test('the pass has a cross, a hold and a fade, and a shot every 0.45 s', () => {
@@ -61,26 +61,28 @@ test('a pass during injection moves the year by less than 5 years, so the pass a
   assert.ok(year - 25 < 5);
 });
 
+const THREE = [10, 25, 1000]; // a test schedule with three years, to show that the rules do not depend on the schedule
+
 test('playback that crosses a survey year starts a pass, and the step ends at that year', () => {
-  assert.equal(S.heroSurveyCrossing(9.8, 10.2), 10);
-  assert.equal(S.heroSurveyCrossing(9.8, 10), 10);
-  assert.equal(S.heroSurveyCrossing(10, 10.2), null, 'a step from the year does not start again');
-  assert.equal(S.heroSurveyCrossing(1, 2), null);
   assert.equal(S.heroSurveyCrossing(24, 26), 25);
-  assert.equal(S.heroSurveyCrossing(5, 30), 10, 'the first year in the step wins');
+  assert.equal(S.heroSurveyCrossing(24.8, 25), 25);
+  assert.equal(S.heroSurveyCrossing(25, 25.2), null, 'a step from the year does not start again');
+  assert.equal(S.heroSurveyCrossing(1, 2), null);
+  assert.equal(S.heroSurveyCrossing(9.8, 10.2, THREE), 10);
+  assert.equal(S.heroSurveyCrossing(5, 30, THREE), 10, 'the first year in the step wins');
 });
 
 test('a jump never starts a pass', () => {
   assert.equal(S.heroSurveyCrossing(0, 200), null);
-  assert.equal(S.heroSurveyCrossing(0, 31), null);
-  assert.equal(S.heroSurveyCrossing(0, 30), 10);
+  assert.equal(S.heroSurveyCrossing(0, 31, THREE), null);
+  assert.equal(S.heroSurveyCrossing(0, 30, THREE), 10);
   assert.equal(S.heroSurveyCrossing(300, 100), null, 'a scrub back');
   assert.equal(S.heroSurveyCrossing(3, 3), null);
   assert.equal(S.HERO_SURVEY_JUMP, 30);
   assert.match(hero, /const HERO_LEAK_JUMP = 30;/);
 });
 
-test('each survey year starts once for each pass of the clock through it', () => {
+test('the automatic pass starts once for each pass of the clock through year 25', () => {
   const run = () => {
     const fired = [];
     let year = 0;
@@ -92,16 +94,28 @@ test('each survey year starts once for each pass of the clock through it', () =>
     }
     return fired;
   };
-  assert.deepEqual(run(), [10, 25, 1000]);
-  assert.deepEqual(run(), [10, 25, 1000], 'a restart from year 0 lets all of them happen again');
+  assert.deepEqual(run(), [25]);
+  assert.deepEqual(run(), [25], 'a restart from year 0 lets it happen again');
 });
 
 test('the next survey is the first year after the current year', () => {
-  assert.equal(S.heroSurveyNext(0), 10);
-  assert.equal(S.heroSurveyNext(10), 25);
-  assert.equal(S.heroSurveyNext(26), 1000);
-  assert.equal(S.heroSurveyNext(1000), null);
-  assert.equal(S.heroSurveyNext(1500), null);
+  assert.equal(S.heroSurveyNext(0), 25);
+  assert.equal(S.heroSurveyNext(24.9), 25);
+  assert.equal(S.heroSurveyNext(25), null);
+  assert.equal(S.heroSurveyNext(26), null);
+  assert.equal(S.heroSurveyNext(10, THREE), 25);
+  assert.equal(S.heroSurveyNext(1000, THREE), null);
+});
+
+test('the pass time of a paused model stops at cross plus hold, and never goes back', () => {
+  near(S.heroSurveyHoldEnd(), S.HERO_SURVEY_CROSS + S.HERO_SURVEY_HOLD);
+  assert.equal(S.heroSurveyPausedTime(1, 0.5, false), 1.5);
+  assert.equal(S.heroSurveyPausedTime(5.8, 0.5, false), S.heroSurveyHoldEnd());
+  assert.equal(S.heroSurveyPausedTime(S.heroSurveyHoldEnd(), 0.5, false), S.heroSurveyHoldEnd());
+  assert.equal(S.heroSurveyPausedTime(6.3, 0.5, false), 6.3, 'a pass in the fade stays where it is');
+  assert.equal(S.heroSurveyPausedTime(2, -1, false), 2, 'a negative step does nothing');
+  assert.equal(S.heroSurveyPausedTime(0, 0.1, true), S.heroSurveyHoldEnd(), 'reduced motion shows the image at once');
+  assert.equal(S.heroSurveyFade(S.heroSurveyHoldEnd()), 1, 'the image does not fade at the end of the hold');
 });
 
 test('the passes alternate: left to right first, then right to left', () => {
@@ -450,7 +464,7 @@ test('the canvas is above the rock and below the annotations, the platform, the 
   assert.match(css, /\.hero-annotations \{ position: absolute; inset: 0; z-index: 5;/);
   assert.match(rule('.hero-leak-readout'), /z-index: 6;/);
   assert.match(rule('.hero-player'), /z-index: 9;/);
-  assert.match(survey, /className="hero-survey" aria-hidden="true" data-survey-year=\{year\}/);
+  assert.match(survey, /className="hero-survey" aria-hidden="true" data-survey-year=\{Math\.round\(year\)\}/);
 });
 
 test('the fold ramp is one clipped image and one destination-out gradient, and the old strips are gone', () => {
@@ -476,7 +490,7 @@ test('the hero mounts the canvas only while a pass runs', () => {
   assert.match(hero, /\{survey && <HeroSurvey key=\{survey\.id\} /);
   assert.match(hero, /const \[survey, setSurvey\] = useState\(null\);/);
   assert.equal((hero.match(/<HeroSurvey /g) || []).length, 1);
-  assert.match(hero, /setSurvey\(\{ year: crossed, id: surveyCount\.current \}\)/);
+  assert.match(hero, /setSurvey\(\{ year: at, id: surveyCount\.current \}\)/);
   assert.match(hero, /if \(pass\.u >= HERO_SURVEY_TOTAL\) \{ surveyRef\.current = [^;]*; setSurvey\(null\); \}/);
 });
 
@@ -504,16 +518,63 @@ test('the factor cuts the droplet emission of the leak flow and of the injection
   assert.match(hero, /<HeroInjectionFlow [^>]*surveyRef=\{surveyRef\} \/>/);
 });
 
-test('the survey loop runs at 30 fps at most and only while the clock ticks', () => {
+test('the survey loop runs at 30 fps at most and only while the hero is in view and the tab is visible', () => {
   assert.equal(S.HERO_SURVEY_FRAME_MS, 30);
-  assert.match(survey, /const running = heroShouldTick\(\{ playing, visible, hidden \}\);/);
+  assert.match(survey, /const live = visible && !hidden;/);
   assert.match(survey, /if \(last && now - last < HERO_SURVEY_FRAME_MS\) return;/);
-  assert.match(survey, /if \(!running\) \{\s*if \(engineRef\.current\) engineRef\.current\.paint\([^\n]*\n\s*return undefined;/);
+  assert.match(survey, /if \(!live\) \{\s*if \(engineRef\.current\) engineRef\.current\.paint\([^\n]*\n\s*return undefined;/);
+});
+
+test('while the model is paused, the survey loop owns the pass time and stops at the end of the hold', () => {
+  assert.match(survey, /if \(!playing && pass\.active\) \{\s*pass\.u = heroSurveyPausedTime\(pass\.u, dt \* speed, reduced\);/);
+  assert.match(survey, /settled = pass\.u >= heroSurveyHoldEnd\(\);/);
+  assert.match(survey, /if \(settled\) cancelAnimationFrame\(frameId\);/);
+  assert.match(survey, /\}, \[live, playing, speed\]\);/);
+  assert.match(hero, /<HeroSurvey [^>]*speed=\{speed\} \/>/);
+  // The clock loop of the hero runs only while the model plays, so one owner holds the pass time at a time.
+  assert.match(hero, /if \(!late \|\| !heroShouldTick\(\{ playing, visible, hidden \}\)\) return undefined;/);
+});
+
+test('the 4D button: the text 4D, the name and the title, the active state, and disabled without a run', () => {
+  const button = hero.match(/<button type="button" className="hero-player__small hero-player__survey"([^>]*)>([^<]*)</);
+  assert.ok(button, 'the button exists');
+  assert.equal(button[2], '4D');
+  assert.match(button[1], /aria-label="Run a 4D seismic survey"/);
+  assert.match(button[1], /title="Run a 4D seismic survey"/);
+  assert.match(button[1], /aria-pressed=\{surveyOn \? 'true' : 'false'\}/);
+  assert.match(button[1], /disabled=\{!run\}/);
+  assert.match(button[1], /onClick=\{controls\.survey\}/);
+  assert.ok(hero.indexOf('hero-player__speed') < hero.indexOf('hero-player__survey'), 'the button follows the speed button');
+  assert.match(hero, /surveyOn=\{!!survey\}/);
+  assert.match(css, /\.hero-player__survey\[aria-pressed="true"\] \{[^}]*var\(--hero-accent\)/);
+});
+
+test('a press and a clock crossing use the same start function, and a running pass makes the press do nothing', () => {
+  assert.equal((hero.match(/surveyRef\.current = \{ active: true/g) || []).length, 1, 'one place starts a pass');
+  assert.match(hero, /const startSurvey = at => \{/);
+  assert.match(hero, /startSurvey\(crossed\);/);
+  assert.match(hero, /survey: \(\) => \{ if \(run && !survey\) startSurvey\(yearRef\.current\); \},/);
+});
+
+test('the click sets only refs and state, and the image of a manual pass builds after the first painted frame', () => {
+  const start = hero.slice(hero.indexOf('const startSurvey = at'), hero.indexOf('const nextSurvey'));
+  assert.ok(!/heroSurveyBuild|\.build\(|heroFrameAt/.test(start), 'the start function builds nothing');
+  assert.match(survey, /let deferred = true;/);
+  assert.match(survey, /else if \(deferred\) return;/);
+  assert.match(survey, /build\(\) \{ deferred = false; ensureImage\(\); \}/);
+  assert.match(survey, /if \(!engine\.hasImage\(\)\) \{\s*frameId = requestAnimationFrame\(\(\) => \{\s*timer = setTimeout\(\(\) => \{[^]*?engine\.build\(\);/);
+  // The first call of fit() draws the ship and the shots before the build runs.
+  assert.ok(survey.indexOf('    fit();') < survey.indexOf('engine.build();'));
+});
+
+test('the chip and the data attribute show the rounded year of a manual pass', () => {
+  assert.match(survey, /data-survey-year=\{Math\.round\(year\)\}/);
+  assert.match(survey, /year \$\{Math\.round\(year\)\}`;/);
 });
 
 test('no animation loop runs when idle, and no frame costs a state update or a number format', () => {
-  assert.equal((survey.match(/requestAnimationFrame\(/g) || []).length, 2, 'one loop (start and repeat), in the component, after the still-frame return');
-  assert.ok(survey.indexOf('requestAnimationFrame(') > survey.indexOf('if (!running) {'));
+  assert.equal((survey.match(/requestAnimationFrame\(/g) || []).length, 3, 'the deferred build, and one loop (start and repeat)');
+  assert.ok(survey.lastIndexOf('requestAnimationFrame(') > survey.indexOf('if (!live) {'));
   assert.ok(!/requestAnimationFrame/.test(hero.slice(hero.indexOf('{survey && <HeroSurvey'), hero.indexOf('{survey && <HeroSurvey') + 300)));
   assert.ok(!/toLocaleString/.test(survey));
   assert.ok(!/useState|setState/.test(survey), 'the component keeps no state');
@@ -530,7 +591,7 @@ test('the image build is capped at 1600 px, and the store holds one image that t
 });
 
 test('the only text is the chip, and reduced motion shows the image with no ship and no shots', () => {
-  assert.match(survey, /const label = `4D survey · year \$\{year\}`;/);
+  assert.match(survey, /const label = `4D survey · year \$\{Math\.round\(year\)\}`;/);
   assert.equal((survey.match(/fillText\(/g) || []).length, 1);
   assert.match(survey, /if \(reduced \|\| heroSurveyChipShown\(size\.chipX, size\.chipW, gun, dir, L\)\) chip\(fade\);/);
   assert.match(survey, /if \(reduced\) return;\s*\/\/ Shots/);
@@ -543,8 +604,8 @@ test('the reflected fronts draw only when the plume exists, with 0.7 of the alph
   assert.match(survey, /\(0\.7 \* a\)\.toFixed\(3\)/);
 });
 
-test('the hidden description names the survey years', () => {
-  assert.match(hero, /Four-dimensional seismic surveys image the CO2 at years 10, 25 and 1000\./);
+test('the hidden description names the automatic survey and the 4D button', () => {
+  assert.match(hero, /A 4D seismic survey images the CO2 at year 25, and the 4D button runs a survey at any year\./);
 });
 
 test('the shared constants match the hero constants', () => {
@@ -562,7 +623,9 @@ test('every top-level name in the survey file has the survey prefix', () => {
   for (const name of names) assert.match(name, /^(?:heroSurvey|HERO_SURVEY|HeroSurvey)/);
 });
 
-test('the README names the survey and its years', () => {
+test('the README names the survey, the year of the automatic pass, the button and the paused hold', () => {
   assert.match(readme, /\*\*4D survey \(`HeroSurvey\.jsx`\)\.\*\*/);
-  assert.match(readme, /At years 10, 25 and 1000/);
+  assert.match(readme, /One automatic pass runs at year 25/);
+  assert.match(readme, /"4D" button/);
+  assert.match(readme, /While the model is paused, a pass runs on/);
 });

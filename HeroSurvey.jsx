@@ -6,7 +6,7 @@
    ===================================================== */
 
 // ---- hero survey helpers
-const HERO_SURVEY_YEARS = [10, 25, 1000]; // two surveys during injection (years 0 to 30), one long after
+const HERO_SURVEY_YEARS = [25]; // one automatic pass, near the end of injection (years 0 to 30). The 4D button runs a pass at any year.
 const HERO_SURVEY_CROSS = 4.5;   // pass seconds: the ship crosses the hero and the image appears behind it
 const HERO_SURVEY_HOLD = 1.4;    // pass seconds: the image stays
 const HERO_SURVEY_FADE = 0.8;    // pass seconds: the image fades
@@ -77,6 +77,17 @@ const heroSurveyNext = (year, years = HERO_SURVEY_YEARS) => {
 
 // The first pass goes left to right (1). The next goes right to left (-1), and so on.
 const heroSurveyDirection = count => (count % 2 === 0 ? 1 : -1);
+
+// The pass time at the end of the hold. A pass of a paused model runs on to this time and stays there.
+const heroSurveyHoldEnd = () => HERO_SURVEY_CROSS + HERO_SURVEY_HOLD;
+
+// The pass time of a paused model after a step of dt pass seconds. The ship finishes and the image holds. A pass in the fade stays where it is.
+// Under reduced motion the pass goes to the hold at once.
+const heroSurveyPausedTime = (u, dt, reduced) => {
+  const end = heroSurveyHoldEnd();
+  if (u >= end) return u;
+  return reduced ? end : Math.min(end, u + Math.max(0, dt));
+};
 
 // The opacity of the image: full during the cross and the hold, then a linear fade.
 const heroSurveyFade = u => {
@@ -501,7 +512,8 @@ const heroSurveyEngine = (canvas, sectionRef, run, year, reduced) => {
   const ctx = canvas.getContext('2d');
   const size = { w: 0, h: 0, ratio: 1, secTop: 0, secH: 0, left: 100, font: '', chipW: 0, chipH: 0, chipX: 0, chipY: 0, checked: -1, ramp: null, echo: null };
   let image = null;
-  const label = `4D survey · year ${year}`;
+  let deferred = true; // the first build waits for build(), so a click does not wait for it
+  const label = `4D survey · year ${Math.round(year)}`;
   const WATERLINE = 44; // px from the top of the canvas to the sea level
   const SHIP_Y = WATERLINE - 20;
   const GUN = 30;       // px between the ship and the gun
@@ -515,6 +527,7 @@ const heroSurveyEngine = (canvas, sectionRef, run, year, reduced) => {
     if (image && image.width === need.width && image.height === need.height) return;
     const s = heroSurveyStore;
     if (s.image && s.run === run && s.year === year && s.w === need.width && s.h === need.height) image = s.image;
+    else if (deferred) return;
     else if (need.width && need.height) image = heroSurveyBuild(run, year, need.width, need.height, heroSurveyLeft(need.width));
   };
 
@@ -573,6 +586,9 @@ const heroSurveyEngine = (canvas, sectionRef, run, year, reduced) => {
   };
 
   return {
+    hasImage: () => !!image,
+    // Build the image now, if the store has none. The ship and the shots draw until then.
+    build() { deferred = false; ensureImage(); },
     // Fit the canvas to its CSS box and read the place of the section in it.
     resize(ratio) {
       const box = canvas.getBoundingClientRect(), section = sectionRef.current;
@@ -667,13 +683,14 @@ const heroSurveyEngine = (canvas, sectionRef, run, year, reduced) => {
   };
 };
 
-// One canvas over the hero. The loop runs only while the clock runs, the hero is in view and the tab is visible.
-// The clock owns the pass time. This component reads it from the shared ref, so React does not render for each frame.
-const HeroSurvey = ({ sectionRef, run, surveyRef, year, playing, visible, hidden }) => {
+// One canvas over the hero. The loop runs while the hero is in view and the tab is visible.
+// While the model plays, the clock owns the pass time. While the model is paused, this loop owns it: the ship finishes,
+// the image appears and holds, and the loop stops. This component reads the shared ref, so React does not render for each frame.
+const HeroSurvey = ({ sectionRef, run, surveyRef, year, playing, visible, hidden, speed }) => {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const reduced = useMemo(() => siteReducedMotion(), []);
-  const running = heroShouldTick({ playing, visible, hidden });
+  const live = visible && !hidden;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -683,9 +700,22 @@ const HeroSurvey = ({ sectionRef, run, surveyRef, year, playing, visible, hidden
       if (engine.resize(Math.min(1.5, window.devicePixelRatio || 1))) engine.paint(surveyRef.current, performance.now() / 1000);
     };
     fit();
+    // The image of a pass that the idle build did not prepare builds after the first painted frame.
+    let frameId = 0, timer = 0;
+    if (!engine.hasImage()) {
+      frameId = requestAnimationFrame(() => {
+        timer = setTimeout(() => {
+          if (engineRef.current !== engine) return;
+          engine.build();
+          engine.paint(surveyRef.current, performance.now() / 1000);
+        }, 0);
+      });
+    }
     const sizes = 'ResizeObserver' in window ? new ResizeObserver(fit) : null;
     if (sizes) { sizes.observe(canvas); sizes.observe(sectionRef.current); }
     return () => {
+      cancelAnimationFrame(frameId);
+      clearTimeout(timer);
       if (sizes) sizes.disconnect();
       engineRef.current = null;
       // The pass is over: drop the image.
@@ -694,7 +724,7 @@ const HeroSurvey = ({ sectionRef, run, surveyRef, year, playing, visible, hidden
   }, []);
 
   useEffect(() => {
-    if (!running) {
+    if (!live) {
       if (engineRef.current) engineRef.current.paint(surveyRef.current, performance.now() / 1000);
       return undefined;
     }
@@ -702,12 +732,21 @@ const HeroSurvey = ({ sectionRef, run, surveyRef, year, playing, visible, hidden
     const tick = now => {
       frameId = requestAnimationFrame(tick);
       if (last && now - last < HERO_SURVEY_FRAME_MS) return;
+      const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
       last = now;
-      if (engineRef.current) engineRef.current.paint(surveyRef.current, now / 1000);
+      const pass = surveyRef.current;
+      let settled = false;
+      if (!playing && pass.active) {
+        pass.u = heroSurveyPausedTime(pass.u, dt * speed, reduced);
+        pass.factor = heroSurveyClock(pass.u);
+        settled = pass.u >= heroSurveyHoldEnd();
+      }
+      if (engineRef.current) engineRef.current.paint(pass, now / 1000);
+      if (settled) cancelAnimationFrame(frameId);
     };
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [running]);
+  }, [live, playing, speed]);
 
-  return <canvas ref={canvasRef} className="hero-survey" aria-hidden="true" data-survey-year={year} />;
+  return <canvas ref={canvasRef} className="hero-survey" aria-hidden="true" data-survey-year={Math.round(year)} />;
 };

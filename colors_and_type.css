@@ -1448,6 +1448,9 @@ body:has(#app-loader) .hero-rain-drop { animation-play-state: paused; }
 }
 .hero-player__small:hover { color: var(--sim-ink); border-color: var(--sim-ink-faint); }
 .hero-player__small:active { transform: scale(0.96); }
+.hero-player__small:disabled { opacity: 0.45; cursor: default; }
+/* The 4D button looks active while a pass runs. */
+.hero-player__survey[aria-pressed="true"] { color: var(--hero-accent); border-color: color-mix(in srgb, var(--hero-accent) 55%, transparent); background: color-mix(in srgb, var(--hero-accent) 10%, transparent); cursor: default; }
 .hero-player__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; margin-top: 10px; }
 .hero-player__title { margin: 0; font: 600 13.5px/1.4 var(--sim-font-ui); }
 /* The run time of the model, as a small badge at the right of the title row. */

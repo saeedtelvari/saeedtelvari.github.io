@@ -449,6 +449,12 @@ const SubsurfaceHero = ({ onNavigate }) => {
     surveyRef.current = { active: false, u: 0, factor: 1, year: 0, dir: 1 };
     setSurvey(null);
   };
+  // One start path for a pass: the clock crossing a survey year and the 4D button both call it. It sets a ref and one state only.
+  // The image of a pass builds later, after the first painted frame, in the canvas.
+  const startSurvey = at => {
+    surveyRef.current = { active: true, u: 0, factor: 1, year: at, dir: heroSurveyDirection(surveyCount.current++) };
+    setSurvey({ year: at, id: surveyCount.current });
+  };
   // The image of the next survey builds when the browser is idle. No build runs during a pass.
   const nextSurvey = survey ? null : heroSurveyNext(year);
   useEffect(() => heroSurveyPrepare(run, nextSurvey, sectionRef), [run, nextSurvey]);
@@ -486,8 +492,7 @@ const SubsurfaceHero = ({ onNavigate }) => {
         if (crossed !== null) {
           next = crossed;
           started = true;
-          surveyRef.current = { active: true, u: 0, factor: 1, year: crossed, dir: heroSurveyDirection(surveyCount.current++) };
-          setSurvey({ year: crossed, id: surveyCount.current });
+          startSurvey(crossed);
         }
         yearRef.current = next;
         setYear(next);
@@ -565,6 +570,8 @@ const SubsurfaceHero = ({ onNavigate }) => {
     scrub: value => { setYear(value); setPlaying(false); jumpShip(value); clearBreach(); cancelSurvey(); },
     restart: () => { setYear(0); setPlaying(true); clearBreach(); cancelSurvey(); surveyCount.current = 0; shutRef.current = HERO_SHUTIN_SECONDS; setShutSeconds(HERO_SHUTIN_SECONDS); },
     speed: () => setSpeed(s => (s === 1 ? 2 : s === 2 ? 4 : 1)),
+    // A press starts a pass at the current year. A pass that runs, or a missing run, makes the press do nothing.
+    survey: () => { if (run && !survey) startSurvey(yearRef.current); },
   };
 
   return (
@@ -580,13 +587,13 @@ const SubsurfaceHero = ({ onNavigate }) => {
       <HeroWell flow={flow} dim={shut.dim} />
       <HeroWater geology={heroGeology} faults={HERO_FAULTS} frame={frame} leak={leak} roofR={heroOverlying.roofR} flow={flow} dim={shut.dim} />
       <HeroInjectionFlow sectionRef={sectionRef} injecting={!!run && year < injectionYears && ship.phase === 'moored'} speed={speed} playing={playing} visible={visible} hidden={hidden} surveyRef={surveyRef} />
-      {survey && <HeroSurvey key={survey.id} sectionRef={sectionRef} run={run} surveyRef={surveyRef} year={survey.year} playing={playing} visible={visible} hidden={hidden} />}
+      {survey && <HeroSurvey key={survey.id} sectionRef={sectionRef} run={run} surveyRef={surveyRef} year={survey.year} playing={playing} visible={visible} hidden={hidden} speed={speed} />}
       {late && <SurfaceSite geology={heroGeology} flow={flow} hose={shut.hose} dim={shut.dim} ship={ship} />}
       <HeroLabels />
       <HeroLeakReadout frame={frame} card={leak || hold} breachFault={breachFault} pushScale={pushScale} />
       <Identity onNavigate={onNavigate} />
       <HeroPlayer year={year} playing={playing} speed={speed} frame={frame} run={run} injectionYears={injectionYears} leak={leak} peak={leakScale.peak}
-        ship={ship.phase} exaggeration={exaggeration} controls={controls} weather={scene} />
+        ship={ship.phase} exaggeration={exaggeration} controls={controls} weather={scene} surveyOn={!!survey} />
     </section>
   );
 };
@@ -1174,7 +1181,7 @@ const HeroLabels = React.memo(() => (
   <div className="hero-annotations">
     <p className="visually-hidden">
       Cross-section, from the sea surface down: 76 m of sea, the seabed, overburden, an overlying aquifer, a caprock, the storage aquifer the well injects into,
-      and underburden, cut by two faults. Four-dimensional seismic surveys image the CO2 at years 10, 25 and 1000.
+      and underburden, cut by two faults. A 4D seismic survey images the CO2 at year 25, and the 4D button runs a survey at any year.
     </p>
     <div className="hero-axis" aria-hidden="true">
       <span className="hero-axis__rule hero-axis__rule--upper" />
@@ -1231,7 +1238,7 @@ const HeroLeakReadout = ({ frame, card, breachFault, pushScale }) => {
 /* =====================================================
    Player — controls, the CO2 inventory and the scale note
    ===================================================== */
-const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, leak, peak, ship, exaggeration, controls, weather }) => {
+const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, leak, peak, ship, exaggeration, controls, weather, surveyOn }) => {
   // The run time is known once per run. toLocaleString is slow, so the badge text is not built on every frame.
   const receipt = useMemo(() => (run && run.computeMs > 0
     ? { badge: heroReceiptBadge(run.years, run.computeMs), text: heroReceiptText(run.years, run.computeMs) } : null), [run]);
@@ -1271,6 +1278,8 @@ const HeroPlayer = ({ year, playing, speed, frame, run, injectionYears, leak, pe
           <Icon name="restart" size={15} />
         </button>
         <button type="button" className="hero-player__small hero-player__speed" onClick={controls.speed} aria-label={`${speed}× playback speed`}>{speed}×</button>
+        <button type="button" className="hero-player__small hero-player__survey" onClick={controls.survey} disabled={!run}
+          aria-pressed={surveyOn ? 'true' : 'false'} aria-label="Run a 4D seismic survey" title="Run a 4D seismic survey">4D</button>
       </div>
       <div className="hero-player__head">
         <p className="hero-player__title">Live VE model, year <span className="hero-player__year">{shownYear}</span> <span className="hero-player__phase">{phase}</span>{leak && <span className="hero-player__leak"> · F{leak.fault + 1} leaking</span>}</p>
