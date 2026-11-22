@@ -84,20 +84,24 @@ years = [[int(r["weather"]), r1(r["lcoe_eur_per_mwh"], 2), r1(r["mean_air_c"], 2
 tornado = [[r["label"], r1(r["input_low"], 4), r1(r["input_high"], 4), r1(r["lcoe_low"], 2), r1(r["lcoe_high"], 2), r1(r["lcoe_base"], 2)]
            for r in rows(MP + "final_pick__tornado_pick.csv")]
 
-# Model picks and their 13 tests
-mstress = {}
-for r in rows("mp_stress.csv"):
-    mstress.setdefault(int(r["pick"]), []).append(1 if r["meets_all_hard_rules"] == "True" else 0)
+# Model picks and their 13 tests: the 5 Nov set (mp_*.csv) and the 22 Nov set (mp_new_*.csv, commit cd1ef95,
+# study_results/2026-11-22/model_picks_new). Pick 0 of each set is our pick, so the second set skips it.
 picks = []
-for i, r in enumerate(rows("mp_picks.csv")):
-    req = json.loads(r["request"])
-    picks.append({
-        "model": r["model"], "question": r["question"], "design": r["design"],
-        "boiler": float(r["boiler_mw"]), "chiller": float(r["chiller_mw"]),
-        "doublets": req.get("n_doublets"), "depth": req.get("depth_m"),
-        "lcoe": float(r["knmi2025_lcoe"]), "co2": int(float(r["knmi2025_co2_t"])),
-        "passed": int(r["stress_passed"]), "tests": mstress.get(i, []),
-    })
+for prefix in ("mp_", "mp_new_"):
+    mstress = {}
+    for r in rows(prefix + "stress.csv"):
+        mstress.setdefault(int(r["pick"]), []).append(1 if r["meets_all_hard_rules"] == "True" else 0)
+    for i, r in enumerate(rows(prefix + "picks.csv")):
+        if prefix == "mp_new_" and r["model"] == "Our pick":
+            continue
+        req = json.loads(r["request"])
+        picks.append({
+            "model": r["model"], "question": r["question"], "design": r["design"],
+            "boiler": float(r["boiler_mw"]), "chiller": float(r["chiller_mw"]),
+            "doublets": req.get("n_doublets"), "depth": req.get("depth_m"),
+            "lcoe": float(r["knmi2025_lcoe"]), "co2": int(float(r["knmi2025_co2_t"])),
+            "passed": int(r["stress_passed"]), "tests": mstress.get(i, []),
+        })
 
 
 # Agent paths from the run ledgers (full design brief, max reasoning)
