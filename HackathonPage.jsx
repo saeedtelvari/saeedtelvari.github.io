@@ -183,13 +183,6 @@ const HkPlantSection = () => {
   );
 };
 
-const HK_HERO_STATS = [
-  { value: 36.35, digits: 2, prefix: '€', label: 'per MWh of heat and cooling' },
-  { value: 4269, digits: 0, label: 't CO₂ a year, 84 % below gas' },
-  { value: 365, digits: 0, suffix: '/365', label: 'days with all demand met' },
-  { value: 99, digits: 0, suffix: ' %', label: 'of 400 sampled futures met' },
-];
-
 const HkHero = () => (
   <header className="hk-hero" id="top">
     <div className="hk-hero__text">
@@ -207,14 +200,6 @@ const HkHero = () => (
       </div>
     </div>
     <div className="hk-hero__art"><HkPlantSection /></div>
-    <ul className="hk-stats">
-      {HK_HERO_STATS.map((s, i) => (
-        <HkReveal as="li" key={s.label} delay={i * 90} className="hk-stat">
-          <strong><HkCount value={s.value} digits={s.digits} prefix={s.prefix || ''} suffix={s.suffix || ''} /></strong>
-          <span>{s.label}</span>
-        </HkReveal>
-      ))}
-    </ul>
   </header>
 );
 
