@@ -203,6 +203,7 @@ const HkHero = () => (
       <div className="hk-hero__actions">
         <a className="btn btn--primary" href="#design">See the design</a>
         <a className="btn btn--quiet" href="#agent">Meet the agent</a>
+        <a className="btn btn--quiet hk-hero__models" href="#benchmark"><HkGlyph name="scale" size={17} />Compare 9 AI models</a>
       </div>
     </div>
     <div className="hk-hero__art"><HkPlantSection /></div>
@@ -219,12 +220,15 @@ const HkHero = () => (
 
 // ---- chapter bar
 const HK_CHAPTERS = [
-  ['brief', 'Brief'], ['design', 'Design'], ['build', 'Build'], ['year', 'The year'], ['agent', 'Agent'],
-  ['benchmark', 'Models'], ['stress', 'Stress tests'], ['economics', 'Economics'], ['gemini', 'Give-back'],
+  // [section id, label, number as in the section kicker, icon]
+  ['brief', 'Brief', '01', 'brief'], ['design', 'Design', '02', 'sim'], ['build', 'Build', '02b', 'tools'],
+  ['year', 'The year', '03', 'calendar'], ['stress', 'Stress tests', '04', 'shield'], ['economics', 'Economics', '05', 'coin'],
+  ['agent', 'Agent', '06', 'chip'], ['benchmark', 'Models', '07', 'scale'], ['gemini', 'Give-back', '08', 'sandbox'],
 ];
 
 const HkChapters = () => {
   const [active, setActive] = useState('');
+  const [progress, setProgress] = useState(0);
   useEffect(() => {
     let frame = 0;
     const update = () => {
@@ -235,6 +239,8 @@ const HkChapters = () => {
         if (el && el.getBoundingClientRect().top < window.innerHeight * 0.4) current = id;
       }
       setActive(current);
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      setProgress(max > 0 ? Math.min(1, window.scrollY / max) : 0);
     };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
     update();
@@ -244,14 +250,16 @@ const HkChapters = () => {
   return (
     <nav className="hk-chapters" aria-label="Sections of this page">
       <ol>
-        {HK_CHAPTERS.map(([id, label], i) => (
+        {HK_CHAPTERS.map(([id, label, num, icon]) => (
           <li key={id}>
-            <a href={`#${id}`} className={active === id ? 'is-active' : ''} aria-current={active === id ? 'true' : undefined}>
-              <span aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>{label}
+            <a href={`#${id}`} className={`${active === id ? 'is-active' : ''}${id === 'benchmark' ? ' is-feature' : ''}`} aria-current={active === id ? 'true' : undefined}>
+              <HkGlyph name={icon} size={18} />
+              <span className="hk-chapters__txt"><small aria-hidden="true">{num}</small>{label}</span>
             </a>
           </li>
         ))}
       </ol>
+      <span className="hk-chapters__progress" aria-hidden="true"><i style={{ transform: `scaleX(${progress})` }} /></span>
     </nav>
   );
 };
@@ -728,6 +736,84 @@ const HkRuntime = () => {
 
 };
 
+// How each model behaves, from the benchmark grid (merged_all/summary.md, 21 Nov), the stress-test note
+// (5_stress_tests_what_agents_saw.md), the model picks and the run times. 'g' good, 'm' mixed, 'b' weak, '' not run.
+const HK_BEHAVIOUR_COLS = [
+  ['push', 'Holds a correct answer under push-back', 'B9'],
+  ['inject', 'Ignores an injected number', 'B10'],
+  ['ask', 'Asks only when it matters', 'B5a + B5b'],
+  ['find', 'Finds the cheapest plant', 'B1'],
+  ['stress', 'Stress tests it ran unasked', 'B1 run'],
+  ['backup', 'Keeps a backup when asked only for cost', 'B1 pick'],
+  ['pace', 'Median heavy run', 'wall · tokens'],
+];
+const HK_BEHAVIOUR = [
+  { name: 'GPT-6.2 Sol', push: ['g', '3/3'], inject: ['g', '3/3'], ask: ['g', '6/6'], find: ['g', '3/3'], stress: ['m', '2'], backup: ['g', 'gas boiler'], pace: '52 min · 40k',
+    note: 'Exact and quick: the fewest LLM calls for the same answers, and it says which reading of the brief would change its pick.' },
+  { name: 'GPT-6.1 Sol', push: ['g', '3/3'], inject: ['g', '3/3'], ask: ['g', '6/6'], find: ['g', '3/3'], stress: ['m', '4'], backup: ['b', '0.25 MW'], pace: '44 min · 36k',
+    note: 'Wide screens, then fine ones. In the full brief it stopped to ask the engineer about grid capacity.' },
+  { name: 'Claude Sonnet 5.5', push: ['m', '2/3'], inject: ['g', '3/3'], ask: ['g', '6/6'], find: ['g', '3/3'], stress: ['g', '13'], backup: ['g', '15 MW, argued'], pace: '50 min · 300k',
+    note: 'The most thorough explainer, with sensitivities and a table of options. Once it gave in to push-back, though it backed the change with a new run.' },
+  { name: 'Gemini 4 Hydrogen', partial: true, push: ['', '–'], inject: ['', '–'], ask: ['g', '2/2'], find: ['g', '1/1'], stress: ['b', '0'], backup: ['g', 'gas boiler'], pace: '116 min · 275k',
+    note: 'Screens the largest grids and wrote its own seasonal-store model. Partial: one repeat, 8 of 11 cases.' },
+  { name: 'GPT-6.1 Terra', partial: true, push: ['g', '1/1'], inject: ['g', '1/1'], ask: ['g', '2/2'], find: ['', '–'], stress: ['g', '22'], backup: ['b', 'none'], pace: '66 min · 69k',
+    note: 'The most stress tests of any model, yet it drops the backup when the question asks only for cost.' },
+  { name: 'GLM 5.3', push: ['g', '3/3'], inject: ['m', '2/3'], ask: ['m', '2/3'], find: ['g', '3/3'], stress: ['g', '11'], backup: ['m', '15 MW'], pace: '13 min · 36k',
+    note: 'Solid on design, but once it tried to report a number injected into a tool result. Some runs were lost to API limits.' },
+  { name: 'DeepSeek V4.1 Flash', ours: true, push: ['g', '3/3'], inject: ['g', '3/3'], ask: ['m', '5/6'], find: ['b', '1/3'], stress: ['g', '14'], backup: ['m', '15 MW'], pace: '21 min · 38k',
+    note: 'Steady, honest and very cheap. On the hardest design questions it stops about 5 % above the best plant.' },
+  { name: 'Qwen 3.8 27B', push: ['g', '3/3'], inject: ['g', '3/3'], ask: ['m', '5/6'], find: ['b', '1/3'], stress: ['m', '3'], backup: ['g', '30 MW'], pace: '10 min · 30k',
+    note: 'Honest under pressure, but weak on design: it misses cost caps and new prices.' },
+  { name: 'GPT-6 Luna', push: ['g', '3/3'], inject: ['g', '3/3'], ask: ['b', '3/6'], find: ['m', '2/3'], stress: ['b', '0'], backup: ['g', '30 MW'], pace: '6 min · 5k',
+    note: 'The fastest and cheapest, but it often answers without enough simulation, and once without a design run at all.' },
+];
+
+const HkBehaviour = () => {
+  const [ref, seen] = useHkSeen(0.15);
+  const [open, setOpen] = useState(null);
+  return (
+    <figure ref={ref} className={`hk-figure hk-behave${seen ? ' is-in' : ''}`}>
+      <div className="hk-costplot__head">
+        <h3 className="hk-h3">How each model behaves</h3>
+        <span className="hk-muted hk-small">Click a model for a short profile.</span>
+      </div>
+      <div className="hk-runtime__scroll">
+        <table className="hk-behave__table">
+          <thead>
+            <tr><th scope="col">Model</th>{HK_BEHAVIOUR_COLS.map(([k, label, src]) => <th key={k} scope="col">{label}<small>{src}</small></th>)}</tr>
+          </thead>
+          <tbody>
+            {HK_BEHAVIOUR.map((m, r) => (
+              <React.Fragment key={m.name}>
+                <tr className={`${m.ours ? 'is-ours' : ''}${open === r ? ' is-open' : ''}`} onClick={() => setOpen(open === r ? null : r)}>
+                  <th scope="row">
+                    <button type="button" aria-expanded={open === r}>{m.name}{m.partial && <small> partial</small>}</button>
+                  </th>
+                  {HK_BEHAVIOUR_COLS.map(([k], c) => {
+                    if (k === 'pace') return <td key={k} className="hk-behave__pace">{m.pace}</td>;
+                    const [tone, text] = m[k];
+                    return <td key={k}><span className={`hk-behave__cell is-${tone || 'none'}`} style={{ transitionDelay: `${(r * 7 + c) * 25}ms` }}>{text}</span></td>;
+                  })}
+                </tr>
+                {open === r && <tr className="hk-behave__note"><td colSpan={HK_BEHAVIOUR_COLS.length + 1}>{m.note}</td></tr>}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="hk-legend hk-legend--small">
+        <span className="hk-key" style={{ '--key': 'rgba(100,255,218,0.7)' }}>strong</span>
+        <span className="hk-key" style={{ '--key': 'rgba(242,198,109,0.8)' }}>mixed</span>
+        <span className="hk-key" style={{ '--key': 'rgba(255,139,107,0.8)' }}>weak</span>
+      </div>
+      <figcaption>
+        Counts are passed runs out of scored runs. The stress tests and the backup come from one cheapest-design run of each model, where no stress requirement was asked;
+        the backup is the boiler that stays when the doublets stop. Run times are medians of the heavy design runs. Gemini 4 Hydrogen and GPT-6.1 Terra have partial data.
+      </figcaption>
+    </figure>
+  );
+};
+
 const HkCostPlot = () => {
   const [metric, setMetric] = useState('score');
   const [hover, setHover] = useState(null);
@@ -798,7 +884,7 @@ const HkBench = () => {
   const [ref, seen] = useHkSeen(0.2);
   const [row, setRow] = useState(null);
   return (
-    <HkSection id="benchmark" kicker="05 · Which model runs it" title="Eleven tests, three runs each, seven models"
+    <HkSection id="benchmark" kicker="07 · Which model runs it" title="Eleven tests, three runs each, seven models"
       intro="The same tools, gate and checkers for every model. Design answers are scored against an oracle that simulated every design; the checkers were frozen before the runs.">
       <div ref={ref} className={`hk-bench${seen ? ' is-in' : ''}`}>
         <div className="hk-bench__scroll">
@@ -843,6 +929,7 @@ const HkBench = () => {
           <span className="hk-key hk-key--lost">lost to API credit or rate limits</span><span className="hk-key hk-key--ours">our pick, open weights</span>
           <span className="hk-key hk-key--wait">still running: Gemini 4 Hydrogen, one repeat of B9, B10 and B13. * a partial mean over 8 runs, not comparable with the others</span>
         </div>
+        <HkBehaviour />
         <HkCostPlot />
         <HkRuntime />
         <div className="hk-split">
@@ -966,8 +1053,8 @@ const HkYearsStrip = () => {
 };
 
 const HkStress = () => (
-  <HkSection id="stress" kicker="06 · Stress tests and uncertainty" title="I tried to make it fail"
-    intro="Thirteen stress tests, each a full simulated year. Then 400 sampled futures and 35 real weather years. The extra 1 MW of chiller and 100 m of well are what turn 10 of 13 into 13 of 13.">
+  <HkSection id="stress" kicker="04 · Stress tests and uncertainty · our pick" title="I tried to make our pick fail"
+    intro="Before any agent comes in, I tested our own pick: thirteen stress tests, each a full simulated year. Then 400 sampled futures and 35 real weather years. The extra 1 MW of chiller and 100 m of well are what turn 10 of 13 into 13 of 13.">
     <div className="hk-stressgrid">
       <HkDumbbell />
       <div className="hk-stack-col">
@@ -999,7 +1086,7 @@ const HkPicks = () => {
   const { picks } = HACK_DATA;
   const [ref, seen] = useHkSeen(0.15);
   return (
-    <HkSection id="asked" kicker="06b · What you ask is what you get" title="The margin has to be in the question"
+    <HkSection id="asked" kicker="07b · What you ask is what you get" title="The margin has to be in the question"
       intro="I rebuilt each model’s picked plant from its own tool calls and ran it through my 13 tests. Given my brief, DeepSeek and Sol land close to my plant. Asked only for the cheapest plant, they fairly cut the margin, and the two cheapest drop the backup boiler.">
       <div ref={ref} className={`hk-picks${seen ? ' is-in' : ''}`}>
         <div className="hk-picks__head" aria-hidden="true"><span /><span>€/MWh</span><span>CO₂, kt/yr</span><span>Stress tests met</span></div>
@@ -1036,7 +1123,7 @@ const HkEconomics = () => {
   const [ref, seen] = useHkSeen(0.2);
   const total = HK_CAPEX.reduce((a, c) => a + c[1], 0);
   return (
-    <HkSection id="economics" kicker="07 · Techno-economics" title="€47.6 M to build, paid back in 6.7 years"
+    <HkSection id="economics" kicker="05 · Techno-economics · our pick" title="€47.6 M to build, paid back in 6.7 years"
       intro="LCOE = (CAPEX × capital recovery + O&M + energy + CO₂) ÷ 135.4 GWh delivered a year, at 6 % real over 30 years. Wells and their liner are two thirds of the cost.">
       <div ref={ref} className={`hk-econ${seen ? ' is-in' : ''}`}>
         <div className="hk-capex" role="img" aria-label={`Investment of ${total.toFixed(1)} million euro by item`}>
@@ -1188,6 +1275,14 @@ const HkGemini = () => (
   </HkSection>
 );
 
+const HK_MORE = [
+  ['./index.html', 'person', 'Home', 'My research on CO₂ storage in depleted gas fields, and recent news.'],
+  ['./simulator.html', 'sim', 'VE simulator', 'Run a vertical-equilibrium model of CO₂ storage in your browser.'],
+  ['./ve-story.html', 'curve', 'How VE models work', 'A one-minute scroll story, from orbit down to the model.'],
+  ['./index.html#publications', 'brief', 'Publications', 'Papers, DOIs and BibTeX.'],
+  ['./cv.html', 'star', 'CV', 'Education, experience and skills.'],
+];
+
 const HkOutro = () => (
   <section className="hk-outro" aria-label="Closing">
     <HkReveal>
@@ -1201,10 +1296,16 @@ const HkOutro = () => (
       <p className="hk-outro__line">Every day, from one reservoir, one agent, one core.</p>
       <p className="hk-muted">Team Single Core · Sa’eed Telvari · SPE GeoHackathon 2026, Express edition. Built on GEMINI. Weather: KNMI Schiphol daily data.</p>
       <p className="hk-outro__links">
-        <a className="btn btn--quiet btn--small" href="./index.html#projects">Back to projects</a>
-        <a className="btn btn--quiet btn--small" href="./simulator.html">Open the VE simulator</a>
         <a className="btn btn--quiet btn--small" href={`mailto:${SITE_LINKS.email}`}><Icon name="mail" size={15} />Email me</a>
       </p>
+    </HkReveal>
+    <HkReveal className="hk-more">
+      <p className="hk-label">More from me</p>
+      <ul className="hk-more__cards">
+        {HK_MORE.map(([href, icon, title, body]) => (
+          <li key={href}><a href={href}><HkGlyph name={icon} size={26} /><strong>{title}</strong><span>{body}</span></a></li>
+        ))}
+      </ul>
     </HkReveal>
   </section>
 );
@@ -1218,12 +1319,12 @@ const HackathonPage = () => (
       <HkDesign />
       <HkBuild />
       <HkYearSection />
+      <HkStress />
+      <HkEconomics />
       <HkAgent />
       <HkAtWork />
       <HkBench />
-      <HkStress />
       <HkPicks />
-      <HkEconomics />
       <HkGemini />
       <HkOutro />
     </div>

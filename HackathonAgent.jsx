@@ -327,7 +327,7 @@ const HK_AGENT_STATS = [
 ];
 
 const HkAgent = () => (
-  <HkSection id="agent" kicker="04 · The agent" title="An agent that plans, but never invents a number"
+  <HkSection id="agent" kicker="06 · The agent" title="An agent that plans, but never invents a number"
     intro="The LLM is swappable and not deterministic. Everything around it is deterministic. Follow one question through the system.">
     <HkFlowchart />
     <div className="hk-agentstats">
@@ -786,7 +786,7 @@ const HkBoard = () => {
 };
 
 const HkAtWork = () => (
-  <HkSection id="replay" kicker="04b · The agent at work" title="Watch each model work, call by call"
+  <HkSection id="replay" kicker="06b · The agent at work" title="Watch each model work, call by call"
     intro="Each tab replays a real session from its transcript and run ledger, at maximum reasoning. Every LLM call, every tool call and every plant it simulated appears at the moment it happened. DeepSeek and GPT-6.1 Sol answer the full brief, with CO₂ priced at €180/t. GPT-6.2 Sol and Claude Sonnet 5.5 answer benchmark case B1: find the cheapest design. Gemini 4 Hydrogen joins when its runs finish.">
     <HkBoard />
   </HkSection>
