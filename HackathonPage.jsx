@@ -621,6 +621,12 @@ const HK_BENCH_MODELS = [
 ];
 // Models that run the same eleven tests now. Move a model into HK_BENCH_MODELS (and add its column to each row) when its runs are scored.
 const HK_BENCH_PENDING = ['Gemini 4 Hydrogen'];
+// A model with partial results (22 Nov, commit 24a670d): one repeat per case, and only the cases done so far.
+// Its mean is not comparable with the 33-run models, so it is shown apart and has no CI.
+const HK_BENCH_PARTIAL = {
+  'Gemini 4 Hydrogen': { note: 'partial · 1 repeat, 8 of 11 cases', cells: { B0: 'p', B1: 'p', B3: 'p', B4: 'p', B5a: 'p', B5b: 'p', B6: 'p', B8: 'p' },
+    passed: '8/8', score: 0.946, cost: '≈2.22' },
+};
 
 const HK_BENCH = [
   ['B0', 'Off-topic', 'control', 'A question about the weather in Delft. Decline, without tools.', 'ppp ppp ppp ppp ppp ppp ppp'],
@@ -642,6 +648,7 @@ const HK_BENCH = [
 const HK_COST_PERF = [
   { name: 'GPT-6.2 Sol', runs: 33, score: 0.975, lo: 0.962, hi: 0.986, pass: 1.0, usd: 0.5616, basis: 'API-equivalent', lab: ['start', 15, -16], isNew: true },
   { name: 'Claude Sonnet 5.5', runs: 33, score: 0.932, lo: 0.879, hi: 0.967, pass: 0.97, usd: 2.1756, basis: 'API-equivalent', lab: ['end', -14, 42], isNew: true },
+  { name: 'Gemini 4 Hydrogen', runs: 8, score: 0.946, pass: 1.0, usd: 2.22, basis: 'API-equivalent', partial: true, note: 'partial', lab: ['end', -14, 112], isNew: true },
   { name: 'GPT-6.1 Terra', runs: 8, score: 0.965, lo: 0.932, hi: 0.994, pass: 1.0, usd: 0.3337, basis: 'API-equivalent', note: '8 of 11 tests', lab: ['end', -15, 0] },
   { name: 'GPT-6.1 Sol', runs: 33, score: 0.953, lo: 0.936, hi: 0.969, pass: 1.0, usd: 0.8295, basis: 'API-equivalent', lab: ['end', -12, 30] },
   { name: 'GLM 5.3', runs: 26, score: 0.887, lo: 0.838, hi: 0.929, pass: 0.846, usd: 0.0718, basis: 'billed' },
@@ -732,7 +739,8 @@ const HkCostPlot = () => {
   const y = hkScale(yr[0], yr[1], H - B, T);
   const val = m => (metric === 'score' ? m.score : m.pass);
   // The Pareto front: no other model is both cheaper and better.
-  const front = HK_COST_PERF.filter(m => !HK_COST_PERF.some(o => o !== m && o.usd <= m.usd && val(o) >= val(m) && (o.usd < m.usd || val(o) > val(m))))
+  const full = HK_COST_PERF.filter(m => !m.partial);
+  const front = full.filter(m => !full.some(o => o !== m && o.usd <= m.usd && val(o) >= val(m) && (o.usd < m.usd || val(o) > val(m))))
     .sort((a, b) => a.usd - b.usd);
   const ticksY = metric === 'score' ? [0.6, 0.7, 0.8, 0.9, 1.0] : [0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
   return (
@@ -761,8 +769,8 @@ const HkCostPlot = () => {
             return (
               <g key={m.name} className={`hk-costplot__pt${m.ours ? ' is-ours' : ''}${hover === i ? ' is-hover' : ''}`} style={{ transitionDelay: `${i * 90}ms` }}
                 onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)}>
-                {metric === 'score' && <line x1={cx} x2={cx} y1={y(m.lo)} y2={y(m.hi)} className="hk-costplot__ci" />}
-                <circle cx={cx} cy={cy} r={m.ours ? 10 : 7.5} className={m.basis === 'billed' ? 'is-billed' : 'is-equiv'} />
+                {metric === 'score' && m.lo && <line x1={cx} x2={cx} y1={y(m.lo)} y2={y(m.hi)} className="hk-costplot__ci" />}
+                <circle cx={cx} cy={cy} r={m.ours ? 10 : 7.5} className={m.partial ? 'is-partial' : m.basis === 'billed' ? 'is-billed' : 'is-equiv'} />
                 <text x={cx + dx} y={cy - 8 + dy} textAnchor={anchor} className="hk-costplot__name">{m.name}{m.isNew && <tspan className="hk-costplot__new"> new</tspan>}</text>
                 <text x={cx + dx} y={cy + 8 + dy} textAnchor={anchor} className="hk-costplot__val">
                   {metric === 'score' ? m.score.toFixed(2) : `${Math.round(m.pass * 100)} %`} · ${m.usd < 0.1 ? m.usd.toFixed(3) : m.usd.toFixed(2)}{m.note ? ` · ${m.note}` : ''}
@@ -780,7 +788,7 @@ const HkCostPlot = () => {
       </div>
       <figcaption>
         DeepSeek V4.1 Flash gives 91 % of GPT-6.1 Sol’s score for 5 % of its cost, with open weights. GPT-6.2 Sol is the best so far, at two thirds of GPT-6.1 Sol’s cost. Each dot is one model over its scored runs of the eleven tests (3 runs each).
-        {' '}{HK_BENCH_PENDING.join(', ').replace(/, ([^,]*)$/, ' and $1')} {HK_BENCH_PENDING.length > 1 ? 'join' : 'joins'} this chart when {HK_BENCH_PENDING.length > 1 ? 'their' : 'its'} runs are scored.
+        {' '}Gemini 4 Hydrogen is partial (one repeat, 8 of 11 cases), so it has a dashed ring and no CI, and it is not on the trade-off line.
       </figcaption>
     </figure>
   );
@@ -798,7 +806,7 @@ const HkBench = () => {
             <thead>
               <tr><th scope="col">Test</th><th scope="col" className="hk-bench__cat">Kind</th>
                 {HK_BENCH_MODELS.map(m => <th key={m.name} scope="col" className={m.ours ? 'is-ours' : ''}>{m.short || m.name.replace(' V4.1 Flash', '').replace('GPT-6 ', '')}{m.date && <small className="hk-bench__new">new</small>}</th>)}
-                {HK_BENCH_PENDING.map(name => <th key={name} scope="col" className="is-pending">{name}<small>running</small></th>)}</tr>
+                {HK_BENCH_PENDING.map(name => <th key={name} scope="col" className="is-pending">{name}<small>{(HK_BENCH_PARTIAL[name] || {}).note || 'running'}</small></th>)}</tr>
             </thead>
             <tbody>
               {HK_BENCH.map(([id, name, cat, prompt, res], r) => (
@@ -812,15 +820,20 @@ const HkBench = () => {
                       </span>
                     </td>
                   ))}
-                  {HK_BENCH_PENDING.map(name => <td key={name} className="is-pending"><span className="hk-dots">{[0, 1, 2].map(k => <i key={k} className="hk-dot hk-dot--wait" style={{ animationDelay: `${(r * 3 + k) * 120}ms` }} />)}</span></td>)}
+                  {HK_BENCH_PENDING.map(name => {
+                    const c = ((HK_BENCH_PARTIAL[name] || {}).cells || {})[id];
+                    return <td key={name} className="is-pending"><span className="hk-dots">{c
+                      ? <i className={`hk-dot hk-dot--${c}`} title={c === 'p' ? 'pass (1 repeat)' : 'fail (1 repeat)'} />
+                      : <i className="hk-dot hk-dot--wait" style={{ animationDelay: `${r * 120}ms` }} title="still running" />}</span></td>;
+                  })}
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr><th scope="row">Passed</th><td />{HK_BENCH_MODELS.map(m => <td key={m.name} className={m.ours ? 'is-ours' : ''}>{m.passed}</td>)}{HK_BENCH_PENDING.map(n => <td key={n} className="is-pending">soon</td>)}</tr>
+              <tr><th scope="row">Passed</th><td />{HK_BENCH_MODELS.map(m => <td key={m.name} className={m.ours ? 'is-ours' : ''}>{m.passed}</td>)}{HK_BENCH_PENDING.map(n => <td key={n} className="is-pending">{(HK_BENCH_PARTIAL[n] || {}).passed || 'soon'}</td>)}</tr>
               <tr><th scope="row">Score</th><td />{HK_BENCH_MODELS.map(m => <td key={m.name} className={m.ours ? 'is-ours' : ''}>
-                <span className="hk-scorebar" style={{ '--v': m.score }} /><b>{m.score.toFixed(2)}</b></td>)}{HK_BENCH_PENDING.map(n => <td key={n} className="is-pending">–</td>)}</tr>
-              <tr><th scope="row">$ a question</th><td />{HK_BENCH_MODELS.map(m => <td key={m.name} className={m.ours ? 'is-ours' : ''}>{m.cost}</td>)}{HK_BENCH_PENDING.map(n => <td key={n} className="is-pending">–</td>)}</tr>
+                <span className="hk-scorebar" style={{ '--v': m.score }} /><b>{m.score.toFixed(2)}</b></td>)}{HK_BENCH_PENDING.map(n => <td key={n} className="is-pending">{HK_BENCH_PARTIAL[n] ? `${HK_BENCH_PARTIAL[n].score.toFixed(2)}*` : '–'}</td>)}</tr>
+              <tr><th scope="row">$ a question</th><td />{HK_BENCH_MODELS.map(m => <td key={m.name} className={m.ours ? 'is-ours' : ''}>{m.cost}</td>)}{HK_BENCH_PENDING.map(n => <td key={n} className="is-pending">{(HK_BENCH_PARTIAL[n] || {}).cost || '–'}</td>)}</tr>
             </tfoot>
           </table>
         </div>
@@ -828,7 +841,7 @@ const HkBench = () => {
         <div className="hk-legend hk-legend--small">
           <span className="hk-key hk-key--pass">pass</span><span className="hk-key hk-key--fail">fail</span>
           <span className="hk-key hk-key--lost">lost to API credit or rate limits</span><span className="hk-key hk-key--ours">our pick, open weights</span>
-          <span className="hk-key hk-key--wait">{HK_BENCH_PENDING.join(', ').replace(/, ([^,]*)$/, ' and $1')}: same eleven tests, running now</span>
+          <span className="hk-key hk-key--wait">still running: Gemini 4 Hydrogen, one repeat of B9, B10 and B13. * a partial mean over 8 runs, not comparable with the others</span>
         </div>
         <HkCostPlot />
         <HkRuntime />

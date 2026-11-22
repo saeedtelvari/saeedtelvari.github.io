@@ -424,10 +424,28 @@ const HK_RUNS = {
     ],
   },
 };
+HK_RUNS.hydrogen = {
+  label: 'Gemini 4 Hydrogen', tag: 'B1 · cheapest design · partial', answer: 916, b1: true,
+  answerText: '2 doublets at 3,050 m · CHP on the co-produced gas · backup gas boiler · 0.4 MW ORC · screw chiller with dry cooler',
+  answerNote: 'On the way it wrote its own seasonal-store model in the sandbox. The store did not give a cheaper plant that meets every rule.',
+  views: { all: { x: [3.5, 24], y: [26, 68], label: 'Whole design space' }, zoom: { x: [4.2, 12], y: [31, 40], label: 'Zoom on the answer' } },
+  steps: [
+    { t: 14, phase: 0, text: 'Reads the brief and the list of models.' },
+    { t: 594, phase: 1, run: 9, text: 'Screens 48 plants: 1–3 doublets from 2 to 3.5 km, boiler or heat pump. One doublet at 3 km leads: R0009.' },
+    { t: 657, phase: 1, text: 'Asks the Fimbul.jl reservoir tables how a doublet performs over 30 years at 2.5, 3 and 3.5 km.' },
+    { t: 1033, phase: 2, run: 125, text: 'Screens 1.5 to 4 km for 1 and 2 doublets. Two doublets at 3.1 km with CHP lead: R0125.' },
+    { t: 1371, phase: 2, text: 'Narrows the depth in 25 m steps, then tunes boilers, return temperatures, pumps and an ORC.' },
+    { t: 1952, phase: 2, text: 'Tries two doublets at different depths, such as 3,000 and 3,200 m.' },
+    { t: 3233, phase: 2, run: 916, text: 'Finds R0916: two doublets at 3,050 m with CHP and a 0.4 MW ORC, at €32.32/MWh.' },
+    { t: 3729, phase: 2, text: 'Writes its own model, a seasonal thermal store, and registers it after its tests. No plant with the store meets every rule.' },
+    { t: 4369, phase: 2, text: 'Reads its notes, rewrites the store model and screens again. The store still does not give a valid plant.' },
+    { t: 6757, phase: 1, text: 'A last screen of heat pumps on shallower wells: half of them fail the physics gate.' },
+    { t: 6974, phase: 5, run: 916, text: 'Answers R0916, at €32.32/MWh.' },
+  ],
+};
 // The roster: sessions with data first, then models whose runs are on the way.
 const HK_ROSTER = [
-  { key: 'deepseek' }, { key: 'sol' }, { key: 'sol62' }, { key: 'sonnet55' },
-  { key: 'hydrogen', label: 'Gemini 4 Hydrogen' },
+  { key: 'deepseek' }, { key: 'sol' }, { key: 'sol62' }, { key: 'sonnet55' }, { key: 'hydrogen' },
 ];
 const HK_VIEWS = { all: { x: [3.5, 14.5], y: [34, 72], label: 'Whole design space' }, zoom: { x: [3.9, 8.2], y: [35, 50], label: 'Zoom on the answer' } };
 // Round grid steps for any axis range.
@@ -639,7 +657,7 @@ const HkBoard = () => {
               className={`hk-btab${which === r.key ? ' is-on' : ''}${ready ? '' : ' is-pending'}`}
               onClick={() => ready && setWhich(r.key)}>
               <strong>{label}</strong>
-              <small>{ready ? (meta.tag || 'live run') : 'run on the way'}</small>
+              <small>{ready ? (meta.tag || 'live run') : 'runs still going'}</small>
               {ready && <span className="hk-btab__prog"><i style={{ width: `${((states[r.key] || { u: 0 }).u / warps[r.key].U) * 100}%` }} /></span>}
             </button>
           );

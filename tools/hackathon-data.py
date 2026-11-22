@@ -115,6 +115,8 @@ RUNS = {
     # 21 Nov benchmark, case B1 ("find the cheapest design"), commit 8607d12 on the benchmark branch.
     "sol62": (NEW + "gpt-6.2-sol_fill_B1_r2/gpt-6.2-sol/B1/r2", "transcripts/B1.jsonl", None),
     "sonnet55": (NEW + "claude-sonnet-5.5_A/claude-sonnet-5.5/B1/r1", "transcripts/B1.jsonl", None),
+    "hydrogen": ("24a670d:simulator_examples/agent_bench_results/2026-11-21-max/gemini-4-hydrogen_A/gemini-4-hydrogen/B1/r1",
+                 "transcripts/B1.jsonl", None),
 }
 
 
@@ -132,6 +134,7 @@ def clock(stamp):
 
 def clip(text, n):
     text = " ".join(str(text).split())
+    text = re.sub(r"[A-Za-z]:\\[^\"',;]*", "<local path>", text)  # no local file paths on the public page
     return text if len(text) <= n else text[: n - 1].rsplit(" ", 1)[0] + "…"
 
 
@@ -165,6 +168,8 @@ def summarise(name, args, res):
         a = f"{args.get('depth_m')} m, {args.get('flow_m3h')} m³/h"
     elif name in ("ask_user",):
         a = args.get("question", "")
+    elif name == "write_model":
+        a = f"{args.get('name', 'model')}: new model code in the sandbox"
     elif name in ("memory_write", "log_option"):
         a = args.get("text") or args.get("option") or ""
     a = clip(a, 150)
@@ -221,6 +226,12 @@ def summarise(name, args, res):
         r = "logged: " + (grab(r'"verdict":"([^"]+)"', res) or "") + ("; " + grab(r'"pareto":"([^"]+)"', res) if grab(r'"pareto":"([^"]+)"', res) else "")
     elif name == "memory_write":
         r = "saved to project notes"
+    elif name == "memory_read":
+        r = "read the project notes"
+    elif name == "write_model":
+        cls = grab(r'"class":"([^"]+)"', res)
+        reg = grab(r'"registered_as":"([^"]+)"', res)
+        r = (f"registered {reg} ({cls}) after its tests" if reg else "model written")
     elif name == "ask_user":
         r = "waits for the engineer"
     else:
