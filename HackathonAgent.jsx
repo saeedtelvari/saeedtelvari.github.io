@@ -425,7 +425,7 @@ const HK_RUNS = {
   },
 };
 HK_RUNS.hydrogen = {
-  label: 'Gemini 4 Hydrogen', tag: 'B1 · cheapest design · partial', answer: 916, b1: true,
+  label: 'Gemini 4 Hydrogen', tag: 'B1 · cheapest design', answer: 916, b1: true,
   answerText: '2 doublets at 3,050 m · CHP on the co-produced gas · backup gas boiler · 0.4 MW ORC · screw chiller with dry cooler',
   answerNote: 'On the way it wrote its own seasonal-store model in the sandbox. The store did not give a cheaper plant that meets every rule.',
   views: { all: { x: [3.5, 24], y: [26, 68], label: 'Whole design space' }, zoom: { x: [4.2, 12], y: [31, 40], label: 'Zoom on the answer' } },

@@ -238,11 +238,77 @@ const HkBuilder = () => {
   );
 };
 
+// ---- the agents' picks against the 720-plant screen
+const HkLlmVsScreen = () => {
+  const { screen } = HACK_DATA;
+  const [hover, setHover] = useState(null);
+  const [ref, seen] = useHkSeen(0.2);
+  const picks = useMemo(() => hkLlmPicks().slice().sort((a, b) => a.lcoe - b.lcoe), []);
+  const valid = screen.filter(p => p[5]);
+  const optimum = valid.reduce((b, p) => (!b || p[6] < b[6] ? p : b), null);
+  const ours = screen[HK_BUILDER_ENGINE.run(HK_PRESETS[0].design).index];
+  const beat = picks.filter(p => p.lcoe < optimum[6]).length;
+  // the screen's best trade-off line: no other valid plant is both cheaper and lower in CO2
+  const front = valid.filter(p => !valid.some(o => o !== p && o[6] <= p[6] && o[7] <= p[7] && (o[6] < p[6] || o[7] < p[7]))).sort((a, b) => a[7] - b[7]);
+  const W = 1160, H = 500, L = 56, R = 16, T = 16, B = 44;
+  const x = hkScale(3.5, 14.5, L, W - R);
+  const y = hkScale(30, 46, H - B, T);
+  return (
+    <HkSection id="vsscreen" kicker="05c · The agents against the screen" title={`${beat} of ${picks.length} agent picks beat the cheapest plant of my screen`}
+      intro="My screen holds boiler size, return temperatures and pumps fixed. The agents could tune them, and most of their picks land below the whole screen on cost. The catch is in the last column: the two cheapest rebuilt picks dropped the backup that our stress tests need.">
+      <div ref={ref} className={`hk-vs${seen ? ' is-in' : ''}`}>
+        <figure className="hk-figure hk-vs__fig">
+          <svg viewBox={`0 0 ${W} ${H}`} className="hk-chart" role="img" aria-label="The 720-plant screen, its best trade-off line, our pick, the cheapest plant of the screen and the numbered picks of the LLM agents, on cost against CO2.">
+            {[30, 32, 34, 36, 38, 40, 42, 44, 46].map(v => <g key={v} className="hk-grid"><line x1={L} x2={W - R} y1={y(v)} y2={y(v)} /><text x={L - 8} y={y(v) + 4} textAnchor="end">{v}</text></g>)}
+            {[4, 6, 8, 10, 12, 14].map(v => <g key={v} className="hk-grid"><text x={x(v)} y={H - B + 20} textAnchor="middle">{v}</text></g>)}
+            <text className="hk-axis-title" x={(L + W) / 2} y={H - 6} textAnchor="middle">CO₂, kt a year</text>
+            <text className="hk-axis-title" x="13" y={(T + H - B) / 2} textAnchor="middle" transform={`rotate(-90 13 ${(T + H - B) / 2})`}>€ per MWh, CO₂ at €80/t</text>
+            <rect x={L} y={y(optimum[6])} width={W - L - R} height={y(30) - y(optimum[6])} className="hk-vs__below" />
+            <text x={W - R - 8} y={y(optimum[6]) + 18} textAnchor="end" className="hk-vs__belowtxt">cheaper than every plant of the screen</text>
+            <g className="hk-bld__cloud">{screen.map((p, i) => p[6] <= 46 && <circle key={i} cx={x(p[7])} cy={y(p[6])} r="2.6" className={p[5] ? '' : 'is-bad'} />)}</g>
+            <polyline className="hk-vs__front" points={front.filter(p => p[6] <= 46).map(p => `${x(p[7])},${y(p[6])}`).join(' ')} />
+            <g className="hk-bld__opt"><circle cx={x(optimum[7])} cy={y(optimum[6])} r="8" /></g>
+            <g className="hk-star"><path transform={`translate(${x(ours[7])} ${y(ours[6])})`} d="M0 -13 L3.8 -4.2 L12.4 -4 L5.6 1.8 L7.9 10.6 L0 5.6 L-7.9 10.6 L-5.6 1.8 L-12.4 -4 L-3.8 -4.2 Z" /></g>
+            {picks.map((p, i) => (
+              <g key={i} className={`hk-vs__pick${p.rebuilt ? '' : ' is-own'}${hover === i ? ' is-hover' : ''}`} style={{ transitionDelay: `${i * 80}ms` }}
+                onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)}>
+                <circle cx={x(p.co2)} cy={y(p.lcoe)} r="11" />
+                <text x={x(p.co2)} y={y(p.lcoe) + 4} textAnchor="middle">{i + 1}</text>
+              </g>
+            ))}
+          </svg>
+          <div className="hk-legend hk-legend--small">
+            <span className="hk-key" style={{ '--key': 'rgba(135,150,170,0.6)' }}>a plant of the screen</span>
+            <span className="hk-key hk-key--front">the screen’s best trade-offs</span>
+            <span className="hk-key hk-key--opt">cheapest plant in the screen</span>
+            <span className="hk-key hk-key--star">our pick</span>
+            <span className="hk-key hk-key--llm">agent pick, rebuilt on our basis</span>
+            <span className="hk-key hk-key--llmown">agent pick, from its own run</span>
+          </div>
+        </figure>
+        <ol className="hk-vs__list">
+          {picks.map((p, i) => (
+            <li key={i} className={`${hover === i ? 'is-hover' : ''}${p.lcoe < optimum[6] ? ' is-below' : ''}`} onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)}>
+              <span className={`hk-vs__n${p.rebuilt ? '' : ' is-own'}`}>{i + 1}</span>
+              <div>
+                <strong>{p.name}</strong><small>{p.q} · {p.design}</small>
+              </div>
+              <b>€{p.lcoe.toFixed(2)}</b>
+              <span className="hk-vs__tests">{p.rebuilt ? <React.Fragment><i style={{ width: `${p.passed / 13 * 100}%` }} /><em>{p.passed}/13</em></React.Fragment> : <em className="hk-muted">not run</em>}</span>
+            </li>
+          ))}
+          <li className="hk-vs__ref"><span className="hk-vs__n is-star">★</span><div><strong>Our pick</strong><small>€{ours[6].toFixed(2)} in this screen run, €36.35 in its final run</small></div><b>€{ours[6].toFixed(2)}</b><span className="hk-vs__tests"><i style={{ width: '100%' }} /><em>13/13</em></span></li>
+        </ol>
+      </div>
+    </HkSection>
+  );
+};
+
 const HkBuild = () => (
-  <HkSection id="build" kicker="02b · Your turn" title="Build your own plant"
+  <HkSection id="build" kicker="08 · Your turn" title="Build your own plant"
     intro="Choose the main parts of a plant. The page finds the same plant among the 720 that I simulated, each for a full year on the same basis, and shows its cost, its CO₂ and whether it meets demand. If you choose something that was not simulated, the page uses the nearest simulated plant and says so.">
     <HkBuilder />
   </HkSection>
 );
 
-Object.assign(window, { HkBuild, HK_BUILDER_ENGINE });
+Object.assign(window, { HkBuild, HkLlmVsScreen, HK_BUILDER_ENGINE });
