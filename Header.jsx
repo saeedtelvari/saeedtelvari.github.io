@@ -29,7 +29,7 @@ const HEADER_PROFILES = [
   { icon: 'linkedin', label: 'LinkedIn', href: SITE_LINKS.linkedin },
 ];
 
-const Header = ({ active, onNavigate, variant = 'site', story = false }) => {
+const Header = ({ active, onNavigate, variant = 'site', story = false, brandName = false }) => {
   const [scrolled, setScrolled] = useState(false);
   const [overStory, setOverStory] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -106,8 +106,9 @@ const Header = ({ active, onNavigate, variant = 'site', story = false }) => {
   return (
     <header className={classes}>
       <div className="app-header__bar">
-        <a className="app-header__logo" href="./index.html" onClick={event => handleItemClick('home', event)} aria-label="Sa’eed Telvari, home">
+        <a className={`app-header__logo${brandName ? ' app-header__logo--named' : ''}`} href="./index.html" onClick={event => handleItemClick('home', event)} aria-label="Sa’eed Telvari, home">
           <img src="./assets/logo-minimalist.webp" alt="" width="40" height="40" />
+          {brandName && <span className="app-header__brand" aria-hidden="true"><strong>Sa’eed Telvari</strong><small>Home · research, simulator, CV</small></span>}
         </a>
 
         <nav className="app-header__nav" aria-label="Main">

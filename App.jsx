@@ -168,7 +168,7 @@ const HackathonStandalone = () => {
   return (
     <React.Fragment>
       <SkipLink />
-      <Header active="projects" onNavigate={navigate} />
+      <Header active="projects" onNavigate={navigate} brandName />
       <main id="main-content" tabIndex={-1}><HackathonPage /></main>
       <Footer onNavigate={navigate} />
     </React.Fragment>
