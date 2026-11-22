@@ -458,6 +458,9 @@ code, kbd, .mono {
   .project-feature__media:hover { transform: translateY(-2px); box-shadow: 0 12px 28px -12px rgba(5, 9, 15, 0.7); }
   .project-feature__media:hover .project-feature__shot { border-color: var(--sim-rule-strong); }
 }
+/* A second feature (the GeoHackathon) mirrors the first: the image is on the left. */
+.project-feature--more { padding-top: 28px; }
+@media (min-width: 861px) { .project-feature--more .project-feature__media { order: -1; } }
 .sheet .project-links { display: flex; flex-wrap: wrap; gap: 10px 12px; margin: 18px 0 0; }
 .project-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 24px; }
 .project {

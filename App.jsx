@@ -161,6 +161,20 @@ const SimulatorStandalone = () => {
   );
 };
 
+// The GeoHackathon page. HackathonPage comes from hackathon-bundle.js, which only geohackathon.html loads.
+const HackathonStandalone = () => {
+  const navigate = (id, event) => siteNavigate('hackathon', id, event);
+  useEffect(() => dismissLoader(), []);
+  return (
+    <React.Fragment>
+      <SkipLink />
+      <Header active="projects" onNavigate={navigate} />
+      <main id="main-content" tabIndex={-1}><HackathonPage /></main>
+      <Footer onNavigate={navigate} />
+    </React.Fragment>
+  );
+};
+
 const rootEl = document.getElementById('root');
 const sitePage = rootEl && typeof rootEl.getAttribute === 'function' ? rootEl.getAttribute('data-page') : null;
 const root = ReactDOM.createRoot(rootEl);
@@ -170,5 +184,6 @@ root.render(
   sitePage === 'simulator' ? <SimulatorStandalone />
     : sitePage === 'cv' ? <CVStandalone />
     : sitePage === 'story' && storyAvailable ? <StoryPage />
+    : sitePage === 'hackathon' && typeof HackathonPage === 'function' ? <HackathonStandalone />
     : <SiteHome />
 );
