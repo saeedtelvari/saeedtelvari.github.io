@@ -4,3 +4,8 @@
 .claude/
 skills/
 skills-lock.json
+
+# Local output of the graphify code graph. It holds local paths, so it is not part of the site.
+graphify-out/
+# The CV PDF is off the site until its print layout is fixed (tools/cv-pdf.js still writes it here for a check).
+assets/cv.pdf

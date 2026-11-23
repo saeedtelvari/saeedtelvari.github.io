@@ -1956,7 +1956,7 @@ const Identity = React.memo(({ onNavigate }) => (
     <nav className="hero-doors hero-reveal" aria-label="Paths for visitors">
       <ul>
         <li><span className="hero-doors__ask">Reviewing my work?</span> <a href="#publications" onClick={event => onNavigate && onNavigate('publications', event)}><span className="hero-doors__long">Papers and BibTeX</span><span className="hero-doors__short">Papers &amp; BibTeX</span></a></li>
-        <li><span className="hero-doors__ask">Hiring?</span> <a href="./assets/cv.pdf">CV (PDF)</a></li>
+        <li><span className="hero-doors__ask">Hiring?</span> <a href="./cv.html">CV</a></li>
         <li><span className="hero-doors__ask">Working on CCS?</span> <a href="./simulator.html#method"><span className="hero-doors__long">The method and its checks</span><span className="hero-doors__short">Method</span></a></li>
       </ul>
     </nav>

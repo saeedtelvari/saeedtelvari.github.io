@@ -218,7 +218,7 @@ const ContactSection = () => {
             </button>
             <span className="visually-hidden" aria-live="polite">{status.email ? `${status.email}: email address` : ''}</span>
           </div>
-          <p className="contact__cv">CV: <a href="./assets/cv.pdf">CV (PDF)</a> · <a href="./cv.html">CV (web)</a></p>
+          <p className="contact__cv"><a href="./cv.html">CV</a></p>
           <p className="contact__address"><Icon name="pin" size={16} />Institute of GeoEnergy Engineering, Heriot-Watt University, Edinburgh, UK</p>
         </div>
         <ul className="contact__profiles">

@@ -43,8 +43,7 @@ lacks('index.html', /social-card-story/, 'the homepage keeps its own card');
 has('index.html', /faulted aquifer/, 'the homepage card text describes the live hero');
 
 lacks('CVPage.jsx', /Saeed-Telvari-CV\.pdf/, 'CV page must not request a missing PDF asset');
-has('CVPage.jsx', /window\.print\(\)/, 'CV page print action must invoke browser print');
-has('CVPage.jsx', /Print or save as PDF/, 'CV page must offer browser print and PDF export');
+lacks('CVPage.jsx', /Print or save as PDF/, 'the CV page has no PDF button until the print layout is fixed');
 has('CVPage.jsx', /SITE_PUBLICATIONS/, 'CV page needs evidence beyond education and skills');
 lacks('CVPage.jsx', /headerbg3|backgroundImage/, 'CV has no photo background');
 has('cv.html', /<title>CV — Sa'eed Telvari<\/title>/, 'CV needs its own title');

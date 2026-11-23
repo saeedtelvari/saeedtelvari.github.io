@@ -26,19 +26,16 @@ test('the doors nav has the three targets', () => {
   const nav = hero.match(/<nav className="hero-doors[^>]*aria-label="Paths for visitors">([\s\S]*?)<\/nav>/);
   assert.ok(nav, 'the doors nav exists with its label');
   const hrefs = [...nav[1].matchAll(/href="([^"]+)"/g)].map(match => match[1]);
-  assert.deepEqual(hrefs, ['#publications', './assets/cv.pdf', './simulator.html#method']);
+  assert.deepEqual(hrefs, ['#publications', './cv.html', './simulator.html#method']);
   assert.ok(hero.indexOf('hero-actions') < hero.indexOf('hero-doors'), 'the doors come after the buttons');
 });
 
-test('assets/cv.pdf is a PDF under 400 KB, and the Contact section links to both CV forms', () => {
-  const file = path.join(root, 'assets', 'cv.pdf');
-  assert.ok(fs.existsSync(file), 'cv.pdf exists');
-  const bytes = fs.readFileSync(file);
-  assert.equal(bytes.subarray(0, 4).toString('latin1'), '%PDF');
-  assert.ok(bytes.length < 400 * 1024, `cv.pdf is ${bytes.length} bytes`);
-  const sections = read('HomeSections.jsx');
-  assert.match(sections, /href="\.\/assets\/cv\.pdf">CV \(PDF\)</);
-  assert.match(sections, /href="\.\/cv\.html">CV \(web\)</);
+test('the CV PDF is off the site until its print layout is fixed, and the Contact section links to the web CV', () => {
+  assert.ok(!fs.existsSync(path.join(root, 'assets', 'cv.pdf')), 'no cv.pdf in the site');
+  for (const file of ['SubsurfaceHero.jsx', 'HomeSections.jsx', 'CVPage.jsx', 'site-content.js', 'Header.jsx', 'Footer.jsx']) {
+    assert.doesNotMatch(read(file), /cv\.pdf|CV \(PDF\)/, `${file} has no link to the CV PDF`);
+  }
+  assert.match(read('HomeSections.jsx'), /<p className="contact__cv"><a href="\.\/cv\.html">CV<\/a><\/p>/);
 });
 
 test('the speed button name contains its visible text', () => {

@@ -57,9 +57,6 @@ const CVPage = () => (
           <li><a href="https://saeedtelvari.github.io/">saeedtelvari.github.io</a></li>
         </ul>
       </div>
-      <button type="button" className="btn btn--quiet cv-print" onClick={() => window.print()}>
-        <Icon name="print" size={16} />Print or save as PDF
-      </button>
     </header>
 
     <CVSection id="interests" title="Research interests"><p className="cv-interests">{SITE_CV.interests}</p></CVSection>
